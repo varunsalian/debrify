@@ -1923,6 +1923,20 @@ PiP presentation stay device-pending.
 
 ## Follow-ups
 
+- **Phase-11 original late restore (preserved):** a stored-track language read
+  resumed after disposal still calls the disposed player's subtitle setter;
+  default audio can likewise apply its captured track through the live player
+  after manual choice, reset, profile handoff, disposal or renderer replacement.
+  Disposal during initial restoration can be followed by `_initializePlayer`
+  creating a new six-second autosave timer after dispose already cancelled its
+  earlier timers. The characterization asserts that specific leaked timer before
+  cancelling only its test-clock handle; application cleanup is unchanged.
+- **Phase-11 original file cleanup (preserved):** download has no lifetime guard.
+  Write/rename completion after reset/disposal can register a file after cleanup
+  ran, leaving the final file behind. Tests inspect final/partial bytes before
+  fixture deletion. Overlapping same-stem downloads replace the file in completion
+  order and share the set registration.
+
 - **Phase-10 subtitle apply races (S2c original, preserved):** decoder logs read
   the current attempt, so an old log can roll B back. An admitted A rollback
   continues after B/reset/profile/replacement and restores captured ids/path
@@ -3961,6 +3975,46 @@ Validation: exact diff and `git diff --check`.
   `p11/stepT/frozen-result.json`. Independent disjoint edit-list ordering differs
   from the prototype; canonical declarations, Hosts, scaffolds and bodies agree.
   Application/pubspec/CI unchanged. Step 0 continues; no production moves.
+
+### 2026-10-14 — Phase 11 Step 0 complete (STOP before production moves)
+
+- **Revision/original.** Follows Step T `2ee13b490` and approved numeric correction
+  `07b61398b`; application original **`7fdf59370`**. Step-0 commit receipt:
+  `refactor-evidence/vplayer/p11/step0/commit.json`. App/pubspec unchanged;
+  all three destinations remain evidence-only; no production/CI transition.
+- **Characterization.** **190 passing original-caller cases** across 15 scenario
+  files: streamed raw/gzip/ZIP bytes and independent exact 15 s budgets; cache
+  formats/bounds/client closure; actual cleanup files and held write/rename
+  leaks; discovery/priority/manual/audio/profile/disposal races and retries;
+  restore/default-language captures; physical series writes in both profiles;
+  aliases/title metadata/pt-BR; early inputs; every live retained caller. Public
+  selections use step-H `finish()`; no private State or source-text coverage.
+  The shared driver adds only an opt-in legacy-profile fixture flag (true default).
+- **Sweep/proofs.** All 15 declarations and 28 references re-measured. AST 611:
+  **400 assertion kills /18 evidenced equivalence sites /two dormant catches /
+  191 invalid first candidates**; **67 typed alternatives all assertion-killed**.
+  All 25 live references assertion-killed; three unified-menu legacy references
+  dormant. Every final case-file hash has an original assertion-failing witness.
+  Full matrix/mutation/per-test tables in the deps report; exact patches,
+  completed logs, IDs, input hashes and reasons under `p11/step0/`.
+- **Baseline/checks.** Nice19, serialized suites:
+  `suite_evidence.py run vplayer/p11/step0/final-suite --no-pub
+  --dart-define=DEBRIFY_VP_TEST_HOOKS=true`, then `compare --against
+  original-suite.jsonl final-suite.jsonl` and strict identities PASS:
+  **13,742 success /13 failure /28 load error /20 skip**, exactly 190 additions,
+  zero old changes/missing/newly skipped/fixed identities; same SDK/flags and
+  stable tested tree. Test analysis/format, size and architecture PASS.
+  Unchanged Step-T P1–P10 histories, seam proofs and all Dart/Kotlin self-tests
+  retained; nested parser invocations isolated under `.dart_tool/vplayer_parser/`.
+- **Deviations/limits.** Failed filters/fixture assumptions, type-invalid/error-only
+  mutations and the deliberately interrupted concurrency 1 suite are uncredited;
+  final controls/replays use the correct original behavior and baseline flags.
+  Original late restores, late file registration, leaked 6 s initialization timer
+  and cross-profile series map writes are pinned and recorded in Follow-ups.
+  Retired-State cache publication is unobservable; native decoding/real metadata
+  and durability stay device-pending. No bug fix, real transport, build/run/install,
+  device action, push/merge/branch switch. STOP for independent Step-0 sampling;
+  production moves, registrations and ratchet lowering remain Step 1.
 
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 

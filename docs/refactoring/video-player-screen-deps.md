@@ -7200,3 +7200,995 @@ uncredited. Prototype and frozen manifests agree after canonicalizing independen
 disjoint edit-list order; Hosts, scaffolds and application bodies are identical.
 The inventory is drafted; current CI stays on P10 until Step 1. Step-0 controls,
 mutation sweep and suite baseline remain a separate checkpoint.
+
+## Phase 11 Step 0 — original subtitle sources and preferences (2026-10-14)
+
+Application original **`7fdf59370`**, tooling `2ee13b490`. No application, pubspec, CI/theme/source-guard or size-ratchet change. All three destinations remain evidence-only. The streaming fixture delegates synthetic `MockClient.streaming` responses; header/body and real file write/rename are separately held. Actual files/bytes are inspected before fixture deletion. The shared driver only adds an opt-in `committed` argument, retaining its existing true default, for a real legacy storage-failure caller. No real transport, private State access or source-text test is credited.
+
+Every moved declaration and all 28 retained references are re-measured at the named original. The AST inventory has **611 statement/branch/literal/field sites**: **400 assertion-killed, 18 equivalence/invariant sites, two dormant defensive-catch sites and 191 syntax/type/flow-invalid first candidates**. None of the compiler, load, error-only or interrupted failures count as kills. **67 additional typed declaration alternatives all assertion-fail**, exercising bindings/snapshots that simple declaration deletion made undefined. The 25 live retained references independently assertion-fail; three legacy-sheet references are dormant because the constant unified-menu path returns before installation. No real survivor remains. Exact offsets, patches, commands, completed logs and hashes: `p11/step0/primary-closure.json`, `typed-alternatives-plan-results.json`, `closure7-plan-results.json`, `reference-results.json`, `reference-closure-results.json`, `inventory-full.json` and adjacent replay directories.
+
+Original outcomes are preserved: stored/default-audio continuations can act after manual/reset/profile/replacement/disposal; initial restoration can create the specific six-second autosave timer after disposal; late download write/rename can register after cleanup; same-stem overlaps replace in completion order; series writes can copy A’s captured map into B. Both physical profiles and unrelated entries are asserted. The exact leaked timer is asserted before cancelling its test-clock handle. Retired-State final cache publication is unobservable without private access; its token-only guard stays frozen, while no post-disposal native selection and outliving service retries are executable. Public browser-model enrichment is used for the changed-identity cache case, consistent with prior snapshot fixtures; TVMaze itself preserves a supplied IMDb id. These defects/limits are recorded in Follow-ups, never fixed.
+
+### Declaration coverage matrix
+
+| Original declaration | Observable callers / boundaries | Primary sites |
+|---|---|---|
+| `_restoreTrackPreferences` | Stored/null/auto/off/conflicting/missing choices; IPTV ordering; held map/track/language reads across manual/reset/replacement/profile/dispose; readiness publication and caught malformed values. | 136 |
+| `_persistTrackChoice` | Movie and series keys/fallbacks; both physical profile maps and unrelated entries; optimistic attempt markers, newest completer, captured audio and failed writes completing (P10 callers reused). | 28 |
+| `_applyDefaultAudioLanguage` | Null preference has no native read; native selection precedence, language/title aliases and placeholders; native await across manual/reset/profile/replacement/dispose uses captured tracks and live player. | 23 |
+| `_audioAllowsAutomaticSubtitles` | Forced override and foreign-only policy; unknown/pending/native-failed language, selected metadata and live revisions through stream/menu events. | 1 |
+| `_refreshSubtitleAudioPolicy` | Initialization and final samples; same-ID menu refresh vs stream listener; pending old revision/default results, manual success/failure, forced/reselect/readiness gates and external/embedded latch resets. | 46 |
+| `_applyDefaultSubtitleLanguage` | English/first-real/native fallback, no tracks, ISO aliases/title metadata/pt-BR, explicit off, source order, addon-ordinal exclusion, pending settings/order/sid and caught failures. | 80 |
+| `_applyForcedSubtitle` | Marked/unmarked/full/off/nonnative tracks, missing native metadata, stale manual choice while metadata is held, diagnostic source and Android renderer rejection/retry callers. | 18 |
+| `_downloadStremioSubtitleToTempFile` | Actual non-UTF8 raw/gzip/ZIP bytes; declared/actual limits and exact independent 15s budgets; all seven cache formats and exact 1/5MiB lengths; rejection/client closure; write/rename/reset/dispose and same-stem overlap. | 67 |
+| `_applyExternalSubtitleTrack` | Apply-before-remove; captured addon ordinals only; failure/removal rejection/nonnative and held cleanup across reset/disposal; exact diagnostic and caller postchecks. | 28 |
+| `_cleanupTempSubtitleFilesSync` | Actual files inspected before fixture deletion; dispose/reset and six navigation callers; missing-file catch and clearing registration; late file leaks preserved. | 4 |
+| `_fetchAndMaybeAutoSelectAddonSubtitle` | Custom/manual/parsed/single-file/missing/zero identity coordinates; same-identity warm cache and changed public model; held stale episode publication; profile/disposal/retry and inventory failure. | 119 |
+| `_applySubtitleSourcePriority` | Token/mounted entry, same-token coalescing, newer-generation progress, independent new-State queue and queued native writes. | 6 |
+| `_applySubtitlePriorityUpdate` | Higher loading/failure/lower fallback, byte/native rejection to embedded, manual embedded-first bypass, pending audio/manual/profile/dispose, provisional/regular embedded result latch, exact source diagnostics. | 53 |
+| `_tempSubtitleFiles` | Fresh empty instance set; cached/written registration, clearing and late leaks. No construction I/O or scheduling. | 1 |
+| `_subtitlePrioritySelectionQueue` | Implicit inert construction; distinct State queues while a retired State download is held; static-sharing original mutant fails an assertion. | 1 |
+
+### Retained occurrence matrix
+
+| Point / original line | Caller → declaration | Fate / witness |
+|---|---|---|
+| `r01` /2423 | `_initializePlayer` → `_restoreTrackPreferences` | assertion-killed: subtitle PikPak initial open restores tracks through its retained continuation |
+| `r02` /2513 | `_initializePlayer` → `_restoreTrackPreferences` | assertion-killed: subtitle original language en native no selects 2 |
+| `r03` /2748 | `_bindPlayerInstanceSubscriptions` → `_refreshSubtitleAudioPolicy` | assertion-killed: subtitle policy native track dispatch uses its retained refresh caller |
+| `r04` /3332 | `_fallbackExplicitRendererToAutomatic` → `_restoreTrackPreferences` | assertion-killed: subtitle renderer replacement restores remembered tracks through the retained fallback caller |
+| `r05` /4848 | `_goToNextEpisode` → `_resetSubtitleState` | assertion-killed: subtitle magic next retained reset deletes its outgoing addon file before reopening media |
+| `r06` /8151 | `_switchToSourcePlaylist` → `_restoreTrackPreferences` | assertion-killed: subtitle playlist source rollback restores its subtitle selection through its retained caller |
+| `r07` /8269 | `_switchToStremioSource` → `_resetSubtitleState` | assertion-killed: subtitle direct source retained reset deletes its outgoing addon file before reopening media |
+| `r08` /8316 | `_switchToStremioSource` → `_restoreTrackPreferences` | assertion-killed: subtitle direct source commit restores its subtitle selection through its retained caller |
+| `r09` /8366 | `_switchToStremioSource` → `_restoreTrackPreferences` | assertion-killed: subtitle direct source rollback restores its subtitle selection through its retained caller |
+| `r10` /8531 | `_switchToStremioTvChannel` → `_resetSubtitleState` | assertion-killed: subtitle Stremio guide retained reset deletes its outgoing addon file before reopening media |
+| `r11` /8740 | `_goToChannelById` → `_resetSubtitleState` | assertion-killed: subtitle guide channel retained reset deletes its outgoing addon file before reopening media |
+| `r12` /8868 | `_goToNextChannel` → `_resetSubtitleState` | assertion-killed: subtitle next channel retained reset deletes its outgoing addon file before reopening media |
+| `r13` /9169 | `_loadPlaylistIndexAttempt` → `_resetSubtitleState` | assertion-killed: subtitle raw playlist retained reset deletes its outgoing addon file before reopening media |
+| `r14` /9264 | `_loadPlaylistIndexAttempt` → `_restoreTrackPreferences` | assertion-killed: subtitle parsed playlist identity follows original index and enriched show across episode selection |
+| `r15` /9981 | `_retryAddonSubtitleFetchAfterSeriesMetadata` → `_fetchAndMaybeAutoSelectAddonSubtitle` | assertion-killed: subtitle changed metadata identity replaces the warm cache before the public menu reads it |
+| `r16` /10221 | `dispose` → `_cleanupTempSubtitleFilesSync` | assertion-killed: subtitle reuse cache is inspected and registered for cleanup |
+| `r17` /14507 | `_identifyTitleAndFetchSubtitles` → `_fetchAndMaybeAutoSelectAddonSubtitle` | assertion-killed: subtitle manual movie identity embeddedFirst=false overrides custom launch and reuses warmed discovery |
+| `r18` /14666 | `_showTracksSheet` → `_persistTrackChoice` | dormant-unified-menu-compatibility: kUnifiedPlayerMenuEnabled returns before legacy TracksSheet installation; old addon helper has no live caller; frozen body/token comparison preserved |
+| `r19` /14819 | `_menuApplyTrackChange` → `_persistTrackChoice` | assertion-killed: subtitle series preference map read crosses profile handoff and preserves physical contents |
+| `r20` /14827 | `_audioTrackChoiceChanged` → `_persistTrackChoice` | assertion-killed: subtitle admitted rollback clears the active attempt before a later audio preference write |
+| `r21` /14833 | `_audioTrackChoiceChanged` → `_refreshSubtitleAudioPolicy` | assertion-killed: subtitle same audio choice re-samples native language through its retained callback |
+| `r22` /14861 | `_withManualSubtitleChoice` → `_refreshSubtitleAudioPolicy` | assertion-killed: subtitle policy failed manual dispatch uses its retained refresh caller |
+| `r23` /14910 | `_menuSelectAddonSubtitle` → `_downloadStremioSubtitleToTempFile` | assertion-killed: subtitle download preserves actual raw non-UTF8 bytes |
+| `r24` /14925 | `_menuSelectAddonSubtitle` → `_applyExternalSubtitleTrack` | assertion-killed: subtitle external replacement success loads before retiring only captured addon ids |
+| `r25` /14946 | `_applyStremioSubtitleFromTracksSheet` → `_downloadStremioSubtitleToTempFile` | dormant-unified-menu-compatibility: kUnifiedPlayerMenuEnabled returns before legacy TracksSheet installation; old addon helper has no live caller; frozen body/token comparison preserved |
+| `r26` /14956 | `_applyStremioSubtitleFromTracksSheet` → `_applyExternalSubtitleTrack` | dormant-unified-menu-compatibility: kUnifiedPlayerMenuEnabled returns before legacy TracksSheet installation; old addon helper has no live caller; frozen body/token comparison preserved |
+| `r27` /15077 | `_resetSubtitleState` → `_cleanupTempSubtitleFilesSync` | assertion-killed: subtitle cleanup catches a missing file and clears registration before the next reset |
+| `r28` /15972 | `_VpSubtitleApplyHostAdapter` → `_persistTrackChoice` | assertion-killed: subtitle rollback waits for successful optimistic persistence across same content |
+
+### Equivalences and dormant paths
+
+| Points | Producer/consumer proof |
+|---|---|
+| `p036` | The local subtitleApplied initializer is assigned on every normal branch before its first read; early returns/catches do not read it. This is not a moved field or an early-input initializer. |
+| `p290`, `p291` | The only awaited operation in the try is findForcedSubtitleId. Its read wrapper catches every native property error and returns an empty string; count parsing uses tryParse, and all current callbacks here are pure live State-field checks. The platform getter is outside the try. Consequently ordinary native metadata failure cannot reach this outer catch. The original caller test asserts a count read, off selection and absence of the outer diagnostic. Body remains frozen; not counted as a kill. |
+| `p369` | Deleting the final return null in the catch of Future<String?> leaves normal fall-through from the function, which Dart resolves to null. It is after the same log and client finally-close; no subsequent statements, values or effects exist. |
+| `p373` | Changing toList(growable:false) to growable:true only changes capacity policy of a private copied oldExternalIds list. Every use is read-only iteration; the list is neither mutated nor exposed. Captured ids, order, cleanup and awaits are identical. |
+| `p433`, `p434`, `p435`, `p436`, `p437`, `p441`, `p442`, `p443`, `p444` | All writes to the manual season/episode fields are one atomic setState in identifyTitleAndFetchSubtitles (14474-14477), after a non-null current-season/episode pair or the validated positive pair returned by the public dialog (14436-14455). Reset clears the manual IMDb identity at the same time. On the series manual path both coordinates are therefore non-null; the fallback branch is never needed and the later ??= assignments are no-ops. Inverting one null comparison may enter the branch, but its only extra operations are the pure current-episode lookup and null-coalescing assignments to already non-null locals. The requests and coordinates are unchanged. No private field injection is used. |
+| `p485` | At cache-key construction, season and episode are either both null or both non-null: manual selection establishes a full pair; recognized SeriesEpisode has its parsed pair; single-file fallback only assigns either coordinate inside the guard requiring both effective coordinates. Missing-season/episode paths leave both locals null. Thus !=null && !=null and !=null // !=null agree. Zero-valued coordinates remain non-null and are separately pinned, so comparisons against 0 are not classified equivalent. |
+| `p392` | Returning true instead of false when cleanup detects disposal/content change/isCurrent failure cannot publish a selection. The live menu caller rechecks mounted and the same token before persistence. The automatic priority caller passes valid, and selectSubtitleBySourcePriority rechecks it immediately after tryAddon; stale results return null, and the final coordinator also rechecks it. The legacy caller has the same token/mounted check and is dormant. There is no await between the cleanup guard and its return. Native apply/removal effects happened before this guard and are identical. |
+| `p504` | Changing the onUpdate // guard to && admits invalid updates, but the immediately invoked applySubtitleSourcePriority has the identical mounted/token entry guard before touching the queue. No await or effect lies between the two guards. Valid updates and all native work are unchanged. Wrong-generation and retired-State deliveries are rejected by the inner guard. |
+| `p524` | The weaker //->&& entry guard only additionally admits retired-State same-token delivery: every live caller passes the current token synchronously or guards it immediately before invocation. The priority body valid() rejects an unmounted State before any await, host/native effect or log. Queue bookkeeping in the retired State is unobservable and cannot affect another State because the queue is instance-owned; the new-State/held-disposed-download caller test pins that ownership. No timer or platform call is introduced. |
+| `p248` | Deleting the false return after the native sid await still reaches setSubtitleTrackWithDiagnostics with the same current callback. Its first synchronous statement rejects stale work before any effect. In between are only pure current-track lookup and argument construction; no await, mutable callback or exception-producing native operation. Thus stale work still returns false and valid work is unchanged. The true-return mutation at this same site is assertion-killed, so the result value remains pinned. |
+| `p496` | The computed fetch cacheKey is non-null after the IMDb guard. Every facade write of a non-null cachedSubtitleKey first writes cachedStremioSubtitles to the non-null flattened/fetched list in the same synchronous block (identify, two menu publication callbacks, final discovery). Both reset paths clear list and key synchronously. Thus a matching non-null key always has a non-null list; replacing list != null with list != 0 agrees on every reachable comparison. A mismatched key short-circuits. The // cache guard mutation is separately exercised by a changed metadata identity, rather than classified equivalent. |
+
+Native decoding/encoding detection, real mpv disposition metadata and platform I/O durability remain device-pending. Widget tests prove bytes, requested flush, client/native command order and property calls; they do not claim native decoder or crash-durability validation. The dormant legacy sheet and defensive forced-helper catch remain protected verbatim.
+
+### Systematic mutation table
+
+| Point | Declaration / original line / kind | Fate | Assertion witness / audit |
+|---|---|---|---|
+| `p000` | `_restoreTrackPreferences`:15089 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p001` | `_restoreTrackPreferences`:15092 /statement | assertion-killed | subtitle restoration diagnostic preserves the track snapshot and chosen fallback |
+| `p002` | `_restoreTrackPreferences`:15093 /interpolated-string | assertion-killed | subtitle restoration diagnostic preserves the track snapshot and chosen fallback |
+| `p003` | `_restoreTrackPreferences`:15097 /statement | assertion-killed | subtitle restoration rejects old content immediately after the held track poll |
+| `p004` | `_restoreTrackPreferences`:15099 /branch | assertion-killed | subtitle stored auto restoration keeps default conflict and off semantics |
+| `p005` | `_restoreTrackPreferences`:15099 /operator | assertion-killed | subtitle stored auto restoration keeps default conflict and off semantics |
+| `p006` | `_restoreTrackPreferences`:15100 /statement | assertion-killed | subtitle restoration rejects old content immediately after the held track poll |
+| `p007` | `_restoreTrackPreferences`:15101 /string | assertion-killed | subtitle restoration rejects old content immediately after the held track poll |
+| `p008` | `_restoreTrackPreferences`:15103 /return | assertion-killed | subtitle restoration rejects old content immediately after the held track poll |
+| `p009` | `_restoreTrackPreferences`:15106 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p010` | `_restoreTrackPreferences`:15107 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p011` | `_restoreTrackPreferences`:15109 /branch | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p012` | `_restoreTrackPreferences`:15109 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p013` | `_restoreTrackPreferences`:15109 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p014` | `_restoreTrackPreferences`:15109 /null | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p015` | `_restoreTrackPreferences`:15111 /statement | assertion-killed | subtitle series restore reads parsed series preferences through original initialization |
+| `p016` | `_restoreTrackPreferences`:15113 /string | assertion-killed | subtitle series restore reads Unknown Series fallback preferences through original initialization |
+| `p017` | `_restoreTrackPreferences`:15117 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p018` | `_restoreTrackPreferences`:15117 /conditional | assertion-killed | subtitle stored no restoration keeps default conflict and off semantics |
+| `p019` | `_restoreTrackPreferences`:15119 /string | assertion-killed | subtitle video title "" persists its original sanitized fallback key |
+| `p020` | `_restoreTrackPreferences`:15120 /statement | assertion-killed | subtitle stored no restoration keeps default conflict and off semantics |
+| `p021` | `_restoreTrackPreferences`:15127 /branch | assertion-killed | subtitle stored auto restoration keeps default conflict and off semantics |
+| `p022` | `_restoreTrackPreferences`:15127 /operator | assertion-killed | subtitle stored auto restoration keeps default conflict and off semantics |
+| `p023` | `_restoreTrackPreferences`:15128 /statement | assertion-killed | subtitle restoration rejects old content immediately after the held preference map read |
+| `p024` | `_restoreTrackPreferences`:15129 /string | assertion-killed | subtitle restoration rejects old content immediately after the held preference map read |
+| `p025` | `_restoreTrackPreferences`:15131 /return | assertion-killed | subtitle restoration rejects old content immediately after the held preference map read |
+| `p026` | `_restoreTrackPreferences`:15134 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p027` | `_restoreTrackPreferences`:15135 /interpolated-string | assertion-killed | subtitle restoration diagnostic preserves the track snapshot and chosen fallback |
+| `p028` | `_restoreTrackPreferences`:15137 /statement | assertion-killed | subtitle restoration rejects old content immediately after the held track poll |
+| `p029` | `_restoreTrackPreferences`:15138 /interpolated-string | assertion-killed | subtitle restoration rejects old content immediately after the held track poll |
+| `p030` | `_restoreTrackPreferences`:15138 /conditional | assertion-killed | subtitle restoration diagnostic preserves the track snapshot and chosen fallback |
+| `p031` | `_restoreTrackPreferences`:15138 /operator | assertion-killed | subtitle restoration diagnostic preserves the track snapshot and chosen fallback |
+| `p032` | `_restoreTrackPreferences`:15138 /null | assertion-killed | subtitle restoration diagnostic preserves the track snapshot and chosen fallback |
+| `p033` | `_restoreTrackPreferences`:15138 /string | assertion-killed | subtitle restoration diagnostic preserves the track snapshot and chosen fallback |
+| `p034` | `_restoreTrackPreferences`:15139 /interpolated-string | assertion-killed | subtitle restoration diagnostic preserves the track snapshot and chosen fallback |
+| `p035` | `_restoreTrackPreferences`:15142 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p036` | `_restoreTrackPreferences`:15142 /boolean | equivalent | equivalence-proofs.json |
+| `p037` | `_restoreTrackPreferences`:15144 /branch | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p038` | `_restoreTrackPreferences`:15144 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p039` | `_restoreTrackPreferences`:15144 /null | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p040` | `_restoreTrackPreferences`:15145 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p041` | `_restoreTrackPreferences`:15145 /string | assertion-killed | subtitle stored audio "1" with global "null" restores its original precedence |
+| `p042` | `_restoreTrackPreferences`:15146 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p043` | `_restoreTrackPreferences`:15146 /string | assertion-killed | subtitle stored audio "null" with global "null" restores its original precedence |
+| `p044` | `_restoreTrackPreferences`:15153 /branch | assertion-killed | subtitle stored audio "1" with global "null" restores its original precedence |
+| `p045` | `_restoreTrackPreferences`:15153 /operator | assertion-killed | subtitle stored audio "auto" with global "eng" restores its original precedence |
+| `p046` | `_restoreTrackPreferences`:15153 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p047` | `_restoreTrackPreferences`:15153 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p048` | `_restoreTrackPreferences`:15153 /null | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p049` | `_restoreTrackPreferences`:15155 /operator | assertion-killed | subtitle stored audio "1" with global "null" restores its original precedence |
+| `p050` | `_restoreTrackPreferences`:15155 /string | assertion-killed | subtitle stored audio "auto" with global "eng" restores its original precedence |
+| `p051` | `_restoreTrackPreferences`:15156 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p052` | `_restoreTrackPreferences`:15157 /operator | assertion-killed | subtitle stored auto restoration keeps default conflict and off semantics |
+| `p053` | `_restoreTrackPreferences`:15159 /branch | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p054` | `_restoreTrackPreferences`:15159 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p055` | `_restoreTrackPreferences`:15159 /null | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p056` | `_restoreTrackPreferences`:15160 /statement | assertion-killed | subtitle stored audio "1" with global "null" restores its original precedence |
+| `p057` | `_restoreTrackPreferences`:15162 /statement | assertion-killed | subtitle stored audio "missing" with global "eng" restores its original precedence |
+| `p058` | `_restoreTrackPreferences`:15166 /statement | assertion-killed | subtitle stored audio "auto" with global "eng" restores its original precedence |
+| `p059` | `_restoreTrackPreferences`:15169 /branch | assertion-killed | subtitle stored policy choice wins an audio refresh admitted before its success turn |
+| `p060` | `_restoreTrackPreferences`:15170 /statement | assertion-killed | subtitle IPTV series audio override follows stored tracks before final restoration |
+| `p061` | `_restoreTrackPreferences`:15172 /statement | assertion-killed | subtitle stored auto samples foreign audio before selecting the embedded default |
+| `p062` | `_restoreTrackPreferences`:15172 /boolean | assertion-killed | subtitle stored-auto replacement defers policy reselection until restoration publishes readiness |
+| `p063` | `_restoreTrackPreferences`:15175 /branch | assertion-killed | subtitle stored auto restoration keeps default conflict and off semantics |
+| `p064` | `_restoreTrackPreferences`:15175 /operator | assertion-killed | subtitle stored auto restoration keeps default conflict and off semantics |
+| `p065` | `_restoreTrackPreferences`:15175 /return | assertion-killed | subtitle stored language excludes the first app-managed addon ordinal |
+| `p066` | `_restoreTrackPreferences`:15184 /branch | assertion-killed | subtitle stored language excludes the first app-managed addon ordinal |
+| `p067` | `_restoreTrackPreferences`:15184 /operator | assertion-killed | subtitle stored auto restoration keeps default conflict and off semantics |
+| `p068` | `_restoreTrackPreferences`:15184 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p069` | `_restoreTrackPreferences`:15184 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p070` | `_restoreTrackPreferences`:15184 /null | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p071` | `_restoreTrackPreferences`:15186 /operator | assertion-killed | subtitle stored language excludes the first app-managed addon ordinal |
+| `p072` | `_restoreTrackPreferences`:15186 /string | assertion-killed | subtitle stored auto restoration keeps default conflict and off semantics |
+| `p073` | `_restoreTrackPreferences`:15187 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p074` | `_restoreTrackPreferences`:15189 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p075` | `_restoreTrackPreferences`:15191 /operator | assertion-killed | subtitle stored language excludes the first app-managed addon ordinal |
+| `p076` | `_restoreTrackPreferences`:15191 /operator | assertion-killed | subtitle stored language excludes the first app-managed addon ordinal |
+| `p077` | `_restoreTrackPreferences`:15193 /branch | assertion-killed | subtitle stored language excludes the first app-managed addon ordinal |
+| `p078` | `_restoreTrackPreferences`:15194 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p079` | `_restoreTrackPreferences`:15196 /operator | assertion-killed | subtitle stored no restoration keeps default conflict and off semantics |
+| `p080` | `_restoreTrackPreferences`:15196 /operator | assertion-killed | subtitle stored no restoration keeps default conflict and off semantics |
+| `p081` | `_restoreTrackPreferences`:15205 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p082` | `_restoreTrackPreferences`:15207 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p083` | `_restoreTrackPreferences`:15208 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p084` | `_restoreTrackPreferences`:15208 /operator | assertion-killed | subtitle stored no restoration keeps default conflict and off semantics |
+| `p085` | `_restoreTrackPreferences`:15208 /operator | assertion-killed | subtitle stored no restoration keeps default conflict and off semantics |
+| `p086` | `_restoreTrackPreferences`:15208 /string | assertion-killed | subtitle stored no restoration keeps default conflict and off semantics |
+| `p087` | `_restoreTrackPreferences`:15209 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p088` | `_restoreTrackPreferences`:15209 /null | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p089` | `_restoreTrackPreferences`:15210 /operator | assertion-killed | subtitle stored 1 restoration keeps default conflict and off semantics |
+| `p090` | `_restoreTrackPreferences`:15210 /operator | assertion-killed | subtitle stored 2 restoration keeps default conflict and off semantics |
+| `p091` | `_restoreTrackPreferences`:15210 /string | assertion-killed | subtitle global off overrides a stored embedded track literally labelled Off |
+| `p092` | `_restoreTrackPreferences`:15211 /operator | assertion-killed | subtitle stored 2 restoration keeps default conflict and off semantics |
+| `p093` | `_restoreTrackPreferences`:15219 /branch | assertion-killed | subtitle stored no restoration keeps default conflict and off semantics |
+| `p094` | `_restoreTrackPreferences`:15220 /statement | assertion-killed | subtitle stored 1 restoration keeps default conflict and off semantics |
+| `p095` | `_restoreTrackPreferences`:15221 /interpolated-string | assertion-killed | subtitle stored 1 restoration keeps default conflict and off semantics |
+| `p096` | `_restoreTrackPreferences`:15222 /interpolated-string | assertion-killed | subtitle stored 1 restoration keeps default conflict and off semantics |
+| `p097` | `_restoreTrackPreferences`:15223 /interpolated-string | assertion-killed | subtitle stored 1 restoration keeps default conflict and off semantics |
+| `p098` | `_restoreTrackPreferences`:15225 /statement | assertion-killed | subtitle stored 1 restoration keeps default conflict and off semantics |
+| `p099` | `_restoreTrackPreferences`:15227 /statement | assertion-killed | subtitle stored no restoration keeps default conflict and off semantics |
+| `p100` | `_restoreTrackPreferences`:15228 /interpolated-string | assertion-killed | subtitle stored no restoration keeps default conflict and off semantics |
+| `p101` | `_restoreTrackPreferences`:15229 /interpolated-string | assertion-killed | subtitle stored no restoration keeps default conflict and off semantics |
+| `p102` | `_restoreTrackPreferences`:15231 /statement | assertion-killed | subtitle stored no restoration keeps default conflict and off semantics |
+| `p103` | `_restoreTrackPreferences`:15234 /string | assertion-killed | subtitle stored preference rejection preserves its restore-specific diagnostic source |
+| `p104` | `_restoreTrackPreferences`:15236 /branch | assertion-killed | subtitle stored policy choice wins an audio refresh admitted before its success turn |
+| `p105` | `_restoreTrackPreferences`:15236 /operator | assertion-killed | subtitle non-policy stored choice allows fallback on replacement with a missing ordinal |
+| `p106` | `_restoreTrackPreferences`:15237 /statement | assertion-killed | subtitle stored policy choice wins an audio refresh admitted before its success turn |
+| `p107` | `_restoreTrackPreferences`:15237 /boolean | assertion-killed | subtitle stored policy choice wins an audio refresh admitted before its success turn |
+| `p108` | `_restoreTrackPreferences`:15242 /statement | assertion-killed | subtitle stored language excludes the first app-managed addon ordinal |
+| `p109` | `_restoreTrackPreferences`:15243 /interpolated-string | assertion-killed | subtitle stored language excludes the first app-managed addon ordinal |
+| `p110` | `_restoreTrackPreferences`:15245 /statement | assertion-killed | subtitle stored missing restoration keeps default conflict and off semantics |
+| `p111` | `_restoreTrackPreferences`:15249 /statement | assertion-killed | subtitle stored auto restoration keeps default conflict and off semantics |
+| `p112` | `_restoreTrackPreferences`:15250 /interpolated-string | assertion-killed | subtitle stored auto restoration keeps default conflict and off semantics |
+| `p113` | `_restoreTrackPreferences`:15252 /statement | assertion-killed | subtitle stored auto restoration keeps default conflict and off semantics |
+| `p114` | `_restoreTrackPreferences`:15256 /statement | assertion-killed | subtitle restoration diagnostic preserves the track snapshot and chosen fallback |
+| `p115` | `_restoreTrackPreferences`:15256 /string | assertion-killed | subtitle restoration diagnostic preserves the track snapshot and chosen fallback |
+| `p116` | `_restoreTrackPreferences`:15257 /statement | assertion-killed | subtitle IPTV series audio override follows global default before final restoration |
+| `p117` | `_restoreTrackPreferences`:15258 /branch | assertion-killed | subtitle IPTV series audio override follows global default before final restoration |
+| `p118` | `_restoreTrackPreferences`:15259 /statement | assertion-killed | subtitle IPTV series audio override follows global default before final restoration |
+| `p119` | `_restoreTrackPreferences`:15261 /statement | assertion-killed | subtitle replacement defers policy reselection until stored restoration publishes readiness |
+| `p120` | `_restoreTrackPreferences`:15261 /boolean | assertion-killed | subtitle replacement defers policy reselection until stored restoration publishes readiness |
+| `p121` | `_restoreTrackPreferences`:15262 /statement | assertion-killed | subtitle restoration diagnostic preserves the track snapshot and chosen fallback |
+| `p122` | `_restoreTrackPreferences`:15266 /branch | assertion-killed | subtitle restoration diagnostic preserves the track snapshot and chosen fallback |
+| `p123` | `_restoreTrackPreferences`:15266 /operator | assertion-killed | subtitle restoration diagnostic preserves the track snapshot and chosen fallback |
+| `p124` | `_restoreTrackPreferences`:15267 /statement | assertion-killed | subtitle stored language read held across reset retains original captured selection |
+| `p125` | `_restoreTrackPreferences`:15267 /string | assertion-killed | subtitle stored language read held across reset retains original captured selection |
+| `p126` | `_restoreTrackPreferences`:15268 /return | assertion-killed | subtitle stored language read held across reset retains original captured selection |
+| `p127` | `_restoreTrackPreferences`:15272 /statement | assertion-killed | subtitle restoration diagnostic preserves the track snapshot and chosen fallback |
+| `p128` | `_restoreTrackPreferences`:15273 /statement | assertion-killed | subtitle priority waits for higher loading addon then success |
+| `p129` | `_restoreTrackPreferences`:15273 /boolean | assertion-killed | subtitle priority waits for higher loading addon then success |
+| `p130` | `_restoreTrackPreferences`:15274 /statement | assertion-killed | subtitle final restoration policy refresh samples changed native audio before discovery |
+| `p131` | `_restoreTrackPreferences`:15275 /statement | assertion-killed | subtitle restoration diagnostic preserves the track snapshot and chosen fallback |
+| `p132` | `_restoreTrackPreferences`:15276 /interpolated-string | assertion-killed | subtitle restoration diagnostic preserves the track snapshot and chosen fallback |
+| `p133` | `_restoreTrackPreferences`:15281 /statement | assertion-killed | subtitle priority waits for higher loading addon then success |
+| `p134` | `_restoreTrackPreferences`:15283 /statement | assertion-killed | subtitle malformed stored track identity is caught before restoration publishes selection |
+| `p135` | `_restoreTrackPreferences`:15283 /interpolated-string | assertion-killed | subtitle malformed stored track identity is caught before restoration publishes selection |
+| `p136` | `_applyDefaultAudioLanguage`:15290 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p137` | `_applyDefaultAudioLanguage`:15292 /branch | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p138` | `_applyDefaultAudioLanguage`:15292 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p139` | `_applyDefaultAudioLanguage`:15292 /null | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p140` | `_applyDefaultAudioLanguage`:15294 /return | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p141` | `_applyDefaultAudioLanguage`:15297 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p142` | `_applyDefaultAudioLanguage`:15298 /branch | assertion-killed | subtitle original no preference fallback audio property failure |
+| `p143` | `_applyDefaultAudioLanguage`:15298 /return | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p144` | `_applyDefaultAudioLanguage`:15306 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p145` | `_applyDefaultAudioLanguage`:15307 /branch | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p146` | `_applyDefaultAudioLanguage`:15309 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p147` | `_applyDefaultAudioLanguage`:15310 /string | assertion-killed | subtitle original audio en native eng selects 2 |
+| `p148` | `_applyDefaultAudioLanguage`:15312 /branch | assertion-killed | subtitle native audio read held across manual uses captured tracks and live player |
+| `p149` | `_applyDefaultAudioLanguage`:15313 /return | assertion-killed | subtitle original audio en native eng selects 2 |
+| `p150` | `_applyDefaultAudioLanguage`:15321 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p151` | `_applyDefaultAudioLanguage`:15323 /branch | assertion-killed | subtitle original audio en native fra selects 1 |
+| `p152` | `_applyDefaultAudioLanguage`:15324 /statement | assertion-killed | subtitle original no preference fallback audio property failure |
+| `p153` | `_applyDefaultAudioLanguage`:15328 /branch | assertion-killed | subtitle original audio de native  selects 3 |
+| `p154` | `_applyDefaultAudioLanguage`:15329 /statement | assertion-killed | subtitle original audio de native  selects 3 |
+| `p155` | `_applyDefaultAudioLanguage`:15334 /branch | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p156` | `_applyDefaultAudioLanguage`:15334 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p157` | `_applyDefaultAudioLanguage`:15334 /null | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p158` | `_applyDefaultAudioLanguage`:15335 /statement | assertion-killed | subtitle original no preference fallback audio property failure |
+| `p159` | `_audioAllowsAutomaticSubtitles`:15343 /operator | assertion-killed | subtitle live audio policy uses the off apply caller before source priority reselects |
+| `p160` | `_refreshSubtitleAudioPolicy`:15350 /boolean | assertion-killed | subtitle initialization reaches the foreign off original apply caller |
+| `p161` | `_refreshSubtitleAudioPolicy`:15351 /branch | assertion-killed | subtitle initialization reaches the foreign off original apply caller |
+| `p162` | `_refreshSubtitleAudioPolicy`:15351 /operator | assertion-killed | subtitle default audio with no tracks avoids the native language property read |
+| `p163` | `_refreshSubtitleAudioPolicy`:15351 /return | assertion-killed | subtitle policy manual success dispatch uses its retained refresh caller |
+| `p164` | `_refreshSubtitleAudioPolicy`:15352 /branch | assertion-killed | subtitle initialization reaches the foreign off original apply caller |
+| `p165` | `_refreshSubtitleAudioPolicy`:15353 /branch | assertion-killed | subtitle forced renderer rejection keeps no preferences restore and replacement ordering |
+| `p166` | `_refreshSubtitleAudioPolicy`:15353 /operator | assertion-killed | subtitle forced renderer rejection keeps no preferences restore and replacement ordering |
+| `p167` | `_refreshSubtitleAudioPolicy`:15354 /statement | assertion-killed | subtitle forced renderer rejection keeps no preferences restore and replacement ordering |
+| `p168` | `_refreshSubtitleAudioPolicy`:15356 /return | assertion-killed | subtitle forced true preference null never selects a full track |
+| `p169` | `_refreshSubtitleAudioPolicy`:15358 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p170` | `_refreshSubtitleAudioPolicy`:15358 /prefix | assertion-killed | subtitle failed manual choice cannot resurrect an earlier audio revision |
+| `p171` | `_refreshSubtitleAudioPolicy`:15359 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p172` | `_refreshSubtitleAudioPolicy`:15360 /statement | assertion-killed | subtitle discovery cannot use the previous audio language while its next sample is pending |
+| `p173` | `_refreshSubtitleAudioPolicy`:15360 /null | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p174` | `_refreshSubtitleAudioPolicy`:15361 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p175` | `_refreshSubtitleAudioPolicy`:15362 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p176` | `_refreshSubtitleAudioPolicy`:15365 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p177` | `_refreshSubtitleAudioPolicy`:15366 /branch | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p178` | `_refreshSubtitleAudioPolicy`:15369 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p179` | `_refreshSubtitleAudioPolicy`:15369 /string | assertion-killed | subtitle live audio policy uses the off apply caller before source priority reselects |
+| `p180` | `_refreshSubtitleAudioPolicy`:15370 /statement | assertion-killed | subtitle live audio policy uses the off apply caller before source priority reselects |
+| `p181` | `_refreshSubtitleAudioPolicy`:15376 /operator | assertion-killed | subtitle latest audio revision wins a held earlier native language delivery |
+| `p182` | `_refreshSubtitleAudioPolicy`:15376 /operator | assertion-killed | subtitle latest audio revision wins a held earlier native language delivery |
+| `p183` | `_refreshSubtitleAudioPolicy`:15376 /operator | assertion-killed | subtitle latest audio revision wins a held earlier native language delivery |
+| `p184` | `_refreshSubtitleAudioPolicy`:15377 /operator | assertion-killed | subtitle initialization reaches the foreign off original apply caller |
+| `p185` | `_refreshSubtitleAudioPolicy`:15378 /operator | assertion-killed | subtitle initialization reaches the foreign off original apply caller |
+| `p186` | `_refreshSubtitleAudioPolicy`:15380 /branch | assertion-killed | subtitle initialization reaches the foreign off original apply caller |
+| `p187` | `_refreshSubtitleAudioPolicy`:15380 /return | assertion-killed | subtitle live audio policy uses the off apply caller before source priority reselects |
+| `p188` | `_refreshSubtitleAudioPolicy`:15381 /statement | assertion-killed | subtitle live audio policy uses the off apply caller before source priority reselects |
+| `p189` | `_refreshSubtitleAudioPolicy`:15382 /branch | assertion-killed | subtitle live audio policy uses the off apply caller before source priority reselects |
+| `p190` | `_refreshSubtitleAudioPolicy`:15382 /operator | assertion-killed | subtitle replacement defers policy reselection until stored restoration publishes readiness |
+| `p191` | `_refreshSubtitleAudioPolicy`:15382 /return | assertion-killed | subtitle live audio policy uses the off apply caller before source priority reselects |
+| `p192` | `_refreshSubtitleAudioPolicy`:15383 /branch | assertion-killed | subtitle initialization reaches the foreign off original apply caller |
+| `p193` | `_refreshSubtitleAudioPolicy`:15384 /statement | assertion-killed | subtitle embedded priority clears its applied latch when preferred audio turns captions off |
+| `p194` | `_refreshSubtitleAudioPolicy`:15384 /boolean | assertion-killed | subtitle policy native track dispatch uses its retained refresh caller |
+| `p195` | `_refreshSubtitleAudioPolicy`:15385 /statement | assertion-killed | subtitle policy native track dispatch uses its retained refresh caller |
+| `p196` | `_refreshSubtitleAudioPolicy`:15385 /null | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p197` | `_refreshSubtitleAudioPolicy`:15386 /statement | assertion-killed | subtitle policy native track dispatch uses its retained refresh caller |
+| `p198` | `_refreshSubtitleAudioPolicy`:15386 /null | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p199` | `_refreshSubtitleAudioPolicy`:15387 /statement | assertion-killed | subtitle initialization reaches the foreign off original apply caller |
+| `p200` | `_refreshSubtitleAudioPolicy`:15389 /string | assertion-killed | subtitle refresh off request retains its diagnostic source on native rejection |
+| `p201` | `_refreshSubtitleAudioPolicy`:15393 /branch | assertion-killed | subtitle stale off success cannot repeat a newer provisional embedded selection |
+| `p202` | `_refreshSubtitleAudioPolicy`:15393 /return | assertion-killed | subtitle stale off success cannot repeat a newer provisional embedded selection |
+| `p203` | `_refreshSubtitleAudioPolicy`:15394 /statement | assertion-killed | subtitle policy native track dispatch uses its retained refresh caller |
+| `p204` | `_refreshSubtitleAudioPolicy`:15397 /operator | assertion-killed | subtitle held automatic download crossed by audio preserves original validity |
+| `p205` | `_refreshSubtitleAudioPolicy`:15397 /null | assertion-killed | subtitle held automatic download crossed by audio preserves original validity |
+| `p206` | `_applyDefaultSubtitleLanguage`:15404 /boolean | assertion-killed | subtitle policy manual success dispatch uses its retained refresh caller |
+| `p207` | `_applyDefaultSubtitleLanguage`:15406 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p208` | `_applyDefaultSubtitleLanguage`:15407 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p209` | `_applyDefaultSubtitleLanguage`:15409 /operator | assertion-killed | subtitle provisional default rejects an identified title changing only the content token |
+| `p210` | `_applyDefaultSubtitleLanguage`:15409 /operator | assertion-killed | subtitle provisional default rejects an identified title changing only the content token |
+| `p211` | `_applyDefaultSubtitleLanguage`:15409 /operator | assertion-killed | subtitle provisional default rejects an identified title changing only the content token |
+| `p212` | `_applyDefaultSubtitleLanguage`:15410 /operator | assertion-killed | subtitle original language null native 3 selects 3 |
+| `p213` | `_applyDefaultSubtitleLanguage`:15411 /operator | assertion-killed | subtitle original language null native 3 selects 3 |
+| `p214` | `_applyDefaultSubtitleLanguage`:15414 /branch | assertion-killed | subtitle original language null native 3 selects 3 |
+| `p215` | `_applyDefaultSubtitleLanguage`:15415 /statement | assertion-killed | subtitle initialization reaches the foreign off original apply caller |
+| `p216` | `_applyDefaultSubtitleLanguage`:15417 /string | assertion-killed | subtitle default off request retains its diagnostic source on native rejection |
+| `p217` | `_applyDefaultSubtitleLanguage`:15420 /return | assertion-killed | subtitle initialization reaches the foreign off original apply caller |
+| `p218` | `_applyDefaultSubtitleLanguage`:15420 /boolean | assertion-killed | subtitle early off return and applied result precede a held final foreign-audio sample |
+| `p219` | `_applyDefaultSubtitleLanguage`:15422 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p220` | `_applyDefaultSubtitleLanguage`:15424 /statement | assertion-killed | subtitle restoration diagnostic preserves the track snapshot and chosen fallback |
+| `p221` | `_applyDefaultSubtitleLanguage`:15424 /interpolated-string | assertion-killed | subtitle restoration diagnostic preserves the track snapshot and chosen fallback |
+| `p222` | `_applyDefaultSubtitleLanguage`:15425 /branch | assertion-killed | subtitle original language null native 3 selects 3 |
+| `p223` | `_applyDefaultSubtitleLanguage`:15426 /return | assertion-killed | subtitle provisional default rejects an identified title changing only the content token |
+| `p224` | `_applyDefaultSubtitleLanguage`:15426 /boolean | assertion-killed | subtitle stale default-language read returns false before priority settings and readiness publication |
+| `p225` | `_applyDefaultSubtitleLanguage`:15428 /branch | assertion-killed | subtitle original language null native 3 selects 3 |
+| `p226` | `_applyDefaultSubtitleLanguage`:15429 /return | assertion-killed | subtitle forced false preference en never selects a full track |
+| `p227` | `_applyDefaultSubtitleLanguage`:15431 /branch | assertion-killed | subtitle policy manual success dispatch uses its retained refresh caller |
+| `p228` | `_applyDefaultSubtitleLanguage`:15431 /operator | assertion-killed | subtitle explicit off disables an existing track before unavailable source priority is consulted |
+| `p229` | `_applyDefaultSubtitleLanguage`:15431 /operator | assertion-killed | subtitle explicit off disables an existing track before unavailable source priority is consulted |
+| `p230` | `_applyDefaultSubtitleLanguage`:15431 /string | assertion-killed | subtitle explicit off disables an existing track before unavailable source priority is consulted |
+| `p231` | `_applyDefaultSubtitleLanguage`:15432 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p232` | `_applyDefaultSubtitleLanguage`:15433 /branch | assertion-killed | subtitle stale default-source order returns false before matching and readiness publication |
+| `p233` | `_applyDefaultSubtitleLanguage`:15434 /return | assertion-killed | subtitle stale default-source order returns false before matching and readiness publication |
+| `p234` | `_applyDefaultSubtitleLanguage`:15434 /boolean | assertion-killed | subtitle stale default-source order returns false before matching and readiness publication |
+| `p235` | `_applyDefaultSubtitleLanguage`:15436 /branch | assertion-killed | subtitle restoration diagnostic preserves the track snapshot and chosen fallback |
+| `p236` | `_applyDefaultSubtitleLanguage`:15436 /operator | assertion-killed | subtitle restoration diagnostic preserves the track snapshot and chosen fallback |
+| `p237` | `_applyDefaultSubtitleLanguage`:15436 /return | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p238` | `_applyDefaultSubtitleLanguage`:15436 /boolean | assertion-killed | subtitle priority waits for higher loading addon then success |
+| `p239` | `_applyDefaultSubtitleLanguage`:15438 /branch | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p240` | `_applyDefaultSubtitleLanguage`:15438 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p241` | `_applyDefaultSubtitleLanguage`:15438 /null | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p242` | `_applyDefaultSubtitleLanguage`:15439 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p243` | `_applyDefaultSubtitleLanguage`:15440 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p244` | `_applyDefaultSubtitleLanguage`:15441 /branch | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p245` | `_applyDefaultSubtitleLanguage`:15444 /statement | assertion-killed | subtitle original language null native 3 selects 3 |
+| `p246` | `_applyDefaultSubtitleLanguage`:15444 /string | assertion-killed | subtitle original language null native 3 selects 3 |
+| `p247` | `_applyDefaultSubtitleLanguage`:15449 /branch | assertion-killed | subtitle original language null native 3 selects 3 |
+| `p248` | `_applyDefaultSubtitleLanguage`:15450 /return | equivalent-redundant-current-guard | equivalence-addendum.json |
+| `p249` | `_applyDefaultSubtitleLanguage`:15450 /boolean | assertion-killed | subtitle pending native sid default cannot overwrite a newer manual selection |
+| `p250` | `_applyDefaultSubtitleLanguage`:15452 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p251` | `_applyDefaultSubtitleLanguage`:15456 /branch | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p252` | `_applyDefaultSubtitleLanguage`:15456 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p253` | `_applyDefaultSubtitleLanguage`:15456 /null | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p254` | `_applyDefaultSubtitleLanguage`:15456 /return | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p255` | `_applyDefaultSubtitleLanguage`:15456 /boolean | assertion-killed | subtitle original no preference fallback empty |
+| `p256` | `_applyDefaultSubtitleLanguage`:15457 /return | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p257` | `_applyDefaultSubtitleLanguage`:15459 /string | assertion-killed | subtitle no preference native rejection keeps the original diagnostic source |
+| `p258` | `_applyDefaultSubtitleLanguage`:15464 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p259` | `_applyDefaultSubtitleLanguage`:15466 /branch | assertion-killed | subtitle original language en native no selects 2 |
+| `p260` | `_applyDefaultSubtitleLanguage`:15466 /operator | assertion-killed | subtitle original language en native no selects 2 |
+| `p261` | `_applyDefaultSubtitleLanguage`:15466 /string | assertion-killed | subtitle explicit off disables an existing track before unavailable source priority is consulted |
+| `p262` | `_applyDefaultSubtitleLanguage`:15468 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p263` | `_applyDefaultSubtitleLanguage`:15470 /string | assertion-killed | subtitle off native rejection keeps the original diagnostic source |
+| `p264` | `_applyDefaultSubtitleLanguage`:15473 /return | assertion-killed | subtitle explicit off disables an existing track before unavailable source priority is consulted |
+| `p265` | `_applyDefaultSubtitleLanguage`:15478 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p266` | `_applyDefaultSubtitleLanguage`:15480 /branch | assertion-killed | subtitle original language en native no selects 2 |
+| `p267` | `_applyDefaultSubtitleLanguage`:15481 /branch | assertion-killed | subtitle original language en native no selects 2 |
+| `p268` | `_applyDefaultSubtitleLanguage`:15482 /statement | assertion-killed | subtitle original language en native no selects 2 |
+| `p269` | `_applyDefaultSubtitleLanguage`:15486 /branch | assertion-killed | subtitle original language en native no selects 2 |
+| `p270` | `_applyDefaultSubtitleLanguage`:15487 /statement | assertion-killed | subtitle original language de native no selects 6 |
+| `p271` | `_applyDefaultSubtitleLanguage`:15492 /branch | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p272` | `_applyDefaultSubtitleLanguage`:15492 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p273` | `_applyDefaultSubtitleLanguage`:15492 /null | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p274` | `_applyDefaultSubtitleLanguage`:15493 /statement | assertion-killed | subtitle restoration diagnostic preserves the track snapshot and chosen fallback |
+| `p275` | `_applyDefaultSubtitleLanguage`:15494 /interpolated-string | assertion-killed | subtitle restoration diagnostic preserves the track snapshot and chosen fallback |
+| `p276` | `_applyDefaultSubtitleLanguage`:15496 /return | assertion-killed | subtitle original language en native no selects 2 |
+| `p277` | `_applyDefaultSubtitleLanguage`:15498 /string | assertion-killed | subtitle language native rejection keeps the original diagnostic source |
+| `p278` | `_applyDefaultSubtitleLanguage`:15502 /statement | assertion-killed | subtitle original language ja native no selects no |
+| `p279` | `_applyDefaultSubtitleLanguage`:15503 /interpolated-string | assertion-killed | subtitle original language ja native no selects no |
+| `p280` | `_applyDefaultSubtitleLanguage`:15505 /return | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p281` | `_applyDefaultSubtitleLanguage`:15505 /boolean | assertion-killed | subtitle original language ja native no selects no |
+| `p282` | `_applyDefaultSubtitleLanguage`:15508 /statement | assertion-killed | subtitle malformed default-language storage is swallowed before selection |
+| `p283` | `_applyDefaultSubtitleLanguage`:15508 /interpolated-string | assertion-killed | subtitle malformed default-language storage is swallowed before selection |
+| `p284` | `_applyDefaultSubtitleLanguage`:15509 /return | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p285` | `_applyDefaultSubtitleLanguage`:15509 /boolean | assertion-killed | subtitle malformed default-language storage is swallowed before selection |
+| `p286` | `_applyForcedSubtitle`:15517 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p287` | `_applyForcedSubtitle`:15518 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p288` | `_applyForcedSubtitle`:15520 /branch | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p289` | `_applyForcedSubtitle`:15521 /statement | assertion-killed | subtitle forced true preference null never selects a full track |
+| `p290` | `_applyForcedSubtitle`:15528 /statement | dormant-defensive-catch | equivalence-addendum.json |
+| `p291` | `_applyForcedSubtitle`:15528 /interpolated-string | dormant-defensive-catch | equivalence-addendum.json |
+| `p292` | `_applyForcedSubtitle`:15530 /branch | assertion-killed | subtitle forced true preference null never selects a full track |
+| `p293` | `_applyForcedSubtitle`:15530 /return | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p294` | `_applyForcedSubtitle`:15530 /boolean | assertion-killed | subtitle forced metadata pending during manual choice publishes the original unsuccessful restoration result |
+| `p295` | `_applyForcedSubtitle`:15531 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p296` | `_applyForcedSubtitle`:15533 /operator | assertion-killed | subtitle forced true preference null never selects a full track |
+| `p297` | `_applyForcedSubtitle`:15533 /operator | assertion-killed | subtitle forced true preference null never selects a full track |
+| `p298` | `_applyForcedSubtitle`:15537 /return | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p299` | `_applyForcedSubtitle`:15539 /conditional | assertion-killed | subtitle forced match native rejection keeps the original diagnostic source |
+| `p300` | `_applyForcedSubtitle`:15539 /operator | assertion-killed | subtitle forced match native rejection keeps the original diagnostic source |
+| `p301` | `_applyForcedSubtitle`:15539 /null | assertion-killed | subtitle forced missing native rejection keeps the original diagnostic source |
+| `p302` | `_applyForcedSubtitle`:15539 /string | assertion-killed | subtitle forced missing native rejection keeps the original diagnostic source |
+| `p303` | `_applyForcedSubtitle`:15539 /string | assertion-killed | subtitle forced match native rejection keeps the original diagnostic source |
+| `p304` | `_downloadStremioSubtitleToTempFile`:15554 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p305` | `_downloadStremioSubtitleToTempFile`:15555 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p306` | `_downloadStremioSubtitleToTempFile`:15556 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p307` | `_downloadStremioSubtitleToTempFile`:15558 /string | assertion-killed | subtitle cache accepts exact 1 byte boundary without a download |
+| `p308` | `_downloadStremioSubtitleToTempFile`:15559 /string | assertion-killed | subtitle reuse cache is inspected and registered for cleanup |
+| `p309` | `_downloadStremioSubtitleToTempFile`:15560 /string | assertion-killed | subtitle valid ass cache bypasses HTTP and is deleted by the original cleanup caller |
+| `p310` | `_downloadStremioSubtitleToTempFile`:15561 /string | assertion-killed | subtitle valid ssa cache bypasses HTTP and is deleted by the original cleanup caller |
+| `p311` | `_downloadStremioSubtitleToTempFile`:15562 /string | assertion-killed | subtitle valid ttml cache bypasses HTTP and is deleted by the original cleanup caller |
+| `p312` | `_downloadStremioSubtitleToTempFile`:15563 /string | assertion-killed | subtitle valid xml cache bypasses HTTP and is deleted by the original cleanup caller |
+| `p313` | `_downloadStremioSubtitleToTempFile`:15564 /string | assertion-killed | subtitle valid sub cache bypasses HTTP and is deleted by the original cleanup caller |
+| `p314` | `_downloadStremioSubtitleToTempFile`:15566 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p315` | `_downloadStremioSubtitleToTempFile`:15566 /interpolated-string | assertion-killed | subtitle reuse cache is inspected and registered for cleanup |
+| `p316` | `_downloadStremioSubtitleToTempFile`:15567 /branch | assertion-killed | subtitle download preserves actual raw non-UTF8 bytes |
+| `p317` | `_downloadStremioSubtitleToTempFile`:15568 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p318` | `_downloadStremioSubtitleToTempFile`:15569 /branch | assertion-killed | subtitle reuse cache is inspected and registered for cleanup |
+| `p319` | `_downloadStremioSubtitleToTempFile`:15569 /operator | assertion-killed | subtitle empty cache is inspected and registered for cleanup |
+| `p320` | `_downloadStremioSubtitleToTempFile`:15569 /operator | assertion-killed | subtitle empty cache is inspected and registered for cleanup |
+| `p321` | `_downloadStremioSubtitleToTempFile`:15569 /integer | assertion-killed | subtitle cache accepts exact 1 byte boundary without a download |
+| `p322` | `_downloadStremioSubtitleToTempFile`:15569 /operator | assertion-killed | subtitle cache accepts exact 5242880 byte boundary without a download |
+| `p323` | `_downloadStremioSubtitleToTempFile`:15570 /statement | assertion-killed | subtitle reuse cache is inspected and registered for cleanup |
+| `p324` | `_downloadStremioSubtitleToTempFile`:15571 /return | assertion-killed | subtitle reuse cache is inspected and registered for cleanup |
+| `p325` | `_downloadStremioSubtitleToTempFile`:15573 /statement | assertion-killed | subtitle invalid cache is removed even if replacement download is rejected |
+| `p326` | `_downloadStremioSubtitleToTempFile`:15577 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p327` | `_downloadStremioSubtitleToTempFile`:15578 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p328` | `_downloadStremioSubtitleToTempFile`:15580 /statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p329` | `_downloadStremioSubtitleToTempFile`:15581 /string | assertion-killed | subtitle overlapping same-stem downloads replace in completion order and clean one registered file |
+| `p330` | `_downloadStremioSubtitleToTempFile`:15582 /integer | assertion-killed | subtitle header timeout starts its own fifteen-second budget |
+| `p331` | `_downloadStremioSubtitleToTempFile`:15583 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p332` | `_downloadStremioSubtitleToTempFile`:15584 /branch | assertion-killed | subtitle download preserves actual raw non-UTF8 bytes |
+| `p333` | `_downloadStremioSubtitleToTempFile`:15584 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p334` | `_downloadStremioSubtitleToTempFile`:15584 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p335` | `_downloadStremioSubtitleToTempFile`:15584 /null | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p336` | `_downloadStremioSubtitleToTempFile`:15585 /operator | assertion-killed | subtitle streaming declared limit pins limits, effects and client close |
+| `p337` | `_downloadStremioSubtitleToTempFile`:15586 /statement | assertion-killed | subtitle streaming declared too large pins limits, effects and client close |
+| `p338` | `_downloadStremioSubtitleToTempFile`:15587 /string | assertion-killed | subtitle streaming declared too large pins limits, effects and client close |
+| `p339` | `_downloadStremioSubtitleToTempFile`:15588 /interpolated-string | assertion-killed | subtitle streaming declared too large pins limits, effects and client close |
+| `p340` | `_downloadStremioSubtitleToTempFile`:15590 /return | assertion-killed | subtitle streaming declared too large pins limits, effects and client close |
+| `p341` | `_downloadStremioSubtitleToTempFile`:15590 /null | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p342` | `_downloadStremioSubtitleToTempFile`:15592 /branch | assertion-killed | subtitle download preserves actual raw non-UTF8 bytes |
+| `p343` | `_downloadStremioSubtitleToTempFile`:15592 /operator | assertion-killed | subtitle download preserves actual raw non-UTF8 bytes |
+| `p344` | `_downloadStremioSubtitleToTempFile`:15592 /integer | assertion-killed | subtitle overlapping same-stem downloads replace in completion order and clean one registered file |
+| `p345` | `_downloadStremioSubtitleToTempFile`:15593 /statement | assertion-killed | subtitle streaming status pins limits, effects and client close |
+| `p346` | `_downloadStremioSubtitleToTempFile`:15594 /interpolated-string | assertion-killed | subtitle streaming status pins limits, effects and client close |
+| `p347` | `_downloadStremioSubtitleToTempFile`:15596 /return | assertion-killed | subtitle streaming status pins limits, effects and client close |
+| `p348` | `_downloadStremioSubtitleToTempFile`:15596 /null | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p349` | `_downloadStremioSubtitleToTempFile`:15599 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p350` | `_downloadStremioSubtitleToTempFile`:15601 /integer | assertion-killed | subtitle body timeout starts its own fifteen-second budget |
+| `p351` | `_downloadStremioSubtitleToTempFile`:15602 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p352` | `_downloadStremioSubtitleToTempFile`:15603 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p353` | `_downloadStremioSubtitleToTempFile`:15603 /interpolated-string | assertion-killed | subtitle overlapping same-stem downloads replace in completion order and clean one registered file |
+| `p354` | `_downloadStremioSubtitleToTempFile`:15604 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p355` | `_downloadStremioSubtitleToTempFile`:15604 /interpolated-string | assertion-killed | subtitle overlapping same-stem downloads replace in completion order and clean one registered file |
+| `p356` | `_downloadStremioSubtitleToTempFile`:15605 /statement | assertion-killed | subtitle overlapping same-stem downloads replace in completion order and clean one registered file |
+| `p357` | `_downloadStremioSubtitleToTempFile`:15605 /boolean | assertion-killed | subtitle held write after dispose preserves the original file leak |
+| `p358` | `_downloadStremioSubtitleToTempFile`:15606 /branch | assertion-killed | subtitle overlapping same-stem downloads replace in completion order and clean one registered file |
+| `p359` | `_downloadStremioSubtitleToTempFile`:15606 /statement | assertion-killed | subtitle overlapping same-stem downloads replace in completion order and clean one registered file |
+| `p360` | `_downloadStremioSubtitleToTempFile`:15607 /statement | assertion-killed | subtitle overlapping same-stem downloads replace in completion order and clean one registered file |
+| `p361` | `_downloadStremioSubtitleToTempFile`:15608 /statement | assertion-killed | subtitle overlapping same-stem downloads replace in completion order and clean one registered file |
+| `p362` | `_downloadStremioSubtitleToTempFile`:15609 /statement | assertion-killed | subtitle download preserves actual raw non-UTF8 bytes |
+| `p363` | `_downloadStremioSubtitleToTempFile`:15610 /interpolated-string | assertion-killed | subtitle download preserves actual raw non-UTF8 bytes |
+| `p364` | `_downloadStremioSubtitleToTempFile`:15611 /interpolated-string | assertion-killed | subtitle download preserves actual raw non-UTF8 bytes |
+| `p365` | `_downloadStremioSubtitleToTempFile`:15613 /return | assertion-killed | subtitle overlapping same-stem downloads replace in completion order and clean one registered file |
+| `p366` | `_downloadStremioSubtitleToTempFile`:15615 /statement | assertion-killed | subtitle download preserves actual raw non-UTF8 bytes |
+| `p367` | `_downloadStremioSubtitleToTempFile`:15618 /statement | assertion-killed | subtitle streaming body error pins limits, effects and client close |
+| `p368` | `_downloadStremioSubtitleToTempFile`:15618 /interpolated-string | assertion-killed | subtitle streaming body error pins limits, effects and client close |
+| `p369` | `_downloadStremioSubtitleToTempFile`:15619 /return | equivalent | equivalence-addendum.json |
+| `p370` | `_downloadStremioSubtitleToTempFile`:15619 /null | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p371` | `_applyExternalSubtitleTrack`:15632 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p372` | `_applyExternalSubtitleTrack`:15633 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p373` | `_applyExternalSubtitleTrack`:15636 /boolean | equivalent | equivalence-addendum.json |
+| `p374` | `_applyExternalSubtitleTrack`:15638 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p375` | `_applyExternalSubtitleTrack`:15640 /string | assertion-killed | subtitle external replacement apply failure loads before retiring only captured addon ids |
+| `p376` | `_applyExternalSubtitleTrack`:15643 /branch | assertion-killed | subtitle external replacement success loads before retiring only captured addon ids |
+| `p377` | `_applyExternalSubtitleTrack`:15643 /return | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p378` | `_applyExternalSubtitleTrack`:15643 /boolean | assertion-killed | subtitle external replacement apply failure loads before retiring only captured addon ids |
+| `p379` | `_applyExternalSubtitleTrack`:15645 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p380` | `_applyExternalSubtitleTrack`:15646 /branch | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p381` | `_applyExternalSubtitleTrack`:15648 /branch | assertion-killed | subtitle external cleanup held across dispose never removes a reused subsequent ordinal |
+| `p382` | `_applyExternalSubtitleTrack`:15648 /operator | assertion-killed | subtitle external cleanup held across reset never removes a reused subsequent ordinal |
+| `p383` | `_applyExternalSubtitleTrack`:15648 /operator | assertion-killed | subtitle external cleanup held across dispose never removes a reused subsequent ordinal |
+| `p384` | `_applyExternalSubtitleTrack`:15649 /operator | assertion-killed | subtitle external cleanup held across dispose never removes a reused subsequent ordinal |
+| `p385` | `_applyExternalSubtitleTrack`:15650 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p386` | `_applyExternalSubtitleTrack`:15650 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p387` | `_applyExternalSubtitleTrack`:15650 /null | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p388` | `_applyExternalSubtitleTrack`:15651 /statement | assertion-killed | subtitle external cleanup held across dispose never removes a reused subsequent ordinal |
+| `p389` | `_applyExternalSubtitleTrack`:15652 /string | assertion-killed | subtitle external cleanup held across dispose never removes a reused subsequent ordinal |
+| `p390` | `_applyExternalSubtitleTrack`:15653 /interpolated-string | assertion-killed | subtitle external cleanup held across dispose never removes a reused subsequent ordinal |
+| `p391` | `_applyExternalSubtitleTrack`:15655 /return | assertion-killed | subtitle external cleanup held across dispose never removes a reused subsequent ordinal |
+| `p392` | `_applyExternalSubtitleTrack`:15655 /boolean | equivalent-through-callers | equivalence-addendum.json |
+| `p393` | `_applyExternalSubtitleTrack`:15658 /statement | assertion-killed | subtitle external cleanup held across dispose never removes a reused subsequent ordinal |
+| `p394` | `_applyExternalSubtitleTrack`:15658 /string | assertion-killed | subtitle external cleanup held across dispose never removes a reused subsequent ordinal |
+| `p395` | `_applyExternalSubtitleTrack`:15660 /statement | assertion-killed | subtitle external replacement remove failure loads before retiring only captured addon ids |
+| `p396` | `_applyExternalSubtitleTrack`:15660 /interpolated-string | assertion-killed | subtitle external replacement remove failure loads before retiring only captured addon ids |
+| `p397` | `_applyExternalSubtitleTrack`:15664 /return | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p398` | `_applyExternalSubtitleTrack`:15664 /boolean | assertion-killed | subtitle external replacement success loads before retiring only captured addon ids |
+| `p399` | `_cleanupTempSubtitleFilesSync`:15671 /statement | assertion-killed | subtitle reuse cache is inspected and registered for cleanup |
+| `p400` | `_cleanupTempSubtitleFilesSync`:15673 /statement | assertion-killed | subtitle cleanup catches a missing file and clears registration before the next reset |
+| `p401` | `_cleanupTempSubtitleFilesSync`:15673 /interpolated-string | assertion-killed | subtitle cleanup catches a missing file and clears registration before the next reset |
+| `p402` | `_cleanupTempSubtitleFilesSync`:15676 /statement | assertion-killed | subtitle cleanup catches a missing file and clears registration before the next reset |
+| `p403` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15682 /branch | assertion-killed | subtitle priority waits for higher loading addon then success |
+| `p404` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15682 /operator | assertion-killed | subtitle priority waits for higher loading addon then success |
+| `p405` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15683 /operator | assertion-killed | subtitle manual movie identity overrides custom launch and reuses warmed discovery |
+| `p406` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15683 /null | assertion-killed | subtitle manual movie identity embeddedFirst=false overrides custom launch and reuses warmed discovery |
+| `p407` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15684 /return | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p408` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15686 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p409` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15690 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p410` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15691 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p411` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15692 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p412` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15693 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p413` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15694 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p414` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15696 /branch | assertion-killed | subtitle priority waits for higher loading addon then success |
+| `p415` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15696 /operator | assertion-killed | subtitle priority waits for higher loading addon then success |
+| `p416` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15696 /operator | assertion-killed | subtitle priority waits for higher loading addon then success |
+| `p417` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15696 /null | assertion-killed | subtitle priority waits for higher loading addon then success |
+| `p418` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15697 /statement | assertion-killed | subtitle manual movie identity overrides custom launch and reuses warmed discovery |
+| `p419` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15698 /statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p420` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15698 /conditional | assertion-killed | subtitle manual series identity overrides custom launch and reuses warmed discovery |
+| `p421` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15698 /operator | assertion-killed | subtitle manual series identity overrides custom launch and reuses warmed discovery |
+| `p422` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15698 /string | assertion-killed | subtitle manual series identity overrides custom launch and reuses warmed discovery |
+| `p423` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15698 /string | assertion-killed | subtitle manual series identity overrides custom launch and reuses warmed discovery |
+| `p424` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15698 /string | assertion-killed | subtitle manual movie identity embeddedFirst=false overrides custom launch and reuses warmed discovery |
+| `p425` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15699 /branch | assertion-killed | subtitle manual series identity overrides custom launch and reuses warmed discovery |
+| `p426` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15699 /operator | assertion-killed | subtitle manual series identity overrides custom launch and reuses warmed discovery |
+| `p427` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15699 /string | assertion-killed | subtitle manual series identity overrides custom launch and reuses warmed discovery |
+| `p428` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15700 /statement | assertion-killed | subtitle manual series identity overrides custom launch and reuses warmed discovery |
+| `p429` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15701 /statement | assertion-killed | subtitle manual series identity overrides custom launch and reuses warmed discovery |
+| `p430` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15702 /branch | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p431` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15702 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p432` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15702 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p433` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15702 /operator | equivalent-or-unreachable-manual-fallback | equivalence-addendum.json |
+| `p434` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15702 /operator | equivalent-or-unreachable-manual-fallback | equivalence-addendum.json |
+| `p435` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15702 /null | equivalent-or-unreachable-manual-fallback | equivalence-addendum.json |
+| `p436` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15702 /operator | equivalent-or-unreachable-manual-fallback | equivalence-addendum.json |
+| `p437` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15702 /null | equivalent-or-unreachable-manual-fallback | equivalence-addendum.json |
+| `p438` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15703 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p439` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15703 /null | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p440` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15705 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p441` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15706 /statement | equivalent-or-unreachable-manual-fallback | equivalence-addendum.json |
+| `p442` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15707 /statement | equivalent-or-unreachable-manual-fallback | equivalence-addendum.json |
+| `p443` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15709 /statement | equivalent-or-unreachable-manual-fallback | equivalence-addendum.json |
+| `p444` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15710 /statement | equivalent-or-unreachable-manual-fallback | equivalence-addendum.json |
+| `p445` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15712 /branch | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p446` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15712 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p447` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15712 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p448` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15712 /null | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p449` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15713 /statement | assertion-killed | subtitle parsed playlist identity follows original index and enriched show across episode selection |
+| `p450` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15714 /statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p451` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15714 /string | assertion-killed | subtitle parsed playlist identity follows original index and enriched show across episode selection |
+| `p452` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15716 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p453` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15717 /branch | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p454` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15717 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p455` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15717 /null | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p456` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15718 /statement | assertion-killed | subtitle parsed playlist identity follows original index and enriched show across episode selection |
+| `p457` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15719 /statement | assertion-killed | subtitle parsed playlist identity follows original index and enriched show across episode selection |
+| `p458` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15723 /statement | assertion-killed | subtitle priority waits for higher loading addon then success |
+| `p459` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15725 /branch | assertion-killed | subtitle priority waits for higher loading addon then success |
+| `p460` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15725 /operator | assertion-killed | subtitle single-file missing episode discovery preserves the original coordinate fallback |
+| `p461` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15725 /operator | assertion-killed | subtitle single-file missing episode discovery preserves the original coordinate fallback |
+| `p462` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15725 /operator | assertion-killed | subtitle single-file complete series discovery preserves the original coordinate fallback |
+| `p463` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15725 /string | assertion-killed | subtitle single-file complete series discovery preserves the original coordinate fallback |
+| `p464` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15726 /operator | assertion-killed | subtitle single-file complete series discovery preserves the original coordinate fallback |
+| `p465` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15726 /null | assertion-killed | subtitle single-file missing season discovery preserves the original coordinate fallback |
+| `p466` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15727 /operator | assertion-killed | subtitle single-file complete series discovery preserves the original coordinate fallback |
+| `p467` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15727 /null | assertion-killed | subtitle single-file missing episode discovery preserves the original coordinate fallback |
+| `p468` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15728 /statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p469` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15728 /string | assertion-killed | subtitle single-file complete series discovery preserves the original coordinate fallback |
+| `p470` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15729 /statement | assertion-killed | subtitle single-file complete series discovery preserves the original coordinate fallback |
+| `p471` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15730 /statement | assertion-killed | subtitle single-file complete series discovery preserves the original coordinate fallback |
+| `p472` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15732 /statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p473` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15732 /string | assertion-killed | subtitle priority waits for higher loading addon then success |
+| `p474` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15737 /branch | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p475` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15737 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p476` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15737 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p477` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15737 /null | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p478` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15738 /statement | assertion-killed | subtitle single-file empty id discovery preserves the original coordinate fallback |
+| `p479` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15741 /boolean | assertion-killed | subtitle metadata arriving after restoration retries discovery through the retained caller |
+| `p480` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15743 /return | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p481` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15745 /statement | assertion-killed | subtitle manual movie identity embeddedFirst=false overrides custom launch and reuses warmed discovery |
+| `p482` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15746 /interpolated-string | assertion-killed | subtitle manual movie identity embeddedFirst=false overrides custom launch and reuses warmed discovery |
+| `p483` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15750 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p484` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15750 /conditional | assertion-killed | subtitle manual movie identity overrides custom launch and reuses warmed discovery |
+| `p485` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15750 /operator | equivalent | equivalence-addendum.json |
+| `p486` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15750 /operator | assertion-killed | subtitle manual series identity overrides custom launch and reuses warmed discovery |
+| `p487` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15750 /null | assertion-killed | subtitle single-file zero season discovery preserves the original coordinate fallback |
+| `p488` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15750 /operator | assertion-killed | subtitle manual series identity overrides custom launch and reuses warmed discovery |
+| `p489` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15750 /null | assertion-killed | subtitle single-file zero episode discovery preserves the original coordinate fallback |
+| `p490` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15751 /interpolated-string | assertion-killed | subtitle manual series identity overrides custom launch and reuses warmed discovery |
+| `p491` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15755 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p492` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15756 /branch | assertion-killed | subtitle priority waits for higher loading addon then success |
+| `p493` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15756 /operator | assertion-killed | subtitle changed metadata identity replaces the warm cache before the public menu reads it |
+| `p494` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15756 /operator | assertion-killed | subtitle manual movie identity overrides custom launch and reuses warmed discovery |
+| `p495` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15756 /operator | assertion-killed | subtitle manual movie identity overrides custom launch and reuses warmed discovery |
+| `p496` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15756 /null | equivalent-cache-invariant | equivalence-addendum.json |
+| `p497` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15757 /statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p498` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15758 /statement | assertion-killed | subtitle manual movie identity overrides custom launch and reuses warmed discovery |
+| `p499` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15759 /interpolated-string | assertion-killed | subtitle same identity metadata retries use the published warm cache without another request |
+| `p500` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15764 /statement | assertion-killed | subtitle single-file complete series discovery preserves the original coordinate fallback |
+| `p501` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15764 /interpolated-string | assertion-killed | subtitle single-file complete series discovery preserves the original coordinate fallback |
+| `p502` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15765 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p503` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15771 /branch | assertion-killed | subtitle same-token discovery updates coalesce while download is held without duplicate native apply |
+| `p504` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15771 /operator | equivalent-redundant-entry-guard | equivalence-addendum.json |
+| `p505` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15771 /operator | assertion-killed | subtitle same-token discovery updates coalesce while download is held without duplicate native apply |
+| `p506` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15771 /return | assertion-killed | subtitle same-token discovery updates coalesce while download is held without duplicate native apply |
+| `p507` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15772 /statement | assertion-killed | subtitle same-token discovery updates coalesce while download is held without duplicate native apply |
+| `p508` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15775 /statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p509` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15778 /branch | assertion-killed | subtitle same-token discovery updates coalesce while download is held without duplicate native apply |
+| `p510` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15778 /operator | assertion-killed | subtitle same-token discovery updates coalesce while download is held without duplicate native apply |
+| `p511` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15779 /statement | assertion-killed | subtitle stale discovery delivery cannot replace the incoming episode cache exposed by the menu |
+| `p512` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15780 /string | assertion-killed | subtitle stale discovery delivery cannot replace the incoming episode cache exposed by the menu |
+| `p513` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15782 /return | assertion-killed | subtitle stale discovery delivery cannot replace the incoming episode cache exposed by the menu |
+| `p514` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15786 /statement | assertion-killed | subtitle same identity metadata retries use the published warm cache without another request |
+| `p515` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15787 /statement | assertion-killed | subtitle parsed playlist identity follows original index and enriched show across episode selection |
+| `p516` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15788 /statement | assertion-killed | subtitle same identity metadata retries use the published warm cache without another request |
+| `p517` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15789 /statement | assertion-killed | subtitle same-token discovery updates coalesce while download is held without duplicate native apply |
+| `p518` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15790 /interpolated-string | assertion-killed | subtitle single-file complete series discovery preserves the original coordinate fallback |
+| `p519` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15794 /statement | assertion-killed | subtitle manual movie identity overrides custom launch and reuses warmed discovery |
+| `p520` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15799 /statement | assertion-killed | subtitle discovery catches stable legacy inventory storage failure without native selection |
+| `p521` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15799 /interpolated-string | assertion-killed | subtitle discovery catches stable legacy inventory storage failure without native selection |
+| `p522` | `_applySubtitleSourcePriority`:15806 /boolean | assertion-killed | subtitle priority waits for higher loading addon then success |
+| `p523` | `_applySubtitleSourcePriority`:15808 /branch | assertion-killed | subtitle priority waits for higher loading addon then success |
+| `p524` | `_applySubtitleSourcePriority`:15808 /operator | equivalent-through-current-callers | equivalence-addendum.json |
+| `p525` | `_applySubtitleSourcePriority`:15808 /operator | assertion-killed | subtitle priority waits for higher loading addon then success |
+| `p526` | `_applySubtitleSourcePriority`:15808 /return | assertion-killed | subtitle priority waits for higher loading addon then success |
+| `p527` | `_applySubtitleSourcePriority`:15809 /statement | assertion-killed | subtitle priority waits for higher loading addon then success |
+| `p528` | `_applySubtitlePriorityUpdate`:15818 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p529` | `_applySubtitlePriorityUpdate`:15820 /operator | assertion-killed | subtitle held automatic download crossed by dispose preserves original validity |
+| `p530` | `_applySubtitlePriorityUpdate`:15820 /operator | assertion-killed | subtitle held automatic download crossed by dispose preserves original validity |
+| `p531` | `_applySubtitlePriorityUpdate`:15820 /operator | assertion-killed | subtitle held automatic download crossed by dispose preserves original validity |
+| `p532` | `_applySubtitlePriorityUpdate`:15820 /operator | assertion-killed | subtitle held automatic download crossed by dispose preserves original validity |
+| `p533` | `_applySubtitlePriorityUpdate`:15820 /operator | assertion-killed | subtitle held automatic download crossed by dispose preserves original validity |
+| `p534` | `_applySubtitlePriorityUpdate`:15820 /operator | assertion-killed | subtitle held automatic download crossed by dispose preserves original validity |
+| `p535` | `_applySubtitlePriorityUpdate`:15820 /operator | assertion-killed | subtitle held automatic download crossed by dispose preserves original validity |
+| `p536` | `_applySubtitlePriorityUpdate`:15820 /operator | assertion-killed | subtitle priority waits for higher loading addon then success |
+| `p537` | `_applySubtitlePriorityUpdate`:15823 /operator | assertion-killed | subtitle priority waits for higher loading addon then success |
+| `p538` | `_applySubtitlePriorityUpdate`:15827 /operator | assertion-killed | subtitle priority waits for higher loading addon then success |
+| `p539` | `_applySubtitlePriorityUpdate`:15827 /null | assertion-killed | subtitle priority waits for higher loading addon then success |
+| `p540` | `_applySubtitlePriorityUpdate`:15828 /branch | assertion-killed | subtitle priority waits for higher loading addon then success |
+| `p541` | `_applySubtitlePriorityUpdate`:15828 /return | assertion-killed | subtitle priority waits for higher loading addon then success |
+| `p542` | `_applySubtitlePriorityUpdate`:15830 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p543` | `_applySubtitlePriorityUpdate`:15832 /branch | assertion-killed | subtitle priority waits for higher loading addon then success |
+| `p544` | `_applySubtitlePriorityUpdate`:15833 /branch | assertion-killed | subtitle forced renderer rejection keeps no preferences restore and replacement ordering |
+| `p545` | `_applySubtitlePriorityUpdate`:15833 /statement | assertion-killed | subtitle forced renderer rejection keeps no preferences restore and replacement ordering |
+| `p546` | `_applySubtitlePriorityUpdate`:15834 /return | assertion-killed | subtitle forced renderer rejection keeps no preferences restore and replacement ordering |
+| `p547` | `_applySubtitlePriorityUpdate`:15836 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p548` | `_applySubtitlePriorityUpdate`:15837 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p549` | `_applySubtitlePriorityUpdate`:15838 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p550` | `_applySubtitlePriorityUpdate`:15846 /branch | assertion-killed | subtitle apply failure falls through addon priority to embedded preference |
+| `p551` | `_applySubtitlePriorityUpdate`:15846 /operator | assertion-killed | subtitle apply failure falls through addon priority to embedded preference |
+| `p552` | `_applySubtitlePriorityUpdate`:15846 /boolean | assertion-killed | subtitle manual movie identity embeddedFirst=true overrides custom launch and reuses warmed discovery |
+| `p553` | `_applySubtitlePriorityUpdate`:15846 /return | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p554` | `_applySubtitlePriorityUpdate`:15846 /boolean | assertion-killed | subtitle manual movie identity embeddedFirst=true overrides custom launch and reuses warmed discovery |
+| `p555` | `_applySubtitlePriorityUpdate`:15847 /return | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p556` | `_applySubtitlePriorityUpdate`:15847 /boolean | assertion-killed | subtitle apply failure falls through addon priority to embedded preference |
+| `p557` | `_applySubtitlePriorityUpdate`:15850 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p558` | `_applySubtitlePriorityUpdate`:15851 /branch | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p559` | `_applySubtitlePriorityUpdate`:15851 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p560` | `_applySubtitlePriorityUpdate`:15851 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p561` | `_applySubtitlePriorityUpdate`:15851 /null | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p562` | `_applySubtitlePriorityUpdate`:15851 /return | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p563` | `_applySubtitlePriorityUpdate`:15851 /boolean | assertion-killed | subtitle download failure falls through addon priority to embedded preference |
+| `p564` | `_applySubtitlePriorityUpdate`:15852 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p565` | `_applySubtitlePriorityUpdate`:15860 /branch | assertion-killed | subtitle held automatic download crossed by profile preserves original validity |
+| `p566` | `_applySubtitlePriorityUpdate`:15860 /statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p567` | `_applySubtitlePriorityUpdate`:15861 /return | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p568` | `_applySubtitlePriorityUpdate`:15864 /branch | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p569` | `_applySubtitlePriorityUpdate`:15864 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p570` | `_applySubtitlePriorityUpdate`:15864 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p571` | `_applySubtitlePriorityUpdate`:15864 /null | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p572` | `_applySubtitlePriorityUpdate`:15864 /return | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p573` | `_applySubtitlePriorityUpdate`:15865 /branch | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p574` | `_applySubtitlePriorityUpdate`:15866 /statement | assertion-killed | subtitle same-token discovery updates coalesce while download is held without duplicate native apply |
+| `p575` | `_applySubtitlePriorityUpdate`:15867 /statement | assertion-killed | subtitle held automatic download crossed by profile preserves original validity |
+| `p576` | `_applySubtitlePriorityUpdate`:15868 /branch | assertion-killed | subtitle held automatic download crossed by audio preserves original validity |
+| `p577` | `_applySubtitlePriorityUpdate`:15869 /statement | assertion-killed | subtitle regular embedded priority result latches against a later foreign-audio refresh |
+| `p578` | `_applySubtitlePriorityUpdate`:15869 /boolean | assertion-killed | subtitle regular embedded priority result latches against a later foreign-audio refresh |
+| `p579` | `_applySubtitlePriorityUpdate`:15872 /statement | assertion-killed | subtitle source priority catches malformed language after real addon discovery |
+| `p580` | `_applySubtitlePriorityUpdate`:15872 /interpolated-string | assertion-killed | subtitle source priority catches malformed language after real addon discovery |
+| `p581` | `_persistTrackChoice`:15892 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p582` | `_persistTrackChoice`:15893 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p583` | `_persistTrackChoice`:15894 /branch | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p584` | `_persistTrackChoice`:15894 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p585` | `_persistTrackChoice`:15894 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p586` | `_persistTrackChoice`:15894 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p587` | `_persistTrackChoice`:15894 /null | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p588` | `_persistTrackChoice`:15897 /statement | assertion-killed | subtitle rollback waits for successful optimistic persistence across same content |
+| `p589` | `_persistTrackChoice`:15897 /boolean | assertion-killed | subtitle rollback waits for successful optimistic persistence across same content |
+| `p590` | `_persistTrackChoice`:15898 /statement | assertion-killed | subtitle admitted rollback clears the active attempt before a later audio preference write |
+| `p591` | `_persistTrackChoice`:15899 /statement | assertion-killed | subtitle rollback waits for successful optimistic persistence across same content |
+| `p592` | `_persistTrackChoice`:15900 /statement | assertion-killed | subtitle rollback waits for successful optimistic persistence across same content |
+| `p593` | `_persistTrackChoice`:15903 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p594` | `_persistTrackChoice`:15904 /branch | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p595` | `_persistTrackChoice`:15904 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p596` | `_persistTrackChoice`:15904 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p597` | `_persistTrackChoice`:15904 /null | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p598` | `_persistTrackChoice`:15906 /statement | assertion-killed | subtitle series preference map read keeps original scope and preserves physical contents |
+| `p599` | `_persistTrackChoice`:15907 /string | assertion-killed | subtitle series restore reads Unknown Series fallback preferences through original initialization |
+| `p600` | `_persistTrackChoice`:15913 /declaration-statement | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p601` | `_persistTrackChoice`:15913 /conditional | assertion-killed | subtitle admitted rollback clears the active attempt before a later audio preference write |
+| `p602` | `_persistTrackChoice`:15915 /string | assertion-killed | subtitle video title "" persists its original sanitized fallback key |
+| `p603` | `_persistTrackChoice`:15916 /statement | assertion-killed | subtitle rollback waits for successful optimistic persistence across same content |
+| `p604` | `_persistTrackChoice`:15925 /branch | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p605` | `_persistTrackChoice`:15925 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p606` | `_persistTrackChoice`:15925 /operator | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p607` | `_persistTrackChoice`:15925 /null | invalid-candidate | Excluded invalid first candidate; typed binding/parent behaviour separately exercised |
+| `p608` | `_persistTrackChoice`:15926 /statement | assertion-killed | subtitle rollback waits for successful optimistic persistence across same content |
+| `p609` | `_tempSubtitleFiles`:1325 /field-initializer | assertion-killed | subtitle external replacement success loads before retiring only captured addon ids |
+| `p610` | `_subtitlePrioritySelectionQueue`:1319 /field-initializer | assertion-killed | subtitle a new playback State owns an independent queue while a disposed State download is held |
+
+### Typed declaration alternatives
+
+| Alternative / first point | Declaration / original line | Original assertion witness |
+|---|---|---|
+| `a000` /`p000` | `_restoreTrackPreferences`:15089 | subtitle restoration diagnostic preserves the track snapshot and chosen fallback |
+| `a009` /`p009` | `_restoreTrackPreferences`:15106 | subtitle series restore reads parsed series preferences through original initialization |
+| `a017` /`p017` | `_restoreTrackPreferences`:15117 | subtitle stored 1 restoration keeps default conflict and off semantics |
+| `a026` /`p026` | `_restoreTrackPreferences`:15134 | subtitle restoration diagnostic preserves the track snapshot and chosen fallback |
+| `a040` /`p040` | `_restoreTrackPreferences`:15145 | subtitle stored audio "1" with global "null" restores its original precedence |
+| `a042` /`p042` | `_restoreTrackPreferences`:15146 | subtitle series restore reads parsed series preferences through original initialization |
+| `a051` /`p051` | `_restoreTrackPreferences`:15156 | subtitle stored audio "1" with global "null" restores its original precedence |
+| `a073` /`p073` | `_restoreTrackPreferences`:15187 | subtitle series restore reads parsed series preferences through original initialization |
+| `a074` /`p074` | `_restoreTrackPreferences`:15189 | subtitle series restore reads parsed series preferences through original initialization |
+| `a078` /`p078` | `_restoreTrackPreferences`:15194 | subtitle series restore reads parsed series preferences through original initialization |
+| `a081` /`p081` | `_restoreTrackPreferences`:15205 | subtitle series restore reads parsed series preferences through original initialization |
+| `a082` /`p082` | `_restoreTrackPreferences`:15207 | subtitle stored 1 restoration keeps default conflict and off semantics |
+| `a136` /`p136` | `_applyDefaultAudioLanguage`:15290 | subtitle original audio de native  selects 3 |
+| `a141` /`p141` | `_applyDefaultAudioLanguage`:15297 | subtitle original audio de native  selects 3 |
+| `a144` /`p144` | `_applyDefaultAudioLanguage`:15306 | subtitle original audio en native eng selects 2 |
+| `a146` /`p146` | `_applyDefaultAudioLanguage`:15309 | subtitle original audio en native eng selects 2 |
+| `a150` /`p150` | `_applyDefaultAudioLanguage`:15321 | subtitle original audio ja native  selects 2 |
+| `a169` /`p169` | `_refreshSubtitleAudioPolicy`:15358 | subtitle held automatic download crossed by audio preserves original validity |
+| `a171` /`p171` | `_refreshSubtitleAudioPolicy`:15359 | subtitle held automatic download crossed by audio preserves original validity |
+| `a174` /`p174` | `_refreshSubtitleAudioPolicy`:15361 | subtitle policy native property failure retains recognized track metadata for foreign-audio selection |
+| `a175` /`p175` | `_refreshSubtitleAudioPolicy`:15362 | subtitle policy native property failure retains recognized track metadata for foreign-audio selection |
+| `a176` /`p176` | `_refreshSubtitleAudioPolicy`:15365 | subtitle held automatic download crossed by audio preserves original validity |
+| `a178` /`p178` | `_refreshSubtitleAudioPolicy`:15369 | subtitle held automatic download crossed by audio preserves original validity |
+| `a207` /`p207` | `_applyDefaultSubtitleLanguage`:15406 | subtitle explicit off disables an existing track before unavailable source priority is consulted |
+| `a208` /`p208` | `_applyDefaultSubtitleLanguage`:15407 | subtitle explicit off disables an existing track before unavailable source priority is consulted |
+| `a219` /`p219` | `_applyDefaultSubtitleLanguage`:15422 | subtitle explicit off disables an existing track before unavailable source priority is consulted |
+| `a231` /`p231` | `_applyDefaultSubtitleLanguage`:15432 | subtitle original language null native 3 selects 3 |
+| `a242` /`p242` | `_applyDefaultSubtitleLanguage`:15439 | subtitle reported native sid failure retains the Dart selected track |
+| `a243` /`p243` | `_applyDefaultSubtitleLanguage`:15440 | subtitle original language null native 3 selects 3 |
+| `a250` /`p250` | `_applyDefaultSubtitleLanguage`:15452 | subtitle original language null native 3 selects 3 |
+| `a258` /`p258` | `_applyDefaultSubtitleLanguage`:15464 | subtitle restoration diagnostic preserves the track snapshot and chosen fallback |
+| `a262` /`p262` | `_applyDefaultSubtitleLanguage`:15468 | subtitle explicit off disables an existing track before unavailable source priority is consulted |
+| `a265` /`p265` | `_applyDefaultSubtitleLanguage`:15478 | subtitle original language ja native no selects no |
+| `a286` /`p286` | `_applyForcedSubtitle`:15517 | subtitle nonnative forced mode never inherits an unmarked full track |
+| `a287` /`p287` | `_applyForcedSubtitle`:15518 | subtitle forced true preference null never selects a full track |
+| `a295` /`p295` | `_applyForcedSubtitle`:15531 | subtitle forced true preference null never selects a full track |
+| `a304` /`p304` | `_downloadStremioSubtitleToTempFile`:15554 | subtitle download preserves actual raw non-UTF8 bytes |
+| `a305` /`p305` | `_downloadStremioSubtitleToTempFile`:15555 | subtitle download preserves actual raw non-UTF8 bytes |
+| `a306` /`p306` | `_downloadStremioSubtitleToTempFile`:15556 | subtitle download preserves actual raw non-UTF8 bytes |
+| `a314` /`p314` | `_downloadStremioSubtitleToTempFile`:15566 | subtitle valid vtt cache bypasses HTTP and is deleted by the original cleanup caller |
+| `a317` /`p317` | `_downloadStremioSubtitleToTempFile`:15568 | subtitle valid vtt cache bypasses HTTP and is deleted by the original cleanup caller |
+| `a326` /`p326` | `_downloadStremioSubtitleToTempFile`:15577 | subtitle download preserves actual raw non-UTF8 bytes |
+| `a331` /`p331` | `_downloadStremioSubtitleToTempFile`:15583 | subtitle download preserves actual raw non-UTF8 bytes |
+| `a349` /`p349` | `_downloadStremioSubtitleToTempFile`:15599 | subtitle download preserves actual raw non-UTF8 bytes |
+| `a351` /`p351` | `_downloadStremioSubtitleToTempFile`:15602 | subtitle download preserves actual raw non-UTF8 bytes |
+| `a352` /`p352` | `_downloadStremioSubtitleToTempFile`:15603 | subtitle download preserves actual raw non-UTF8 bytes |
+| `a354` /`p354` | `_downloadStremioSubtitleToTempFile`:15604 | subtitle held write after dispose preserves the original file leak |
+| `a371` /`p371` | `_applyExternalSubtitleTrack`:15632 | subtitle external replacement success loads before retiring only captured addon ids |
+| `a372` /`p372` | `_applyExternalSubtitleTrack`:15633 | subtitle external replacement success loads before retiring only captured addon ids |
+| `a374` /`p374` | `_applyExternalSubtitleTrack`:15638 | subtitle external replacement success loads before retiring only captured addon ids |
+| `a379` /`p379` | `_applyExternalSubtitleTrack`:15645 | subtitle external replacement success loads before retiring only captured addon ids |
+| `a408` /`p408` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15686 | subtitle parsed playlist identity follows original index and enriched show across episode selection |
+| `a409` /`p409` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15690 | subtitle parsed playlist identity follows original index and enriched show across episode selection |
+| `a412` /`p412` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15693 | subtitle single-file movie discovery preserves the original coordinate fallback |
+| `a413` /`p413` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15694 | subtitle single-file movie discovery preserves the original coordinate fallback |
+| `a452` /`p452` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15716 | subtitle parsed playlist identity follows original index and enriched show across episode selection |
+| `a483` /`p483` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15750 | subtitle single-file movie discovery preserves the original coordinate fallback |
+| `a502` /`p502` | `_fetchAndMaybeAutoSelectAddonSubtitle`:15765 | subtitle parsed playlist identity follows original index and enriched show across episode selection |
+| `a528` /`p528` | `_applySubtitlePriorityUpdate`:15818 | subtitle priority waits for higher loading addon then success |
+| `a542` /`p542` | `_applySubtitlePriorityUpdate`:15830 | subtitle priority waits for higher loading addon then success |
+| `a547` /`p547` | `_applySubtitlePriorityUpdate`:15836 | subtitle priority waits for higher loading addon then success |
+| `a549` /`p549` | `_applySubtitlePriorityUpdate`:15838 | subtitle priority waits for higher loading addon then success |
+| `a557` /`p557` | `_applySubtitlePriorityUpdate`:15850 | subtitle priority waits for higher loading addon then success |
+| `a564` /`p564` | `_applySubtitlePriorityUpdate`:15852 | subtitle priority waits for higher loading addon then success |
+| `a581` /`p581` | `_persistTrackChoice`:15892 | subtitle rollback waits for failed optimistic persistence across same content |
+| `a593` /`p593` | `_persistTrackChoice`:15903 | subtitle series restore reads parsed series preferences through original initialization |
+| `a600` /`p600` | `_persistTrackChoice`:15913 | subtitle video title "" persists its original sanitized fallback key |
+
+### Final per-test original witnesses
+
+| Final behavior case | Assertion-failing original witness |
+|---|---|
+| subtitle IPTV series audio override follows global default before final restoration | `witness-final-plan-results.json`:`p117` |
+| subtitle IPTV series audio override follows stored tracks before final restoration | `witness-refresh-plan-results.json`:`w008` |
+| subtitle PikPak initial open restores tracks through its retained continuation | `reference-results.json`:`r01` |
+| subtitle Stremio guide retained reset deletes its outgoing addon file before reopening media | `reference-results.json`:`r10` |
+| subtitle a new playback State owns an independent queue while a disposed State download is held | `witness-refresh-plan-results.json`:`w001` |
+| subtitle apply failure falls through addon priority to embedded preference | `witness-refresh-plan-results.json`:`w001` |
+| subtitle body timeout starts its own fifteen-second budget | `closure5-plan-results.json`:`p350` |
+| subtitle cache accepts exact 1 byte boundary without a download | `witness-refresh-plan-results.json`:`w006` |
+| subtitle cache accepts exact 5242880 byte boundary without a download | `witness-refresh-plan-results.json`:`w006` |
+| subtitle changed metadata identity replaces the warm cache before the public menu reads it | `closure6-plan-results.json`:`p493` |
+| subtitle cleanup catches a missing file and clears registration before the next reset | `closure6-plan-results.json`:`p401` |
+| subtitle default audio with no tracks avoids the native language property read | `witness-refresh-plan-results.json`:`w017` |
+| subtitle default language excludes the first app-managed addon ordinal | `witness-refresh-plan-results.json`:`w044` |
+| subtitle default off request retains its diagnostic source on native rejection | `witness-refresh-plan-results.json`:`w022` |
+| subtitle direct source commit restores its subtitle selection through its retained caller | `reference-results.json`:`r08` |
+| subtitle direct source retained reset deletes its outgoing addon file before reopening media | `reference-results.json`:`r07` |
+| subtitle direct source rollback restores its subtitle selection through its retained caller | `reference-results.json`:`r09` |
+| subtitle discovery cannot use the previous audio language while its next sample is pending | `witness-refresh-plan-results.json`:`w020` |
+| subtitle discovery catches stable legacy inventory storage failure without native selection | `witness-refresh-plan-results.json`:`w033` |
+| subtitle discovery failure falls through addon priority to embedded preference | `witness-refresh-plan-results.json`:`w001` |
+| subtitle download failure falls through addon priority to embedded preference | `witness-refresh-plan-results.json`:`w001` |
+| subtitle download preserves actual gzip non-UTF8 bytes | `witness-refresh-plan-results.json`:`w041` |
+| subtitle download preserves actual raw non-UTF8 bytes | `closure5-plan-results.json`:`p362` |
+| subtitle download preserves actual zip non-UTF8 bytes | `witness-refresh-plan-results.json`:`w041` |
+| subtitle early off return and applied result precede a held final foreign-audio sample | `witness-refresh-plan-results.json`:`w001` |
+| subtitle embedded priority clears its applied latch when preferred audio turns captions off | `witness-refresh-plan-results.json`:`w001` |
+| subtitle empty cache is inspected and registered for cleanup | `witness-refresh-plan-results.json`:`w010` |
+| subtitle explicit off disables an existing track before unavailable source priority is consulted | `witness-final-plan-results.json`:`p261` |
+| subtitle external cleanup held across dispose never removes a reused subsequent ordinal | `witness-refresh-plan-results.json`:`w005` |
+| subtitle external cleanup held across reset never removes a reused subsequent ordinal | `witness-refresh-plan-results.json`:`w005` |
+| subtitle external replacement apply failure loads before retiring only captured addon ids | `witness-refresh-plan-results.json`:`w005` |
+| subtitle external replacement nonnative loads before retiring only captured addon ids | `witness-refresh-plan-results.json`:`w005` |
+| subtitle external replacement remove failure loads before retiring only captured addon ids | `witness-refresh-plan-results.json`:`w005` |
+| subtitle external replacement success loads before retiring only captured addon ids | `closure7-plan-results.json`:`a374` |
+| subtitle failed manual choice cannot resurrect an earlier audio revision | `witness-refresh-plan-results.json`:`w001` |
+| subtitle final restoration policy refresh samples changed native audio before discovery | `witness-refresh-plan-results.json`:`w014` |
+| subtitle forced false preference en never selects a full track | `witness-refresh-plan-results.json`:`w002` |
+| subtitle forced match native rejection keeps the original diagnostic source | `witness-refresh-plan-results.json`:`w009` |
+| subtitle forced metadata failure falls back to off without escaping its property-read catch | `witness-refresh-plan-results.json`:`w047` |
+| subtitle forced metadata pending during manual choice publishes the original unsuccessful restoration result | `closure5-plan-results.json`:`p294` |
+| subtitle forced missing native rejection keeps the original diagnostic source | `witness-refresh-plan-results.json`:`w009` |
+| subtitle forced renderer rejection keeps no preferences restore and replacement ordering | `closure4-results.json`:`p165` |
+| subtitle forced renderer rejection keeps stored auto restore and replacement ordering | `closure4-results.json`:`p165` |
+| subtitle forced true preference null never selects a full track | `witness-refresh-plan-results.json`:`w018` |
+| subtitle forced true preference off never selects a full track | `witness-refresh-plan-results.json`:`w018` |
+| subtitle global off overrides a stored embedded track literally labelled Off | `witness-refresh-plan-results.json`:`w015` |
+| subtitle guide channel retained reset deletes its outgoing addon file before reopening media | `reference-results.json`:`r11` |
+| subtitle header timeout starts its own fifteen-second budget | `closure5-plan-results.json`:`p330` |
+| subtitle held automatic download crossed by audio preserves original validity | `witness-refresh-plan-results.json`:`w001` |
+| subtitle held automatic download crossed by dispose preserves original validity | `witness-refresh-plan-results.json`:`w001` |
+| subtitle held automatic download crossed by manual preserves original validity | `witness-refresh-plan-results.json`:`w001` |
+| subtitle held automatic download crossed by profile preserves original validity | `witness-refresh-plan-results.json`:`w001` |
+| subtitle held rename after dispose preserves the original file leak | `witness-refresh-plan-results.json`:`w043` |
+| subtitle held rename after reset preserves the original file leak | `witness-refresh-plan-results.json`:`w043` |
+| subtitle held write after dispose preserves the original file leak | `typed-alternatives-plan-results.json`:`a304` |
+| subtitle held write after reset preserves the original file leak | `witness-refresh-plan-results.json`:`w042` |
+| subtitle invalid cache is removed even if replacement download is rejected | `witness-refresh-plan-results.json`:`w006` |
+| subtitle language native rejection keeps the original diagnostic source | `witness-refresh-plan-results.json`:`w025` |
+| subtitle latest audio revision wins a held earlier native language delivery | `witness-refresh-plan-results.json`:`w001` |
+| subtitle magic next retained reset deletes its outgoing addon file before reopening media | `reference-results.json`:`r05` |
+| subtitle malformed default-language storage is swallowed before selection | `witness-refresh-plan-results.json`:`w026` |
+| subtitle malformed stored track identity is caught before restoration publishes selection | `closure2-results.json`:`p134` |
+| subtitle manual movie identity embeddedFirst=false overrides custom launch and reuses warmed discovery | `closure5-plan-results.json`:`p406` |
+| subtitle manual movie identity embeddedFirst=true overrides custom launch and reuses warmed discovery | `closure5-plan-results.json`:`p424` |
+| subtitle manual series identity embeddedFirst=false overrides custom launch and reuses warmed discovery | `closure5-plan-results.json`:`p406` |
+| subtitle manual series identity embeddedFirst=true overrides custom launch and reuses warmed discovery | `closure5-plan-results.json`:`p481` |
+| subtitle metadata arriving after restoration retries discovery through the retained caller | `closure6-plan-results.json`:`p479` |
+| subtitle native audio read held across dispose uses captured tracks and live player | `witness-refresh-plan-results.json`:`w045` |
+| subtitle native audio read held across manual uses captured tracks and live player | `witness-final-plan-results.json`:`p151` |
+| subtitle native audio read held across profile uses captured tracks and live player | `witness-refresh-plan-results.json`:`w045` |
+| subtitle native audio read held across replacement uses captured tracks and live player | `witness-refresh-plan-results.json`:`w045` |
+| subtitle native audio read held across reset uses captured tracks and live player | `witness-refresh-plan-results.json`:`w045` |
+| subtitle newer content token proceeds while the outgoing generation download remains held | `witness-refresh-plan-results.json`:`w001` |
+| subtitle next channel retained reset deletes its outgoing addon file before reopening media | `reference-results.json`:`r12` |
+| subtitle no preference native rejection keeps the original diagnostic source | `witness-refresh-plan-results.json`:`w023` |
+| subtitle non-policy stored choice allows fallback on replacement with a missing ordinal | `witness-refresh-plan-results.json`:`w016` |
+| subtitle nonnative forced mode never inherits an unmarked full track | `typed-alternatives-plan-results.json`:`a286` |
+| subtitle off native rejection keeps the original diagnostic source | `witness-refresh-plan-results.json`:`w024` |
+| subtitle original audio de native  selects 3 | `witness-final-plan-results.json`:`p151` |
+| subtitle original audio en native eng selects 2 | `witness-final-plan-results.json`:`p117` |
+| subtitle original audio en native fra selects 1 | `witness-final-plan-results.json`:`p151` |
+| subtitle original audio ja native  selects 2 | `witness-final-plan-results.json`:`p151` |
+| subtitle original audio null native  selects 2 | `witness-refresh-plan-results.json`:`w046` |
+| subtitle original language de native no selects 6 | `witness-refresh-plan-results.json`:`w002` |
+| subtitle original language en native no selects 2 | `witness-refresh-plan-results.json`:`w002` |
+| subtitle original language eng native no selects 2 | `witness-refresh-plan-results.json`:`w002` |
+| subtitle original language es native no selects 3 | `witness-refresh-plan-results.json`:`w002` |
+| subtitle original language fr native no selects 1 | `witness-refresh-plan-results.json`:`w002` |
+| subtitle original language fra native no selects 1 | `witness-refresh-plan-results.json`:`w002` |
+| subtitle original language fre native no selects 1 | `witness-refresh-plan-results.json`:`w002` |
+| subtitle original language ja native no selects no | `witness-refresh-plan-results.json`:`w002` |
+| subtitle original language null native 3 selects 3 | `witness-refresh-plan-results.json`:`w002` |
+| subtitle original language null native no selects 2 | `witness-refresh-plan-results.json`:`w002` |
+| subtitle original language off native 3 selects no | `witness-final-plan-results.json`:`p261` |
+| subtitle original language por native no selects 4 | `witness-refresh-plan-results.json`:`w002` |
+| subtitle original language pt-BR native no selects 4 | `witness-refresh-plan-results.json`:`w002` |
+| subtitle original language spa native no selects 3 | `witness-refresh-plan-results.json`:`w002` |
+| subtitle original no preference fallback audio property failure | `witness-final-plan-results.json`:`p151` |
+| subtitle original no preference fallback empty | `witness-refresh-plan-results.json`:`w002` |
+| subtitle original no preference fallback first real | `witness-refresh-plan-results.json`:`w002` |
+| subtitle original no preference fallback nonnative | `witness-refresh-plan-results.json`:`w002` |
+| subtitle original no preference fallback sid property failure | `witness-refresh-plan-results.json`:`w002` |
+| subtitle overlapping same-stem downloads replace in completion order and clean one registered file | `witness-refresh-plan-results.json`:`w039` |
+| subtitle oversize cache is inspected and registered for cleanup | `witness-refresh-plan-results.json`:`w010` |
+| subtitle parsed playlist identity follows original index and enriched show across episode selection | `reference-results.json`:`r14` |
+| subtitle pending native sid default cannot overwrite a newer manual selection | `closure5-plan-results.json`:`p249` |
+| subtitle playlist source commit restores its subtitle selection through its retained caller | `reference-witness-results.json`:`r14` |
+| subtitle playlist source rollback restores its subtitle selection through its retained caller | `reference-results.json`:`r06` |
+| subtitle policy failed manual dispatch uses its retained refresh caller | `witness-refresh-plan-results.json`:`w001` |
+| subtitle policy manual success dispatch uses its retained refresh caller | `witness-refresh-plan-results.json`:`w001` |
+| subtitle policy native property failure retains recognized track metadata for foreign-audio selection | `typed-alternatives-plan-results.json`:`a169` |
+| subtitle policy native track dispatch uses its retained refresh caller | `witness-refresh-plan-results.json`:`w001` |
+| subtitle priority storage change alone schedules no reselection | `witness-refresh-plan-results.json`:`w048` |
+| subtitle priority waits for higher loading addon then failure | `witness-refresh-plan-results.json`:`w001` |
+| subtitle priority waits for higher loading addon then success | `witness-refresh-plan-results.json`:`w001` |
+| subtitle provisional default rejects an identified title changing only the content token | `witness-refresh-plan-results.json`:`w001` |
+| subtitle raw playlist retained reset deletes its outgoing addon file before reopening media | `reference-results.json`:`r13` |
+| subtitle refresh off request retains its diagnostic source on native rejection | `witness-refresh-plan-results.json`:`w021` |
+| subtitle regular embedded priority result latches against a later foreign-audio refresh | `witness-refresh-plan-results.json`:`w001` |
+| subtitle renderer replacement restores remembered tracks through the retained fallback caller | `reference-results.json`:`r04` |
+| subtitle replacement defers policy reselection until stored restoration publishes readiness | `witness-refresh-plan-results.json`:`w001` |
+| subtitle reported native sid failure retains the Dart selected track | `typed-alternatives-plan-results.json`:`a207` |
+| subtitle restoration diagnostic preserves the track snapshot and chosen fallback | `closure2-results.json`:`p114` |
+| subtitle restoration rejects old content immediately after the held preference map read | `witness-refresh-plan-results.json`:`w012` |
+| subtitle restoration rejects old content immediately after the held track poll | `witness-refresh-plan-results.json`:`w011` |
+| subtitle reuse cache is inspected and registered for cleanup | `reference-results.json`:`r16` |
+| subtitle same audio choice re-samples native language through its retained callback | `reference-closure-results.json`:`r21` |
+| subtitle same identity metadata retries use the published warm cache without another request | `reference-results.json`:`r15` |
+| subtitle same-token discovery updates coalesce while download is held without duplicate native apply | `witness-refresh-plan-results.json`:`w001` |
+| subtitle series preference map read crosses profile handoff and preserves physical contents | `reference-results.json`:`r19` |
+| subtitle series preference map read keeps original scope and preserves physical contents | `reference-results.json`:`r19` |
+| subtitle series restore reads Unknown Series fallback preferences through original initialization | `closure5-plan-results.json`:`p599` |
+| subtitle series restore reads parsed series preferences through original initialization | `typed-alternatives-plan-results.json`:`a000` |
+| subtitle service retry outlives disposed route without native apply | `witness-refresh-plan-results.json`:`w040` |
+| subtitle single-file complete series discovery preserves the original coordinate fallback | `closure5-plan-results.json`:`p462` |
+| subtitle single-file empty id discovery preserves the original coordinate fallback | `closure5-plan-results.json`:`p478` |
+| subtitle single-file missing episode discovery preserves the original coordinate fallback | `closure5-plan-results.json`:`p460` |
+| subtitle single-file missing season discovery preserves the original coordinate fallback | `closure5-plan-results.json`:`p460` |
+| subtitle single-file movie discovery preserves the original coordinate fallback | `closure5-plan-results.json`:`p460` |
+| subtitle single-file no id discovery preserves the original coordinate fallback | `closure5-plan-results.json`:`p478` |
+| subtitle single-file zero episode discovery preserves the original coordinate fallback | `closure5-plan-results.json`:`p462` |
+| subtitle single-file zero season discovery preserves the original coordinate fallback | `closure5-plan-results.json`:`p462` |
+| subtitle source priority catches malformed language after real addon discovery | `witness-refresh-plan-results.json`:`w034` |
+| subtitle stale default-language read returns false before priority settings and readiness publication | `closure5-plan-results.json`:`p228` |
+| subtitle stale default-source order returns false before matching and readiness publication | `closure5-plan-results.json`:`p228` |
+| subtitle stale discovery delivery cannot replace the incoming episode cache exposed by the menu | `witness-refresh-plan-results.json`:`w001` |
+| subtitle stale off success cannot repeat a newer provisional embedded selection | `witness-refresh-plan-results.json`:`w001` |
+| subtitle stored 1 restoration keeps default conflict and off semantics | `witness-refresh-plan-results.json`:`w004` |
+| subtitle stored 2 restoration keeps default conflict and off semantics | `witness-refresh-plan-results.json`:`w004` |
+| subtitle stored audio "" with global "eng" restores its original precedence | `witness-refresh-plan-results.json`:`w003` |
+| subtitle stored audio "" with global "null" restores its original precedence | `witness-refresh-plan-results.json`:`w003` |
+| subtitle stored audio "1" with global "eng" restores its original precedence | `witness-refresh-plan-results.json`:`w003` |
+| subtitle stored audio "1" with global "null" restores its original precedence | `witness-refresh-plan-results.json`:`w003` |
+| subtitle stored audio "2" with global "eng" restores its original precedence | `witness-refresh-plan-results.json`:`w003` |
+| subtitle stored audio "2" with global "null" restores its original precedence | `witness-refresh-plan-results.json`:`w003` |
+| subtitle stored audio "auto" with global "eng" restores its original precedence | `witness-refresh-plan-results.json`:`w003` |
+| subtitle stored audio "auto" with global "null" restores its original precedence | `witness-refresh-plan-results.json`:`w003` |
+| subtitle stored audio "missing" with global "eng" restores its original precedence | `witness-refresh-plan-results.json`:`w003` |
+| subtitle stored audio "missing" with global "null" restores its original precedence | `witness-refresh-plan-results.json`:`w003` |
+| subtitle stored audio "null" with global "eng" restores its original precedence | `witness-refresh-plan-results.json`:`w003` |
+| subtitle stored audio "null" with global "null" restores its original precedence | `witness-refresh-plan-results.json`:`w003` |
+| subtitle stored auto restoration keeps default conflict and off semantics | `witness-refresh-plan-results.json`:`w004` |
+| subtitle stored auto samples foreign audio before selecting the embedded default | `witness-refresh-plan-results.json`:`w019` |
+| subtitle stored language excludes the first app-managed addon ordinal | `witness-refresh-plan-results.json`:`w004` |
+| subtitle stored language read held across dispose retains original captured selection | `witness-refresh-plan-results.json`:`w004` |
+| subtitle stored language read held across manual retains original captured selection | `witness-refresh-plan-results.json`:`w004` |
+| subtitle stored language read held across profile retains original captured selection | `witness-refresh-plan-results.json`:`w004` |
+| subtitle stored language read held across replacement retains original captured selection | `witness-refresh-plan-results.json`:`w004` |
+| subtitle stored language read held across reset retains original captured selection | `closure2-results.json`:`p124` |
+| subtitle stored missing restoration keeps default conflict and off semantics | `witness-refresh-plan-results.json`:`w004` |
+| subtitle stored no restoration keeps default conflict and off semantics | `witness-refresh-plan-results.json`:`w004` |
+| subtitle stored policy choice wins an audio refresh admitted before its success turn | `witness-refresh-plan-results.json`:`w008` |
+| subtitle stored-auto replacement defers policy reselection until restoration publishes readiness | `witness-refresh-plan-results.json`:`w001` |
+| subtitle streaming body error pins limits, effects and client close | `closure5-plan-results.json`:`p367` |
+| subtitle streaming declared limit pins limits, effects and client close | `closure5-plan-results.json`:`p336` |
+| subtitle streaming declared too large pins limits, effects and client close | `closure5-plan-results.json`:`p337` |
+| subtitle streaming empty pins limits, effects and client close | `witness-refresh-plan-results.json`:`w041` |
+| subtitle streaming html pins limits, effects and client close | `witness-refresh-plan-results.json`:`w041` |
+| subtitle streaming status pins limits, effects and client close | `closure5-plan-results.json`:`p345` |
+| subtitle streaming undeclared limit pins limits, effects and client close | `witness-refresh-plan-results.json`:`w041` |
+| subtitle streaming undeclared too large pins limits, effects and client close | `witness-refresh-plan-results.json`:`w041` |
+| subtitle valid ass cache bypasses HTTP and is deleted by the original cleanup caller | `witness-refresh-plan-results.json`:`w027` |
+| subtitle valid srt cache bypasses HTTP and is deleted by the original cleanup caller | `witness-refresh-plan-results.json`:`w006` |
+| subtitle valid ssa cache bypasses HTTP and is deleted by the original cleanup caller | `witness-refresh-plan-results.json`:`w028` |
+| subtitle valid sub cache bypasses HTTP and is deleted by the original cleanup caller | `witness-refresh-plan-results.json`:`w031` |
+| subtitle valid ttml cache bypasses HTTP and is deleted by the original cleanup caller | `witness-refresh-plan-results.json`:`w029` |
+| subtitle valid vtt cache bypasses HTTP and is deleted by the original cleanup caller | `typed-alternatives-plan-results.json`:`a305` |
+| subtitle valid xml cache bypasses HTTP and is deleted by the original cleanup caller | `witness-refresh-plan-results.json`:`w030` |
+| subtitle video title "" persists its original sanitized fallback key | `closure5-plan-results.json`:`p601` |
+| subtitle video title "A Film / β!" persists its original sanitized fallback key | `closure5-plan-results.json`:`p601` |
+
+All 190 final case-file hashes have completed assertion-failing original witnesses (`p11/step0/witness-audit.json`); 48 final-input refreshes and three final language-file refreshes preserve the original application. A SourceSheet success witness additionally uses the retained playlist restoration caller. Final focused original controls pass190; the last null-audio native-read assertion has its own passing control. No interrupted or error-only mutation is credited.
+
+### Completed controls and additions-only baseline
+
+| New characterization file (`test/features/video_player/`) | Cases |
+|---|---|
+| `video_player_subtitle_sources_audio_races_test.dart` | 10 |
+| `video_player_subtitle_sources_callers_test.dart` | 9 |
+| `video_player_subtitle_sources_diagnostics_test.dart` | 12 |
+| `video_player_subtitle_sources_discovery_races_test.dart` | 4 |
+| `video_player_subtitle_sources_external_test.dart` | 6 |
+| `video_player_subtitle_sources_files_test.dart` | 19 |
+| `video_player_subtitle_sources_identity_test.dart` | 13 |
+| `video_player_subtitle_sources_language_test.dart` | 51 |
+| `video_player_subtitle_sources_metadata_test.dart` | 3 |
+| `video_player_subtitle_sources_payload_test.dart` | 13 |
+| `video_player_subtitle_sources_priority_test.dart` | 24 |
+| `video_player_subtitle_sources_resets_test.dart` | 6 |
+| `video_player_subtitle_sources_restore_guards_test.dart` | 4 |
+| `video_player_subtitle_sources_restore_races_test.dart` | 10 |
+| `video_player_subtitle_sources_series_writes_test.dart` | 6 |
+
+The staged tested tree `fb38fdef82621b9fe92bbc9a7a39e1c549cccb58` has **13,742 success /13 failure /28 load error /20 skip**. The complete `suite_evidence.py compare` and strict identity comparison both pass versus `original-suite.jsonl`: exactly190 added passing identities, zero changed/missing/newly skipped/fixed old identities. SDK Flutter3.44.8 (`058e0af2c2b57e369d905a03ac9748b0ebf543c6`), Dart3.12.2; exact original flags `--no-pub --dart-define=DEBRIFY_VP_TEST_HOOKS=true`, default test concurrency; suite invocations serialized. `final-suite.env.json` records a stable tree throughout. No failure allowlist or `test_baseline.py --record`.
+
+Final test analysis and normal formatting PASS (18 test/support files, zero issues); size and architecture PASS (3004 files /1672 migrated files). Step-T historical P1–P10, S/S2/S2b/S2c and every Dart/Kotlin self-test evidence is reused unchanged: no application/tooling/manifest input changed after `2ee13b490`. Parser-routing receipts show the full suite’s nested real-config self-test used its own copied package under `.dart_tool/vplayer_parser/suite_nested/`, with inherited kernels removed. The final explicit audio callback witness closes the only retained-reference survivor. App/pubspec are byte-identical to `7fdf59370`; the detached original is restored. CI/theme/source guards, production destinations and size lowering remain Step1 work.
+
+Development deviations remain archived and uncredited: early focused filters omitted relevant cases; declaration deletion often broke syntax/type promotion; one error-only list access now has an assertion before reading it; throwing-queue initialization timed out and was replaced by a valid static-sharing mutation. Native metadata failure is caught by the helper, and TVMaze preserves supplied IMDb identity, so controls were corrected at the fixture boundary; the changed identity uses the exposed shared browser model. The foreign-policy fixture needed the actual matching native-language rule, not a guessed unknown-language shortcut. Reset fixture URLs were made valid after whitespace encoding mismatched their synthetic route. The original has two initial embedded applications in the policy case (provisional then regular), now pinned before a later refresh. A first full-suite invocation with extra concurrency1 was deliberately interrupted and uncredited, then rerun from scratch with exact baseline flags. Earlier environment omission/brief overlapping controls and failed probes were likewise excluded and serially re-run. Assertions and application behavior were preserved; no bug fixes, real network, build/run/install/device actions, push/merge/branch switch.
+
+STOP before production moves. Step-0 commit and full commands/receipts are archived in `p11/step0/commit.json`, `final-suite-strict.json`, `witness-audit.json`, completed JSON/stderr logs and mutation patches. Independent sampling/review follows.

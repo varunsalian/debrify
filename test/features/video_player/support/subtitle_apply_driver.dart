@@ -33,9 +33,11 @@ class SubtitleApplyDriver {
   SubtitleApplyDriver(
     this.t, {
     bool native = true,
+    bool committed = true,
     void Function(FakePlayer)? configurePlayer,
   }) : f = VideoPlayerEnvironment(
          native: native,
+         committed: committed,
          configurePlayer: configurePlayer,
        );
   final WidgetTester t;
