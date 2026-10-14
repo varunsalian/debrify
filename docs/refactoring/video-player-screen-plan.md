@@ -1921,6 +1921,64 @@ offset/rendered configuration and profile writes; ≥ 5 mutations spread
 across phases 9–11; full suite and both release builds. Native decoding and
 PiP presentation stay device-pending.
 
+## Phase 12 — identify title and the subtitle search sheet
+
+Branch `refactor/vplayer-p12` off the M2 merge `6053efabd`. Evidence
+`refactor-evidence/vplayer/p12/`. Line numbers at `0c2fb62e8` (phase-11
+merge; M2 is test-only) — re-measure by name.
+
+≈ 650 lines leave the facade into two files (sizes proved at step T):
+
+**`vp_identify_title.dart` — `VpIdentifyTitle` + Host (≈ 300 lines):**
+`_currentPlaybackTitleForIdentity` 13894, `_identitySearchInitialQuery`
+13912, `_subtitleIdentityLabelForSheet` 13939,
+`_currentSeasonEpisodeForIdentity` 14302,
+`_requestSeasonEpisodeForIdentity` 14331 (a season/episode dialog —
+lexical builder contexts and `setDialogState` stay lexical),
+`_identifyTitleAndFetchSubtitles` 14430 (orchestrates the manual identity
+write, addon subtitle fetch via the phase-11 collaborator through the
+facade, and the identity label refresh).
+
+**`vp_identify_title_sheet.dart` — presentation helper (≈ 360 lines):**
+`_buildIdentifyTitleResultTile` 13950, `_showIdentifyTitleSearchSheet`
+14023 (278 lines; the modal search sheet with `setSheetState`, TV focus,
+debounce/search state — the lexical-setter guard applies).
+
+Phase-1 helpers already moved (`vpIdentitySearch…`, `vpFilterIdentitySearchResults`,
+`vpNormalisedContentType`, `vpNormalisePosterUrl`, `VpSeasonEpisodeSelection`)
+are imported, not re-moved.
+
+**Stays State-owned:** manual identity fields (`_manualContentImdbId`,
+`_manualContentType`, `_manualContentSeason`, `_manualContentEpisode` —
+read by effective identity getters, trackers, skip, guide),
+`_findSeriesEpisodeForCurrentIndex`, effective identity getters,
+`_resetSubtitleState`. Exact Host and field decisions by reader/writer
+count at step T; the phase-10/11 Host forwarders that reach moved
+members (if any) become patched facade adapters.
+
+**Retained references:** menu "identify title" action, tracks/subtitle
+menu label (`subtitleIdentityLabel:`), metadata retry orchestration —
+measured at step T.
+
+### Step 0 — characterization of the original
+
+Initial query construction (playback title vs content title vs filename,
+series stripping), search via the Stremio catalog addons (HTTP harness;
+real fixture addon), result filtering/labels/posters (phase-1 helpers via
+callers), the sheet's debounce, empty/error/loading states, TV DPAD
+navigation (first-key, held repeat, Back), selection → movie adopts
+immediately, series → season/episode dialog (validation, prefill from the
+current episode, cancel), manual identity write and its effect on
+trackers/skip/subtitle fetch identity, stale search results after a newer
+query, sheet dismissal mid-search, disposal and profile handoff during
+search/fetch; early windows. Mutation proofs, coverage matrix, Claude
+sample.
+
+### Device checklist (end of series)
+
+Identify title on phone and TV: search, pick a movie, pick a series
+episode; subtitles fetch for the chosen identity; trackers use it.
+
 ## Follow-ups
 
 - **Phase-11 original late restore (preserved):** a stored-track language read
