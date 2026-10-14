@@ -422,6 +422,15 @@ order. No new hook or installer. Exact declaration patches, independent site
 default/order negatives, source guard and S/S2 proofs are required as for S2.
 S2b stops for its own independent review before k2 characterization or moves.
 
+**Phase-10 platform checkpoint S2c.** Extend the same `VpS2Hooks.isAndroid`
+getter at only the renderer rejection guard in
+`_setSubtitleTrackWithDiagnostics`. The hook and installer, S and the accepted
+S2/S2b ledger stay frozen. A Phase-10 checkpoint ledger declares the single
+before→after patch against `5c7b704bd`, retains every other facade declaration
+and protects earlier destinations through history. Independent site negatives
+and actual-body native-default/order witnesses precede independent review;
+bitmap rejection/acceptance characterization follows at Step 0.
+
 **Per-phase profile/resource evidence** (AGENTS "Profiles, asynchronous
 work, and resources"): each stateful phase's step 0 pins, where its
 members participate, captured-scope writes, profile switch/deletion during
@@ -1653,7 +1662,137 @@ Auto subtitle sync on a mistimed external subtitle (pill announces, result
 shows, offset applied); manual sync slider and reset; subtitle style
 changes apply live (phone, TV, desktop, tvOS).
 
+## Phase 10 — subtitle engine II: apply, diagnostics and failure rollback
+
+Branch `refactor/vplayer-p10` off the phase-9 merge `5c7b704bd`. Evidence
+`refactor-evidence/vplayer/p10/`. Line numbers at `5c7b704bd`.
+
+### Ownership and moves (frozen by the design review)
+
+**Five methods move** → `presentation/legacy_video_player/vp_subtitle_apply.dart`
+(≈ 183 existing lines): `_waitForSubtitleTracks` 3889,
+`_setNativeSubtitleVisibilityForTrack` 3906,
+`_setSubtitleTrackWithDiagnostics` 3924, `_handleSubtitleApplyFailure`
+(≈ 3968), `_showSubtitleFailureMessage` 4052.
+
+**State-owned:** `_subtitleDiagnosticGeneration` and
+`_activeSubtitleApplyAttempt` (readers/writers span apply, failure,
+disposal, content reset, the subscription binder and preference
+persistence — two of the attempt's three readers stay outside), and the
+`_subtitleSelectionCorrection` notifier (allocation slot). The six
+external field occurrences stay unchanged.
+
+**Host (18 names / 21 declarations):** `mounted`, `context`, `setState`
+(→ `_vpSetState`), `player`, `addonSubtitleFetchToken`, `isIOS`, `isAndroid`,
+`isPipActive`, `iosPipStarting`, `androidVideoRendererMode`,
+`selectedStremioSubtitleId` getter/setter, `activeExternalSubtitlePath`
+getter, `subtitleSelectionCorrection`, `playerMenuKey`,
+`setActiveExternalSubtitlePath(String?)`,
+`Future<void> persistTrackChoice(String audio, String subtitle)`, and
+getter/setter pairs for both diagnostic fields. `GlobalKey<PlayerMenuPanelState>`
+and `ValueNotifier<String?>` identities preserved. Four complete chain
+substitutions registered (`registered_occurrence_substitutions.py:17`
+precedent): `VpS2Hooks.isIOS`, `VpS2Hooks.isAndroid`, `_pip.iosPipStarting`,
+`_subtitleSync.setActiveExternalSubtitlePath` → their Host forms, adapters
+reading the live facade; no sibling imports.
+
+**Patched facade adapter:** `_VpPipLifecycleHostAdapter` registered in
+`patched_class_projection` (`check_dart_moves.py:148`) with one counted
+rewrite of its `setNativeSubtitleVisibilityForTrack` forwarder (16180).
+
+**Retained references (23 executable):** 15 apply calls, 5 failure-message
+calls, 1 failure-handler call, 1 track-wait call, 1 PiP-adapter forwarder
+(3959/4002/4011 are internal moved-body calls; 8491 is a comment;
+10426/10427 are disposal invalidation and 15256/15257 content reset, both
+State-owned field writes left unchanged). Diagnostic-log subscription
+cancellation and notifier disposal stay in place.
+
+**CI:** current/self-test and both analyzer inputs → P10; P9 `--at
+5c7b704bd`; protect all 19 earlier destinations; tests and the destination
+in `ci_behavior_tests.txt`, the theme manifest, rendered set and all three
+source-guard lists. Collaborator assigned after `_subtitleSync`.
+
+### Step S2c — one-predicate seam extension (reviewed separately)
+
+The Android renderer rejection guard (3930) still uses raw
+`Platform.isAndroid`, outside S2/S2b (`vplayer_platform_seam_proof.py:27`).
+**Decision:** a separately reviewed **S2c** checkpoint replaces this one
+predicate occurrence with `VpS2Hooks.isAndroid` (short-circuit order and
+once-only default evaluation preserved; S/S2/S2b proofs retained; the new
+site mutation-proven) before step 0. Then characterize bitmap/image
+rejection on incompatible renderers, acceptance on `directMediaCodec`, and
+the Android-TV exemption (`FakeNativePlayer` records visibility effects;
+decoded bitmap rendering stays device-pending).
+
+The S2c ledger is `dev/tool/dart_moves/vplayer_p10_seam.json` (zero moves).
+CI's current/self-test and analyzer manifest select that checkpoint, retaining
+the P9 diagnostic inventory and adding P9 `--at 5c7b704bd`. This is checkpoint
+wiring only; Step T and the production P10 transition follow independent review.
+
+### Step 0 — characterization of the original (at S2c)
+
+- **Apply success:** native track set, visibility per text/bitmap/external,
+  generation increment, persisted preference matching the attempt.
+- **Correction delivery:** `kUnifiedPlayerMenuEnabled` is constant true, so
+  the facade returns before `TracksSheet.show` (14822) — the notifier's only
+  listener. Characterize repeated corrections through
+  `PlayerMenuPanelState.reconcileSubtitleSelection` (4045), incl. a
+  dismissed/reopened menu. Notifier-listener delivery and its null-arm
+  purpose are **dormant compatibility behaviour**, protected by the verbatim
+  proof; notifier construction, assignments and disposal unchanged.
+- **Three distinct late-failure behaviours (pin actual outcomes, add no
+  guards, record defects in Follow-ups):** (1) the decoder-log subscription
+  reads the *current* attempt (2665; logs carry no generation), so an old
+  log arriving after attempt B starts can roll **B** back; (2) a delayed
+  exception from A's apply carries A's object and is rejected by the entry
+  guard (3986); (3) a rollback of A admitted before B starts has no
+  generation recheck after its awaits. Barriers at native visibility, track
+  application, rollback visibility/track application and the 50 ms success
+  delay, crossed by content reset, profile handoff, disposal and renderer
+  replacement. After visibility, apply rereads the live player (3961);
+  replacement invalidates subscriptions but not the apply attempt (3252) —
+  preserve the captured-platform vs later-live-read distinction.
+- **Persistence/completion race matrix:** `_persistTrackChoice` (16071)
+  sets `persisted` and assigns `persistenceDone` before writing, swallows
+  write errors and completes its completer in `finally`; a second matching
+  write can replace the completer; rollback awaits the current one (4036)
+  then samples content again. Cover a decoder failure during an optimistic
+  write, failed writes still completing, two matching writes released out
+  of order, rollback persistence after content/profile changes. Exact
+  attempt and completer identities. **Physical writes in both profiles'
+  `playback_state_v1`** incl. unrelated entries (track storage reads a map,
+  `track_preferences_storage.dart:60`, then `PlaybackStateStore`
+  reacquires preferences, `playback_state_store.dart:33` — the same
+  cross-profile risk as phase 7's Follow-up). Existing `CompletionDelivery`,
+  preference transport doubles and step-H pending-action helpers suffice.
+- **S2c cases** above; `_waitForSubtitleTracks` timeout/arrival; early
+  windows; mutation proofs; coverage matrix; Claude sample. Feeds M2 (after
+  phase 11).
+
+### Device checklist (end of series)
+
+Selecting embedded, addon and external subtitles applies them; a broken
+subtitle reverts to the previous one with a message; bitmap (PGS)
+subtitles show, and are rejected with a message on an incompatible Android
+renderer; the menu reflects the corrected selection.
+
 ## Follow-ups
+
+- **Phase-10 subtitle apply races (S2c original, preserved):** decoder logs read
+  the current attempt, so an old log can roll B back. An admitted A rollback
+  continues after B/reset/profile/replacement and restores captured ids/path
+  without rechecking generation. Apply captures the native platform before its
+  await but reads the live player afterward. A manual addon apply can set its
+  stale native URI after reset while its outer caller rejects persistence.
+- Track preferences re-acquire the active profile after reading a map: A's
+  delayed map can overwrite B, including unrelated entries. Rollback waits for
+  the newest matching completer; an older physical write finishing last can
+  overwrite its correction. Tests inspect both profiles' physical contents.
+- A saved menu callback after disposal continues apply/persistence when the
+  correction notifier was already null; clearing a non-null correction throws
+  in debug mode. The existing disposal resume write can erase the previous
+  preference entry in that scenario. Original outcomes are pinned, not fixed.
+  Phase-10 evidence and follow-up coverage: `p10/step0/` and the deps matrix.
 
 - **Phase-8 lifecycle/PiP races (original S2, preserved):** backgrounding
   before output creation does not latch the first open; an older held
@@ -3451,6 +3590,175 @@ closures valid. P3: passthrough mutation notes p018/p021 corrected to the
 passthrough-off Android case (still device-pending). Claude sample 16/20 →
 18/18 valid after closures. Merged.
 
+### 2026-10-14 — Phase 10 S2c seam extension checkpoint (STOP)
+
+- **Input/scope.** Approved design `e1e73b811`, application base `5c7b704bd`;
+  final revision receipt in `p10/s2c/commit.json`. Application delta is exactly
+  one `Platform.isAndroid` → `VpS2Hooks.isAndroid` read in the subtitle renderer
+  rejection guard. Original current-check/short-circuit order, all other app
+  bytes, hook/installer and pubspec preserved. No production move or bug fix.
+- **Ledger/CI.** Checkpoint classifies 789 spans: 788 retained, one patched,
+  no scaffolding/destinations. Exact patch and earlier destination protection;
+  accepted S2/S2b ledger unchanged. CI current/self-test and analyzer manifest
+  select S2c with the unchanged P9 inventory; P9 historical check added.
+- **Proof/checks.** Nice19 S and S2/S2b/S2c self-proofs, current checkpoint,
+  CI universal self-test and P9/S2b same-revision history PASS. All 23 prior
+  independent negatives preserved plus eight S2c negatives. Extracted hook/guard:
+  five mode controls
+  (debug flag/no flag, assertions off, profile, compiled release) PASS; eight
+  independent site mutations assertion-killed. Serialized S/S2 guard suites,
+  hooks true and false: 7/7 PASS each, complete logs and stable input trees.
+  Analyzer retains all 104 identities/occurrences; zero formatting additions or
+  comma edits. Guard analysis, format/idempotence, size, architecture and diff
+  PASS. Isolated copied parser packages with kernels removed; commands/results
+  and exact application delta archived under `p10/s2c/`.
+- **Notes/stop.** Preliminary checks exposed a reporting-only assumption in
+  S's scaffold summary and a negative matching both current-check guards.
+  Summary now uses S's accepted ledger; the negative is scoped to the renderer
+  guard. Assertions preserved; rejected attempts archived uncredited, complete
+  final runs pass. No T, Step 0, full-suite gate, app build, push/merge/switch
+  or device action.
+  STOP for S2c independent review; native bitmap rendering remains device-pending.
+
+2026-10-14 — **Phase 10 independent S2c review (`vp-rev10s2c`): no P1/P2/P3.**
+Checkpoint `a2e034cb3` accepted. S2c is the ORIGINAL for Phase-10 behavior and
+mutation proofs; `5c7b704bd` remains the phase-9 historical merge checkpoint.
+
+### 2026-10-14 — Phase 10 prerequisites; frozen Host correction pending
+
+- S2c original re-measured: five methods, 150 AST statement/branch/literal sites,
+  exactly 23 retained executable references. All 36 independent nice19 checks
+  PASS: 26 existing Dart manifest self-tests, P1–P9 at their named merges and
+  Kotlin self-test. Every Dart invocation uses an isolated copied parser with
+  copied kernels removed. Evidence `p10/stepT/independent-results.json`.
+- Complete S2c original suite by identity versus P9 gate PASS: 13,465 successes,
+  unchanged 13 failures/28 load errors/20 skips, zero added/missing/changed/fixed
+  identities. SDK identical; tested tree stable. `p10/step0/original-suite*`.
+- **Blocking design mismatch:** the explicitly frozen 17-name /20-declaration
+  Host and three chains omit `isAndroid`, now required by the accepted S2c
+  predicate inside the moved diagnostics method. Preserving it without a facade
+  back-import needs `bool get isAndroid => VpS2Hooks.isAndroid;` and the fourth
+  exact chain. Proposed correction is 18 names /21 declarations /four chains;
+  `p10/stepT/host-correction-proposal.json`. Direction requested; not applied.
+- Step T materialization/probe/commit and full Step 0 remain incomplete.
+  Eighteen caller-case development controls and two pilot assertion witnesses
+  are preserved only in the detached original/evidence; they are not credited
+  as a completed coverage matrix or final mutation sweep. Main application,
+  pubspec and CI unchanged; no production move, push/merge/switch or device work.
+
+### 2026-10-14 — Phase 10 plan-owner Host correction approved
+
+Claude approved the proposal recorded in
+`p10/stepT/host-correction-proposal.json`: 18 Host names /21 declarations,
+four registered chains, and live `isAndroid` forwarded to `VpS2Hooks.isAndroid`
+at the original read. Frozen ownership and the resolution now match S2c;
+no destination facade import, production change or CI transition. Plan-only
+checkpoint; Step T and full Step 0 continue against `a2e034cb3` application code.
+Validation: exact diff and `git diff --check`.
+
+### 2026-10-14 — Phase 10 Step T complete (application still S2c)
+
+- Revision: original `a2e034cb3`, plan-owner correction `2adc21ec2`; this tooling
+  checkpoint is archived in `p10/stepT/commit.json`. Complete draft materializes
+  five moves, 782 retained and two patched spans (789 exhaustive); 23 retained
+  occurrences, exact 18-name /21-declaration Host and four registered chains.
+  Hypothetical destination 223 lines; State fields and teardown stay in place.
+- Commands/results: `draft_vplayer_subtitle_apply_moves.py`, real-config fixture
+  and universal `check_dart_moves --self-test --self-compare-original`, all-retained
+  self-compare, S and S2/S2b/S2c proofs PASS. P1–P9 named `--at`, 26 existing
+  Dart manifest self-tests and Kotlin self-test PASS in the unchanged prerequisite
+  evidence. All 19 earlier destinations protected; isolated copied parsers,
+  copied kernels removed, nice19 throughout.
+- Root/probe analyzer 104 scoped identities, strict original 176; inventory
+  preserves every earlier mapping. Optional-comma proof: one destination comma,
+  zero facade comma edits, idempotence, zero formatting diagnostic additions.
+  Evidence: `p10/stepT/` commands, complete logs and identity reports.
+- Deviation: first universal command completed its assertion phase but rejected
+  the draft in its CLI postamble without `--self-compare-original`. That attempt
+  is archived uncredited; the full corrected command completed with exit 0.
+  Final generator replay produces the identical manifest. No application,
+  pubspec or production CI transition; Step 0 continues on S2c.
+
+### 2026-10-14 — Phase 10 Step 0 complete; STOP before production moves
+
+- Revision: original S2c application `a2e034cb3`, tooling `1a51002e7`; final
+  characterization commit recorded in `p10/step0/commit.json`. Added 87 original
+  caller cases in nine behavior files plus one shared H driver. Unchanged files
+  pass on detached S2c and current worktree; no private State/attempt injection.
+- Coverage: all five moves, 152 systematic AST points and 23 retained references.
+  Final mutations: 110 assertion kills, seven source-audited original-caller
+  equivalences, 35 flow/type-invalid candidates (no credit); 20/20 live retained
+  references killed, three dormant legacy sheet references frozen. Every new
+  test has a final-file original assertion witness. Full matrix, exact patches,
+  physical A/B storage writes, commands/hashes and classifications in deps and
+  `p10/step0/`.
+- Final serial original/current focused runs PASS (87 cases each); new-test
+  analyzer zero issues; format/idempotence, size/architecture and diff PASS.
+  Fresh `suite_evidence.py run/compare` versus the S2c original suite PASS:
+  13,552 successes, unchanged 13 failures/28 load errors/20 skips; exactly 87
+  additions, zero missing/changed/fixed/newly skipped identities. Tested tree
+  stable, same SDK/flags. `after-step0*`, baseline comparison and checks archived.
+- Notes: source-specific rejection and separate request counts prevent later
+  defaults from masking retained-call gaps. A non-pumping mutation matcher and
+  preliminary fixture expectations were corrected on the original; failed
+  attempts remain uncredited. One owned orphan tester from an uncredited timeout
+  was cleaned up. Seven equivalences are documented, not removed. Cross-profile
+  writes, stale rollback/native effects and disposed notifier behavior remain
+  as-is in Follow-ups. No allowlist/pubspec/production change; CI/source/theme
+  transition and the actual move remain Step 1. No build or device work.
+
+### 2026-10-14 — Phase 10 Step 0b independent sample closure
+
+- Revision: ORIGINAL `0055d29a7` (S2c lib tree); addendum revision recorded in
+  `p10/step0b/commit.json`. Claude's independent sample: 18/20 assertion kills
+  (90%); n10/n15 source-audited equivalent, 18/18 non-equivalent killed.
+- Proof: all pointer/generation producers either increment before clearing or
+  mark handled before clearing; persisted is stamped only after successReturned
+  and that flag is never reset. No reachable proposed window distinguishes the
+  mutants. Exact detached original control and both replays complete with all
+  87 existing cases passing; hashes/patches/commands in `p10/step0b/`.
+- Deps matrix/table updated. No application, test, dependency or allowlist change;
+  reuse completed Step-0 baseline (13,552 successes, unchanged 13 failures/28
+  load errors/20 skips; 87 original additions only). Guards retained verbatim.
+  Production move and gate follow in separate commits.
+
+### 2026-10-14 — Phase 10 Step 1 applied
+
+- Revision: addendum `8fb405474`; production revision recorded in
+  `p10/step1/commit.json`. Five moves into the 223-line subtitle apply bridge;
+  facade 16,477 lines (ratchet lowered from 16,603). Exact 18-name /21-declaration
+  Host, four chains, two patched declarations and 23 references; State-owned
+  diagnostics/notifier and teardown order preserved.
+- Current manifest PASS, zero differences; all 87 focused original-caller cases
+  PASS on moved code. Format, size/architecture, scoped analyzer comparator and
+  retargeted S2/S2b/S2c source proof PASS. Evidence `p10/step1/`; full gate follows
+  on this clean commit. S2c proof validates the live reader result and retains
+  earlier independent negatives, adding five exact adapter-projection negatives.
+- CI current/self-test and both analyzer inputs now P10; P1–P9 histories, all
+  seam proofs, nine behavior registrations, theme/source lists updated. No
+  pubspec or behavior change. Initial projection expected-shape error (missing
+  annotation tokens) is archived uncredited; corrected proof rerun passes.
+
+### 2026-10-14 — Phase 10 gate complete; STOP
+
+- Tested clean Step-1 `8032eda34`; gate revision recorded in
+  `p10/gate/commit.json`. Fresh full suite versus the Step-0b baseline by identity
+  PASS: 13,552 success, identical 13 failures/28 load errors/20 skips; zero
+  changed/added/missing/fixed/newly skipped identities. Stable tree and same SDK
+  and harness flag. No flake stabilization or allowlisting.
+- All 43 mechanical jobs PASS: every other Dart manifest self-test, P10
+  universal/current, P1–P9 named histories, Kotlin checker self-test, S/S2/S2b/
+  S2c proofs, size/architecture and negatives. Isolated copied parser packages
+  and kernel deletion/routing audited. Facade 16,477; bridge 223 lines.
+- CI-scope analyzer/allowlist and P10 comparator PASS (104 scoped occurrences,
+  zero additions); CI formatting and changed theme guard PASS. Both apk and
+  macOS release builds PASS, serialized after the suite, without install/run.
+  Application/input hashes and pubspec unchanged throughout. Evidence
+  `p10/gate/`; exact commands, complete logs, metadata and artifact receipts.
+- Physical native decoder/bitmap rendering and PiP presentation remain
+  device-pending. Dormant paths and characterized original defects preserved;
+  M2 follows phase 11. No production bug fix or push/merge/switch. STOP for review.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
@@ -3560,3 +3868,20 @@ subtitles and metadata; both teardown protocols frozen in place plus
 startup windows. P3s: revised ownership map (settings, external path,
 overlay flag, pill notifier and fade cache State-owned; selection-correction
 notifier State-owned), exact Host, 33-occurrence ledger, CI, executable M2.
+
+## Phase 10 design review resolution (Codex `vp-design`, 2026-10-14) — "No P1s"
+
+P2s folded: both diagnostic fields State-owned, five moves, frozen 18-name
+Host and chain substitutions, PiP adapter patch registration; S2c chosen
+for the Android renderer rejection guard (separately reviewed); notifier
+listener classified dormant, corrections characterized via the unified
+menu; three distinct late-failure behaviours pinned as-is; persistence race
+matrix with physical writes in both profiles. P3s: 23-reference ledger;
+explicit CI transition.
+
+Plan-owner correction (Claude, 2026-10-14): the accepted S2c Android
+predicate requires the live `bool get isAndroid` Host projection with adapter
+body `VpS2Hooks.isAndroid`, read at the original moment. The corrected frozen
+Host has 18 names /21 declarations and four complete registered chains. This
+preserves S2c without a destination-to-facade import; proposal and exact patch:
+`refactor-evidence/vplayer/p10/stepT/host-correction-proposal.json`.

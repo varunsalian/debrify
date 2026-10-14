@@ -158,6 +158,8 @@ def run(package):
     pip_tests(package)
     from test_dart_subtitle_sync_moves import run as subtitle_sync_tests
     subtitle_sync_tests(package)
+    from test_dart_subtitle_apply_moves import run as subtitle_apply_tests
+    subtitle_apply_tests(package)
     sleep_tests(package)
     skip_tests(package)
     display_tests(package)

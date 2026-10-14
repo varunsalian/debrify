@@ -97,7 +97,7 @@ def prove(package, self_test=False):
         assert installation_errors({SOURCE: current, 'lib/other.dart': 'VideoPlayerScreenTestHooks.install(null);'})
     return errors, dict(patched_declarations=2, interception_patches=3,
                         original_spans=len(manifest['declarations']), ownership_phase=manifest['phase'],
-                        frozen_scaffolding=list(manifest['scaffolding'][SOURCE]),
+                        frozen_scaffolding=list(seam_ledger['scaffolding'][SOURCE]),
                         default_operations_once=True, original_configuration_once=True,
                         installation='explicit release/profile throw, compile-time flag, assert-only assignment',
                         negatives=self_test)

@@ -74,6 +74,7 @@ ROUTE_BOUNDARIES = (
     "lib/features/video_player/presentation/legacy_video_player/vp_local_completion.dart",
     "lib/features/video_player/presentation/legacy_video_player/vp_pip_lifecycle.dart",
     "lib/features/video_player/presentation/legacy_video_player/vp_subtitle_auto_sync.dart",
+    "lib/features/video_player/presentation/legacy_video_player/vp_subtitle_apply.dart",
     "lib/services/video_player_launcher.dart",
     "lib/features/player_launch/presentation/legacy_launch/",
     "lib/screens/catalog_item_detail_screen.dart",
