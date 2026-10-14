@@ -1924,60 +1924,110 @@ PiP presentation stay device-pending.
 ## Phase 12 — identify title and the subtitle search sheet
 
 Branch `refactor/vplayer-p12` off the M2 merge `6053efabd`. Evidence
-`refactor-evidence/vplayer/p12/`. Line numbers at `0c2fb62e8` (phase-11
-merge; M2 is test-only) — re-measure by name.
+`refactor-evidence/vplayer/p12/`. Line numbers at `6053efabd`.
 
-≈ 650 lines leave the facade into two files (sizes proved at step T):
+**Eight methods, 643 existing lines,** into two files (sizes proved at
+step T; no size exception, no widget-tree change):
 
-**`vp_identify_title.dart` — `VpIdentifyTitle` + Host (≈ 300 lines):**
-`_currentPlaybackTitleForIdentity` 13894, `_identitySearchInitialQuery`
-13912, `_subtitleIdentityLabelForSheet` 13939,
-`_currentSeasonEpisodeForIdentity` 14302,
-`_requestSeasonEpisodeForIdentity` 14331 (a season/episode dialog —
-lexical builder contexts and `setDialogState` stay lexical),
-`_identifyTitleAndFetchSubtitles` 14430 (orchestrates the manual identity
-write, addon subtitle fetch via the phase-11 collaborator through the
-facade, and the identity label refresh).
+| Destination | Members | Lines |
+|---|---|---|
+| `vp_identify_title.dart` — `VpIdentifyTitle` + Host | `_currentPlaybackTitleForIdentity`, `_identitySearchInitialQuery`, `_subtitleIdentityLabelForSheet`, `_currentSeasonEpisodeForIdentity`, `_identifyTitleAndFetchSubtitles` | ≈ 195 |
+| `vp_identify_title_ui.dart` — `VpIdentifyTitleUi`, an **inert presentation helper** with live `mounted`/`context` forwarders + Host | `_buildIdentifyTitleResultTile`, `_showIdentifyTitleSearchSheet` (278), `_requestSeasonEpisodeForIdentity` (98, the episode dialog) | 448 |
 
-**`vp_identify_title_sheet.dart` — presentation helper (≈ 360 lines):**
-`_buildIdentifyTitleResultTile` 13950, `_showIdentifyTitleSearchSheet`
-14023 (278 lines; the modal search sheet with `setSheetState`, TV focus,
-debounce/search state — the lexical-setter guard applies).
+**Boundary (frozen):** `VpIdentifyTitle` reaches the sheet and dialog
+through **facade Host routing** (`_host.showIdentifyTitleSearchSheet`,
+`_host.requestSeasonEpisodeForIdentity` → `_s._identifyUi…`), not a sibling
+import. Result-tile taps keep using the **live State context** (13958) —
+never `sheetContext` through a new wrapper or parameter; sheet
+layout/close actions and episode-dialog actions keep their **lexical
+builder contexts**. Search results, tokens, flags, controllers, focus
+nodes, the handoff object and `initialSearchStarted` stay in their original
+invocation/builder scopes. `setSheetState` and `setDialogState` are
+registered with the lexical-setter guard (`occurrence_field_bindings.py:334`)
+with real-manifest negatives (each setter or builder context replaced by
+the Host's).
 
-Phase-1 helpers already moved (`vpIdentitySearch…`, `vpFilterIdentitySearchResults`,
-`vpNormalisedContentType`, `vpNormalisePosterUrl`, `VpSeasonEpisodeSelection`)
-are imported, not re-moved.
+**State-owned:** all five manual identity fields incl.
+`_manualSubtitleDisplayLabel`. **Host (frozen):** live widget selectors
+`title`, `contentTitle`, `contentSeason`, `contentEpisode`;
+playlist/index/title and coordinate getters; the required manual/cache/
+selection setters; `_vpSetState`; exactly
+`Future<void> fetchAndMaybeAutoSelectAddonSubtitle()` forwarding to
+`_s._addonSubtitles…` (complete receiver-chain substitution registered).
+No player, tracker, skip or preference controller in this Host. Probe
+receiver-induced async-context diagnostics (`_host.mounted` may stop
+satisfying the lint for `_host.context`).
 
-**Stays State-owned:** manual identity fields (`_manualContentImdbId`,
-`_manualContentType`, `_manualContentSeason`, `_manualContentEpisode` —
-read by effective identity getters, trackers, skip, guide),
-`_findSeriesEpisodeForCurrentIndex`, effective identity getters,
-`_resetSubtitleState`. Exact Host and field decisions by reader/writer
-count at step T; the phase-10/11 Host forwarders that reach moved
-members (if any) become patched facade adapters.
+**Retained references (7):** `_currentPlaybackTitleForIdentity` 14547,
+14759; `_subtitleIdentityLabelForSheet` 14721, 15044;
+`_currentSeasonEpisodeForIdentity` 12646 (direct-episode prefetch);
+`_identifyTitleAndFetchSubtitles` 14720, 15043. Metadata retry calls P11
+directly (no reference here). **No P9–P11 adapter needs patching**; the
+existing addon manual-field forwarders stay unchanged. Phase-1 helpers
+imported: `vpNormalisedContentType`, `vpSubtitleSearchDisplayLabel`,
+`vpFilterIdentitySearchResults`, `vpNormalisePosterUrl`,
+`vpIdentityMetaSubtitle`, `VpSeasonEpisodeSelection`.
 
-**Retained references:** menu "identify title" action, tracks/subtitle
-menu label (`subtitleIdentityLabel:`), metadata retry orchestration —
-measured at step T.
+**CI:** current/self-test and both analyzer inputs → P12; P11 `--at
+0c2fb62e8`; protect all 23 earlier destinations; all seam proofs; tests and
+both destinations in `ci_behavior_tests.txt`, theme manifest, rendered set
+and the three source-guard lists. Collaborators assigned after the P11
+ones; resource allocations stay inside the action methods.
 
 ### Step 0 — characterization of the original
 
-Initial query construction (playback title vs content title vs filename,
-series stripping), search via the Stremio catalog addons (HTTP harness;
-real fixture addon), result filtering/labels/posters (phase-1 helpers via
-callers), the sheet's debounce, empty/error/loading states, TV DPAD
-navigation (first-key, held repeat, Back), selection → movie adopts
-immediately, series → season/episode dialog (validation, prefill from the
-current episode, cancel), manual identity write and its effect on
-trackers/skip/subtitle fetch identity, stale search results after a newer
-query, sheet dismissal mid-search, disposal and profile handoff during
-search/fetch; early windows. Mutation proofs, coverage matrix, Claude
-sample.
+- **Identity effect (corrected):** effective identity getters (1281) read
+  channel overrides and widget values, not manual identity; trackers and
+  skip use them. Launch identity A → manual subtitle identity B: subtitle
+  requests and menu labels adopt B (via the P11 addon Host, 15167) while
+  tracker and skip identity stay A. Separately, manual S/E reaching the
+  direct-episode prefetch (12646) when earlier coordinate sources are
+  absent. Preserve both outcomes.
+- **Search submission (no debounce):** typing only cancels focus handoff
+  (14186); searches start on submission, the suffix button or the deferred
+  initial search; editing does not bump `searchToken`, so an older
+  submitted search can publish beneath edited text. Cover typing alone,
+  empty submission, repeated submissions, older completion after a newer
+  submission, older completion after editing without submission — with
+  request counts.
+- **Episode dialog:** empty controllers (14336); available coordinates
+  **bypass** the dialog (14455) rather than prefill it; empty-field
+  validation and cancellation when coordinates are missing.
+- **Errors:** ordinary catalog HTTP/JSON failures collapse to empty
+  results (`stremio_service.dart:3668`) → classify as empty/partial; drive
+  the "Search failed" UI through a real stable-session addon-inventory/
+  storage failure. Reuse existing identity tests for filtering/poster
+  coverage.
+- **Async matrix at the real guards:** completion checks sheet activity,
+  State mounted and submitted token (14064) — no profile identity; the
+  deferred initial search's first setter runs before those guards;
+  resource cleanup only after the modal Future returns. Identification
+  commits manual identity and clears subtitle caches **before** fetching
+  (14478), never rolls back on failure, and returns after P11 auto-selection
+  without another token check (14514); empty-result and catch messages check
+  mounted only. Held boundaries at initial-search scheduling, addon-inventory
+  lookup, catalog response delivery, sheet selection, episode-dialog
+  completion, subtitle discovery and P11 auto-selection, crossed with
+  dismissal, content reset, profile handoff and disposal; pin stale results
+  and partial commits as-is; distinguish guarded inventory retirement from
+  an already-started catalog response under a new profile. Disposal tests
+  keep the root Navigator alive long enough to observe controller/focus
+  cleanup; step-H entered/completed waits; drain before transport reset.
+  Real fixture addon; no application seam.
+- **TV:** submitted TV search arms a one-shot handoff (14094); initial and
+  suffix-button searches do not — all three paths, focus movement while a
+  response is held, first-result activation, repeated directional keys,
+  Back during keyboard editing vs route dismissal, restoration to the menu
+  through real key events on the rendered menu action (menu focus
+  restoration, `player_menu_panel.dart:641`); the episode dialog's solid
+  Apply action is its TV autofocus anchor.
+- Early windows; mutation proofs; coverage matrix; Claude sample.
 
 ### Device checklist (end of series)
 
 Identify title on phone and TV: search, pick a movie, pick a series
-episode; subtitles fetch for the chosen identity; trackers use it.
+episode (dialog only when coordinates are missing); addon subtitles fetch
+for the chosen identity; trackers and skip keep the launch identity.
 
 ## Follow-ups
 
@@ -4322,3 +4372,14 @@ used chains. Every named table entry is preserved; `_resetSubtitleState` stays
 in place. The proposed three Hosts are frozen, with normal-format sizes
 303/282/412. This resolves the prerequisite clarification without changing
 application behaviour or authorizing production moves at Step T/0.
+
+## Phase 12 design review resolution (Codex `vp-design`, 2026-10-14) — "No P1s"
+
+P2s folded: manual identity affects subtitle discovery and the prefetch
+fallback only (not trackers/skip) — characterized as-is; search has no
+debounce, dialog bypassed when coordinates exist, error UI only via
+inventory/storage failure; presentation helper frozen (episode dialog
+grouped with the sheet, facade Host routing, live State context for tile
+taps, lexical setters/contexts guarded); async matrix at the real guards
+and commit points. P3s: 8-method/7-reference ledger, no adapter patches,
+corrected phase-1 helper names; concrete TV and CI coverage.
