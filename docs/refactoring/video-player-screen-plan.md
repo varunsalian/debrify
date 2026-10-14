@@ -4227,6 +4227,31 @@ Claude sample 16/20 → 20/20 after closures. Merged; M2 follows.
   physical PiP presentation remain device-pending. No later phase or
   push/merge/branch switch. STOP for review.
 
+### 2026-10-14 — Phase 12 Step T complete (application still original)
+
+- Design `2356e5404`; named original/base `6053efabd`. Complete draft:
+  781 declarations (772 retained/eight moved/one patched State constructor),
+  seven retained substitutions, 23 earlier destinations; exact inert Hosts,
+  live widget selectors/P11 chain, facade UI routing and lexical contexts/setters.
+  Normal-format evidence-only destinations **263/470** lines, both ≤500.
+- Materialization and universal real-config self-test/all-retained comparison
+  PASS zero differences. Independent declared-corruption lexical negatives
+  reject both setters and each builder context. Optional-comma anchor proof,
+  formatting idempotence and final comparison archived.
+- Fresh P1–P11 `--at` (P11 `0c2fb62e8`) and all S/S2/S2b/S2c proofs PASS.
+  Other 26 Dart manifest self-tests and Kotlin's 597 assertions reuse completed
+  M2 gate results after exact tooling/core/parser/manifest/app/SDK input checks;
+  all runs used isolated parser packages with kernels removed. The changed
+  universal registration and P12 negatives were rerun completely.
+- Analyzer root114/strict188/unformatted123/formatted124, zero errors. The
+  identification declaration gains three receiver-induced async-context infos
+  and one formatting-induced braces info; six facade imports become unused.
+  Recorded identities/maxima preserve earlier mappings, with no lint fix.
+  Evidence `p12/stepT/` includes commands, complete receipts, memberships,
+  Hosts and input hashes; initial failed pilots are uncredited.
+- Application/pubspec/CI/size baseline unchanged. Step 0 continues at original
+  application code; no production extraction or later step is started.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

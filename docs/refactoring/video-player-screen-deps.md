@@ -8397,3 +8397,47 @@ device-pending. S2/S2b exercise the approved predicates and native call
 contracts with distinct fake player instances; this is no device-rendering
 parity claim. Original session-only timing, mounted-only handoff and other
 recorded defects remain preserved. M2 complete; later work is not started.
+
+
+## Phase 12 Step T — frozen identify-title split (original `6053efabd`)
+
+Evidence: `refactor-evidence/vplayer/p12/stepT/`. Both normally formatted
+prototype destinations meet the cap: **263** lines (`vp_identify_title.dart`)
+and **470** (`vp_identify_title_ui.dart`). The prototype exists only in evidence;
+application, dependencies, size baselines and CI remain unchanged.
+
+The draft `vplayer_p12.json` exhaustively classifies **781** original physical
+spans: 772 retained, eight moved and one patched State constructor. Seven
+retained substitutions; 23 earlier destinations protected. The two eager
+assignments follow the three P11 collaborators. Main-to-UI calls route through
+live facade adapters; the P11 complete receiver chain and four live widget
+selectors are explicitly registered. The five manual fields remain State-owned.
+Exact Host declarations, signatures, import lists, bodies, orders and inert
+scaffolding are frozen in the manifest and `membership.json`.
+
+The existing lexical-setter guard is opted into `setSheetState` and
+`setDialogState`; no shared comparison-core change is needed. Real-config
+negatives independently reject Host setters and contexts even with corrupt
+edits declared as token substitutions. Other negatives pin live State tile
+context, lexical sheet/dialog contexts, invocation/builder-local search state,
+resource cleanup, eager construction, facade routing and forbidden imports.
+
+Zero-difference materialization and an all-retained self-compare are archived.
+Normal-format optional-comma anchors (insertions/deletions), token equality
+modulo those sites, idempotence and post-format move equality are in
+`optional-commas.json` / `format.log`. Analyzer probes are recorded by original
+declaration, preserving the P1–P11 maxima: root 114, strict 188, unformatted split
+123, formatted split 124 scoped occurrences, **zero errors**. The receiver
+adds three `use_build_context_synchronously` infos in
+`_identifyTitleAndFetchSubtitles`; formatting adds one
+`curly_braces_in_flow_control_structures` info there. Six newly unused facade
+imports are inventoried for Step 1. No lint correction or behaviour edit is made.
+
+Fresh P1–P11 named-revision comparisons and all seam proofs pass. The complete
+universal self-test includes the new P12 routing/binding negatives. Unchanged
+other-feature Dart and Kotlin self-tests reuse completed M2 gate evidence after
+byte equality checks of tooling, core, parser, manifests, relevant application
+and SDK inputs (`reused-prerequisites.json`); every original and nested manifest
+run used an isolated copied parser package with kernels removed. The universal
+completion receipt is `universal-result.json`. Step 0 follows; no production
+move or CI transition is authorized by this draft.
