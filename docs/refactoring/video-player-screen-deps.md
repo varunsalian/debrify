@@ -7074,3 +7074,37 @@ are in `p10/step1/`. The first projection check omitted annotation tokens in its
 expected getter shape; its failed attempt is retained uncredited, and the exact
 `@override` shape passes the complete rerun. No application behavior correction,
 dependency change or analyzer allowlist expansion. Full clean-tree gate follows.
+
+
+## Phase 10 clean-tree gate (2026-10-14)
+
+Tested Step-1 `8032eda34`, clean and stable throughout the gate. Fresh full
+`suite_evidence.py run vplayer/p10/gate/flutter-gate --no-pub
+--dart-define=DEBRIFY_VP_TEST_HOOKS=true` matches the Step-0b baseline by every
+identity: **13,552 success /13 failure /28 load error /20 skip**. Zero changed,
+added, missing, fixed or newly skipped identities; same SDK and flags. Baseline
+reuse is documented in Step 0b. No flake stabilization or allowlist change.
+
+**43/43 mechanical checks PASS:** 26 other Dart manifest self-tests, P10
+universal self-test/current comparison, P1–P9 named same-revision historical
+checks, Kotlin checker self-test, S/S2/S2b/S2c proofs, size, architecture and
+architecture negatives. Current P10 has zero differences and protects all 19
+earlier destinations. All primary and nested parser invocations use isolated
+copied packages under `.dart_tool/vplayer_parser/`, with copied kernels deleted;
+routing audit archived. CI-scope analyzer/allowlist and P10 identity comparator
+PASS: **104 scoped occurrences, zero additions**, including infos/multiplicity.
+CI formatting plus the changed theme guard passes. Facade **16,477** lines,
+bridge **223** lines; lowered ratchet enforced.
+
+Both `flutter build apk --release --no-pub` and
+`flutter build macos --release --no-pub` complete under nice19, without run or
+install. Full suite and builds were serialized. Application/input hashes and
+pubspec unchanged throughout. Commands, completed result records, SDK/tree
+metadata, analyzer/format logs, all checker logs, build logs and artifact hashes:
+`p10/gate/`. Evidence includes the independent sample and original survivor
+replays under `p10/step0b/`; both equivalent guards remain unchanged.
+
+Native decoder/bitmap rendering and physical PiP presentation remain device
+checks; no device parity claim. Dormant compatibility paths and original stale
+rollback/cross-profile/disposed-notifier outcomes remain frozen. M2 follows
+phase 11; no later phase, bug fix, push, merge or branch switch performed.

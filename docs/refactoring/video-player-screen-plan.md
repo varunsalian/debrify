@@ -3739,6 +3739,26 @@ Validation: exact diff and `git diff --check`.
   pubspec or behavior change. Initial projection expected-shape error (missing
   annotation tokens) is archived uncredited; corrected proof rerun passes.
 
+### 2026-10-14 — Phase 10 gate complete; STOP
+
+- Tested clean Step-1 `8032eda34`; gate revision recorded in
+  `p10/gate/commit.json`. Fresh full suite versus the Step-0b baseline by identity
+  PASS: 13,552 success, identical 13 failures/28 load errors/20 skips; zero
+  changed/added/missing/fixed/newly skipped identities. Stable tree and same SDK
+  and harness flag. No flake stabilization or allowlisting.
+- All 43 mechanical jobs PASS: every other Dart manifest self-test, P10
+  universal/current, P1–P9 named histories, Kotlin checker self-test, S/S2/S2b/
+  S2c proofs, size/architecture and negatives. Isolated copied parser packages
+  and kernel deletion/routing audited. Facade 16,477; bridge 223 lines.
+- CI-scope analyzer/allowlist and P10 comparator PASS (104 scoped occurrences,
+  zero additions); CI formatting and changed theme guard PASS. Both apk and
+  macOS release builds PASS, serialized after the suite, without install/run.
+  Application/input hashes and pubspec unchanged throughout. Evidence
+  `p10/gate/`; exact commands, complete logs, metadata and artifact receipts.
+- Physical native decoder/bitmap rendering and PiP presentation remain
+  device-pending. Dormant paths and characterized original defects preserved;
+  M2 follows phase 11. No production bug fix or push/merge/switch. STOP for review.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
