@@ -8441,3 +8441,720 @@ and SDK inputs (`reused-prerequisites.json`); every original and nested manifest
 run used an isolated copied parser package with kernels removed. The universal
 completion receipt is `universal-result.json`. Step 0 follows; no production
 move or CI transition is authorized by this draft.
+
+## Phase 12 Step 0 — original identify-title behaviour (`6053efabd`)
+
+Evidence: `refactor-evidence/vplayer/p12/step0/`; detached `original/` has the
+named application tree, `lib/` hash `53935a12f156964ae71adc17b1acde3e9b86e77a`.
+The tests use real rendered callers, one registered synthetic addon, actual
+catalog/subtitle services and the shared Step-H action ledger. No private State
+access, production hook, real network or application change is introduced.
+
+The search has **no debounce**: only deferred initial search, submission and the
+suffix action send requests. Editing cancels TV focus transfer but neither
+starts a search nor changes the submitted token. Empty submission clears UI and
+rejects earlier responses. Search HTTP/JSON/throw failures are empty results;
+a stable physical addon-inventory read failure supplies the actual error UI.
+Available coordinates bypass the empty episode dialog; positive 1 and trimmed
+values are valid, while null, non-integer, zero and negative inputs reject.
+
+Manual subtitle identity B changes subtitle discovery and menu labels while all
+three trackers and skip requests retain launch identity A. Manual coordinates
+feed direct-episode prefetch only when earlier sources have none. Picking a
+movie after a manual series clears both coordinates. Prior manual/addon and
+embedded-selection flags are cleared before new automatic selection. Audio
+policy refresh while new discovery is held sees no old addon slots; failed
+identification leaves the manual identity committed but lets the real menu
+publication callback warm the new cache on retry. A pending A discovery is
+rejected after reset followed by completed B identification.
+
+The async matrix crosses initial scheduling, inventory, catalog, selection,
+episode completion, discovery and P11 auto-selection with dismissal, content
+reset, profile handoff and disposal. Assertions run before held work resumes.
+Catalog publication checks activity/mounted/submitted token, not profile or
+content; inventory retirement checks the profile. Manual identity/cache reset
+commits before discovery. Discovery checks mounted/token. After awaited P11
+selection there is no renewed guard: the captured result still returns after
+reset/disposal/profile change, and the empty notification uses mounted only.
+Root-Navigator disposal keeps popup resources alive until its own Future ends.
+
+TV cases use real directional/Select/Back keys and the real keyboard. Initial
+and suffix requests do not arm transfer; submitted search does. Empty/error
+completion cancels a transfer before a later suffix result. Held result-focus
+callbacks reject disposed State, dismissed sheet, moved focus and empty data.
+Rendered geometry, transition/barrier, poster/error fallback, metadata, input,
+spinner, empty/error typography and the solid episode Apply anchor are pinned.
+The early-window cases suspend defaults: title search is unavailable until
+controls exist. A genuine early Stremio guide handoff still throws on the
+unconstructed player, leaves its transition latch set, and retains a partial
+title after defaults overwrite the dynamic title; a real source change restores
+video. A resolver-owned playlist emptied after commit exercises the upper-bound
+fallback through the quick menu. Neither defect is fixed.
+
+Native decoding, platform IME/PiP presentation and physical phone/TV focus remain
+device-pending; widget/native-contract fakes verify the scoped behaviour above.
+The two legacy tracks-sheet references are dormant behind its unconditional
+unified-menu routing. They remain frozen and are excluded from behavioural kills.
+
+The final normalized inventory is **449 points** (437 AST
+statement/branch/literal points plus 12 explicit arrow-body callbacks), covering
+all eight declarations, and all seven retained references. **349 points have
+completed assertion kills; 21 have specific original-caller equivalence audits;
+23 null guard operands are covered by their enclosing guards; 56 first
+candidates are compiler/flow invalid and receive no kill credit.** These are
+systematic point classifications, not a random-sample score. Typed replacements
+and independent callback mutations prevent invalid deletion attempts from
+concealing behaviour gaps. All five live retained occurrences are killed; the
+two legacy references remain dormant. Exact before/after patches, commands,
+completed JSONL logs, test-file hashes and original source hashes are archived.
+
+### Phase-12 coverage matrix
+
+| Original declaration | Points | Original callers / observable contracts | Scenario files |
+|---|---:|---|---|
+| `_currentPlaybackTitleForIdentity` | 24 | Playlist/dynamic/Stremio/content/blank precedence; early partial handoff; mutable resolver list bounds | `video_player_identify_{choice, early, effect}_test.dart` |
+| `_identitySearchInitialQuery` | 24 | Rendered initial query and exact catalog requests; series/movie/raw extension/whitespace | `video_player_identify_{choice, search}_test.dart` |
+| `_subtitleIdentityLabelForSheet` | 13 | Detected/manual/blank/padded labels; failed identification remains committed | `video_player_identify_{choice, errors, effect}_test.dart` |
+| `_buildIdentifyTitleResultTile` | 24 | Real taps/live State context; metadata/poster/error fallback and geometry | `video_player_identify_{layout, races, tv}_test.dart` |
+| `_showIdentifyTitleSearchSheet` | 164 | Submission counts/token/edit races; error/empty/retry; scheduling/profile/disposal; resource cleanup; TV focus/keys and rendered UI | `video_player_identify_{search, startup, races, errors, error_races, tv, focus_races, layout}_test.dart` |
+| `_currentSeasonEpisodeForIdentity` | 27 | Playlist snapshot vs changed resolver title; filename/manual/widget coordinates; direct prefetch | `video_player_identify_{choice, effect}_test.dart` |
+| `_requestSeasonEpisodeForIdentity` | 45 | Empty inputs, validation/cancel/trimmed positive 1; bypass; late dialog result; TV solid Apply | `video_player_identify_{choice, races, layout}_test.dart` |
+| `_identifyTitleAndFetchSubtitles` | 128 | Identity A/B split, latches/cache clears, overlapping identifications, guard matrix and post-P11 return/notifications | `video_player_identify_{choice, effect, races, errors, empty}_test.dart` |
+
+TV and ordinary input use the same real sheet/menu actions. The final tests also
+pin nonempty error retry, the visible empty list after clearing an error,
+submitted empty/error focus cancellation before a suffix response, a dismissed
+suffix response's absence of a late setter, and old-slot rejection during an
+audio-policy refresh. A focus-node construction alternative is equivalent
+because Flutter InkWell/Focus overwrite its flag on attachment; the search
+field's corresponding alternative is non-equivalent and killed. Native decoding,
+platform IME/PiP presentation and physical phone/TV focus remain device-pending.
+
+### Phase-12 retained occurrence ledger
+
+| ID | Original line / owner | Reference | Outcome |
+|---|---|---|---|
+| `ref1` | 12646 / `_prepareNextDirectEpisode` | `_currentSeasonEpisodeForIdentity` | assertion-killed; references-plan:r01 |
+| `ref2` | 14547 / `_showTracksSheet` | `_currentPlaybackTitleForIdentity` | assertion-killed; references-plan:r02 |
+| `ref3` | 14720 / `_showTracksSheet` | `_identifyTitleAndFetchSubtitles` | dormant-legacy-sheet; unconditional unified-menu route; completed survivor replay |
+| `ref4` | 14721 / `_showTracksSheet` | `_subtitleIdentityLabelForSheet` | dormant-legacy-sheet; unconditional unified-menu route; completed survivor replay |
+| `ref5` | 14759 / `_openPlayerMenuQuick` | `_currentPlaybackTitleForIdentity` | assertion-killed; references-plan:r05 |
+| `ref6` | 15043 / `_buildPlayerMenuPanel` | `_identifyTitleAndFetchSubtitles` | assertion-killed; references-plan:r06 |
+| `ref7` | 15044 / `_buildPlayerMenuPanel` | `_subtitleIdentityLabelForSheet` | assertion-killed; references-plan:r07 |
+
+### Phase-12 audited equivalences
+
+These explanations are specific to the tested mutations and complete original
+producer/consumer chains; survival alone is never treated as equivalence.
+`equivalence-source-audit.json` records source identities/reasons, and completed
+closure receipts record the replays. Invalid guards are excluded rather than
+counted as behavioural kills; related typed values and parent behaviour are
+separately tested. No removal is authorized by an equivalence classification.
+
+| Points | Original-caller proof |
+|---|---|
+| `p100`, `p105` | The invocation-local search counter is written only by runSearch, and every consumer tests captured equality. Changing its origin by one or negating the direction applies a bijection to all successive tokens; stale/latest relationships and focus scheduling are unchanged. No numeric value escapes to callers. |
+| `p340` | currentSeasonEpisodeForIdentity returns either null or a VpSeasonEpisodeSelection whose two coordinates are non-null ints. These are copied together without an await before the null disjunction. Both are null or both are non-null; OR and AND agree. Individual half-missing inputs to the helper are separately rejected and dialog validation remains pinned. |
+| `p359` | The facade has two counter producers: positive +1 during identification and ++ in reset. A +2 identification increment still assigns its captured fresh token and advances monotonically; consumers only compare equality. The -1 operator mutation is not equivalent because it can collide across reset, and is killed by gap358. |
+| `p404`, `p405` | After the accepted series branch, either current coordinates already form a non-null pair or the validated dialog returns a non-null pair. Movie leaves both locals null. Changing either cache-key conjunction to disjunction yields the same series/movie cache key on all paths reaching this block. |
+| `p086`, `p268` | The two child methods return early only when State is unmounted. Both are called only from identifyTitleAndFetchSubtitles, whose immediately resumed parent independently rejects !mounted before using the child value. There is no lifetime restoration or intervening awaited action between child return and parent guard. |
+| `p326`, `p327`, `p329` | The title sheet publishes only vpFilterIdentitySearchResults metas. StremioMeta.id/imdbId/type are final and effectiveImdbId reads the final imdbId. Tiles return that unchanged object via Navigator; the complete original caller chain cannot select a null/non-tt IMDb object. This defensive rejection notice and return value are unreachable through original callers, not credited as kills. |
+| `p436` | The final catch return null is equivalent to implicit completion with null for this nullable async result; earlier rejection/notice effects still run. Changing the actual return value is a separate null-operand mutation, not treated equivalent. |
+| `p234` | After the modal Future completes, sheetActive is false before cleanup. Any already queued focus callback checks the live activity/mounted predicate before touching disposed nodes. No caller retains the local handoff object or can arm/complete it after modal completion. Omitting the final cancel cannot cause a focus action; field/first-result/controller disposal themselves are separately mutation-pinned. |
+| `p107` | Empty query starts no catalog request and changes the submitted token, retiring any earlier search. Any later non-empty user edit (system IME or TV formatter path) calls onChanged and cancels the handoff before a new result; any later submitted search arms a new serial. A same-empty suffix cannot publish results. Already queued older handoffs have a different serial. The empty/error response cancellation sites are not equivalent and are killed by gap135/gap143. |
+| `p381`, `p382` | After this synchronous commit the cached key is cleared. All original cachedStremioSubtitles consumers require a matching non-null key; every producer of a non-null key also assigns a non-null fresh flat list in the same synchronous block. Discovery overwrites the list before P11 reads it. This old flat-list clear has no independently observable effect. cachedAddonSlots is different: audio-policy refresh reads it without a key, and its clear is killed by gap383. |
+| `p391`, `p395` | At the movie path both local coordinates are null. The tested single-operand replacement puts 99 in only one fetch argument; StremioSubtitleService._buildSubtitleId requires both non-null before adding coordinates, so each request remains the same bare IMDb ID. This is specific to these single mutations, not a claim that both coordinates can be arbitrarily changed. |
+| `p384` | The tested null-to-empty-list candidate occurs after a non-empty manual IMDb identity is committed. Empty slots have no addon candidate; the manual identity makes tryEmbedded return false. The discoveryReady null/empty difference cannot select a track. Forced-only policy bypasses slots/discoveryReady entirely. This is specific to an empty replacement; retaining real old slots is non-equivalent and killed at p383. |
+| `p145` | The catch results clear is hidden behind non-null errorMessage. The only later routes exposing the list are empty submission, which itself assigns [], or successful search, which replaces results before setting isSearching false. A failed/retired search cannot expose the old list. No other original consumer reads this invocation-local list. |
+| `p090` | The typed alternative changes only firstResultFocusNode construction canRequestFocus to false. The real InkWell supplies its enabled canRequestFocus to Focus, whose init/update assign that flag to the supplied node. Result handoff runs post-frame after attachment, so the flag is true before every original focus use. No original callback focuses this node before a result tile mounts. Local Flutter SDK ink_well.dart:1333/1392 and focus_scope.dart:573/665; submitted TV replay survives. |
+
+### Phase-12 complete mutation-point table
+
+Detailed attempts (including excluded pilots), literal replacements and exact
+assertion identities are in `coverage-final.json`. Each arrow-body callback is
+listed independently rather than hidden inside a containing return statement.
+
+| Point | Original declaration:line / kind | Classification | Completed witness / source audit |
+|---|---|---|---|
+| `p001` | `_currentPlaybackTitleForIdentity`:13895 / branch | assertion-killed | sweep-plan:p001 |
+| `p002` | `_currentPlaybackTitleForIdentity`:13895 / operator | assertion-killed | closure1-plan:cl_p002 |
+| `p003` | `_currentPlaybackTitleForIdentity`:13895 / operator | assertion-killed | closure1-plan:cl_p003 |
+| `p004` | `_currentPlaybackTitleForIdentity`:13895 / operator | assertion-killed | sweep-plan:p004 |
+| `p005` | `_currentPlaybackTitleForIdentity`:13895 / null | guard-operand | p002, p003, p004 |
+| `p006` | `_currentPlaybackTitleForIdentity`:13896 / operator | assertion-killed | sweep-plan:p006 |
+| `p007` | `_currentPlaybackTitleForIdentity`:13896 / integer | assertion-killed | sweep-plan:p007 |
+| `p008` | `_currentPlaybackTitleForIdentity`:13897 / operator | assertion-killed | closure1-plan:cl_p008 |
+| `p009` | `_currentPlaybackTitleForIdentity`:13898 / return | assertion-killed | sweep-plan:p009 |
+| `p010` | `_currentPlaybackTitleForIdentity`:13900 / branch | assertion-killed | sweep-plan:p010 |
+| `p011` | `_currentPlaybackTitleForIdentity`:13900 / return | assertion-killed | safe-plan:safe011 |
+| `p012` | `_currentPlaybackTitleForIdentity`:13901 / declaration-statement | assertion-killed | typed-plan:d012 |
+| `p013` | `_currentPlaybackTitleForIdentity`:13902 / branch | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p014` | `_currentPlaybackTitleForIdentity`:13902 / operator | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p015` | `_currentPlaybackTitleForIdentity`:13902 / operator | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p016` | `_currentPlaybackTitleForIdentity`:13902 / null | guard-operand | p014, p015 |
+| `p017` | `_currentPlaybackTitleForIdentity`:13903 / return | assertion-killed | closure1-plan:cl_p017 |
+| `p018` | `_currentPlaybackTitleForIdentity`:13905 / declaration-statement | assertion-killed | typed-plan:d018 |
+| `p019` | `_currentPlaybackTitleForIdentity`:13906 / branch | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p020` | `_currentPlaybackTitleForIdentity`:13906 / operator | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p021` | `_currentPlaybackTitleForIdentity`:13906 / operator | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p022` | `_currentPlaybackTitleForIdentity`:13906 / null | guard-operand | p020, p021 |
+| `p023` | `_currentPlaybackTitleForIdentity`:13907 / return | assertion-killed | sweep-plan:p023 |
+| `p024` | `_currentPlaybackTitleForIdentity`:13909 / return | assertion-killed | safe-plan:safe024 |
+| `p025` | `_identitySearchInitialQuery`:13913 / declaration-statement | assertion-killed | typed-plan:d025 |
+| `p026` | `_identitySearchInitialQuery`:13914 / declaration-statement | assertion-killed | typed-plan:d026 |
+| `p027` | `_identitySearchInitialQuery`:13915 / declaration-statement | assertion-killed | typed-plan:d027 |
+| `p028` | `_identitySearchInitialQuery`:13916 / branch | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p029` | `_identitySearchInitialQuery`:13916 / operator | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p030` | `_identitySearchInitialQuery`:13916 / operator | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p031` | `_identitySearchInitialQuery`:13916 / operator | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p032` | `_identitySearchInitialQuery`:13916 / null | guard-operand | p029, p030, p031 |
+| `p033` | `_identitySearchInitialQuery`:13917 / return | assertion-killed | sweep-plan:p033 |
+| `p034` | `_identitySearchInitialQuery`:13920 / declaration-statement | assertion-killed | typed-plan:d034 |
+| `p035` | `_identitySearchInitialQuery`:13921 / declaration-statement | assertion-killed | typed-plan:d035 |
+| `p036` | `_identitySearchInitialQuery`:13922 / branch | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p037` | `_identitySearchInitialQuery`:13922 / operator | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p038` | `_identitySearchInitialQuery`:13922 / operator | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p039` | `_identitySearchInitialQuery`:13922 / null | guard-operand | p037, p038 |
+| `p040` | `_identitySearchInitialQuery`:13923 / return | assertion-killed | sweep-plan:p040 |
+| `p041` | `_identitySearchInitialQuery`:13926 / return | assertion-killed | safe-plan:safe041 |
+| `p042` | `_identitySearchInitialQuery`:13929 / string | assertion-killed | safe-plan:safe042 |
+| `p043` | `_identitySearchInitialQuery`:13930 / boolean | assertion-killed | sweep-plan:p043 |
+| `p044` | `_identitySearchInitialQuery`:13932 / string | assertion-killed | sweep-plan:p044 |
+| `p045` | `_identitySearchInitialQuery`:13934 / string | assertion-killed | sweep-plan:p045 |
+| `p046` | `_identitySearchInitialQuery`:13934 / string | assertion-killed | sweep-plan:p046 |
+| `p047` | `_identitySearchInitialQuery`:13935 / string | assertion-killed | closure1-plan:cl_p047 |
+| `p048` | `_identitySearchInitialQuery`:13935 / string | assertion-killed | sweep-plan:p048 |
+| `p049` | `_subtitleIdentityLabelForSheet`:13940 / declaration-statement | assertion-killed | typed-plan:d049 |
+| `p050` | `_subtitleIdentityLabelForSheet`:13941 / branch | assertion-killed | sweep-plan:p050 |
+| `p051` | `_subtitleIdentityLabelForSheet`:13941 / operator | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p052` | `_subtitleIdentityLabelForSheet`:13941 / operator | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p053` | `_subtitleIdentityLabelForSheet`:13941 / null | guard-operand | p051, p052 |
+| `p054` | `_subtitleIdentityLabelForSheet`:13942 / return | assertion-killed | sweep-plan:p054 |
+| `p055` | `_subtitleIdentityLabelForSheet`:13942 / interpolated-string | assertion-killed | sweep-plan:p055 |
+| `p056` | `_subtitleIdentityLabelForSheet`:13945 / declaration-statement | assertion-killed | typed-plan:d056 |
+| `p057` | `_subtitleIdentityLabelForSheet`:13946 / branch | assertion-killed | sweep-plan:p057 |
+| `p058` | `_subtitleIdentityLabelForSheet`:13946 / return | assertion-killed | sweep-plan:p058 |
+| `p059` | `_subtitleIdentityLabelForSheet`:13946 / null | assertion-killed | null-plan:n059 |
+| `p060` | `_subtitleIdentityLabelForSheet`:13947 / return | assertion-killed | sweep-plan:p060 |
+| `p061` | `_subtitleIdentityLabelForSheet`:13947 / interpolated-string | assertion-killed | sweep-plan:p061 |
+| `p062` | `_buildIdentifyTitleResultTile`:13954 / declaration-statement | assertion-killed | typed-plan:d062 |
+| `p063` | `_buildIdentifyTitleResultTile`:13956 / return | assertion-killed | safe-plan:safe063 |
+| `p064` | `_buildIdentifyTitleResultTile`:13960 / integer | assertion-killed | sweep-plan:p064 |
+| `p065` | `_buildIdentifyTitleResultTile`:13960 / integer | assertion-killed | sweep-plan:p065 |
+| `p066` | `_buildIdentifyTitleResultTile`:13964 / integer | assertion-killed | sweep-plan:p066 |
+| `p067` | `_buildIdentifyTitleResultTile`:13966 / integer | assertion-killed | sweep-plan:p067 |
+| `p068` | `_buildIdentifyTitleResultTile`:13967 / integer | assertion-killed | sweep-plan:p068 |
+| `p069` | `_buildIdentifyTitleResultTile`:13968 / double | assertion-killed | sweep-plan:p069 |
+| `p070` | `_buildIdentifyTitleResultTile`:13969 / conditional | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p071` | `_buildIdentifyTitleResultTile`:13969 / operator | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p072` | `_buildIdentifyTitleResultTile`:13969 / null | guard-operand | p071 |
+| `p073` | `_buildIdentifyTitleResultTile`:13972 / double | assertion-killed | sweep-plan:p073 |
+| `p074` | `_buildIdentifyTitleResultTile`:13979 / double | assertion-killed | closure1-plan:cl_p074 |
+| `p075` | `_buildIdentifyTitleResultTile`:13984 / integer | assertion-killed | closure1-plan:cl_p075 |
+| `p076` | `_buildIdentifyTitleResultTile`:13991 / integer | assertion-killed | sweep-plan:p076 |
+| `p077` | `_buildIdentifyTitleResultTile`:13995 / integer | assertion-killed | sweep-plan:p077 |
+| `p078` | `_buildIdentifyTitleResultTile`:13999 / integer | assertion-killed | closure1-plan:cl_p078 |
+| `p079` | `_buildIdentifyTitleResultTile`:14002 / integer | assertion-killed | sweep-plan:p079 |
+| `p080` | `_buildIdentifyTitleResultTile`:14005 / double | assertion-killed | sweep-plan:p080 |
+| `p081` | `_buildIdentifyTitleResultTile`:14006 / integer | assertion-killed | sweep-plan:p081 |
+| `p082` | `_buildIdentifyTitleResultTile`:14012 / integer | assertion-killed | closure1-plan:cl_p082 |
+| `p083` | `_buildIdentifyTitleResultTile`:14015 / double | assertion-killed | sweep-plan:p083 |
+| `p084` | `_showIdentifyTitleSearchSheet`:14026 / branch | assertion-killed | sweep-plan:p084 |
+| `p085` | `_showIdentifyTitleSearchSheet`:14026 / return | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p086` | `_showIdentifyTitleSearchSheet`:14026 / null | equivalent-original-callers | equivalence-source-audit.json |
+| `p087` | `_showIdentifyTitleSearchSheet`:14028 / declaration-statement | assertion-killed | typed-plan:d087 |
+| `p088` | `_showIdentifyTitleSearchSheet`:14029 / declaration-statement | assertion-killed | closure1-plan:cl_d088 |
+| `p089` | `_showIdentifyTitleSearchSheet`:14029 / string | assertion-killed | closure1-plan:cl_p089 |
+| `p090` | `_showIdentifyTitleSearchSheet`:14030 / declaration-statement | equivalent-original-callers | equivalence-source-audit.json |
+| `p091` | `_showIdentifyTitleSearchSheet`:14031 / string | assertion-killed | closure1-plan:cl_p091 |
+| `p092` | `_showIdentifyTitleSearchSheet`:14033 / declaration-statement | assertion-killed | closure1-plan:cl_d092 |
+| `p093` | `_showIdentifyTitleSearchSheet`:14034 / declaration-statement | assertion-killed | closure1-plan:cl_d093 |
+| `p094` | `_showIdentifyTitleSearchSheet`:14035 / declaration-statement | assertion-killed | closure1-plan:cl_d094 |
+| `p095` | `_showIdentifyTitleSearchSheet`:14035 / boolean | assertion-killed | closure1-plan:cl_p095 |
+| `p096` | `_showIdentifyTitleSearchSheet`:14036 / declaration-statement | assertion-killed | typed-plan:d096 |
+| `p097` | `_showIdentifyTitleSearchSheet`:14036 / boolean | assertion-killed | sweep-plan:p097 |
+| `p098` | `_showIdentifyTitleSearchSheet`:14037 / declaration-statement | assertion-killed | closure1-plan:cl_d098 |
+| `p099` | `_showIdentifyTitleSearchSheet`:14038 / declaration-statement | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p100` | `_showIdentifyTitleSearchSheet`:14038 / integer | equivalent-original-callers | equivalence-source-audit.json |
+| `p101` | `_showIdentifyTitleSearchSheet`:14039 / declaration-statement | assertion-killed | typed-plan:d101 |
+| `p102` | `_showIdentifyTitleSearchSheet`:14039 / boolean | assertion-killed | sweep-plan:p102 |
+| `p103` | `_showIdentifyTitleSearchSheet`:14042 / declaration-statement | assertion-killed | typed-plan:d103 |
+| `p104` | `_showIdentifyTitleSearchSheet`:14043 / declaration-statement | assertion-killed | typed-plan:d104 |
+| `p105` | `_showIdentifyTitleSearchSheet`:14043 / prefix | equivalent-original-callers | equivalence-source-audit.json |
+| `p106` | `_showIdentifyTitleSearchSheet`:14045 / branch | assertion-killed | sweep-plan:p106 |
+| `p107` | `_showIdentifyTitleSearchSheet`:14046 / statement | equivalent-original-callers | equivalence-source-audit.json |
+| `p108` | `_showIdentifyTitleSearchSheet`:14047 / statement | assertion-killed | sweep-plan:p108 |
+| `p109` | `_showIdentifyTitleSearchSheet`:14048 / statement | assertion-killed | sweep-plan:p109 |
+| `p110` | `_showIdentifyTitleSearchSheet`:14049 / statement | assertion-killed | closure1-plan:cl_p110 |
+| `p111` | `_showIdentifyTitleSearchSheet`:14049 / null | assertion-killed | closure2-plan:close2_n111 |
+| `p112` | `_showIdentifyTitleSearchSheet`:14050 / statement | assertion-killed | closure1-plan:cl_p112 |
+| `p113` | `_showIdentifyTitleSearchSheet`:14050 / boolean | assertion-killed | sweep-plan:p113 |
+| `p114` | `_showIdentifyTitleSearchSheet`:14051 / statement | assertion-killed | sweep-plan:p114 |
+| `p115` | `_showIdentifyTitleSearchSheet`:14051 / boolean | assertion-killed | sweep-plan:p115 |
+| `p116` | `_showIdentifyTitleSearchSheet`:14053 / return | assertion-killed | sweep-plan:p116 |
+| `p117` | `_showIdentifyTitleSearchSheet`:14056 / statement | assertion-killed | sweep-plan:p117 |
+| `p118` | `_showIdentifyTitleSearchSheet`:14057 / statement | assertion-killed | sweep-plan:p118 |
+| `p119` | `_showIdentifyTitleSearchSheet`:14057 / boolean | assertion-killed | sweep-plan:p119 |
+| `p120` | `_showIdentifyTitleSearchSheet`:14058 / statement | assertion-killed | closure1-plan:cl_p120 |
+| `p121` | `_showIdentifyTitleSearchSheet`:14058 / null | assertion-killed | null-plan:n121 |
+| `p122` | `_showIdentifyTitleSearchSheet`:14059 / statement | assertion-killed | sweep-plan:p122 |
+| `p123` | `_showIdentifyTitleSearchSheet`:14059 / boolean | assertion-killed | sweep-plan:p123 |
+| `p124` | `_showIdentifyTitleSearchSheet`:14063 / declaration-statement | assertion-killed | typed-plan:d124 |
+| `p125` | `_showIdentifyTitleSearchSheet`:14064 / branch | assertion-killed | sweep-plan:p125 |
+| `p126` | `_showIdentifyTitleSearchSheet`:14064 / operator | assertion-killed | sweep-plan:p126 |
+| `p127` | `_showIdentifyTitleSearchSheet`:14064 / operator | assertion-killed | sweep-plan:p127 |
+| `p128` | `_showIdentifyTitleSearchSheet`:14064 / operator | assertion-killed | sweep-plan:p128 |
+| `p129` | `_showIdentifyTitleSearchSheet`:14064 / return | assertion-killed | sweep-plan:p129 |
+| `p130` | `_showIdentifyTitleSearchSheet`:14065 / statement | assertion-killed | sweep-plan:p130 |
+| `p131` | `_showIdentifyTitleSearchSheet`:14066 / statement | assertion-killed | sweep-plan:p131 |
+| `p132` | `_showIdentifyTitleSearchSheet`:14067 / statement | assertion-killed | sweep-plan:p132 |
+| `p133` | `_showIdentifyTitleSearchSheet`:14067 / boolean | assertion-killed | sweep-plan:p133 |
+| `p134` | `_showIdentifyTitleSearchSheet`:14069 / branch | assertion-killed | closure1-plan:cl_p134 |
+| `p135` | `_showIdentifyTitleSearchSheet`:14070 / statement | assertion-killed | gap-plan:gap135 |
+| `p136` | `_showIdentifyTitleSearchSheet`:14072 / statement | assertion-killed | closure1-plan:cl_p136 |
+| `p137` | `_showIdentifyTitleSearchSheet`:14074 / operator | assertion-killed | closure1-plan:cl_p137 |
+| `p138` | `_showIdentifyTitleSearchSheet`:14080 / branch | assertion-killed | closure1-plan:cl_p138; witness-extra-plan:extra_error_dismiss |
+| `p139` | `_showIdentifyTitleSearchSheet`:14080 / operator | assertion-killed | closure1-plan:cl_p139 |
+| `p140` | `_showIdentifyTitleSearchSheet`:14080 / operator | assertion-killed | closure1-plan:cl_p140 |
+| `p141` | `_showIdentifyTitleSearchSheet`:14080 / operator | assertion-killed | closure1-plan:cl_p141 |
+| `p142` | `_showIdentifyTitleSearchSheet`:14080 / return | assertion-killed | closure1-plan:cl_p142 |
+| `p143` | `_showIdentifyTitleSearchSheet`:14081 / statement | assertion-killed | gap-plan:gap143 |
+| `p144` | `_showIdentifyTitleSearchSheet`:14082 / statement | assertion-killed | closure1-plan:cl_p144 |
+| `p145` | `_showIdentifyTitleSearchSheet`:14083 / statement | equivalent-original-callers | equivalence-source-audit.json |
+| `p146` | `_showIdentifyTitleSearchSheet`:14084 / statement | assertion-killed | closure1-plan:cl_p146 |
+| `p147` | `_showIdentifyTitleSearchSheet`:14084 / string | assertion-killed | closure1-plan:cl_p147 |
+| `p148` | `_showIdentifyTitleSearchSheet`:14085 / statement | assertion-killed | closure1-plan:cl_p148 |
+| `p149` | `_showIdentifyTitleSearchSheet`:14085 / boolean | assertion-killed | closure1-plan:cl_p149 |
+| `p150` | `_showIdentifyTitleSearchSheet`:14094 / statement | assertion-killed | closure1-plan:cl_p150 |
+| `p151` | `_showIdentifyTitleSearchSheet`:14095 / statement | assertion-killed | sweep-plan:p151 |
+| `p152` | `_showIdentifyTitleSearchSheet`:14100 / declaration-statement | assertion-killed | typed-plan:d152 |
+| `p153` | `_showIdentifyTitleSearchSheet`:14103 / boolean | assertion-killed | sweep-plan:p153 |
+| `p154` | `_showIdentifyTitleSearchSheet`:14104 / string | assertion-killed | closure1-plan:cl_p154 |
+| `p155` | `_showIdentifyTitleSearchSheet`:14105 / double | assertion-killed | closure1-plan:cl_p155 |
+| `p156` | `_showIdentifyTitleSearchSheet`:14106 / integer | assertion-killed | closure1-plan:cl_p156 |
+| `p157` | `_showIdentifyTitleSearchSheet`:14108 / declaration-statement | assertion-killed | typed-plan:d157 |
+| `p158` | `_showIdentifyTitleSearchSheet`:14112 / return | assertion-killed | safe-plan:safe158 |
+| `p159` | `_showIdentifyTitleSearchSheet`:14116 / double | assertion-killed | closure1-plan:cl_p159 |
+| `p160` | `_showIdentifyTitleSearchSheet`:14116 / integer | assertion-killed | closure1-plan:cl_p160 |
+| `p161` | `_showIdentifyTitleSearchSheet`:14124 / declaration-statement | assertion-killed | typed-plan:d161 |
+| `p162` | `_showIdentifyTitleSearchSheet`:14124 / boolean | assertion-killed | sweep-plan:p162 |
+| `p163` | `_showIdentifyTitleSearchSheet`:14125 / return | assertion-killed | safe-plan:safe163 |
+| `p164` | `_showIdentifyTitleSearchSheet`:14127 / branch | assertion-killed | sweep-plan:p164 |
+| `p165` | `_showIdentifyTitleSearchSheet`:14127 / operator | assertion-killed | sweep-plan:p165 |
+| `p166` | `_showIdentifyTitleSearchSheet`:14128 / statement | assertion-killed | sweep-plan:p166 |
+| `p167` | `_showIdentifyTitleSearchSheet`:14128 / boolean | assertion-killed | sweep-plan:p167 |
+| `p168` | `_showIdentifyTitleSearchSheet`:14129 / statement | assertion-killed | sweep-plan:p168 |
+| `p169` | `_showIdentifyTitleSearchSheet`:14132 / declaration-statement | assertion-killed | closure1-plan:cl_d169 |
+| `p170` | `_showIdentifyTitleSearchSheet`:14133 / declaration-statement | assertion-killed | closure1-plan:cl_d170 |
+| `p171` | `_showIdentifyTitleSearchSheet`:14133 / operator | assertion-killed | closure1-plan:cl_p171 |
+| `p172` | `_showIdentifyTitleSearchSheet`:14133 / integer | assertion-killed | closure1-plan:cl_p172 |
+| `p173` | `_showIdentifyTitleSearchSheet`:14134 / declaration-statement | assertion-killed | closure1-plan:cl_d173 |
+| `p174` | `_showIdentifyTitleSearchSheet`:14134 / conditional | assertion-killed | closure1-plan:cl_p174 |
+| `p175` | `_showIdentifyTitleSearchSheet`:14136 / operator | assertion-killed | closure1-plan:cl_p175 |
+| `p176` | `_showIdentifyTitleSearchSheet`:14136 / double | assertion-killed | closure1-plan:cl_p176 |
+| `p177` | `_showIdentifyTitleSearchSheet`:14136 / double | assertion-killed | sweep-plan:p177 |
+| `p178` | `_showIdentifyTitleSearchSheet`:14136 / double | assertion-killed | closure1-plan:cl_p178 |
+| `p179` | `_showIdentifyTitleSearchSheet`:14138 / declaration-statement | assertion-killed | typed-plan:d179 |
+| `p180` | `_showIdentifyTitleSearchSheet`:14142 / conditional | assertion-killed | sweep-plan:p180 |
+| `p181` | `_showIdentifyTitleSearchSheet`:14143 / integer | assertion-killed | sweep-plan:p181 |
+| `p182` | `_showIdentifyTitleSearchSheet`:14144 / integer | assertion-killed | sweep-plan:p182 |
+| `p183` | `_showIdentifyTitleSearchSheet`:14144 / double | assertion-killed | sweep-plan:p183 |
+| `p184` | `_showIdentifyTitleSearchSheet`:14147 / double | assertion-killed | sweep-plan:p184 |
+| `p185` | `_showIdentifyTitleSearchSheet`:14148 / double | assertion-killed | sweep-plan:p185 |
+| `p186` | `_showIdentifyTitleSearchSheet`:14153 / boolean | assertion-killed | sweep-plan:p186 |
+| `p187` | `_showIdentifyTitleSearchSheet`:14157 / integer | assertion-killed | closure1-plan:cl_p187 |
+| `p188` | `_showIdentifyTitleSearchSheet`:14157 / integer | assertion-killed | closure1-plan:cl_p188 |
+| `p189` | `_showIdentifyTitleSearchSheet`:14157 / integer | assertion-killed | closure1-plan:cl_p189 |
+| `p190` | `_showIdentifyTitleSearchSheet`:14157 / integer | assertion-killed | closure1-plan:cl_p190 |
+| `p191` | `_showIdentifyTitleSearchSheet`:14162 / string | assertion-killed | closure1-plan:cl_p191 |
+| `p192` | `_showIdentifyTitleSearchSheet`:14164 / double | assertion-killed | sweep-plan:p192 |
+| `p193` | `_showIdentifyTitleSearchSheet`:14165 / integer | assertion-killed | sweep-plan:p193 |
+| `p194` | `_showIdentifyTitleSearchSheet`:14167 / double | assertion-killed | sweep-plan:p194 |
+| `p195` | `_showIdentifyTitleSearchSheet`:14181 / integer | assertion-killed | closure1-plan:cl_p195 |
+| `p196` | `_showIdentifyTitleSearchSheet`:14181 / integer | assertion-killed | closure1-plan:cl_p196 |
+| `p197` | `_showIdentifyTitleSearchSheet`:14181 / integer | assertion-killed | closure1-plan:cl_p197 |
+| `p198` | `_showIdentifyTitleSearchSheet`:14181 / integer | assertion-killed | closure1-plan:cl_p198 |
+| `p199` | `_showIdentifyTitleSearchSheet`:14192 / string | assertion-killed | sweep-plan:p199 |
+| `p200` | `_showIdentifyTitleSearchSheet`:14194 / double | assertion-killed | sweep-plan:p200 |
+| `p201` | `_showIdentifyTitleSearchSheet`:14198 / double | assertion-killed | sweep-plan:p201 |
+| `p202` | `_showIdentifyTitleSearchSheet`:14206 / boolean | assertion-killed | sweep-plan:p202 |
+| `p203` | `_showIdentifyTitleSearchSheet`:14207 / double | assertion-killed | sweep-plan:p203 |
+| `p204` | `_showIdentifyTitleSearchSheet`:14209 / integer | assertion-killed | sweep-plan:p204 |
+| `p205` | `_showIdentifyTitleSearchSheet`:14218 / branch | assertion-killed | sweep-plan:p205 |
+| `p206` | `_showIdentifyTitleSearchSheet`:14219 / return | assertion-killed | closure1-plan:cl_p206 |
+| `p207` | `_showIdentifyTitleSearchSheet`:14221 / integer | assertion-killed | sweep-plan:p207 |
+| `p208` | `_showIdentifyTitleSearchSheet`:14222 / integer | assertion-killed | sweep-plan:p208 |
+| `p209` | `_showIdentifyTitleSearchSheet`:14224 / integer | assertion-killed | sweep-plan:p209 |
+| `p210` | `_showIdentifyTitleSearchSheet`:14226 / double | assertion-killed | sweep-plan:p210 |
+| `p211` | `_showIdentifyTitleSearchSheet`:14233 / branch | assertion-killed | sweep-plan:p211 |
+| `p212` | `_showIdentifyTitleSearchSheet`:14233 / operator | assertion-killed | sweep-plan:p212 |
+| `p213` | `_showIdentifyTitleSearchSheet`:14233 / null | guard-operand | p212 |
+| `p214` | `_showIdentifyTitleSearchSheet`:14234 / return | assertion-killed | closure1-plan:cl_p214 |
+| `p215` | `_showIdentifyTitleSearchSheet`:14239 / double | assertion-killed | closure1-plan:cl_p215 |
+| `p216` | `_showIdentifyTitleSearchSheet`:14241 / integer | assertion-killed | closure1-plan:cl_p216 |
+| `p217` | `_showIdentifyTitleSearchSheet`:14247 / branch | assertion-killed | sweep-plan:p217 |
+| `p218` | `_showIdentifyTitleSearchSheet`:14247 / operator | assertion-killed | sweep-plan:p218 |
+| `p219` | `_showIdentifyTitleSearchSheet`:14248 / return | assertion-killed | closure1-plan:cl_p219 |
+| `p220` | `_showIdentifyTitleSearchSheet`:14250 / string | assertion-killed | closure1-plan:cl_p220 |
+| `p221` | `_showIdentifyTitleSearchSheet`:14253 / double | assertion-killed | closure1-plan:cl_p221 |
+| `p222` | `_showIdentifyTitleSearchSheet`:14255 / integer | assertion-killed | closure1-plan:cl_p222 |
+| `p223` | `_showIdentifyTitleSearchSheet`:14261 / return | assertion-killed | safe-plan:safe223 |
+| `p224` | `_showIdentifyTitleSearchSheet`:14262 / integer | assertion-killed | sweep-plan:p224 |
+| `p225` | `_showIdentifyTitleSearchSheet`:14265 / integer | assertion-killed | sweep-plan:p225 |
+| `p226` | `_showIdentifyTitleSearchSheet`:14266 / double | assertion-killed | sweep-plan:p226 |
+| `p227` | `_showIdentifyTitleSearchSheet`:14271 / conditional | assertion-killed | sweep-plan:p227 |
+| `p228` | `_showIdentifyTitleSearchSheet`:14271 / operator | assertion-killed | sweep-plan:p228 |
+| `p229` | `_showIdentifyTitleSearchSheet`:14271 / integer | assertion-killed | sweep-plan:p229 |
+| `p230` | `_showIdentifyTitleSearchSheet`:14273 / null | assertion-killed | null-plan:n230 |
+| `p231` | `_showIdentifyTitleSearchSheet`:14284 / return | assertion-killed | closure1-plan:cl_safe231 |
+| `p232` | `_showIdentifyTitleSearchSheet`:14292 / statement | assertion-killed | closure2-plan:close2_p232 |
+| `p233` | `_showIdentifyTitleSearchSheet`:14292 / boolean | assertion-killed | closure2-plan:close2_p233 |
+| `p234` | `_showIdentifyTitleSearchSheet`:14295 / statement | equivalent-original-callers | equivalence-source-audit.json |
+| `p235` | `_showIdentifyTitleSearchSheet`:14296 / statement | assertion-killed | closure1-plan:cl_p235 |
+| `p236` | `_showIdentifyTitleSearchSheet`:14297 / statement | assertion-killed | closure1-plan:cl_p236 |
+| `p237` | `_showIdentifyTitleSearchSheet`:14298 / statement | assertion-killed | closure1-plan:cl_p237 |
+| `p238` | `_showIdentifyTitleSearchSheet`:14299 / return | assertion-killed | sweep-plan:p238 |
+| `p239` | `_currentSeasonEpisodeForIdentity`:14303 / declaration-statement | assertion-killed | closure1-plan:cl_d239 |
+| `p240` | `_currentSeasonEpisodeForIdentity`:14304 / branch | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p241` | `_currentSeasonEpisodeForIdentity`:14304 / operator | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p242` | `_currentSeasonEpisodeForIdentity`:14304 / operator | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p243` | `_currentSeasonEpisodeForIdentity`:14304 / null | guard-operand | p241, p242 |
+| `p244` | `_currentSeasonEpisodeForIdentity`:14305 / declaration-statement | assertion-killed | closure1-plan:cl_d244 |
+| `p245` | `_currentSeasonEpisodeForIdentity`:14306 / declaration-statement | assertion-killed | typed-plan:d245 |
+| `p246` | `_currentSeasonEpisodeForIdentity`:14307 / declaration-statement | assertion-killed | typed-plan:d246 |
+| `p247` | `_currentSeasonEpisodeForIdentity`:14308 / branch | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p248` | `_currentSeasonEpisodeForIdentity`:14308 / operator | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p249` | `_currentSeasonEpisodeForIdentity`:14308 / operator | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p250` | `_currentSeasonEpisodeForIdentity`:14308 / null | guard-operand | p248, p249, p251 |
+| `p251` | `_currentSeasonEpisodeForIdentity`:14308 / operator | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p252` | `_currentSeasonEpisodeForIdentity`:14308 / null | guard-operand | p248, p249, p251 |
+| `p253` | `_currentSeasonEpisodeForIdentity`:14309 / return | assertion-killed | closure1-plan:cl_p253 |
+| `p254` | `_currentSeasonEpisodeForIdentity`:14313 / declaration-statement | assertion-killed | typed-plan:d254 |
+| `p255` | `_currentSeasonEpisodeForIdentity`:14316 / declaration-statement | assertion-killed | typed-plan:d255 |
+| `p256` | `_currentSeasonEpisodeForIdentity`:14321 / declaration-statement | assertion-killed | typed-plan:d256 |
+| `p257` | `_currentSeasonEpisodeForIdentity`:14327 / branch | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p258` | `_currentSeasonEpisodeForIdentity`:14327 / operator | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p259` | `_currentSeasonEpisodeForIdentity`:14327 / operator | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p260` | `_currentSeasonEpisodeForIdentity`:14327 / null | guard-operand | p258, p259, p261 |
+| `p261` | `_currentSeasonEpisodeForIdentity`:14327 / operator | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p262` | `_currentSeasonEpisodeForIdentity`:14327 / null | guard-operand | p258, p259, p261 |
+| `p263` | `_currentSeasonEpisodeForIdentity`:14327 / return | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p264` | `_currentSeasonEpisodeForIdentity`:14327 / null | assertion-killed | null-plan:n264 |
+| `p265` | `_currentSeasonEpisodeForIdentity`:14328 / return | assertion-killed | sweep-plan:p265 |
+| `p266` | `_requestSeasonEpisodeForIdentity`:14334 / branch | assertion-killed | sweep-plan:p266 |
+| `p267` | `_requestSeasonEpisodeForIdentity`:14334 / return | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p268` | `_requestSeasonEpisodeForIdentity`:14334 / null | equivalent-original-callers | equivalence-source-audit.json |
+| `p269` | `_requestSeasonEpisodeForIdentity`:14336 / declaration-statement | assertion-killed | typed-plan:d269 |
+| `p270` | `_requestSeasonEpisodeForIdentity`:14337 / declaration-statement | assertion-killed | typed-plan:d270 |
+| `p271` | `_requestSeasonEpisodeForIdentity`:14338 / declaration-statement | assertion-killed | closure1-plan:cl_d271 |
+| `p272` | `_requestSeasonEpisodeForIdentity`:14340 / declaration-statement | assertion-killed | typed-plan:d272 |
+| `p273` | `_requestSeasonEpisodeForIdentity`:14343 / return | assertion-killed | safe-plan:safe273 |
+| `p274` | `_requestSeasonEpisodeForIdentity`:14345 / return | assertion-killed | safe-plan:safe274 |
+| `p275` | `_requestSeasonEpisodeForIdentity`:14346 / string | assertion-killed | sweep-plan:p275 |
+| `p276` | `_requestSeasonEpisodeForIdentity`:14359 / string | assertion-killed | sweep-plan:p276 |
+| `p277` | `_requestSeasonEpisodeForIdentity`:14361 / double | assertion-killed | closure1-plan:cl_p277 |
+| `p278` | `_requestSeasonEpisodeForIdentity`:14366 / integer | assertion-killed | closure1-plan:cl_p278 |
+| `p279` | `_requestSeasonEpisodeForIdentity`:14373 / string | assertion-killed | sweep-plan:p279 |
+| `p280` | `_requestSeasonEpisodeForIdentity`:14375 / double | assertion-killed | closure1-plan:cl_p280 |
+| `p281` | `_requestSeasonEpisodeForIdentity`:14382 / operator | assertion-killed | sweep-plan:p281 |
+| `p282` | `_requestSeasonEpisodeForIdentity`:14382 / null | guard-operand | p281 |
+| `p283` | `_requestSeasonEpisodeForIdentity`:14383 / integer | assertion-killed | closure1-plan:cl_p283 |
+| `p284` | `_requestSeasonEpisodeForIdentity`:14388 / integer | assertion-killed | closure1-plan:cl_p284 |
+| `p285` | `_requestSeasonEpisodeForIdentity`:14396 / string | assertion-killed | closure1-plan:cl_p285 |
+| `p286` | `_requestSeasonEpisodeForIdentity`:14402 / string | assertion-killed | closure1-plan:cl_p286 |
+| `p287` | `_requestSeasonEpisodeForIdentity`:14402 / boolean | assertion-killed | sweep-plan:p287 |
+| `p288` | `_requestSeasonEpisodeForIdentity`:14403 / declaration-statement | assertion-killed | typed-plan:d288 |
+| `p289` | `_requestSeasonEpisodeForIdentity`:14404 / declaration-statement | assertion-killed | typed-plan:d289 |
+| `p290` | `_requestSeasonEpisodeForIdentity`:14405 / branch | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p291` | `_requestSeasonEpisodeForIdentity`:14405 / operator | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p292` | `_requestSeasonEpisodeForIdentity`:14405 / operator | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p293` | `_requestSeasonEpisodeForIdentity`:14405 / operator | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p294` | `_requestSeasonEpisodeForIdentity`:14405 / operator | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p295` | `_requestSeasonEpisodeForIdentity`:14405 / null | guard-operand | p292, p293, p294 |
+| `p296` | `_requestSeasonEpisodeForIdentity`:14406 / operator | assertion-killed | sweep-plan:p296 |
+| `p297` | `_requestSeasonEpisodeForIdentity`:14406 / integer | assertion-killed | closure1-plan:cl_p297 |
+| `p298` | `_requestSeasonEpisodeForIdentity`:14407 / operator | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p299` | `_requestSeasonEpisodeForIdentity`:14407 / null | guard-operand | p298 |
+| `p300` | `_requestSeasonEpisodeForIdentity`:14408 / operator | assertion-killed | sweep-plan:p300 |
+| `p301` | `_requestSeasonEpisodeForIdentity`:14408 / integer | assertion-killed | closure1-plan:cl_p301 |
+| `p302` | `_requestSeasonEpisodeForIdentity`:14409 / statement | assertion-killed | sweep-plan:p302 |
+| `p303` | `_requestSeasonEpisodeForIdentity`:14410 / statement | assertion-killed | sweep-plan:p303 |
+| `p304` | `_requestSeasonEpisodeForIdentity`:14410 / string | assertion-killed | sweep-plan:p304 |
+| `p305` | `_requestSeasonEpisodeForIdentity`:14412 / return | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p306` | `_requestSeasonEpisodeForIdentity`:14414 / statement | assertion-killed | sweep-plan:p306 |
+| `p307` | `_requestSeasonEpisodeForIdentity`:14425 / statement | assertion-killed | sweep-plan:p307 |
+| `p308` | `_requestSeasonEpisodeForIdentity`:14426 / statement | assertion-killed | sweep-plan:p308 |
+| `p309` | `_requestSeasonEpisodeForIdentity`:14427 / return | assertion-killed | sweep-plan:p309 |
+| `p310` | `_identifyTitleAndFetchSubtitles`:14432 / declaration-statement | assertion-killed | typed-plan:d310 |
+| `p311` | `_identifyTitleAndFetchSubtitles`:14433 / declaration-statement | assertion-killed | typed-plan:d311 |
+| `p312` | `_identifyTitleAndFetchSubtitles`:14436 / branch | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p313` | `_identifyTitleAndFetchSubtitles`:14436 / operator | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p314` | `_identifyTitleAndFetchSubtitles`:14436 / operator | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p315` | `_identifyTitleAndFetchSubtitles`:14437 / operator | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p316` | `_identifyTitleAndFetchSubtitles`:14437 / null | guard-operand | p315 |
+| `p317` | `_identifyTitleAndFetchSubtitles`:14438 / operator | assertion-killed | sweep-plan:p317 |
+| `p318` | `_identifyTitleAndFetchSubtitles`:14439 / return | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p319` | `_identifyTitleAndFetchSubtitles`:14439 / null | assertion-killed | null-plan:n319 |
+| `p320` | `_identifyTitleAndFetchSubtitles`:14442 / declaration-statement | assertion-killed | typed-plan:d320 |
+| `p321` | `_identifyTitleAndFetchSubtitles`:14443 / branch | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p322` | `_identifyTitleAndFetchSubtitles`:14443 / operator | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p323` | `_identifyTitleAndFetchSubtitles`:14443 / operator | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p324` | `_identifyTitleAndFetchSubtitles`:14443 / null | guard-operand | p322, p323 |
+| `p325` | `_identifyTitleAndFetchSubtitles`:14443 / string | assertion-killed | sweep-plan:p325 |
+| `p326` | `_identifyTitleAndFetchSubtitles`:14444 / statement | equivalent-original-callers | equivalence-source-audit.json |
+| `p327` | `_identifyTitleAndFetchSubtitles`:14445 / string | equivalent-original-callers | equivalence-source-audit.json |
+| `p328` | `_identifyTitleAndFetchSubtitles`:14447 / return | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p329` | `_identifyTitleAndFetchSubtitles`:14447 / null | equivalent-original-callers | equivalence-source-audit.json |
+| `p330` | `_identifyTitleAndFetchSubtitles`:14450 / declaration-statement | assertion-killed | typed-plan:d330 |
+| `p331` | `_identifyTitleAndFetchSubtitles`:14451 / declaration-statement | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p332` | `_identifyTitleAndFetchSubtitles`:14452 / declaration-statement | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p333` | `_identifyTitleAndFetchSubtitles`:14454 / branch | assertion-killed | sweep-plan:p333 |
+| `p334` | `_identifyTitleAndFetchSubtitles`:14454 / operator | assertion-killed | sweep-plan:p334 |
+| `p335` | `_identifyTitleAndFetchSubtitles`:14454 / string | assertion-killed | sweep-plan:p335 |
+| `p336` | `_identifyTitleAndFetchSubtitles`:14455 / declaration-statement | assertion-killed | typed-plan:d336 |
+| `p337` | `_identifyTitleAndFetchSubtitles`:14456 / statement | assertion-killed | sweep-plan:p337 |
+| `p338` | `_identifyTitleAndFetchSubtitles`:14457 / statement | assertion-killed | sweep-plan:p338 |
+| `p339` | `_identifyTitleAndFetchSubtitles`:14459 / branch | assertion-killed | sweep-plan:p339 |
+| `p340` | `_identifyTitleAndFetchSubtitles`:14459 / operator | equivalent-original-callers | equivalence-source-audit.json |
+| `p341` | `_identifyTitleAndFetchSubtitles`:14459 / operator | assertion-killed | sweep-plan:p341 |
+| `p342` | `_identifyTitleAndFetchSubtitles`:14459 / null | guard-operand | p340, p341, p343 |
+| `p343` | `_identifyTitleAndFetchSubtitles`:14459 / operator | assertion-killed | sweep-plan:p343 |
+| `p344` | `_identifyTitleAndFetchSubtitles`:14459 / null | guard-operand | p340, p341, p343 |
+| `p345` | `_identifyTitleAndFetchSubtitles`:14460 / declaration-statement | assertion-killed | typed-plan:d345 |
+| `p346` | `_identifyTitleAndFetchSubtitles`:14461 / branch | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p347` | `_identifyTitleAndFetchSubtitles`:14461 / operator | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p348` | `_identifyTitleAndFetchSubtitles`:14461 / operator | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p349` | `_identifyTitleAndFetchSubtitles`:14462 / operator | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p350` | `_identifyTitleAndFetchSubtitles`:14462 / null | guard-operand | p349 |
+| `p351` | `_identifyTitleAndFetchSubtitles`:14463 / operator | assertion-killed | sweep-plan:p351 |
+| `p352` | `_identifyTitleAndFetchSubtitles`:14464 / return | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p353` | `_identifyTitleAndFetchSubtitles`:14464 / null | assertion-killed | null-plan:n353 |
+| `p354` | `_identifyTitleAndFetchSubtitles`:14466 / statement | assertion-killed | sweep-plan:p354 |
+| `p355` | `_identifyTitleAndFetchSubtitles`:14467 / statement | assertion-killed | sweep-plan:p355 |
+| `p356` | `_identifyTitleAndFetchSubtitles`:14471 / declaration-statement | assertion-killed | typed-plan:d356 |
+| `p357` | `_identifyTitleAndFetchSubtitles`:14478 / declaration-statement | assertion-killed | closure1-plan:cl_d357 |
+| `p358` | `_identifyTitleAndFetchSubtitles`:14478 / operator | assertion-killed | gap-plan:gap358 |
+| `p359` | `_identifyTitleAndFetchSubtitles`:14478 / integer | equivalent-original-callers | equivalence-source-audit.json |
+| `p360` | `_identifyTitleAndFetchSubtitles`:14479 / statement | assertion-killed | sweep-plan:p360 |
+| `p361` | `_identifyTitleAndFetchSubtitles`:14480 / statement | assertion-killed | sweep-plan:p361 |
+| `p362` | `_identifyTitleAndFetchSubtitles`:14481 / statement | assertion-killed | sweep-plan:p362 |
+| `p363` | `_identifyTitleAndFetchSubtitles`:14482 / statement | assertion-killed | sweep-plan:p363 |
+| `p364` | `_identifyTitleAndFetchSubtitles`:14483 / statement | assertion-killed | sweep-plan:p364 |
+| `p365` | `_identifyTitleAndFetchSubtitles`:14483 / conditional | assertion-killed | sweep-plan:p365 |
+| `p366` | `_identifyTitleAndFetchSubtitles`:14483 / operator | assertion-killed | sweep-plan:p366 |
+| `p367` | `_identifyTitleAndFetchSubtitles`:14483 / string | assertion-killed | sweep-plan:p367 |
+| `p368` | `_identifyTitleAndFetchSubtitles`:14483 / null | assertion-killed | closure1-plan:cl_n368 |
+| `p369` | `_identifyTitleAndFetchSubtitles`:14484 / statement | assertion-killed | sweep-plan:p369 |
+| `p370` | `_identifyTitleAndFetchSubtitles`:14484 / conditional | assertion-killed | sweep-plan:p370 |
+| `p371` | `_identifyTitleAndFetchSubtitles`:14484 / operator | assertion-killed | sweep-plan:p371 |
+| `p372` | `_identifyTitleAndFetchSubtitles`:14484 / string | assertion-killed | sweep-plan:p372 |
+| `p373` | `_identifyTitleAndFetchSubtitles`:14484 / null | assertion-killed | closure1-plan:cl_n373 |
+| `p374` | `_identifyTitleAndFetchSubtitles`:14485 / statement | assertion-killed | sweep-plan:p374 |
+| `p375` | `_identifyTitleAndFetchSubtitles`:14486 / statement | assertion-killed | gap-plan:gap375 |
+| `p376` | `_identifyTitleAndFetchSubtitles`:14486 / null | assertion-killed | closure1-plan:cl_n376 |
+| `p377` | `_identifyTitleAndFetchSubtitles`:14487 / statement | assertion-killed | gap-plan:gap377 |
+| `p378` | `_identifyTitleAndFetchSubtitles`:14487 / boolean | assertion-killed | gap-plan:gap378 |
+| `p379` | `_identifyTitleAndFetchSubtitles`:14488 / statement | assertion-killed | gap-plan:gap379 |
+| `p380` | `_identifyTitleAndFetchSubtitles`:14488 / boolean | assertion-killed | gap-plan:gap380 |
+| `p381` | `_identifyTitleAndFetchSubtitles`:14489 / statement | equivalent-original-callers | equivalence-source-audit.json |
+| `p382` | `_identifyTitleAndFetchSubtitles`:14489 / null | equivalent-original-callers | equivalence-source-audit.json |
+| `p383` | `_identifyTitleAndFetchSubtitles`:14490 / statement | assertion-killed | gap-plan:gap383 |
+| `p384` | `_identifyTitleAndFetchSubtitles`:14490 / null | equivalent-original-callers | equivalence-source-audit.json |
+| `p385` | `_identifyTitleAndFetchSubtitles`:14491 / statement | assertion-killed | gap-plan:gap385 |
+| `p386` | `_identifyTitleAndFetchSubtitles`:14491 / null | assertion-killed | null-plan:n386 |
+| `p387` | `_identifyTitleAndFetchSubtitles`:14495 / declaration-statement | assertion-killed | typed-plan:d387 |
+| `p388` | `_identifyTitleAndFetchSubtitles`:14498 / conditional | assertion-killed | sweep-plan:p388 |
+| `p389` | `_identifyTitleAndFetchSubtitles`:14498 / operator | assertion-killed | sweep-plan:p389 |
+| `p390` | `_identifyTitleAndFetchSubtitles`:14498 / string | assertion-killed | sweep-plan:p390 |
+| `p391` | `_identifyTitleAndFetchSubtitles`:14498 / null | equivalent-original-callers | equivalence-source-audit.json |
+| `p392` | `_identifyTitleAndFetchSubtitles`:14499 / conditional | assertion-killed | sweep-plan:p392 |
+| `p393` | `_identifyTitleAndFetchSubtitles`:14499 / operator | assertion-killed | sweep-plan:p393 |
+| `p394` | `_identifyTitleAndFetchSubtitles`:14499 / string | assertion-killed | sweep-plan:p394 |
+| `p395` | `_identifyTitleAndFetchSubtitles`:14499 / null | equivalent-original-callers | equivalence-source-audit.json |
+| `p396` | `_identifyTitleAndFetchSubtitles`:14501 / declaration-statement | assertion-killed | closure1-plan:cl_d396 |
+| `p397` | `_identifyTitleAndFetchSubtitles`:14503 / branch | assertion-killed | sweep-plan:p397 |
+| `p398` | `_identifyTitleAndFetchSubtitles`:14503 / operator | assertion-killed | sweep-plan:p398 |
+| `p399` | `_identifyTitleAndFetchSubtitles`:14503 / operator | assertion-killed | sweep-plan:p399 |
+| `p400` | `_identifyTitleAndFetchSubtitles`:14503 / return | invalid-candidate | excluded compiler/flow-invalid attempt; related typed/parent behaviour |
+| `p401` | `_identifyTitleAndFetchSubtitles`:14503 / null | assertion-killed | null-plan:n401 |
+| `p402` | `_identifyTitleAndFetchSubtitles`:14505 / declaration-statement | assertion-killed | typed-plan:d402 |
+| `p403` | `_identifyTitleAndFetchSubtitles`:14506 / conditional | assertion-killed | sweep-plan:p403 |
+| `p404` | `_identifyTitleAndFetchSubtitles`:14506 / operator | equivalent-original-callers | equivalence-source-audit.json |
+| `p405` | `_identifyTitleAndFetchSubtitles`:14506 / operator | equivalent-original-callers | equivalence-source-audit.json |
+| `p406` | `_identifyTitleAndFetchSubtitles`:14506 / operator | assertion-killed | sweep-plan:p406 |
+| `p407` | `_identifyTitleAndFetchSubtitles`:14506 / string | assertion-killed | sweep-plan:p407 |
+| `p408` | `_identifyTitleAndFetchSubtitles`:14506 / operator | assertion-killed | sweep-plan:p408 |
+| `p409` | `_identifyTitleAndFetchSubtitles`:14506 / null | guard-operand | p404, p405, p406, p408, p410 |
+| `p410` | `_identifyTitleAndFetchSubtitles`:14506 / operator | assertion-killed | sweep-plan:p410 |
+| `p411` | `_identifyTitleAndFetchSubtitles`:14506 / null | guard-operand | p404, p405, p406, p408, p410 |
+| `p412` | `_identifyTitleAndFetchSubtitles`:14507 / interpolated-string | assertion-killed | sweep-plan:p412 |
+| `p413` | `_identifyTitleAndFetchSubtitles`:14510 / statement | assertion-killed | sweep-plan:p413 |
+| `p414` | `_identifyTitleAndFetchSubtitles`:14511 / statement | assertion-killed | sweep-plan:p414 |
+| `p415` | `_identifyTitleAndFetchSubtitles`:14512 / statement | assertion-killed | sweep-plan:p415 |
+| `p416` | `_identifyTitleAndFetchSubtitles`:14514 / statement | assertion-killed | sweep-plan:p416 |
+| `p417` | `_identifyTitleAndFetchSubtitles`:14516 / branch | assertion-killed | sweep-plan:p417 |
+| `p418` | `_identifyTitleAndFetchSubtitles`:14516 / operator | assertion-killed | sweep-plan:p418 |
+| `p419` | `_identifyTitleAndFetchSubtitles`:14517 / statement | assertion-killed | sweep-plan:p419 |
+| `p420` | `_identifyTitleAndFetchSubtitles`:14519 / string | assertion-killed | sweep-plan:p420 |
+| `p421` | `_identifyTitleAndFetchSubtitles`:14524 / return | assertion-killed | sweep-plan:p421 |
+| `p422` | `_identifyTitleAndFetchSubtitles`:14528 / interpolated-string | assertion-killed | sweep-plan:p422 |
+| `p423` | `_identifyTitleAndFetchSubtitles`:14531 / conditional | assertion-killed | sweep-plan:p423 |
+| `p424` | `_identifyTitleAndFetchSubtitles`:14531 / operator | assertion-killed | sweep-plan:p424 |
+| `p425` | `_identifyTitleAndFetchSubtitles`:14531 / string | assertion-killed | sweep-plan:p425 |
+| `p426` | `_identifyTitleAndFetchSubtitles`:14531 / null | assertion-killed | null-plan:n426 |
+| `p427` | `_identifyTitleAndFetchSubtitles`:14532 / conditional | assertion-killed | sweep-plan:p427 |
+| `p428` | `_identifyTitleAndFetchSubtitles`:14532 / operator | assertion-killed | sweep-plan:p428 |
+| `p429` | `_identifyTitleAndFetchSubtitles`:14532 / string | assertion-killed | sweep-plan:p429 |
+| `p430` | `_identifyTitleAndFetchSubtitles`:14532 / null | assertion-killed | null-plan:n430 |
+| `p431` | `_identifyTitleAndFetchSubtitles`:14535 / statement | assertion-killed | sweep-plan:p431 |
+| `p432` | `_identifyTitleAndFetchSubtitles`:14535 / interpolated-string | assertion-killed | sweep-plan:p432 |
+| `p433` | `_identifyTitleAndFetchSubtitles`:14536 / branch | assertion-killed | sweep-plan:p433 |
+| `p434` | `_identifyTitleAndFetchSubtitles`:14537 / statement | assertion-killed | sweep-plan:p434 |
+| `p435` | `_identifyTitleAndFetchSubtitles`:14539 / string | assertion-killed | sweep-plan:p435 |
+| `p436` | `_identifyTitleAndFetchSubtitles`:14541 / return | equivalent-original-callers | equivalence-source-audit.json |
+| `p437` | `_identifyTitleAndFetchSubtitles`:14541 / null | assertion-killed | closure1-plan:cl_n437 |
+| `a01` | `_buildIdentifyTitleResultTile`:13958 / arrow-body | assertion-killed | arrow-plan:a01 |
+| `a02` | `_buildIdentifyTitleResultTile`:13977 / arrow-body | assertion-killed | arrow-plan:a02 |
+| `a03` | `_showIdentifyTitleSearchSheet`:14074 / arrow-body | assertion-killed | arrow-plan:a03 |
+| `a04` | `_showIdentifyTitleSearchSheet`:14076 / arrow-body | assertion-killed | arrow-plan:a04 |
+| `a05` | `_showIdentifyTitleSearchSheet`:14129 / arrow-body | assertion-killed | arrow-plan:a05 |
+| `a06` | `_showIdentifyTitleSearchSheet`:14175 / arrow-body | assertion-killed | arrow-plan:a06 |
+| `a07` | `_showIdentifyTitleSearchSheet`:14186 / arrow-body | assertion-killed | arrow-plan:a07 |
+| `a08` | `_showIdentifyTitleSearchSheet`:14188 / arrow-body | assertion-killed | arrow-plan:a08 |
+| `a09` | `_showIdentifyTitleSearchSheet`:14204 / arrow-body | assertion-killed | arrow-plan:a09 |
+| `a10` | `_showIdentifyTitleSearchSheet`:14264 / arrow-body | assertion-killed | arrow-plan:a10 |
+| `a11` | `_showIdentifyTitleSearchSheet`:14269 / arrow-body | assertion-killed | arrow-plan:a11 |
+| `a12` | `_requestSeasonEpisodeForIdentity`:14397 / arrow-body | assertion-killed | arrow-plan:a12 |
+
+### Phase-12 final-case assertion witnesses
+
+All **99 final cases** have a completed assertion-failing mutation on the named
+original, with each witness test-file hash matching the final file. Independent
+serial final-file replays are in `witness-refresh-plan-results.json` (28
+mutations), and `per-test-witnesses.json` maps exact identities/hashes. Failed,
+interrupted, runtime-only and compile-failing attempts receive no credit.
+
+| Final case | Original assertion witness |
+|---|---|
+| identify TV edit text real keys preserve handoff activation Back and menu focus | `w001` |
+| identify TV initial real keys preserve handoff activation Back and menu focus | `w001` |
+| identify TV moved focus real keys preserve handoff activation Back and menu focus | `w001` |
+| identify TV panel and episode dialog retain solid Apply autofocus anchor | `w006` |
+| identify TV result focus queued across dismiss sheet respects live guards and cancellation | `w008` |
+| identify TV result focus queued across dispose player respects live guards and cancellation | `w008` |
+| identify TV result focus queued across empty result respects live guards and cancellation | `w008` |
+| identify TV result focus queued across move focus respects live guards and cancellation | `w008` |
+| identify TV submitted empty cancels handoff before a later suffix response | `w001` |
+| identify TV submitted inventory error cancels handoff before a later suffix response | `w001` |
+| identify TV submitted real keys preserve handoff activation Back and menu focus | `w001` |
+| identify TV suffix real keys preserve handoff activation Back and menu focus | `w001` |
+| identify blank dynamic title uses content fallback "   " through the actual tracks caller | `w001` |
+| identify blank dynamic title uses content fallback "  Content.Fallback.2025.mp4  " through the actual tracks caller | `w001` |
+| identify catalog http failure is empty results, not search error | `w002` |
+| identify catalog json failure is empty results, not search error | `w002` |
+| identify catalog throw failure is empty results, not search error | `w002` |
+| identify clears old addon slots before audio policy refresh during held new discovery | `w020` |
+| identify dialog validates empty controllers and -1/1 then accepts trimmed coordinates | `w001` |
+| identify dialog validates empty controllers and / then accepts trimmed coordinates | `w001` |
+| identify dialog validates empty controllers and 0/1 then accepts trimmed coordinates | `w001` |
+| identify dialog validates empty controllers and 1/-1 then accepts trimmed coordinates | `w001` |
+| identify dialog validates empty controllers and 1/0 then accepts trimmed coordinates | `w001` |
+| identify dialog validates empty controllers and 1/x then accepts trimmed coordinates | `w001` |
+| identify dialog validates empty controllers and x/1 then accepts trimmed coordinates | `w001` |
+| identify dismissed suffix response cannot invoke the disposed sheet setter | `w027` |
+| identify dynamic Movie.Name.2024.1080p.mkv query and available coordinates bypass dialog | `w001` |
+| identify dynamic Raw   file	 name .mkv query and available coordinates bypass dialog | `w001` |
+| identify dynamic Raw__file...MPEG query and available coordinates bypass dialog | `w001` |
+| identify dynamic Show.Name.S02E03.1080p.mkv query and available coordinates bypass dialog | `w001` |
+| identify early Stremio guide handoff retains partial title after player error and defaults overwrite the dynamic title | `w016` |
+| identify early tracks caller title fallback "   " cannot run before defaults and uses dynamic title after readiness | `w007` |
+| identify early tracks caller title fallback "Early.Content.2025.mkv" cannot run before defaults and uses dynamic title after readiness | `w007` |
+| identify early tracks caller title fallback "null" cannot run before defaults and uses dynamic title after readiness | `w007` |
+| identify empty captured result after dismiss uses mounted-only notification without another token guard | `w003` |
+| identify empty captured result after dispose uses mounted-only notification without another token guard | `w003` |
+| identify empty captured result after profile uses mounted-only notification without another token guard | `w003` |
+| identify empty captured result after reset uses mounted-only notification without another token guard | `w003` |
+| identify empty captured result after same playback uses mounted-only notification without another token guard | `w003` |
+| identify empty title has no detected label or initial search and cancel leaves identity untouched | `w001` |
+| identify held A discovery cannot return after reopening menu and a completed B identification | `w026` |
+| identify held A discovery cannot return after reset and a completed B identification | `w018` |
+| identify held autoselection across dismiss pins manual commit and cache return timing | `w003` |
+| identify held autoselection across dispose pins manual commit and cache return timing | `w003` |
+| identify held autoselection across profile pins manual commit and cache return timing | `w003` |
+| identify held autoselection across reset pins manual commit and cache return timing | `w003` |
+| identify held catalog response across dismiss checks sheet and mounted, not profile or content | `w002` |
+| identify held catalog response across dispose checks sheet and mounted, not profile or content | `w002` |
+| identify held catalog response across profile checks sheet and mounted, not profile or content | `w002` |
+| identify held catalog response across reset checks sheet and mounted, not profile or content | `w002` |
+| identify held discovery across dismiss pins manual commit and cache return timing | `w011` |
+| identify held discovery across dispose pins manual commit and cache return timing | `w015` |
+| identify held discovery across profile pins manual commit and cache return timing | `w011` |
+| identify held discovery across reset pins manual commit and cache return timing | `w009` |
+| identify held episode completion across dismiss preserves precommit guard | `w005` |
+| identify held episode completion across dispose preserves precommit guard | `w005` |
+| identify held episode completion across profile preserves precommit guard | `w005` |
+| identify held episode completion across reset preserves precommit guard | `w005` |
+| identify held selection completion across dismiss preserves precommit guard | `w005` |
+| identify held selection completion across dispose preserves precommit guard | `w017` |
+| identify held selection completion across profile preserves precommit guard | `w005` |
+| identify held selection completion across reset preserves precommit guard | `w005` |
+| identify held stable inventory error after dismiss cannot publish stale search error | `w028` |
+| identify held stable inventory error after dispose cannot publish stale search error | `w010` |
+| identify held stable inventory error after empty submission cannot publish stale search error | `w010` |
+| identify held stable inventory error after newer success cannot publish stale search error | `w010` |
+| identify initial scheduling held across dismiss preserves original guard and resource timing | `w004` |
+| identify initial scheduling held across dispose preserves original guard and resource timing | `w004` |
+| identify initial scheduling held across profile preserves original guard and resource timing | `w004` |
+| identify initial scheduling held across reset preserves original guard and resource timing | `w004` |
+| identify inventory held across dismiss preserves original guard and resource timing | `w004` |
+| identify inventory held across dispose preserves original guard and resource timing | `w004` |
+| identify inventory held across profile preserves original guard and resource timing | `w004` |
+| identify inventory held across reset preserves original guard and resource timing | `w004` |
+| identify manual label trims "   " or falls back to the detected title while keeping subtitle identity | `w001` |
+| identify manual label trims "  Padded title  " or falls back to the detected title while keeping subtitle identity | `w001` |
+| identify manual season episode feeds direct prefetch when earlier coordinates are absent | `w014` |
+| identify manual subtitle B preserves tracker and skip launch identity A | `w012` |
+| identify manual title clears prior addon and embedded policy latches before selecting the new subtitle | `w019` |
+| identify movie after manual series clears coordinates before direct prefetch and adopts the new cache | `w009` |
+| identify movie clears manual coordinates before a later series uses widget coordinates | `w001` |
+| identify nonempty retry clears the stable inventory error before publishing success | `w024` |
+| identify old response after edit obeys submitted token only | `w002` |
+| identify old response after empty obeys submitted token only | `w002` |
+| identify old response after submit obeys submitted token only | `w002` |
+| identify playlist List.Show.S04E09.mkv query and available coordinates bypass dialog | `w001` |
+| identify provider-owned playlist shrinking to the current index uses dynamic fallback through the quick caller | `w022` |
+| identify quick caller without a playlist returns normally and reads the current dynamic title | `w007` |
+| identify quick speed menu routes parsed playlist identity into the real subtitle action | `w001` |
+| identify result tile after player disposal uses live State context and modal resources remain owned until dismissal | `w021` |
+| identify saved public menu callback after disposal returns null without allocating another sheet | `w013` |
+| identify sheet width 1600.0 keeps panel geometry tiles and spinner appearance | `w006` |
+| identify sheet width 600.0 keeps panel geometry tiles and spinner appearance | `w006` |
+| identify sheet width 720.0 keeps panel geometry tiles and spinner appearance | `w006` |
+| identify sheet width 940.0 keeps panel geometry tiles and spinner appearance | `w006` |
+| identify stable inventory failure at catalog shows its error and preserves original commit point | `w023` |
+| identify stable inventory failure at subtitles shows its error and preserves original commit point | `w009` |
+| identify typing does not search, suffix and repeated submissions do, empty submission clears | `w002` |
+| identify uses the series snapshot coordinates when the resolver playlist title changes in place | `w025` |
+
+### Phase-12 completed baseline and checks
+
+The final serial original/current focused runs each pass **99/99** cases. New
+scenario/support analyzer: zero issues. Format/idempotence, size/architecture and
+diff checks pass. The fresh `suite_evidence.py` run with `--no-pub
+--dart-define=DEBRIFY_VP_TEST_HOOKS=true`, compared by identity against completed
+M2 `m2/gate/flutter-gate.jsonl`, passes **additions only**: **13,847 successes,
+unchanged 13 failures /28 load errors /20 skips**, exactly 99 passing additions,
+zero missing/changed/fixed/newly skipped identities. SDK/configuration match M2;
+tracked tested tree is stable during the complete 1,034.950 s run. Receipts:
+`focused-final-results.json`, `step0-suite.env.json`, `suite-result.json` and
+`suite-compare.log`. Every nested manifest/parser call uses an isolated copied
+package under `.dart_tool/vplayer_parser/`; copied kernels are removed.
+
+Initial fixture/expectation/error-zone pilots and interrupted/overlapping runs
+are excluded from passing evidence. An evidence-only OS lock serializes source
+edits and suites; corrections and strengthened assertion scopes were first
+validated on the original. The dismissed-sheet observer is scoped to its actual
+unawaited search rather than changing the other disposal/storage fixture paths.
+No application bug, dependency, allowlist, production checker/CI transition or
+size baseline is changed. The two destinations remain evidence-only. Native
+playback/platform input/PiP presentation retain the device-pending checklist.

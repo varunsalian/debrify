@@ -2031,6 +2031,22 @@ for the chosen identity; trackers and skip keep the launch identity.
 
 ## Follow-ups
 
+- **Phase-12 original identity-sheet windows (preserved):** the deferred initial
+  search's first setter precedes liveness guards and can run after sheet
+  dismissal; result-tile taps use live State context and throw after player
+  disposal while the popup/root Navigator survive. Manual subtitle identity
+  commits before discovery and is not rolled back by a storage failure; tracker
+  and skip identity remain the launch identity. After P11 auto-selection there
+  is no renewed content/mounted guard, so old captured results can still return
+  after reset/profile handoff/disposal, with notifications checking mounted only.
+- **Phase-12 original early guide/playlist windows (preserved):** selecting a
+  Stremio guide item before player construction writes metadata then throws on
+  native subtitle reset, leaving the transition latch set. Defaults overwrite
+  the dynamic title but retain the partial Stremio title; a real source change
+  restores video. A resolver-owned playlist can change after commit while the
+  series metadata snapshot retains its earlier coordinates. Characterization
+  pins both behaviours without changing application code.
+
 - **Phase-11 original late restore (preserved):** a stored-track language read
   resumed after disposal still calls the disposed player's subtitle setter;
   default audio can likewise apply its captured track through the live player
@@ -4251,6 +4267,35 @@ Claude sample 16/20 → 20/20 after closures. Merged; M2 follows.
   Hosts and input hashes; initial failed pilots are uncredited.
 - Application/pubspec/CI/size baseline unchanged. Step 0 continues at original
   application code; no production extraction or later step is started.
+
+### 2026-10-15 — Phase 12 Step 0 complete (STOP before production moves)
+
+- Revision: Step T `beb0da7ab`; original application/base `6053efabd`, lib tree
+  `53935a12f156964ae71adc17b1acde3e9b86e77a`. Step-0 commit receipt:
+  `refactor-evidence/vplayer/p12/step0/commit.json`. App/pubspec unchanged;
+  both 263/470-line destinations remain evidence-only; current CI stays P11.
+- Added **99 real-caller cases** in 12 scenario files and five small H-support
+  fixtures: identity A/B tracker/skip split; prefetch/coordinate precedence;
+  no-debounce request counts; dialogs/errors/retries; held scheduling/inventory/
+  catalog/selection/dialog/discovery/P11 results; cleanup; real TV keys/focus;
+  rendered UI; early guide failure and mutable resolver-list windows. Preserved
+  defects are in Follow-ups. No private State or source-text characterization.
+- Sweep: eight moves, **449 points** (437 AST plus 12 arrow bodies), seven refs.
+  **349 assertion kills /21 audited equivalents /23 guard operands /56 invalid
+  candidates excluded**; all five live refs killed, two legacy refs dormant.
+  Every final case-file hash has an original assertion witness (28 fresh serial
+  replay mutations). Complete coverage/mutation/per-case tables are in deps.
+- Nice19, serialized `run-suite` original/current focused runs PASS99 each.
+  `suite_evidence.py` fresh run/compare versus M2 PASS additions-only:
+  **13,847 successes; unchanged 13 failures/28 load errors/20 skips**, exactly
+  99 added identities, zero missing/changed/fixed/newly skipped. Same SDK/flags;
+  tested tree stable. Analyzer zero issues; format, size/architecture, diff PASS.
+  Evidence `p12/step0/` records commands, hashes, complete logs and comparisons.
+- Deviations: initial fixture/expectation/error-zone pilots and overlapping or
+  interrupted runs are uncredited. An evidence-only OS lock now covers source
+  edits and suite execution; assertion/observation corrections were validated
+  on the original first. No allowlisting or application fix. Native decoding,
+  platform IME/PiP presentation and physical phone/TV focus remain device-pending.
 
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
