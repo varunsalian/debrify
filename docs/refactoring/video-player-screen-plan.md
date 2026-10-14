@@ -1776,6 +1776,76 @@ subtitle reverts to the previous one with a message; bitmap (PGS)
 subtitles show, and are rejected with a message on an incompatible Android
 renderer; the menu reflects the corrected selection.
 
+## Phase 11 — subtitle sources and track preferences
+
+Branch `refactor/vplayer-p11` off the phase-10 merge `7fdf59370`. Evidence
+`refactor-evidence/vplayer/p11/`. Line numbers at `0055d29a7` (phase-10
+step 0; the phase-10 move shifts them) — re-measure by name. Ownership per
+the phase-9 subtitle map; M2 follows this phase.
+
+≈ 850 lines leave the facade into **two sibling collaborators** (no
+sibling imports; cross calls through the facade):
+
+**`vp_track_preferences.dart` — `VpTrackPreferences` + Host (≈ 500
+lines):** `_resetSubtitleState` 15239, `_restoreTrackPreferences` 15267
+(199 lines), `_applyDefaultAudioLanguage` 15467,
+`_audioAllowsAutomaticSubtitles` 15522 (getter), `_refreshSubtitleAudioPolicy`
+15530, `_applyDefaultSubtitleLanguage` 15581, `_applyForcedSubtitle` 15693,
+`_persistTrackChoice` 16071 (the phase-10 Host's `persistTrackChoice`
+forwarder is re-pointed — a P11 patched facade adapter, phase-5/10
+precedent).
+
+**`vp_addon_subtitles.dart` — `VpAddonSubtitles` + Host (≈ 330 lines):**
+`_downloadStremioSubtitleToTempFile` 15724, `_applyExternalSubtitleTrack`
+15803, `_cleanupTempSubtitleFilesSync` 15847,
+`_fetchAndMaybeAutoSelectAddonSubtitle` 15859,
+`_applySubtitleSourcePriority` 15983, `_applySubtitlePriorityUpdate` 15995.
+
+Fields owned by these (temp-file list, addon fetch token, priority state,
+track-restore flags — exact list and State-vs-controller decision by
+reader/writer counts at step T; notifiers stay State-owned).
+
+**Stays in the facade for now:** `_findSeriesEpisodeForCurrentIndex`
+(shared: skip-segment Host, guide, trackers), the menu subtitle actions
+(`_withManualSubtitleChoice`, `_menuSubtitles*`,
+`_applyStremioSubtitleFromTracksSheet`, `_buildPlayerMenuPanel` — move with
+the tracks sheet/unified menu phase), `_subtitleSelectionCorrection`,
+`_subtitleSettings`, `_activeExternalSubtitlePath`.
+
+**Retained references:** measured at step T (open/startup restore, audio
+track changes, content resets, menus, identify-title fetch, dispose temp
+cleanup, phase-9/10 Hosts' forwarders → patched adapters as needed).
+
+### Step 0 — characterization of the original
+
+Track preference restore (per-show/per-content keys, audio-language
+fallbacks, subtitle off/embedded/addon/external restoration, forced
+subtitles, the audio-policy rule that allows/blocks automatic subtitles,
+re-evaluation on audio change); default audio/subtitle language selection
+across track lists (incl. language mapping and locale fallbacks);
+persistence identities and the cross-profile physical-write risk (same as
+phases 7/10 — pin as-is, Follow-up); addon subtitle fetch (HTTP harness:
+search, download to temp file, encoding, auto-select by priority/language,
+fetch token staleness on content change, profile switch and disposal
+during fetch, temp-file cleanup on dispose), source priority updates from
+settings; early windows; mutation proofs; coverage matrix; Claude sample.
+
+### Device checklist (end of series)
+
+Remembered audio/subtitle choices return on the next episode and next
+session; default languages pick correctly; forced subtitles show for
+foreign dialogue; addon subtitles auto-select by priority; temp subtitle
+files are cleaned up.
+
+### Integration milestone M2 (after phase 11 merges)
+
+As specified in the phase-9 section: auto-sync + manual override during
+alignment, apply failure/rollback restoring the previous path,
+source/content reset, audio-policy changes, renderer replacement, profile
+handoff and the PiP visibility caller — one scenario, parity on the
+original and the merged tree, ≥ 5 cross-phase mutations, full suite and
+both release builds.
+
 ## Follow-ups
 
 - **Phase-10 subtitle apply races (S2c original, preserved):** decoder logs read
