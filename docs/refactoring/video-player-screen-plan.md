@@ -4080,6 +4080,12 @@ Validation: exact diff and `git diff --check`.
   and preference/temp-file durability across restarts remain device-pending. Dormant paths and characterized
   original defects preserved; M2 follows phase 11. No production bug fix or push/merge/switch. STOP for review.
 
+2026-10-14 — **Phase 11 independent review (Codex `vp-rev11`): no P1/P2 — "No P1s".**
+15/28/3 ledger, bridges 303/282/412, 195 + 87 + 10 cases and gate identities
+verified; q16 is non-equivalent with a physical-write witness. P3: `//` →
+`||` (logical OR) in the p485/p496/p504/p524 equivalence rows, corrected.
+Claude sample 16/20 → 20/20 after closures. Merged; M2 follows.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
