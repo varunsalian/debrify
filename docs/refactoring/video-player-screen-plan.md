@@ -5103,6 +5103,39 @@ for Step 0 and Claude’s independent mutation sample.
   affected mutation/analyzer inputs and record the rebased reduced baseline.
   This checkpoint does not authorize production moves or rebase. STOP.
 
+### 2026-10-15 — Phase 14 Step 0b (independent sample closure; STOP)
+
+- Follows accepted Step 0 `9d22e8223`; the detached original at `1d7699d2e`
+  has identical lib tree `338d6b0b279c3d4fac6897d667ea25600ccb37c2`.
+  No application/pubspec changes, P13 worktree untouched, Step 1 still blocked
+  until P13 merges and the authorized pipeline rebase/proof refresh occurs.
+- Claude's 22-mutant sample initially killed **18 by behavior (82%)**. q11,
+  q13, q18 and q22 were source-only survivors. The deps mutation table names
+  the three structural source guards and explicitly excludes them from
+  behavioral witness credit; all 22 classifications are archived.
+- Added four original-caller cases: deeper non-explicit stored remote wins;
+  real first-deadline expiry across an episode reset with the same target;
+  held 2x persists pre-hold speed in both physical stores; non-IPTV transition
+  suppresses stream/checkpoint server observations while native pause is held.
+  The final original focused run passes **23/23**; all four exact sample
+  mutants fail assertions at identical final test hashes. No source guards
+  run in these mutation proofs. Coverage now **412 killed / 33 device-pending**
+  (only p335 reclassified); all other Step-0 inventory categories retained.
+- `suite_evidence.py` vs accepted Step 0: **209/209 suites loaded, 1,493
+  successes, zero failures/skips; four additions only**, no missing/changed
+  identities (previously 206/1,489). All 56 resume suites are inventoried.
+  Changed-test `dart analyze` PASS; `dart format` four files unchanged;
+  `git diff --check` PASS. No flaky test or baseline regression observed.
+- A superseded original pilot exposed only fixture bookkeeping for the
+  intentionally held next action; it is now marked held, with assertions
+  preserved. Failed pilots are uncredited. Full retry exhaustion, final 5 s
+  polling, 30 s guard settlement and native decoder accuracy remain pending;
+  no DateTime seam or behavior fix was introduced.
+- Commands/results/hashes/patches and this commit's revision receipt:
+  `refactor-evidence/vplayer/p14/step0b/`. Original and reduced suites use the
+  shared serial lock, `nice -n 19`, test-hook define and isolated parser
+  packages. Production/history manifests remain PROVISIONAL. STOP.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

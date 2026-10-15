@@ -11321,3 +11321,75 @@ zero additions**. Size/architecture PASS (3,009 files / 1,677 migrated files).
 Application and pubspec bytes remain identical to the named original. This is
 Step 0's reduced preparation baseline; full suite/builds remain for the named
 integration gates under the approved phase-13 speed-up rule.
+
+## Phase 14 Step 0b — independent sample addendum (2026-10-15)
+
+Named original `9d22e8223` has the same application tree as `1d7699d2e`:
+`338d6b0b279c3d4fac6897d667ea25600ccb37c2`. The existing detached
+`p14/original` at `1d7699d2e` therefore supplies the exact named-original
+application bytes. `step0b/original-identity.json` records the equality.
+No application or dependency file changed. Production remains blocked on P13.
+
+### Independent sample and source-guard classification
+
+Claude's `claude-mut/results.json` contains 22 valid mutants. Initially **18/22
+(82%) had behavior-test assertion kills**. q11, q13, q18 and q22 were behavior
+survivors: their only failures were these three structural source-text guards:
+
+- `Flutter player retains and consumes a TVMaze-discovered identity`
+- `Flutter load path uses the guarded final selection`
+- `Flutter watch reports respect validation, transitions and resume hold`
+
+Those guards reject edits to their matched text; **none is a behavioral mutation
+witness**. They remain structural checks. `independent-sample-classification.json`
+separates the original behavior failures from source-guard failures for all 22
+mutants. The four closure runs include only their respective behavior test files.
+The initial 18 witnesses plus the four new exact-mutant kills give 22 behavioral
+witnesses; this is a targeted closure, not a claimed fresh rerun of all 22.
+
+### Mutation table and coverage matrix addendum
+
+| Sample / original declaration | Behavior through original callers | Assertion-failing original witness |
+|---|---|---|
+| q11 `_maybeRestoreResume` | `tracker_arbitration`: no launch percentages; stored Trakt episode progress 40%, seekable local 20%; furthest stored remote wins at 480,000 ms. | Original seeks 480,000; exact mutant seeks local 240,000. |
+| q13 `_verifyResumeLanding` | `deadline_epoch`: a real 200 ms poll's delivery is held across the real first 1.5 s deadline, then the playlist caller opens episode B and re-arms the same 300,000 ms target. Real elapsed time is bounded; DateTime and production deadlines are unchanged. Both original verifier futures/timers and teardown drain. | Original has exactly two seeks (A and B); exact mutant issues a third stale seek into B. |
+| q18 `_saveResumeLocked` | `hold_save`: select 1.5x, enter temporary 2x through the gesture callback, checkpoint through the aspect menu while still held. Inspect the physical profile `playback_state_v1` row and legacy DB row before release; both contain speed 1.5 and aspect `cover`, while native/display speed remains 2.0. | Exact mutant writes physical speed 2.0 instead of 1.5. Release restores 1.5 on the original. |
+| q22 `_observeServerWatch` | `server_transition`: a real service-prepared non-IPTV target is active. Next sets transition state while native pause is held; a six-minute position edge and a public menu checkpoint must emit no server observations while the action is pending. After transition, play reports the six-minute position. | Exact mutant adds `/Sessions/Playing/Progress` during the held transition (two reports instead of one). |
+
+All four new cases pass unchanged on the original; the final focused run passes
+**23/23 cases**. `sample-closures-results.json` records four complete
+assertion-failing executions, exact patches and final test/support hashes.
+`final-original-proof.json` checks that each mutation's assertion identity also
+passes on the original at those exact hashes. A superseded transition pilot
+failed the fixture's pending-action bookkeeping on the original; marking that
+intentionally suspended action held corrected the fixture, with all assertions
+preserved. The failed pilot is archived and uncredited.
+
+`coverage-matrix.json` extends the original 661-point / 28-reference matrix and
+reclassifies only p335 (the post-wait epoch branch) from device-pending to an
+assertion kill: **412 killed, 19 equivalent, 33 device-pending, 136 invalid
+candidates, 61 null components**. The three other exact mutations strengthen
+already-covered declarations without inflating unique AST-point totals. Full
+retry exhaustion/final five-second wait, the guard's 30-second settling and
+native decoder/keyframe accuracy remain device-pending. The first-deadline
+stale-epoch race is now covered with a bounded real-time driver, without a seam.
+
+### Additions-only reduced baseline
+
+`suite_evidence.py` comparison against the accepted Step-0 baseline passes:
+**209/209 expected suites loaded, 1,493 successes, zero failures/skips; four
+added identities only**, with every previous identity and outcome retained
+(Step 0: 206 suites / 1,489 successes). All 56 resume suites are inventoried;
+the four additions bring resume scenarios from 194 to 198. The staged tested
+tree is stable throughout the run, with the same SDK/configuration. Changed
+Dart analysis passes without issues; formatter checks all four files unchanged;
+`git diff --check` passes. No flaky test or baseline outcome change observed.
+
+Evidence under `refactor-evidence/vplayer/p14/step0b/`: final original log and
+input-hash proof; the four exact patches and complete failing JSON logs;
+independent-sample classification; updated coverage matrix; reduced suite logs,
+environment and explicit load/identity proof; changed-test analysis/format.
+All Flutter runs use the shared serial lock, `nice -n 19`, `--no-pub` and
+`--dart-define=DEBRIFY_VP_TEST_HOOKS=true`; manifest readers use isolated parser
+packages. No source-only failure, runtime-only failure or interrupted run is
+credited. No production move, bug fix, allowlist or dependency change.

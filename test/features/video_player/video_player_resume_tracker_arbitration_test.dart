@@ -26,6 +26,18 @@ void main() {
         )
       >[
         (
+          'stored remote deeper than an in-window local wins without a launch promise',
+          null,
+          null,
+          null,
+          40,
+          0,
+          0,
+          240000,
+          WatchProgressSource.smart,
+          480000,
+        ),
+        (
           'MDBList equal explicit promise does not replace non-explicit Trakt',
           null,
           10,
