@@ -2395,6 +2395,352 @@ the earlier seam proofs. No dummy phase-13 manifest; no history relaxation.
   `media_server_watch_player_wiring_test.dart:58`. The reduced-gate
   inventory includes these five and the resume/server/profile boundary
   tests; every expected suite must load.
+## Phase 15 — IPTV workflow
+
+Branch `refactor/vplayer-p15` (pipelined; prepared off the phase-12 merge
+`1d7699d2e` while phases 13 and 14 run; rebased onto the phase-14 merge
+before step 1 under the pipeline rebase rule). Evidence
+`refactor-evidence/vplayer/p15/`. Line numbers at `1d7699d2e`;
+re-measured after phases 13 and 14 merge. Note: this branch's plan file
+lacks the phase-13/14 section edits; they reconcile at rebase.
+
+≈ 1,715 moved lines into seven files (sizes proved at step T, ≤ 500 each).
+**One switch/recovery owner:** `VpIptvChannelSwitch` is the only writer of
+`_iptvSwitchTicket` (6908, 7874) and the only code that re-opens a live
+channel (switch, source pick, recovery retune). Every other collaborator
+*requests* a tune through its Host and checks staleness against the
+owner's ticket.
+
+| Destination | Members (line, size) | Lines |
+|---|---|---|
+| `vp_iptv_zap_ring.dart` | ring/window state and page primitives: `_reanchorIptvRingToCategory` 5305 (105 incl. doc), section comment + `_kIptvZapPageSize` 5403, `_iptvZapWindowOffset` 5410, `_iptvZapCategoryTotal` 5414, `_iptvZapPagingActive` 5420, `_iptvZapSourceId` 5427, `_iptvZapCategory` 5428, `_iptvZapCategories` 5429, `_iptvZapRequestTicket` 5431, `_iptvZapRequestInFlight` 5432, `_canZapIptvChannel` 5448, `_resetIptvZapPaging` 5461 (14), `_iptvZapArmingPaging` 5475, `_ensureIptvZapPagingArmed` 5485 (21), `_requestIptvZapPage` 5545 (48), `_parseIptvZapPage` 5592 (35), `_installIptvZapWindow` 5629 (28), `_mergeIptvZapPage` 5659 (39) | ≈ 360 |
+| `vp_iptv_zap_ladder.dart` | input ladder: `_kIptvZapEdgeMargin` 5406, `_iptvZapPendingInputs` 5437, `_iptvZapDrainingInputs` 5438, `_iptvZapCachedOriginCategory` 5442, `_iptvZapCachedDirection` 5443, `_iptvZapCachedPage` 5444, `_clearIptvZapBoundaryCache` 5452, `_zapIptvChannel` 5500 (43), `_prefetchIptvZapPage` 5698 (24), `_adjacentIptvCategory` 5721, `_prefetchAdjacentIptvCategory` 5729 (44), `_consumeCachedAdjacentIptvCategory` 5775, `_enterIptvZapCategory` 5792, `_requestAdjacentIptvCategory` 5808 (50), `_queuePendingIptvZapInput` 5857, `_drainPendingIptvZapInputs` 5862 | ≈ 290 |
+| `vp_iptv_guide_catchup.dart` | guide-sheet actions + programme playback: `_iptvCatchupRequests` 787, `_iptvStartOverTimelineVisible` 792, `_toggleIptvStartOverTimeline` 797 (20), `_canStartOverCurrentIptv` 817, `_iptvLiveEdgeAction` 827, `_toggleIptvStartOver` 832 (23), `_startIptvProgrammeFromBeginning` 855 (74), `_iptvGuideContextGeneration` 1160, `_persistIptvGuideContext` 1162, `_anchorIptvGuideCategory` 1175 (15), `_applyIptvGuideCategory` 1192 (30), `_cancelPendingIptvCatchup` 1215, `_beginIptvCatchupRequest` 1225, `_isCurrentIptvCatchupRequest` 1230, `_showIptvChannelSheetOverlay` 5247, `_hideIptvChannelSheet` 5258, `_switchToIptvGuideChannel` 5268 (27), `_playIptvCatchup` 5883 (74) | ≈ 390 |
+| `vp_iptv_channel_switch.dart` | **owner**: `_iptvRecoveryEligible` 720 (16), `_performIptvLiveRetune` 739 (50), `_iptvSwitchTicket` 5959, `_switchToIptvChannel` 6897 (206), `_switchToIptvSource` 7871 (56) | ≈ 415 |
+| `vp_iptv_live_sources.dart` | per-tune stream feedback: `_onIptvStreamError` 5984 (55), `_setIptvSources` 6041 (48), `_initIptvStremioSources` 6089 (18), `_tryOpenLiveStream` 7107 (58) | ≈ 230 |
+| `vp_iptv_watch_memory.dart` | per-tune memory: startup-channel comment + `_lastLiveChannelTimer` 6131, `_lastLiveChannelArmedUrl` 6132, `_lastLiveChannelSettle` 6139, `_noteLiveChannelPlaying` 6141 (39), `_preferredIptvAudioLanguage` 6207, `_iptvSeriesAudioKey` 6212, `_captureIptvAudioLanguage` 6224 (22), `_applyIptvAudioPreference` 6251 (45), `_recordIptvWatchForChannel` 6295 (31) | ≈ 230 |
+| `vp_iptv_zap_banner.dart` | banner lifecycle: `_iptvZapHideTimer` 643, `_iptvZapTicker` 644, `_iptvZapEpgTicket` 645, `_prepareIptvBannerData` 11685 (24), `_raiseIptvZapBanner` 11706 (23), `_hideIptvZapBanner` 11760 (14), `_syncIptvBannerTicker` 11777 (21), `_iptvArchiveRetryAt` 11798, `_refreshIptvBannerEpgIfEnded` 11800 (15), `_loadIptvZapBannerEpg` 11819 (20) | ≈ 155 |
+
+Sizes = measured member spans (doc comments attached to the following
+member) + Host + imports/class scaffolding; the receiver/Host
+qualification adds formatter wraps, so step T measures the formatted file.
+The owner is the tightest; `_onIptvStreamError` lives in the live-stream
+file for that reason (it classifies and routes; the re-open it may request
+is the owner's `switchToIptvChannel(quietRecovery: true)` and the recovery
+machine's `performRetune`, see Open questions).
+
+**Not in this phase (with evidence):**
+- `_effectiveIptvChannels` 932, `_currentIptvChannel` 6108,
+  `_iptvZapBannerOwnsIdentity` 938, `_isIptvSeriesContext` 6198,
+  `_hasIptvNext` 6186, `_hasIptvPrevious` 6190 stay **State-owned derived
+  getters**: read by build/controls, P13 recording (`_currentIptvChannel`
+  ×7 in 6327–6666, `_canRecord` 1154), P14 resume (`_resumeKey` 10388,
+  `_resumeSaveBlocked` 10913, P14 manifest), P11 track preferences adapter
+  (14691), P18 episode navigation (`_onPlaybackEnded` 3996) and the
+  earlier sleep/local-completion/PiP adapters (15226, 14975, 14932). Moving
+  them would patch five more adapters for no ownership gain.
+- `_buildIptvInfoPanel` 12192 → phase 21: a pure widget builder over
+  State-owned banner fields + guide style/tokens/`_recordingActiveNow`;
+  called only from build (13397, 13725, 13743), `_buildTvControls` (11395)
+  and the dock-geometry probe (5114).
+- `_playingLiveUrl` 6518, `_canRecord` 1154 → phase 13 (recording
+  resources).
+- `_showChannelGuideOverlay` 5227, `_hideChannelGuideOverlay` 5240,
+  `_parseChannelDirectory` 5066, `_switchToStremioTvChannel` 8497,
+  `_goToChannelById` 8660, `_goToNextChannel` 8790 → phase 17: they drive
+  Debrify TV's `ChannelGuide`/`_channelEntries`/`widget.requestChannelById`
+  /`requestNextChannel` and Stremio TV, not IPTV.
+- `_resolveAdjacentWithCachedGuide` 12599 → phase 18: TVMaze episode-guide
+  adjacency for catalog series (`widget.seriesSourceFetcher`), not IPTV.
+- `_handleSourceSelected` 7839 → phase 16 (source switching). Its live
+  branch (7849–7851) keeps routing to the owner. **`_switchToIptvSource`
+  moves here, not to 16:** it is the second writer of the switch ticket
+  (7874), resets the recovery machine/pill (7886–7887) and opens through
+  `_tryOpenLiveStream`; leaving it behind would split ticket ownership.
+- IPTV lines inside `initState` (1627–1629), `_onPlayerInstanceReady`
+  (2114–2124), `_bindPlayerInstanceSubscriptions` (2811, 2908–2912) and
+  `_onPlaybackEnded` (3961–3964, 3996–3998) are startup/engine/episode code
+  (phases 16/18/20); they get call-site rewrites only.
+
+### Frozen field ownership
+
+Principle: a field moves only to the collaborator that is its **single
+writer** and only when **no retained code, build, lifecycle or other phase
+reads it**; multi-writer and build-read state stays State-owned. Every
+relocated initializer is a literal, `const`, `null` or inert allocation:
+
+| Field | Fate | Reason / inertness |
+|---|---|---|
+| `_kIptvZapPageSize` 5403 | ring (`static const kIptvZapPageSize`) | read by reanchor/request (ring) and ladder prefetch (5714) via Host `iptvZapPageSize` |
+| `_iptvZapWindowOffset`, `_iptvZapCategoryTotal`, `_iptvZapPagingActive`, `_iptvZapSourceId`, `_iptvZapCategory`, `_iptvZapCategories`, `_iptvZapRequestTicket`, `_iptvZapRequestInFlight`, `_iptvZapArmingPaging` | ring | written only by ring members; ladder and owner (6966) read via Host; literals/`const []` |
+| `_kIptvZapEdgeMargin`, `_iptvZapPendingInputs` (`[]`), `_iptvZapDrainingInputs`, cached triple | ladder | ladder-only writes except `clear()` from ring (5469, 5580, 5586) through Host getter `iptvZapPendingInputs`; growable-list literal inert |
+| `_iptvCatchupRequests` 787 | guide/catch-up | `IptvCatchupRequestGate()` has no side effects (`iptv_catchup_request_gate.dart`); dispose 10208 rewrites to `_iptvGuide.iptvCatchupRequests.cancel()` at the same position |
+| `_iptvGuideContextGeneration` 1160 | guide/catch-up | single writer `_persistIptvGuideContext` (1164); ring reads (5313, 5342, 5553, 5585) via Host |
+| `_iptvSwitchTicket` 5959 | **owner** | single writer (6908, 7874); readers via Host in four siblings; P11 adapter patched (14689) |
+| `_preferredIptvAudioLanguage`, `_lastLiveChannelTimer`, `_lastLiveChannelArmedUrl`, `_lastLiveChannelSettle` | watch memory | single-collaborator; dispose 10281 → `_iptvMemory.lastLiveChannelTimer?.cancel()` same position |
+| `_iptvZapHideTimer`, `_iptvZapTicker`, `_iptvZapEpgTicket`, `_iptvArchiveRetryAt` | banner | banner-only; dispose 10242–10243 rewrite in place |
+| `_iptvChannelsOverride` 785 | State | writers ring (5364, 5645, 5685), guide pick (5280), replay (5951); retained `_effectiveIptvChannels` |
+| `_iptvGuideContextOverride` 786 | State | build sheet 13780–13793; P14 `_saveResumeLocked` 11155 |
+| `_currentIptvIndex` 677 | State | ≈ 40 readers incl. build, resume, init |
+| `_iptvStartOverActive/Loading/TimelineRequested` 788–790 | State | build 11459–11461, 13608–13611; PiP adapter 14922; written by owner, catch-up and live stream inside their own `setState`s |
+| `_iptvErrorsMuted` 5973 | State | retained renderer guards 3127, 3207 |
+| `_lastIptvErrorShown` 5979 | State | two writers (owner 6913, live stream 6023) |
+| `_iptvChannelKey` 5964 | State | retained `_handleSourceSelected` 7849 (P16) |
+| `_showIptvChannelSheet`, `_iptvSheetKey` | State | Back/overlay/build (11492, 11512–11520, 13768, 13773) |
+| `_showIptvZapBanner`, `_iptvZapFloatingMounted`, `_iptvZapChannel`, `_iptvZapEpg`, `_iptvZapEpgLoading`, `_iptvZapClock` | State | build 13704–13722, `_infoPanelSignature` 970–997, `_buildIptvInfoPanel`; `_iptvZapClock = DateTime.now()` is not inert |
+| `_iptvDiag`, `_iptvLiveRecovery` (lazy), `_iptvReconnectText`, `_iptvErrorSub` | State | startup/engine/dispose/PiP; ValueNotifier stays State-owned |
+| `_stremioSourcesOverride`, `_resolveStremioSourceOverride`, `_currentSourceIndex` | State | source switching (P16) and build |
+
+**Patched retained initializer:** `late final _iptvLiveRecovery` (693–716)
+stays lazy and State-owned; exactly two declared rewrites
+`isEligible: _iptvSwitch.iptvRecoveryEligible`,
+`performRetune: _iptvSwitch.performIptvLiveRetune` (694–695). First access
+is in `initState`/instance setup, after the constructor body.
+
+**Scaffolding:** seven collaborators assigned eagerly in the State
+constructor after phase 14's, inert constructors, no constructor or field
+initializer reads a Host: `_zapRing`, `_zapLadder`, `_iptvGuide`,
+`_iptvSwitch`, `_iptvSources`, `_iptvMemory`, `_iptvBanner` (seven).
+
+### Hosts (≈ 14 / 17 / 31 / 53 / 28 / 13 names)
+
+Facade routing between the six siblings (no sibling imports); every
+cross-collaborator method forwarder is a plain non-`async` expression
+forwarder so the callee's synchronous prefix (ticket bump, `expectRetune`
+consumption, `onTuneStarted`) still runs before the caller's next
+statement (`_switchToIptvGuideChannel` 5286–5287 captures the ticket
+*after* calling; `_performIptvLiveRetune` 755–756 sets `expectRetune`
+before calling).
+
+- **Ring (14):** `mounted`, `_vpSetState`; widget selectors
+  `iptvBrowseProvider`, `iptvSourceId`; `currentIptvChannel`,
+  `effectiveIptvChannels`, `currentIptvIndex` (get/set),
+  `iptvChannelsOverride` (set), `iptvGuideContextOverride`;
+  sibling values `iptvSwitchTicket` (owner), `iptvGuideContextGeneration`
+  (guide), `iptvZapPendingInputs` (ladder list object);
+  `clearIptvZapBoundaryCache()` (ladder),
+  `anchorIptvGuideCategory(IptvChannel, {Object? categories})` (guide).
+- **Ladder (17):** `mounted`; `currentIptvChannel`,
+  `effectiveIptvChannels`, `currentIptvIndex`; ring getters
+  `iptvZapPagingActive`, `iptvZapWindowOffset`, `iptvZapCategoryTotal`,
+  `iptvZapCategory`, `iptvZapCategories`, `iptvZapRequestInFlight`,
+  `iptvZapPageSize`; ring ops `requestIptvZapPage({required String?
+  category, required int offset, bool fromEnd = false})` (default
+  preserved), `installIptvZapWindow(page, {required bool
+  preservePlayingChannel})`, `mergeIptvZapPage`, `ensureIptvZapPagingArmed`;
+  `switchToIptvChannel(int, {bool quietRecovery = false})` (owner),
+  `applyIptvGuideCategory` (guide). Ladder writes no ring field.
+- **Guide/catch-up (31):** `context`, `mounted`, `_vpSetState`;
+  `duration`, `controlsVisible` (State ValueNotifier), `tvProgressFocus`,
+  `scheduleAutoHide()`; `currentIptvChannel`, `currentIptvIndex`,
+  `effectiveIptvChannels`, `iptvChannelsOverride` (set),
+  `iptvGuideContextOverride` (get/set), widget selectors `iptvCategories`,
+  `iptvContentType`, `iptvSourceId`, `iptvSourceName`; start-over trio
+  (get/set), `iptvZapEpg`, `iptvDiag`, `iptvLiveRecovery`,
+  `showIptvChannelSheet` (set); `openMedia(…, beforeOpen:)` exact
+  signature; `stopRecording({bool userInitiated = true})` → **phase-13
+  recording collaborator**; `hideIptvZapBanner` (banner);
+  `resetIptvZapPaging`, `reanchorIptvRingToCategory(channel, {required int
+  switchTicket})` (ring); `switchToIptvChannel`, `iptvSwitchTicket`,
+  `iptvRecoveryEligible()` (owner).
+- **Owner (53):** `mounted`, `_vpSetState`, `screenDisposed`,
+  `sleepStopLatched`, `sleepTimerMode` (→ phase-2 `_sleep`),
+  `pausedByLifecycle`, `activeMediaUserPaused`, `player`, `openMedia`,
+  `clearBufferingIndicator`, `startTransitionOverlay`, `tvAbandonScrub()`
+  (called inside its `setState` closure), `tvScrubGeneration` (get/set,
+  `++`), `isTransitioning`/`currentChannelNumber`/`currentChannelName`
+  (set), `currentSourceIndex` (get/set), `hideSourceSheet()` (P16 retained),
+  the transition block (`transitionStopTimer` get/set,
+  `transitionPhaseTimer`, `transitionPhase`, `transitionPhase2Started`,
+  `rainbowController`, `transitionRunning`, `rainbowActive`); IPTV State
+  values (`currentIptvChannel`, `currentIptvIndex` get/set,
+  `effectiveIptvChannels`, start-over trio, `iptvDiag`, `iptvLiveRecovery`,
+  `iptvReconnectText`, `iptvErrorsMuted` get/set, `lastIptvErrorShown`
+  set, `iptvChannelKey`, `isIptvSeriesContext`); siblings
+  `iptvZapPagingActive` (ring), `cancelPendingIptvCatchup`,
+  `hideIptvChannelSheet`, `anchorIptvGuideCategory` (guide),
+  `prepareIptvBannerData`, `raiseIptvZapBanner`, `hideIptvZapBanner`
+  (banner), `recordIptvWatchForChannel`, `setIptvSources(String?,
+  List<StremioIptvCandidate>?, {int currentIndex = 0})`,
+  `tryOpenLiveStream(url, {Duration timeout = …12 s, Map? httpHeaders})`,
+  `applyIptvAudioPreference(int)` (live stream); **phase 13**:
+  `stopRecording`, `refreshEngineRecordingState`, `engineFlagOn`;
+  **phase 14 (State-owned)**: `resumeWriteGuard` (6936 `.clear()`), not a
+  resume collaborator method.
+- **Live stream (28):** `context`, `mounted`, `_vpSetState`, `player`,
+  `openMedia`, `stopRecording` (P13), `isPlaying`; `currentIptvChannel`,
+  `currentIptvIndex`, `effectiveIptvChannels`, `isIptvSeriesContext`,
+  `iptvChannelKey` (get/set), `iptvGuideContextOverride`,
+  `stremioSourcesOverride`/`resolveStremioSourceOverride` (get/set),
+  `currentSourceIndex` (set); widget `iptvSourceId`, `iptvStartIndex`,
+  `videoUrl`; `iptvDiag`, `iptvErrorsMuted`, `lastIptvErrorShown`
+  (get/set), start-over active/timeline (get/set), `iptvLiveRecovery`;
+  owner `iptvSwitchTicket`, `iptvRecoveryEligible()`,
+  `switchToIptvChannel`.
+- **Banner (13):** `mounted`, `_vpSetState`, `controlsVisible`,
+  `iptvZapBannerOwnsIdentity`; State presentation fields `iptvZapChannel`,
+  `iptvZapEpg`, `iptvZapEpgLoading`, `iptvZapClock`,
+  `iptvZapFloatingMounted`, `showIptvZapBanner` (get/set); overlay flags
+  `showIptvChannelSheet`, `showSourceSheet`, `showChannelGuide`.
+
+No Host exposes a collaborator object. No phase-14 resume *method* is
+borrowed (`_saveResume`/`_observeServerWatch` are not called by any moved
+IPTV member); only the State-owned `_resumeWriteGuard`. Lexical
+`context` stays lexical in `_persistIptvGuideContext(IptvGuideContext
+context)` (1162–1165: the parameter shadows State `context`; context-guard
+negative required). `_playIptvCatchup` keeps capturing
+`ScaffoldMessenger.of(context)` before its first await (5902).
+
+### Patched facade adapters (exactly four, six counted rewrites)
+
+Whole-class `patched_class_projection`, regenerated on the accepted
+phase-14 base:
+- `_VpTrackPreferencesHostAdapter` (P11): `applyIptvAudioPreference`
+  14680 → `_s._iptvMemory.applyIptvAudioPreference(ticket)`;
+  `iptvSwitchTicket` 14689 → `_s._iptvSwitch.iptvSwitchTicket`.
+  (`isIptvSeriesContext` 14691 unchanged — State-owned.)
+- `_VpPipLifecycleHostAdapter` (P8): `cancelPendingIptvCatchup` 14914 →
+  `_s._iptvGuide.cancelPendingIptvCatchup(hideFeedback: hideFeedback)`.
+  `iptvStartOverActive`, `iptvLiveRecovery`, `iptvReconnectText`,
+  `currentIptvChannel` unchanged.
+- `_VpPlayerMenuUiHostAdapter` (P13): `captureIptvAudioLanguage` (from
+  `_showTracksSheet` 14027) → `_s._iptvMemory.captureIptvAudioLanguage`.
+- `_VpPlayerMenuHostAdapter` (P13): `captureIptvAudioLanguage` (14180,
+  14188) and `hideIptvZapBanner({bool immediate = false})` (14093) →
+  `_iptvMemory` / `_iptvBanner`.
+
+Unchanged and asserted unchanged: local-completion
+`effectiveIptvChannels` 14975, sleep `currentIptvChannel` 15226, P13
+recording adapters (`currentIptvChannel`, `iptvZapBannerOwnsIdentity`,
+`playingLiveUrl`), every P14 adapter (P14 manifest reads only
+`_currentIptvChannel`/`_effectiveIptvChannels`, both State-owned).
+
+### Retained references (62 facade sites + 2 initializer)
+
+Measured by scanning non-comment code outside the moved spans; Step T's
+scanner is authoritative (`p15/stepT/retained-sites.json`).
+
+| Group | Facade lines |
+|---|---|
+| Lazy recovery initializer | 694, 695 |
+| `_tvNoTimeline` | 589 (`iptvStartOverTimelineVisible`) |
+| `initState` | 1629 (`initIptvStremioSources`) |
+| `_onPlayerInstanceReady` | 2119 prepare banner, 2120 raise, 2121 anchor, 2122 arm paging |
+| Instance subscriptions | 2811 `noteLiveChannelPlaying`, 2910 `onIptvStreamError` |
+| `_onPlaybackEnded` | 3997 `switchToIptvChannel` |
+| Other overlays | 5232 (`_showChannelGuideOverlay`), 7803 (`_showSourceSheetOverlay`) → `hideIptvZapBanner` |
+| `_handleSourceSelected` | 7850 `switchToIptvSource` |
+| `dispose` | 10208 catch-up gate, 10242 hide timer, 10243 ticker, 10281 last-live timer (order kept) |
+| `_buildTvControls` | 11422, 11427 switch; 11423, 11428 can-zap; 11424, 11429 zap; 11453 sheet; 11458 live edge; 11462 timeline toggle; 11464 timeline visible |
+| Back / guide | 11516 hide sheet; 11544 show sheet |
+| `_handleTvKey` | 11590, 11630, 11632 can-zap; 11591 zap |
+| `_onControlsVisibilityChanged` | 11735 hide banner; 11755 sync ticker |
+| `build` | 12812, 12820, 13582 sheet; 12923, 13036, 13047, 13519, 13530, 13538, 13555 can-zap; 12925, 12929, 13037, 13048, 13520, 13531 zap; 13516, 13527 switch; 13566, 13615 timeline visible; 13607 live edge; 13612 toggle; 13776 guide pick; 13777 catch-up; 13778 hide sheet; 13798 persist context |
+
+Tear-offs passed to widgets (`IptvChannelSheet.onChannelSelected`,
+`onPlayProgramme`, `onClose`, `onContextChanged`, dock `onLiveEdgeAction`,
+`onToggleStartOverTimeline`, `onShowIptvChannels`) become tear-offs of the
+same long-lived collaborator, so `==` across rebuilds is preserved.
+Preserve: stop-before-open ordering in retune (768), start-over (883),
+switch (6924) and candidate probe (7118); the switch's
+ticket-before-first-await; dispose order (recovery cancel 10143 → catch-up
+cancel 10208 → banner timers 10242–10243 → last-live timer 10281).
+
+**History:** a pre-phase-14 step-T materialization is **provisional**;
+after phases 13 and 14 merge, rebase and regenerate facade
+partition/import/order/adapter proofs, refresh analyzer probes and
+mutation witnesses, protect every earlier destination derived from the
+applied manifests (≈ 32: 25 + P13's four + P14's three), P12 `--at
+1d7699d2e`, P13 and P14 `--at` their accepted merges, S2d with the earlier
+seam proofs. No dummy manifests; no history relaxation. The theme
+frozen-path list (`theme_surface_manifest.txt:26`,
+`theme_rendered_set.py:57`, `source_guard_test.dart` exact list) gains the
+six files in the commit that creates them. Analyzer: the P12 inventory has
+**no** diagnostics on these members; the receiver probe must check for
+new `use_build_context_synchronously` infos where `_host.context` follows
+an await behind `_host.mounted` (877, 6029 sync, 5902 captured).
+
+### Step 0 — characterization of the original
+
+Existing coverage to keep/extend: `video_player_zap_test.dart`,
+`video_player_zap_categories_test.dart`,
+`video_player_catchup_caller_test.dart`,
+`video_player_catchup_gate_test.dart` (pure gate),
+`video_player_pip_recovery_test.dart`,
+`video_player_resume_iptv_window_test.dart`,
+`video_player_resume_live_key_test.dart`; external boundary tests
+`test/iptv_channel_sheet_responsive_test.dart`,
+`test/iptv_live_recovery_test.dart`, `test/iptv_zap_banner_test.dart`,
+`test/iptv_player_paging_test.dart`, `test/iptv_epg_service_test.dart`.
+
+- **Zap ring/ladder:** non-paged wrap + arm on first press; in-window step
+  with edge-margin (12) prefetch both directions; page crossing queues the
+  press (cap 24) and drains after merge; category crossing via cached
+  prefetch vs round trip; direction reversal drops the cache; empty
+  categories skipped, full walk clears the queue; uncategorized wrap with
+  `fromEnd`; one request in flight (second returns null without clearing);
+  reset/guide pick strands an in-flight page (request ticket); a user
+  browse (generation bump) drops page and queue; re-anchor rejections
+  (switch ticket, generation, playing channel changed, page lacks playing
+  channel); arming retry after a lost bootstrap and `whenComplete` reset;
+  drain stops when a request starts or the press re-queues.
+- **Guide:** anchor/apply category (equal-context no-op, null category,
+  response categories, `IPTV`/`live` fallbacks); persist bumps the
+  generation, apply does not; sheet show hides banner and controls, hide
+  cancels catch-up; guide pick adopts the list, resets paging, captures the
+  ticket after calling the switch, re-anchors only if still current.
+- **Catch-up / Start Over:** live-edge availability (airing + archive),
+  toggle on/off, loading flag, unavailable snackbar, recording stop before
+  open, `beforeOpen` rejection of stale requests, open failure → quiet live
+  retune only when eligible, timeline toggle (loading snackbar; TV focus
+  via `PlatformUtil` test override or device-pending); archived replay
+  (snackbars, history row, paging reset, single-item override) vs airing
+  programme (switch then start-over); cancellation from sheet close, zap,
+  PiP background, dispose. Hold `catchupUrl` and the history write
+  separately.
+- **Owner:** switch order (ticket → mute/reset → `onTuneStarted` /
+  `expectRetune` → pill → stop recording → catch-up cancel → sheet hide →
+  buffering → resume-guard clear → start-over reset/transition/banner or
+  quiet → anchor only when not paged → non-live history → pause → Stremio
+  ladder or M3U open → series audio → 1.5 s transition cleanup → engine
+  refresh). Overlapping switches with the older one held at stop-recording,
+  `resolveCandidates`, each candidate probe and `openMedia`: no open, winner
+  mark, mute release or cleanup from the stale one. Retune: Stremio
+  (`expectRetune` + quiet switch) vs direct reopen with ticket strand
+  during stop-recording. Eligibility matrix (disposed, non-live, sleep
+  latched, end-of-item, lifecycle pause, user pause). Source pick: winner
+  mark, failed pick restores highlight, superseded pick.
+- **Live stream:** error classification — muted, start-over active →
+  quiet retune when eligible, auth regex (401/403/404) skips the machine,
+  live → `onError()`, 6 s burst debounce, non-live message text; source
+  rows set/clear/clamp; init race (zapped away, rows already set);
+  candidate probe success only after open returns (width/position),
+  error, open throw, 12 s timeout, subscriptions cancelled; audio capture
+  (series only, unchanged language skipped, storage write) and apply
+  (20×100 ms wait, session → stored → default precedence, ticket/mounted
+  aborts, manual pick during the wait wins); last-live-channel 1 s settle
+  (no re-arm for the same URL, zap during settle, not playing, playlist-id
+  precedence); history attributes for series episodes.
+- **Banner:** known EPG paints immediately, archive-aware upgrade, late
+  answer for a previous channel dropped; raise blocked by sheet/source/
+  guide/controls; 4.5 s fade, immediate handoff to the dock; 1 s ticker
+  only while on screen (floating or dock with live identity); ended
+  programme / 60 s archive retry refresh.
+- **Profile/disposal matrix:** the IPTV storage writes resolve the profile
+  implicitly at write time (`ProfilePreferences.instance()`:
+  `iptv_last_channel_storage.dart:65`, `iptv_audio_storage.dart:32`,
+  `iptv_history_storage.dart`). Hold the settle timer, audio write,
+  switch history write and replay history write across A→B and disposal;
+  inspect both profiles; pin outcomes as-is (Follow-ups).
+- **Source-text guards:** none of the nine direct readers anchors a moved
+  IPTV declaration (`playback_checkpoint_contract_test.dart:73` anchors
+  `effectiveIptvChannels` inside P14's `_resumeSaveBlocked`, State-owned;
+  `player_auto_next_routing_test.dart` reads `_onPlaybackEnded`, whose
+  body gains only the 3997 rewrite — its anchors are unaffected; verify
+  with the validating reader). Theme guard path lists extended.
+- **Reduced-gate inventory:** every `test/features/video_player/**` file,
+  the readers and theme guard, plus the external boundary tests above;
+  every expected suite must load.
 - Early windows; mutation proofs; coverage; Claude sample.
 
 ### Device checklist (end of series)
@@ -2402,6 +2748,76 @@ the earlier seam proofs. No dummy phase-13 manifest; no history relaxation.
 Resume lands at the saved position for movies, series episodes, TorBox
 and PikPak entries; leaving during a slow resume never resets the saved
 point to 0; speed/aspect/subtitle choices restore with the position.
+Zap with CH+/CH−/arrows (and held keys) across page and category
+boundaries on phone, Android TV and tvOS; picking a search result in the
+guide re-anchors the ring to its category; Start Over and archived replay
+on an Xtream source with catch-up, and returning to live; Stremio IPTV
+channel ladder and a manual source pick; a dropped stream shows the
+reconnect pill and the surrender snackbar with Retry; series audio
+language carries across episodes and sessions; "start on last channel"
+re-tunes the last channel that actually played; the zap banner floats,
+fades, hands off to the dock and its countdown ticks while paused.
+
+### Follow-ups found (record, do not fix)
+
+- **Cancelled replay still writes history:** `_playIptvCatchup` writes the
+  replay row (5938) before the final request check (5946); a replay
+  cancelled during the write leaves a Continue Watching row for an item
+  that never played.
+- **Manual Stremio source pick is not error-muted (suspected):**
+  `_switchToIptvSource` probes with `_iptvErrorsMuted` false, so a dead
+  pick's error reaches `_onIptvStreamError` → `_iptvLiveRecovery.onError()`
+  → `_performIptvLiveRetune` → a full quiet ladder that can replace the
+  user's pick, contrary to its doc comment (7866–7870). Characterize.
+- **Source pick skips switch-boundary steps:** no catch-up cancel,
+  start-over reset, `_resumeWriteGuard.clear()` or error-debounce reset
+  (compare 6912–6940).
+- **Implicit-profile IPTV writes:** settle-timer last channel (6161),
+  audio language (6240), switch history (6978) and replay history (5938)
+  don't capture the originating profile.
+- **Candidate probe binds the pre-open player:** `_tryOpenLiveStream`
+  subscribes to `_player.stream` before `_openMedia`; a renderer
+  replacement during the open leaves it waiting on the old instance until
+  the 12 s timeout (device-pending).
+- **Two audio-preference appliers per switch:** owner's unawaited apply
+  (7075) and the P11 track-preference path (`vp_track_preferences.dart`
+  126, 214) can both call `setAudioTrack`; pin the order.
+- **Unhandled futures:** `_initIptvStremioSources` `.then` has no error
+  handler (6095); unawaited switch futures from the ladder (5511, 5520,
+  5794) and the retune closure (764–782, only `_openMedia` is guarded)
+  surface any throw from `resolveCandidates`/`stopRecording` to the zone.
+
+### Open questions for the design review
+
+1. **Owner size vs placement of `_onIptvStreamError`.** With the error
+   handler inside the owner the file is ≈ 490 before formatter wraps.
+   Proposed: the handler lives in the live-stream file and requests
+   re-opens only via `switchToIptvChannel(quietRecovery: true)` /
+   `iptvLiveRecovery.onError()`. Alternative: a seventh
+   `vp_iptv_stream_feedback.dart`, or accept a documented ≤ 520 owner.
+2. **Live-stream split (Claude decision, review it).** The draft's single
+   live-stream file mixed stream feedback with watch/audio memory; the table
+   above uses two files (`vp_iptv_live_sources.dart`,
+   `vp_iptv_watch_memory.dart`, ≈ 230 each). Re-derive their Hosts (the
+   28-name live-stream Host splits; facade routing between them, no
+   sibling imports) and the patched adapters (`captureIptvAudioLanguage`/
+   `applyIptvAudioPreference` now route to watch memory). Text below that
+   says "live stream" means whichever of the two owns the member.
+3. **Ring/ladder field split.** Ring owns the window and request state;
+   the ladder owns queue/cache. The ring mutates the ladder's list via a
+   Host getter (three `clear()` sites) and calls `clearIptvZapBoundaryCache`
+   via the facade. Acceptable, or keep the queue/cache State-owned?
+4. **Static const across classes.** `_kIptvZapPageSize` becomes
+   `VpIptvZapRing.kIptvZapPageSize` and the ladder reads it through a Host
+   getter; the checker needs a declared static-to-static move (not the
+   static→top-level opt-in) — confirm support or keep it top-level in the
+   ring file.
+5. **Owner Host breadth (53).** Dominated by the duplicated transition
+   cleanup block (7084–7098, 7908–7922) that phase 21 owns; forwarding
+   nine transition members is the verbatim cost. Confirm acceptable vs a
+   later extraction.
+6. **`_isIptvSeriesContext` State-owned.** Kept State-owned to avoid
+   splitting a predicate read by P11, P18 and the owner; confirm.
 
 ## Follow-ups
 
