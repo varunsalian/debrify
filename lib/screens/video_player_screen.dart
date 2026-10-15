@@ -191,6 +191,10 @@ import '../features/video_player/presentation/legacy_video_player/vp_track_prefe
 import '../features/video_player/presentation/legacy_video_player/vp_addon_subtitles.dart';
 import '../features/video_player/presentation/legacy_video_player/vp_identify_title.dart';
 import '../features/video_player/presentation/legacy_video_player/vp_identify_title_ui.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_player_menu_ui.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_player_menu.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_iptv_recording.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_iptv_recording_resources.dart';
 
 /// A full-featured video player screen with playlist support and navigation controls.
 ///
@@ -414,6 +418,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _addonSubtitles = VpAddonSubtitles(_VpAddonSubtitlesHostAdapter(this));
     _identify = VpIdentifyTitle(_VpIdentifyTitleHostAdapter(this));
     _identifyUi = VpIdentifyTitleUi(_VpIdentifyTitleUiHostAdapter(this));
+    _menuUi = VpPlayerMenuUi(_VpPlayerMenuUiHostAdapter(this));
+    _menu = VpPlayerMenu(_VpPlayerMenuHostAdapter(this));
+    _recording = VpIptvRecording(_VpIptvRecordingHostAdapter(this));
+    _recordingResources = VpIptvRecordingResources(
+      _VpIptvRecordingResourcesHostAdapter(this),
+    );
   }
   void _vpSetState(VoidCallback fn) => setState(fn);
 
@@ -765,7 +775,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // mpv makes no promise about `stream-record` across an open() — a
       // running capture must be stopped first, exactly like every other
       // media replacement path (codex round 2, finding 6).
-      await _stopRecording(userInitiated: false);
+      await _recording.stopRecording(userInitiated: false);
       if (!mounted || ticket != _iptvSwitchTicket) return;
       _iptvDiag.onTuneStart(channel.name, channel.url, isLive: true);
       _iptvLiveRecovery.expectRetune = true;
@@ -880,7 +890,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       return;
     }
 
-    await _stopRecording(userInitiated: false);
+    await _recording.stopRecording(userInitiated: false);
     if (!_isCurrentIptvCatchupRequest(requestTicket) ||
         switchTicket != _iptvSwitchTicket ||
         _currentIptvChannel?.url != channel.url) {
@@ -995,7 +1005,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       epg?.now != null ? 'w' : '',
       epg?.next != null ? 'x' : '',
       _iptvZapEpgLoading ? 'L' : '',
-      _recordingActiveNow ? 'r' : '',
+      _recording.recordingActiveNow ? 'r' : '',
     ].join('|');
   }
 
@@ -1111,9 +1121,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// Engine-vs-tee flag (Settings → IPTV → Recording), loaded at player setup.
   bool _engineFlagOn = false;
 
-  /// Supersedes stale engine-state refreshes (zap during a query round-trip).
-  int _engineRefreshTicket = 0;
-
   /// Tap on mpv's log stream while a TEE recording is armed. stream-record
   /// failing INSIDE mpv (its own fopen refused, demuxer that can't dump) is
   /// completely invisible otherwise — the property set succeeds, Dart sees no
@@ -1149,9 +1156,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// could resume and arm libmpv on the NEW channel under the OLD channel's
   /// filename, or arm an already-disposed player and leave the file untracked.
   int _recordingStartGen = 0;
-
-  /// Record is offered only for live IPTV on a libmpv backend.
-  bool get _canRecord => _recordingSupported && _iptvZapBannerOwnsIdentity;
 
   /// Bumped whenever the guide reports a browse the user drove (a category
   /// pick, a search, a source change). An in-flight re-anchor that predates
@@ -1346,6 +1350,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   late final VpAddonSubtitles _addonSubtitles;
   late final VpIdentifyTitle _identify;
   late final VpIdentifyTitleUi _identifyUi;
+  late final VpPlayerMenuUi _menuUi;
+  late final VpPlayerMenu _menu;
+  late final VpIptvRecording _recording;
+  late final VpIptvRecordingResources _recordingResources;
 
   // The quiet bottom-right auto-sync surface: a 5s announce line, then
   // nothing until a real event — statuses during passes, word-only results.
@@ -1553,14 +1561,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // none of which should stop the video.
     _lifecycle = AppLifecycleListener(
       onPause: () {
-        unawaited(_stopRecording(userInitiated: false));
+        unawaited(_recording.stopRecording(userInitiated: false));
         _pip.pauseForBackground();
       },
       onResume: _pip.resumeFromBackground,
     );
 
     // Observe, don't sample: see [_desktopRecordingRevisionListener].
-    if (DesktopRecordingService.instance.isSupported) {
+    if (DesktopRecordingService.instance.isSupported && !VpS2Hooks.isIOS) {
       void onRevision() {
         if (mounted) setState(() {});
       }
@@ -2325,7 +2333,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         LiveRecordingService.engineEnabled().then((on) {
           if (!mounted) return;
           _engineFlagOn = on || ProfileRuntime.isProfileCommitted;
-          if (_engineFlagOn) unawaited(_refreshEngineRecordingState());
+          if (_engineFlagOn)
+            unawaited(_recording.refreshEngineRecordingState());
         }),
       );
     }
@@ -4402,7 +4411,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
 
     if (kUnifiedPlayerMenuEnabled) {
-      _openPlayerMenuQuick(PlayerMenuSection.shuffle);
+      _menu.openPlayerMenuQuick(PlayerMenuSection.shuffle);
       return;
     }
 
@@ -6319,581 +6328,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
-  /// The desktop capture, when it belongs to the CURRENTLY PLAYING channel —
-  /// asked of the SERVICE, not this screen's own field, so a capture the
-  /// desktop SCHEDULER started shows up on (and stops from) the Record button
-  /// too when its channel is being watched.
-  DesktopRecordingCapture? _desktopCaptureForCurrent() {
-    final channel = _currentIptvChannel;
-    if (channel == null) return null;
-    final playing = _playingLiveUrl(channel);
-    if (playing == null) return null;
-    final service = DesktopRecordingService.instance;
-    final direct = service.captureForUrl(playing);
-    if (direct != null) return direct;
-    final twin = LiveRecordingService.xtreamTsTwin(playing);
-    return twin != null ? service.captureForUrl(twin) : null;
-  }
-
-  Future<void> _toggleRecording() async {
-    // Desktop capture of the current channel: stop it.
-    final desktopCapture = _desktopCaptureForCurrent();
-    if (desktopCapture != null) {
-      final savedPath = desktopCapture.path;
-      final bytes = await desktopCapture.stop();
-      if (!mounted) return;
-      // The revision listener has already repainted (the capture ended during
-      // that await); this only guarantees it for the pathological case where
-      // the notification was swallowed.
-      setState(() {});
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            bytes > 0
-                ? 'Recording saved: $savedPath'
-                : 'Recording failed — nothing was captured',
-          ),
-        ),
-      );
-      return;
-    }
-    // Engine capture of the current channel: stop it. Finalization is async in
-    // the service; its "Saved" notification is the confirmation.
-    final engineTask = _engineTaskId;
-    if (engineTask != null) {
-      setState(() => _engineTaskId = null);
-      final ok = await LiveRecordingService.stop(engineTask);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            ok
-                ? 'Recording stopped — saving to Downloads/Debrify/Recordings'
-                : "Couldn't stop recording",
-          ),
-        ),
-      );
-      return;
-    }
-    if (_isRecording) {
-      await _stopRecording();
-      return;
-    }
-    // Engine first on Android: its capture survives zaps, Home, even the app
-    // dying. The tee stays as the fallback — and as the only recorder for true
-    // HLS, which mpv can capture but the engine cannot.
-    if (Platform.isAndroid && _engineFlagOn && _recordingSupported) {
-      final channel = _currentIptvChannel;
-      final recordUrl = await _engineRecordUrlForCurrent();
-      if (channel != null && recordUrl != null) {
-        if (!await ensureRecordingCapacity(context)) return;
-        if (!mounted) return;
-        // This path skips ensureEngineReady (support was pre-checked), so
-        // the one-time notification ask lives here explicitly — fire-and-
-        // forget, so an unanswered dialog can't delay the capture.
-        unawaited(LiveRecordingService.ensureNotificationPermission());
-        final resource = await _currentRecordingResource();
-        if (!mounted) return;
-        final result = await LiveRecordingService.start(
-          url: recordUrl,
-          fileName: _recordingFileName(channel.name),
-          channelName: channel.name,
-          headers: channel.playbackHeaders,
-          connectionResourceId: resource?.id,
-          resourceAuthorizationRevision: resource?.revision,
-        );
-        if (!mounted) return;
-        if (result.ok) {
-          setState(() => _engineTaskId = result.id);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Recording in background — keeps going if you zap or leave. '
-                'Stop from here or the notification.',
-              ),
-            ),
-          );
-        } else if (result.errorCode == 'recording_limit_reached') {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Recording limit reached — free a slot or raise the limit '
-                'in IPTV settings',
-              ),
-            ),
-          );
-        } else if (!ProfileRuntime.isProfileCommitted &&
-            (result.errorCode == 'engine_unsupported' ||
-                result.errorCode == 'fgs_not_allowed' ||
-                result.errorCode == 'missing_plugin')) {
-          // Engine unreachable: the tee still works, with its semantics.
-          await _startRecording();
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Couldn't start recording")),
-          );
-        }
-        return;
-      }
-      // recordUrl == null: true segmented stream (no Xtream twin) — only the
-      // tee can capture what mpv is demuxing. Fall through.
-      if (ProfileRuntime.isProfileCommitted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('This stream cannot be recorded safely'),
-          ),
-        );
-        return;
-      }
-    }
-    // Desktop: the raw HTTP capture is the ONLY recorder that works — the mpv
-    // tee is dead on media_kit's stock libs (no muxers in its FFmpeg). Never
-    // fall through to the tee here; for unrecordable streams say so instead
-    // of starting something that provably writes nothing.
-    if (DesktopRecordingService.instance.isSupported && _recordingSupported) {
-      final channel = _currentIptvChannel;
-      final recordUrl = await _engineRecordUrlForCurrent();
-      if (channel == null) return;
-      if (recordUrl == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              "This channel can't be recorded on desktop (HLS stream)",
-            ),
-          ),
-        );
-        return;
-      }
-      if (!await ensureRecordingCapacity(context)) return;
-      if (!mounted) return;
-      // Raw byte copy → the capture IS a transport stream: .ts, not the
-      // tee's .mkv.
-      final path = await _recordingTargetPath(channel.name, extension: 'ts');
-      // The screen may have closed during that await. Starting now would be
-      // legitimate — captures outlive this screen — but the state below can't
-      // be set on a dead widget, and the user asked for this from a surface
-      // that is gone.
-      if (!mounted) return;
-      // No onFinished: endings are announced app-wide by the reporter in
-      // main(), which is still alive when this screen isn't, and the revision
-      // listener repaints the button. A screen-scoped callback would only
-      // duplicate the toast while the player happens to be open.
-      final resource = await _currentRecordingResource();
-      if (!mounted) return;
-      final capture = await DesktopRecordingService.instance.start(
-        url: recordUrl,
-        path: path,
-        channelName: channel.name,
-        headers: channel.playbackHeaders,
-        connectionResourceId: resource?.id,
-        resourceAuthorizationRevision: resource?.revision,
-      );
-      if (!mounted) return;
-      if (capture == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Couldn't start recording")),
-        );
-        return;
-      }
-      setState(() {});
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Recording in background — keeps going if you zap or leave. '
-            'Stop from here or Settings → Recordings.',
-          ),
-        ),
-      );
-      return;
-    }
-    await _startRecording();
-  }
-
-  /// The URL actually PLAYING for [channel]. NOT `_currentStreamUrl` for
-  /// plain channels — the zap path never updates that field, so after a zap
-  /// it still holds the previous channel's URL, and matching on it would pin
-  /// the Record button (and its Stop!) to the wrong capture. The channel's
-  /// own URL is the identity for everything except Stremio, whose playing URL
-  /// is the resolved candidate only `_currentStreamUrl` knows.
-  String? _playingLiveUrl(IptvChannel channel) {
-    if (!channel.url.startsWith('stremio-tv://')) return channel.url;
-    final resolved = _currentStreamUrl;
-    if (resolved == null || resolved.startsWith('stremio-tv://')) return null;
-    return resolved;
-  }
-
-  /// The URL the ENGINE should capture for the current live channel, or null
-  /// when only the tee can record it. mpv's own `file-format` is ground truth
-  /// for what's actually playing (extension-less URLs lie); the URL shape is
-  /// the fallback when the probe is unavailable.
-  Future<String?> _engineRecordUrlForCurrent() async {
-    final channel = _currentIptvChannel;
-    if (channel == null || channel.isLive != true) return null;
-    final playing = _playingLiveUrl(channel);
-    if (playing == null || playing.isEmpty) return null;
-    // The engine speaks HTTP only. rtmp/rtsp/udp/... channels go to the tee —
-    // mpv plays them, so mpv can record them. Checked BEFORE the probe: mpv
-    // reports e.g. "flv" for RTMP, which would read as progressive below.
-    if (!playing.startsWith('http://') && !playing.startsWith('https://')) {
-      return null;
-    }
-    String format = '';
-    final platform = _player.platform;
-    if (platform is mk.NativePlayer) {
-      try {
-        format = await platform.getProperty('file-format');
-      } catch (_) {}
-    }
-    final lower = format.toLowerCase();
-    if (lower.contains('hls') || lower.contains('dash')) {
-      // Segmented for sure — only an Xtream `.ts` twin can rescue it.
-      return LiveRecordingService.xtreamTsTwin(playing);
-    }
-    if (lower.isNotEmpty) {
-      // Probe says progressive: record exactly what's playing.
-      return playing;
-    }
-    return LiveRecordingService.engineRecordableUrl(playing);
-  }
-
-  /// Re-derive [_engineTaskId] from the native registry — a capture may have
-  /// been started in an earlier player session, or stopped from the
-  /// notification while this screen was open.
-  Future<void> _refreshEngineRecordingState() async {
-    if (!Platform.isAndroid || !_engineFlagOn) return;
-    final channel = _currentIptvChannel;
-    if (channel == null || channel.isLive != true) {
-      if (_engineTaskId != null && mounted) {
-        setState(() => _engineTaskId = null);
-      }
-      return;
-    }
-    final ticket = ++_engineRefreshTicket;
-    final playing = _playingLiveUrl(channel);
-    if (playing == null) {
-      if (_engineTaskId != null) setState(() => _engineTaskId = null);
-      return;
-    }
-    final twin = LiveRecordingService.xtreamTsTwin(playing);
-    final recordings = await LiveRecordingService.query();
-    if (!mounted || ticket != _engineRefreshTicket) return;
-    String? found;
-    for (final r in recordings) {
-      if (r.isRecording &&
-          (r.url == playing || (twin != null && r.url == twin))) {
-        found = r.taskId;
-        break;
-      }
-    }
-    if (found != _engineTaskId) {
-      setState(() => _engineTaskId = found);
-    }
-  }
-
-  /// `<Channel>_<yyyyMMdd_HHmmss>.ts` — same shape as the tee's target path
-  /// (which additionally uniquifies against its own directory; MediaStore
-  /// uniquifies for the engine).
-  String _recordingFileName(String channelName) {
-    final safeName = channelName
-        .replaceAll(RegExp(r'[^A-Za-z0-9 _-]'), '')
-        .trim()
-        .replaceAll(RegExp(r'\s+'), '_');
-    var base = safeName.isEmpty ? 'recording' : safeName;
-    if (base.length > 60) base = base.substring(0, 60);
-    final now = DateTime.now();
-    String two(int v) => v.toString().padLeft(2, '0');
-    final stamp =
-        '${now.year}${two(now.month)}${two(now.day)}_'
-        '${two(now.hour)}${two(now.minute)}${two(now.second)}';
-    return '${base}_$stamp.ts';
-  }
-
-  Future<({String id, int revision})?> _currentRecordingResource() async {
-    final channel = _currentIptvChannel;
-    final sourceId =
-        channel?.attributes['source_playlist_id'] ??
-        channel?.attributes['series_playlist_id'] ??
-        widget.iptvSourceId;
-    if (sourceId == null) return null;
-    // Fresh read first: the launch payload's revision predates any sources
-    // edit made while this player lives (PiP, background), and every edit
-    // bumps every source's revision — a stale one would be refused at start.
-    try {
-      final playlists = await IptvPlaylistStorage.getIptvPlaylists(
-        forSettings: false,
-      );
-      for (final playlist in playlists) {
-        if (playlist.id != sourceId) continue;
-        final id = playlist.connectionResourceId;
-        final revision = playlist.connectionResourceRevision;
-        if (id != null && id.isNotEmpty && revision != null) {
-          return (id: id, revision: revision);
-        }
-      }
-    } catch (_) {
-      // Storage unavailable mid-session: fall through to the launch payload.
-    }
-    for (final source in widget.iptvSources ?? const <Map<String, dynamic>>[]) {
-      if (source['id'] != sourceId) continue;
-      final id = source['connectionResourceId']?.toString();
-      final revision = (source['connectionResourceRevision'] as num?)?.toInt();
-      if (id != null && id.isNotEmpty && revision != null) {
-        return (id: id, revision: revision);
-      }
-    }
-    return null;
-  }
-
-  /// Print mpv log lines that matter while a tee recording runs.
-  void _tapMpvLogsForRecording() {
-    _recordLogSub?.cancel();
-    _recordLogSub = _player.stream.log.listen((log) {
-      final level = log.level.toLowerCase();
-      if (level != 'error' && level != 'fatal') return;
-      debugPrint('VideoPlayer: mpv[${log.level}] ${log.prefix}: ${log.text}');
-    });
-  }
-
-  void _untapMpvLogs() {
-    _recordLogSub?.cancel();
-    _recordLogSub = null;
-  }
-
-  Future<void> _startRecording() async {
-    if (!_playerCreated) return;
-    final platform = _player.platform;
-    if (platform is! mk.NativePlayer) return;
-    final channel = _currentIptvChannel;
-    if (channel == null) return;
-    final gen = ++_recordingStartGen;
-    try {
-      final path = await _recordingTargetPath(channel.name);
-      final parent = Directory(path).parent;
-      if (!await parent.exists()) {
-        await parent.create(recursive: true);
-      }
-      // The channel (or the whole screen) may have gone while the storage work
-      // ran. Arming now would tee the NEW stream into the old channel's file.
-      if (gen != _recordingStartGen || !mounted || !_playerCreated) return;
-      _tapMpvLogsForRecording();
-      await platform.setProperty('stream-record', path);
-      // Read the property back: proves whether mpv actually ACCEPTED the
-      // target (a silent internal failure leaves it set but writes nothing —
-      // the log tap above catches that case).
-      var echoed = '';
-      try {
-        echoed = await platform.getProperty('stream-record');
-      } catch (_) {}
-      debugPrint(
-        'VideoPlayer: stream-record armed — mpv reports "$echoed" '
-        '(want "$path")',
-      );
-      if (gen != _recordingStartGen || !mounted) {
-        // Lost the race inside setProperty itself: disarm rather than leave an
-        // untracked recording running on someone else's stream.
-        _untapMpvLogs();
-        await _disarmStrayRecording(platform, path);
-        return;
-      }
-      setState(() {
-        _isRecording = true;
-        _recordingTempPath = path;
-      });
-      // Crash insurance: registered natively so the file gets published on
-      // next launch even if this process never reaches _stopRecording.
-      if (Platform.isAndroid) {
-        unawaited(
-          AndroidNativeDownloader.registerPendingRecording(
-            path: path,
-            fileName: path.split(Platform.pathSeparator).last,
-            mimeType: 'video/x-matroska',
-          ),
-        );
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            // The tee records what the player reads, so on Android (where the
-            // engine exists as the contrast) say the semantics out loud.
-            Platform.isAndroid
-                ? 'Recording started (stops if you leave the channel)'
-                : 'Recording started',
-          ),
-        ),
-      );
-    } catch (e) {
-      _untapMpvLogs();
-      debugPrint('VideoPlayer: start recording failed: $e');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not start recording')),
-      );
-    }
-  }
-
-  /// Undo a recording that got armed after its channel or screen went away.
-  /// The stub file is milliseconds old, so dropping it loses nothing a user
-  /// would recognise as a recording.
-  Future<void> _disarmStrayRecording(
-    mk.NativePlayer platform,
-    String path,
-  ) async {
-    try {
-      await platform.setProperty('stream-record', '');
-    } catch (e) {
-      debugPrint('VideoPlayer: disarm stray recording failed: $e');
-    }
-    try {
-      final file = File(path);
-      if (await file.exists()) await file.delete();
-    } catch (e) {
-      debugPrint('VideoPlayer: stray recording cleanup failed: $e');
-    }
-  }
-
-  /// Stop the active recording. Auto-stops (channel change / dispose) pass
-  /// [userInitiated] = false to stay quiet.
-  Future<void> _stopRecording({bool userInitiated = true}) async {
-    // A stop supersedes an in-flight start too — including one that has not
-    // yet flipped `_isRecording` and so is invisible to the check below.
-    _recordingStartGen++;
-    if (!_isRecording) return;
-    final path = _recordingTempPath;
-    final platform = _playerCreated ? _player.platform : null;
-    // Flip state first so a rapid re-tap / channel switch can't double-stop.
-    if (mounted) {
-      setState(() {
-        _isRecording = false;
-        _recordingTempPath = null;
-      });
-    } else {
-      _isRecording = false;
-      _recordingTempPath = null;
-    }
-    try {
-      if (platform is mk.NativePlayer) {
-        await platform.setProperty('stream-record', '');
-      }
-    } catch (e) {
-      debugPrint('VideoPlayer: stop recording failed: $e');
-    }
-    _untapMpvLogs();
-    if (path == null) return;
-    // VERIFY before claiming anything: mpv can accept `stream-record` and
-    // still write nothing (internal fopen refused, undumpable demuxer) — the
-    // first macOS test hit exactly that, with a "saved" message over an empty
-    // folder.
-    var fileBytes = 0;
-    try {
-      final file = File(path);
-      if (await file.exists()) fileBytes = await file.length();
-    } catch (_) {}
-    debugPrint(
-      'VideoPlayer: tee recording stopped — $fileBytes bytes on disk at $path',
-    );
-    final fileOk = fileBytes > 0;
-    // Publish to a user-visible location. On Android the file lives in
-    // app-private storage, so hand it to the native MediaStore publisher; on
-    // desktop it's already under the user's Downloads.
-    if (fileOk && Platform.isAndroid) {
-      unawaited(_publishRecording(path, userInitiated: userInitiated));
-    } else if (userInitiated && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            fileOk
-                ? 'Recording saved: $path'
-                : 'Recording failed — mpv wrote no file (see logs)',
-          ),
-        ),
-      );
-    }
-  }
-
-  Future<void> _publishRecording(
-    String path, {
-    required bool userInitiated,
-  }) async {
-    var published = false;
-    try {
-      final fileName = path.split(Platform.pathSeparator).last;
-      final uri = await AndroidNativeDownloader.saveLocalFile(
-        path: path,
-        fileName: fileName,
-        mimeType: 'video/x-matroska',
-      );
-      published = uri != null;
-    } catch (e) {
-      debugPrint('VideoPlayer: publish recording failed: $e');
-    }
-    if (!userInitiated || !mounted) return;
-    // On failure, don't claim a save the user can't find: the file sits in
-    // app-private storage, its registry entry survives (only a successful
-    // publish clears it), and the next app launch re-attempts the publish.
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          published
-              ? 'Recording saved to Downloads/Debrify/Recordings'
-              : "Recording couldn't be added to Downloads — "
-                    'will retry next launch',
-        ),
-      ),
-    );
-  }
-
-  /// A path no other recording is using. The second-resolution stamp alone
-  /// collides when the same channel is stopped and restarted inside one
-  /// second, and that collision is destructive: libmpv would truncate (or
-  /// append to) the previous file, and on Android the still-running publisher
-  /// deletes its source once copied — taking the NEW recording with it. An
-  /// existing file therefore means "in use": step aside with a suffix.
-  ///
-  /// Default `.mkv` (the TEE): mpv's recorder picks the output muxer from the
-  /// filename, and media_kit's decode-trimmed FFmpeg ships no `mpegts` muxer
-  /// ("recorder: Output format not found" → recording silently disabled —
-  /// found live on macOS). Matroska is the only sane target IF a muxer
-  /// exists. Raw byte copiers (the desktop capture, the Android engine) pass
-  /// `extension: 'ts'` — their bytes ARE a transport stream, no muxer
-  /// involved.
-  Future<String> _recordingTargetPath(
-    String channelName, {
-    String extension = 'mkv',
-  }) async {
-    final safeName = channelName
-        .replaceAll(RegExp(r'[^A-Za-z0-9 _-]'), '')
-        .trim()
-        .replaceAll(RegExp(r'\s+'), '_');
-    var base = safeName.isEmpty ? 'recording' : safeName;
-    if (base.length > 60) base = base.substring(0, 60);
-    final now = DateTime.now();
-    String two(int v) => v.toString().padLeft(2, '0');
-    final stamp =
-        '${now.year}${two(now.month)}${two(now.day)}_'
-        '${two(now.hour)}${two(now.minute)}${two(now.second)}';
-
-    Directory dir;
-    if (Platform.isAndroid) {
-      dir =
-          (await getExternalStorageDirectory()) ?? await AppStorage.documents();
-    } else {
-      dir = (await getDownloadsDirectory()) ?? await AppStorage.documents();
-    }
-    final sep = Platform.pathSeparator;
-    final prefix = '${dir.path}${sep}Debrify${sep}Recordings$sep${base}_$stamp';
-
-    var candidate = '$prefix.$extension';
-    for (var n = 2; n < 100 && await File(candidate).exists(); n++) {
-      candidate = '${prefix}_$n.$extension';
-    }
-    // Pathological (99 restarts in one second): fall back to microseconds,
-    // which cannot collide with any of the names tried above.
-    if (await File(candidate).exists()) {
-      candidate = '${prefix}_${now.microsecondsSinceEpoch}.$extension';
-    }
-    return candidate;
-  }
-
   Future<void> _switchToIptvChannel(
     int index, {
     bool quietRecovery = false,
@@ -6921,7 +6355,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // A channel change ends the current recording (the stream identity flips).
     // Unconditional: it must also cancel a start still awaiting its storage
     // setup, which `_isRecording` would not report yet.
-    await _stopRecording(userInitiated: false);
+    await _recording.stopRecording(userInitiated: false);
     if (!mounted || ticket != _iptvSwitchTicket) return;
     _cancelPendingIptvCatchup();
 
@@ -7097,7 +6531,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // The NEW channel may itself already be recording (engine captures keep
     // running across zaps) — repaint the Record button from native truth.
-    if (_engineFlagOn) unawaited(_refreshEngineRecordingState());
+    if (_engineFlagOn) unawaited(_recording.refreshEngineRecordingState());
   }
 
   /// Open [url] and wait until it demonstrably plays (a decoded video size or
@@ -7115,7 +6549,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // across an open() — it may quietly stop or overwrite the file while
     // `_isRecording` still claims it is running. Redundant (and harmless) on
     // the _switchToIptvChannel path, which already stopped before its ladder.
-    await _stopRecording(userInitiated: false);
+    await _recording.stopRecording(userInitiated: false);
 
     final completer = Completer<bool>();
     void finish(bool ok) {
@@ -10197,12 +9631,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               )
               .whenComplete(() {
                 if (path != null && Platform.isAndroid) {
-                  _publishRecording(path, userInitiated: false);
+                  _recording.publishRecording(path, userInitiated: false);
                 }
               }),
         );
       } else if (path != null && Platform.isAndroid) {
-        unawaited(_publishRecording(path, userInitiated: false));
+        unawaited(_recording.publishRecording(path, userInitiated: false));
       }
     }
     _iptvCatchupRequests.cancel();
@@ -11410,7 +10844,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               onInteract: _scheduleAutoHide,
               scrubPreview: _tvScrubTarget,
               onPlayPause: _togglePlay,
-              onShowTracks: () => _showTracksSheet(context),
+              onShowTracks: () => _menuUi.showTracksSheet(context),
               onSpeed: _display.onSpeedButton,
               onAspect: _display.onAspectButton,
               onSleepTimer: _sleep.showSleepTimerSheet,
@@ -11452,9 +10886,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               onShowIptvChannels: _effectiveIptvChannels?.isNotEmpty == true
                   ? _showIptvChannelSheetOverlay
                   : null,
-              hasRecord: _canRecord,
-              isRecording: _recordingActiveNow,
-              onRecord: _canRecord ? _toggleRecording : null,
+              hasRecord: _recording.canRecord,
+              isRecording: _recording.recordingActiveNow,
+              onRecord: _recording.canRecord
+                  ? _recording.toggleRecording
+                  : null,
               onLiveEdgeAction: _iptvLiveEdgeAction,
               liveEdgeActionActive: _iptvStartOverActive,
               liveEdgeActionLoading: _iptvStartOverLoading,
@@ -11501,7 +10937,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // Delegate: BACK inside the menu walks values -> rail before closing
       // (tvOS Menu arrives here via PopScope, never as a key).
       if (_playerMenuKey.currentState?.handleHostBack() != true) {
-        _hidePlayerMenu();
+        _menu.hidePlayerMenu();
       }
       // Still open means the press was spent on a pane change.
       if (_showPlayerMenu) return;
@@ -11737,7 +11173,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // The Record button is about to be looked at — make sure it reflects
       // engine captures stopped from the notification (which this screen
       // otherwise never hears about).
-      if (_engineFlagOn) unawaited(_refreshEngineRecordingState());
+      if (_engineFlagOn) unawaited(_recording.refreshEngineRecordingState());
     }
     // Return focus to the player root whenever the bar goes down, so the
     // remote is never left pointing at a control that has just been excluded
@@ -12092,15 +11528,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     );
   }
 
-  /// One truth for "is this playback being recorded right now", shared by
-  /// the dock's Record button and the styled zap banner's REC tag — the
-  /// three mechanisms are libmpv stream-record, the Android recording
-  /// engine, and the desktop capture process.
-  bool get _recordingActiveNow =>
-      _isRecording ||
-      _engineTaskId != null ||
-      _desktopCaptureForCurrent() != null;
-
   /// The live-IPTV panel, or null when this playback has no channel identity
   /// to present. [flush] embeds it in the controls dock; otherwise it floats.
   /// Debrify TV owns the session identity when the launch asked for the
@@ -12200,7 +11627,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       flush: flush,
       style: _playerGuideStyle,
       tokens: _playerGuideTokens,
-      isRecording: _recordingActiveNow,
+      isRecording: _recording.recordingActiveNow,
     );
   }
 
@@ -13466,7 +12893,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                       _canFetchEpisodes,
                                   onShowPlaylist: () =>
                                       _showPlaylistSheet(context),
-                                  onShowTracks: () => _showTracksSheet(context),
+                                  onShowTracks: () =>
+                                      _menuUi.showTracksSheet(context),
                                   onSeekBarChangedStart: () {
                                     _isSeekingWithSlider = true;
                                     // The viewer owns the position from the
@@ -13599,10 +13027,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                   onPip: PipService.isOwner(this)
                                       ? _pip.enterPip
                                       : null,
-                                  hasRecord: _canRecord,
-                                  isRecording: _recordingActiveNow,
-                                  onRecord: _canRecord
-                                      ? _toggleRecording
+                                  hasRecord: _recording.canRecord,
+                                  isRecording: _recording.recordingActiveNow,
+                                  onRecord: _recording.canRecord
+                                      ? _recording.toggleRecording
                                       : null,
                                   onLiveEdgeAction: _iptvLiveEdgeAction,
                                   liveEdgeActionActive: _iptvStartOverActive,
@@ -13849,7 +13277,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                   ),
                 // Unified player menu (Spotlight panel)
                 if (_showPlayerMenu && !inPip)
-                  Positioned.fill(child: _buildPlayerMenuPanel()),
+                  Positioned.fill(child: _menuUi.buildPlayerMenuPanel()),
                 // Subtitle sync overlay
                 if (_showSyncOverlay && !inPip)
                   _subtitleSync.buildSyncOverlay(),
@@ -13897,530 +13325,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _scheduleAutoHide();
   }
 
-  Future<void> _showTracksSheet(BuildContext context) async {
-    // Dynamically parse season/episode from current video's filename
-    final currentTitle = _identify.currentPlaybackTitleForIdentity();
-    final seriesInfo = SeriesParser.parseFilename(currentTitle);
-    final season =
-        seriesInfo.season ?? _manualContentSeason ?? _effectiveContentSeason;
-    final episode =
-        seriesInfo.episode ?? _manualContentEpisode ?? _effectiveContentEpisode;
-
-    // Get IMDB ID for current item
-    // For series: uses shared IMDB ID (all episodes share same show ID)
-    // For movies: uses per-item IMDB ID (each movie in collection has unique ID)
-    String? effectiveImdbId;
-    final seriesPlaylist = _seriesPlaylist;
-
-    if (_manualContentImdbId != null && _manualContentImdbId!.isNotEmpty) {
-      effectiveImdbId = _manualContentImdbId;
-    } else if (seriesPlaylist != null) {
-      if (seriesPlaylist.isSeries) {
-        // Series: use shared IMDB ID
-        effectiveImdbId = seriesPlaylist.imdbId ?? _effectiveContentImdbId;
-      } else {
-        // Movie collection: try to get/fetch IMDB ID for current index
-        effectiveImdbId = seriesPlaylist.getImdbIdForIndex(_currentIndex);
-
-        // If not cached, try to fetch it now (async but we wait for it)
-        if (effectiveImdbId == null && _effectiveContentImdbId == null) {
-          debugPrint(
-            'VideoPlayer: Fetching movie metadata for index $_currentIndex before showing tracks',
-          );
-          effectiveImdbId = await seriesPlaylist.fetchMovieMetadataForIndex(
-            _currentIndex,
-          );
-        }
-
-        // Fall back to widget's contentImdbId if still null
-        effectiveImdbId ??= _effectiveContentImdbId;
-      }
-    } else {
-      // Single-file playback (no playlist)
-      // Try cached single-file IMDB ID, then widget's contentImdbId
-      effectiveImdbId = _singleFileImdbId ?? _effectiveContentImdbId;
-
-      // If not cached yet, try to fetch it now
-      if (effectiveImdbId == null && !_singleFileImdbFetched) {
-        debugPrint(
-          'VideoPlayer: Fetching single-file movie metadata before showing tracks',
-        );
-        await _fetchSingleFileMovieMetadata();
-        effectiveImdbId = _singleFileImdbId;
-      }
-    }
-
-    // Determine content type
-    // Priority: manual override > widget/channel metadata > playlist detection
-    String? effectiveContentType = _manualContentType ?? _effectiveContentType;
-    if (effectiveContentType == null) {
-      if (seriesPlaylist?.isSeries == true) {
-        effectiveContentType = 'series';
-      } else if (effectiveImdbId != null) {
-        // We have an IMDB ID (either from playlist or single-file lookup)
-        // If not a series, it's a movie
-        effectiveContentType = 'movie';
-      }
-    }
-
-    debugPrint(
-      'VideoPlayer: Opening TracksSheet with contentImdbId=$effectiveImdbId, '
-      'contentType=$effectiveContentType, '
-      'season=$season, episode=$episode (parsed from: $currentTitle)',
-    );
-
-    final subtitleSeason = effectiveContentType == 'series' ? season : null;
-    final subtitleEpisode = effectiveContentType == 'series' ? episode : null;
-
-    // Build cache key for subtitle caching (per-item like Android TV)
-    final String? cacheKey = effectiveImdbId != null
-        ? (subtitleSeason != null && subtitleEpisode != null
-              ? '$effectiveImdbId:$subtitleSeason:$subtitleEpisode'
-              : effectiveImdbId)
-        : null;
-
-    // Check if we have cached per-addon subtitle slots for this content.
-    final List<AddonSubtitleSlot>? baseSlots =
-        (cacheKey != null && _cachedSubtitleKey == cacheKey)
-        ? _cachedAddonSlots
-        : null;
-    // Always include launch-supplied subtitles (e.g. YouTube captions). They
-    // aren't IMDb-keyed, so they never live in the per-item cache above and
-    // must be appended unconditionally — otherwise identifying the title (which
-    // populates _cachedAddonSlots) would make the caption group disappear.
-    final List<AddonSubtitleSlot>? cachedSlots = _injectedSubtitleSlots != null
-        ? [...?baseSlots, ..._injectedSubtitleSlots!]
-        : baseSlots;
-
-    if (cachedSlots != null) {
-      debugPrint(
-        'VideoPlayer: Using ${cachedSlots.length} cached addon slots for key: $cacheKey',
-      );
-    }
-
-    if (!context.mounted) return;
-
-    if (kUnifiedPlayerMenuEnabled) {
-      _openPlayerMenuAt(
-        PlayerMenuSection.subtitles,
-        imdbId: effectiveImdbId,
-        contentType: effectiveContentType,
-        season: subtitleSeason,
-        episode: subtitleEpisode,
-        cachedSlots: cachedSlots,
-        cacheKey: cacheKey,
-      );
-      return;
-    }
-
-    await TracksSheet.show(
-      context,
-      _player,
-      onAudioTrackChanged: _audioTrackChoiceChanged,
-      onTrackChanged: (audioId, subtitleId) async {
-        _userManuallySelectedSubtitle = true;
-        if (!subtitleId.startsWith('stremio:')) {
-          _subtitleSync.setActiveExternalSubtitlePath(null);
-        }
-        // Remember the chosen audio language for this IPTV series (carries to
-        // later episodes and future sessions). No-op off IPTV.
-        _captureIptvAudioLanguage(audioId);
-        await _trackPreferences.persistTrackChoice(audioId, subtitleId);
-      },
-      // Fires only on a genuine subtitle switch (not audio, not re-select, not a
-      // failed load): the sync offset was calibrated for the previous subtitle.
-      onSubtitleTrackChanged: _subtitleSync.resetSubtitleSyncOffset,
-      // Android bitstream passthrough, applied LIVE (same stored setting as
-      // the Playback Defaults row).
-      audioPassthrough: !kIsWeb && Platform.isAndroid
-          ? _audioPassthroughEnabled
-          : null,
-      onAudioPassthroughChanged: !kIsWeb && Platform.isAndroid
-          ? _setAudioPassthroughLive
-          : null,
-      onSubtitleStyleChanged: _subtitleSync.onSubtitleStyleChanged,
-      onSyncOverlayRequested: _subtitleSync.showSyncOverlayPanel,
-      contentImdbId: effectiveImdbId,
-      contentType: effectiveContentType,
-      contentSeason: subtitleSeason,
-      contentEpisode: subtitleEpisode,
-      cachedAddonSlots: cachedSlots,
-      onAddonSlotsFetched: (slots) {
-        // Cache the per-addon slots (and their flat projection, which the
-        // auto-select path consumes) for this content. If the identity was
-        // fixed while the sheet was open, the identify flow already re-keyed
-        // the cache — updates keyed to the stale open-time identity must not
-        // clobber it.
-        if (cacheKey == null) return;
-        if (_cachedSubtitleKey != null && _cachedSubtitleKey != cacheKey) {
-          return;
-        }
-        _cachedAddonSlots = slots;
-        _cachedStremioSubtitles = AddonSubtitleSlot.flatten(slots);
-        _cachedSubtitleKey = cacheKey;
-      },
-      selectedStremioSubtitleId: _selectedStremioSubtitleId,
-      subtitleSelectionCorrection: _subtitleSelectionCorrection,
-      onStremioSubtitleSelected: (id) {
-        _selectedStremioSubtitleId = id;
-        _userManuallySelectedSubtitle = true;
-      },
-      onApplyEmbeddedSubtitle: (track) => _withManualSubtitleChoice(
-        () => _subtitleApply.setSubtitleTrackWithDiagnostics(
-          track,
-          source: 'tracks-sheet-embedded',
-        ),
-      ),
-      onApplyStremioSubtitle: _applyStremioSubtitleFromTracksSheet,
-      onIdentifyTitle: _identify.identifyTitleAndFetchSubtitles,
-      subtitleIdentityLabel: _identify.subtitleIdentityLabelForSheet(),
-    );
-  }
-
-  // ── Unified player menu (Spotlight panel) ─────────────────────────────
-
-  /// Opens the menu with the subtitle-identity context already resolved
-  /// (the tracks-button path, which may await a metadata fetch first).
-  void _openPlayerMenuAt(
-    PlayerMenuSection section, {
-    String? imdbId,
-    String? contentType,
-    int? season,
-    int? episode,
-    List<AddonSubtitleSlot>? cachedSlots,
-    String? cacheKey,
-  }) {
-    _hideIptvZapBanner();
-    _hideTimer?.cancel();
-    _tvReleaseFocusForOverlay();
-    setState(() {
-      _playerMenuInitialSection = section;
-      _menuImdbId = imdbId;
-      _menuContentType = contentType;
-      _menuSeason = season;
-      _menuEpisode = episode;
-      _menuCachedSlots = cachedSlots;
-      _menuCacheKey = cacheKey;
-      _showPlayerMenu = true;
-      _controlsVisible.value = false;
-    });
-  }
-
-  /// Opens the menu from a non-subtitle entry (speed, sleep, aspect,
-  /// shuffle) without awaiting anything: identity comes from caches only.
-  /// If the IMDb id was never fetched, the Subtitles pane still offers the
-  /// "Fix the title" recovery, so nothing is lost — just not pre-fetched.
-  void _openPlayerMenuQuick(PlayerMenuSection section) {
-    final currentTitle = _identify.currentPlaybackTitleForIdentity();
-    final seriesInfo = SeriesParser.parseFilename(currentTitle);
-    final season =
-        seriesInfo.season ?? _manualContentSeason ?? _effectiveContentSeason;
-    final episode =
-        seriesInfo.episode ?? _manualContentEpisode ?? _effectiveContentEpisode;
-
-    String? imdbId;
-    final seriesPlaylist = _seriesPlaylist;
-    if (_manualContentImdbId != null && _manualContentImdbId!.isNotEmpty) {
-      imdbId = _manualContentImdbId;
-    } else if (seriesPlaylist != null) {
-      imdbId = seriesPlaylist.isSeries
-          ? (seriesPlaylist.imdbId ?? _effectiveContentImdbId)
-          : (seriesPlaylist.getImdbIdForIndex(_currentIndex) ??
-                _effectiveContentImdbId);
-    } else {
-      imdbId = _singleFileImdbId ?? _effectiveContentImdbId;
-    }
-
-    String? contentType = _manualContentType ?? _effectiveContentType;
-    if (contentType == null) {
-      if (seriesPlaylist?.isSeries == true) {
-        contentType = 'series';
-      } else if (imdbId != null) {
-        contentType = 'movie';
-      }
-    }
-
-    final subtitleSeason = contentType == 'series' ? season : null;
-    final subtitleEpisode = contentType == 'series' ? episode : null;
-    final String? cacheKey = imdbId != null
-        ? (subtitleSeason != null && subtitleEpisode != null
-              ? '$imdbId:$subtitleSeason:$subtitleEpisode'
-              : imdbId)
-        : null;
-    final baseSlots = (cacheKey != null && _cachedSubtitleKey == cacheKey)
-        ? _cachedAddonSlots
-        : null;
-    final cachedSlots = _injectedSubtitleSlots != null
-        ? [...?baseSlots, ..._injectedSubtitleSlots!]
-        : baseSlots;
-
-    _openPlayerMenuAt(
-      section,
-      imdbId: imdbId,
-      contentType: contentType,
-      season: subtitleSeason,
-      episode: subtitleEpisode,
-      cachedSlots: cachedSlots,
-      cacheKey: cacheKey,
-    );
-  }
-
-  void _hidePlayerMenu() {
-    if (!_showPlayerMenu) return;
-    setState(() => _showPlayerMenu = false);
-    if (PlatformUtil.isTelevision) _tvRootFocus.requestFocus();
-  }
-
-  /// Persist an explicit subtitle choice made from the menu.
-  Future<void> _menuApplyTrackChange(String audioId, String subtitleId) async {
-    _userManuallySelectedSubtitle = true;
-    if (!subtitleId.startsWith('stremio:')) {
-      _subtitleSync.setActiveExternalSubtitlePath(null);
-    }
-    _captureIptvAudioLanguage(audioId);
-    await _trackPreferences.persistTrackChoice(audioId, subtitleId);
-  }
-
-  Future<void> _audioTrackChoiceChanged(
-    String audioId,
-    String currentSubId,
-  ) async {
-    _captureIptvAudioLanguage(audioId);
-    await _trackPreferences.persistTrackChoice(
-      audioId,
-      _hasSubtitlePolicy && !_userManuallySelectedSubtitle
-          ? 'auto'
-          : currentSubId,
-    );
-    await _subtitleLanguage.refreshSubtitleAudioPolicy();
-  }
-
-  Future<void> _menuSelectAudio(String audioId, String currentSubId) async {
-    final track = _player.state.tracks.audio
-        .where((a) => a.id == audioId)
-        .firstOrNull;
-    if (track == null) return;
-    await _player.setAudioTrack(track);
-    await _audioTrackChoiceChanged(audioId, currentSubId);
-  }
-
-  Future<bool> _withManualSubtitleChoice(Future<bool> Function() apply) async {
-    if (!_hasSubtitlePolicy) return apply();
-    final previouslyManual = _userManuallySelectedSubtitle;
-    final token = _addonSubtitleFetchToken;
-    final revision = ++_subtitleAudioRevision;
-    _userManuallySelectedSubtitle = true;
-    var applied = false;
-    try {
-      applied = await apply();
-      return applied;
-    } finally {
-      if (!applied &&
-          mounted &&
-          token == _addonSubtitleFetchToken &&
-          revision == _subtitleAudioRevision) {
-        _userManuallySelectedSubtitle = previouslyManual;
-        unawaited(_subtitleLanguage.refreshSubtitleAudioPolicy());
-      }
-    }
-  }
-
-  Future<bool> _menuSubtitlesOff(String audioId) =>
-      _withManualSubtitleChoice(() async {
-        final applied = await _subtitleApply.setSubtitleTrackWithDiagnostics(
-          mk.SubtitleTrack.no(),
-          source: 'player-menu-off',
-        );
-        if (!applied) return false;
-        _selectedStremioSubtitleId = null;
-        await _menuApplyTrackChange(audioId, 'no');
-        return true;
-      });
-
-  Future<bool> _menuSelectEmbeddedSubtitle(String subId, String audioId) =>
-      _withManualSubtitleChoice(() async {
-        final track = _player.state.tracks.subtitle
-            .where((s) => s.id == subId)
-            .firstOrNull;
-        if (track == null) {
-          _subtitleApply.showSubtitleFailureMessage(
-            'That subtitle track is no longer available. Try another track.',
-          );
-          return false;
-        }
-        final applied = await _subtitleApply.setSubtitleTrackWithDiagnostics(
-          track,
-          source: 'player-menu-embedded',
-        );
-        if (!applied) return false;
-        _selectedStremioSubtitleId = null;
-        await _menuApplyTrackChange(audioId, subId);
-        return true;
-      });
-
-  /// Returns false when the download/apply failed — the panel keeps the
-  /// previous selection (and its sync offset) in that case.
-  Future<bool> _menuSelectAddonSubtitle(
-    StremioSubtitle sub,
-    String audioId,
-  ) => _withManualSubtitleChoice(() async {
-    // Playback continues behind the menu: if the content switches while the
-    // download is in flight (auto-advance, zap), applying the stale subtitle
-    // would attach it — and persist its ids — against the NEW item.
-    final token = _addonSubtitleFetchToken;
-    try {
-      final filePath = await _addonSubtitles.downloadStremioSubtitleToTempFile(
-        sub,
-      );
-      if (filePath == null) {
-        _subtitleApply.showSubtitleFailureMessage(
-          'Couldn’t load subtitles. Check your connection or try another track.',
-        );
-        return false;
-      }
-      if (token != _addonSubtitleFetchToken || !mounted) {
-        return false;
-      }
-      final track = mk.SubtitleTrack.uri(
-        filePath,
-        title: sub.displayName,
-        language: sub.lang,
-      );
-      final applied = await _addonSubtitles.applyExternalSubtitleTrack(track);
-      if (!applied) return false;
-      if (token != _addonSubtitleFetchToken || !mounted) return false;
-      _selectedStremioSubtitleId = sub.id;
-      _subtitleSync.setActiveExternalSubtitlePath(filePath);
-      await _menuApplyTrackChange(audioId, 'stremio:${sub.id}');
-      return true;
-    } catch (e) {
-      debugPrint('PlayerMenu: subtitle apply failed - $e');
-      _subtitleApply.showSubtitleFailureMessage(
-        'Couldn’t apply subtitles. Try another embedded or online track.',
-      );
-      return false;
-    }
-  });
-
-  Future<bool> _applyStremioSubtitleFromTracksSheet(
-    StremioSubtitle sub,
-  ) => _withManualSubtitleChoice(() async {
-    final token = _addonSubtitleFetchToken;
-    try {
-      final filePath = await _addonSubtitles.downloadStremioSubtitleToTempFile(
-        sub,
-      );
-      if (filePath == null) {
-        _subtitleApply.showSubtitleFailureMessage(
-          'Couldn’t load subtitles. Check your connection or try another track.',
-        );
-        return false;
-      }
-      if (token != _addonSubtitleFetchToken || !mounted) {
-        return false;
-      }
-      final applied = await _addonSubtitles.applyExternalSubtitleTrack(
-        mk.SubtitleTrack.uri(
-          filePath,
-          title: sub.displayName,
-          language: sub.lang,
-        ),
-      );
-      if (!applied) return false;
-      if (token != _addonSubtitleFetchToken || !mounted) return false;
-      _subtitleSync.setActiveExternalSubtitlePath(filePath);
-      return true;
-    } catch (e) {
-      debugPrint('TracksSheet: subtitle apply failed - $e');
-      _subtitleApply.showSubtitleFailureMessage(
-        'Couldn’t apply subtitles. Try another embedded or online track.',
-      );
-      return false;
-    }
-  });
-
-  Widget _buildPlayerMenuPanel() {
-    final audios = _player.state.tracks.audio
-        .where((a) => a.id.toLowerCase() != 'no')
-        .toList(growable: false);
-    final embedded = embeddedSubtitleTracks(_player.state.tracks.subtitle);
-    final selectedSub = _selectedStremioSubtitleId != null
-        ? 'stremio:$_selectedStremioSubtitleId'
-        : _player.state.track.subtitle.id;
-    // Captured, not read live: cache write-back must be keyed to the identity
-    // the menu opened with (an identity fix re-keys through its own path).
-    final cacheKey = _menuCacheKey;
-
-    return PlayerMenuPanel(
-      key: _playerMenuKey,
-      initialSection: _playerMenuInitialSection,
-      onClose: _hidePlayerMenu,
-      // mpv's `auto` pseudo-entry heads the list, labeled for what it is —
-      // and kept, because persisting 'auto' is the only way to un-pin a
-      // stored explicit track for this title (restore treats a stored 'auto'
-      // as "use the default selection"). Real tracks are numbered without it
-      // so the file's first stream still reads "Track 1".
-      audioTracks: LanguageMapper.audioTrackOptions(
-        audios,
-        (id, label) => PlayerMenuTrackOption(id, label),
-      ),
-      selectedAudioId: _player.state.track.audio.id,
-      onAudioSelected: _menuSelectAudio,
-      audioPassthrough: !kIsWeb && Platform.isAndroid
-          ? _audioPassthroughEnabled
-          : null,
-      onAudioPassthroughChanged: !kIsWeb && Platform.isAndroid
-          ? _setAudioPassthroughLive
-          : null,
-      embeddedSubtitles: [
-        for (final (i, s) in embedded.indexed)
-          PlayerMenuTrackOption(s.id, LanguageMapper.labelForTrack(s, i)),
-      ],
-      selectedSubtitleId: selectedSub,
-      onSubtitlesOff: _menuSubtitlesOff,
-      onEmbeddedSubtitleSelected: _menuSelectEmbeddedSubtitle,
-      onAddonSubtitleSelected: _menuSelectAddonSubtitle,
-      onSubtitleTrackChanged: _subtitleSync.resetSubtitleSyncOffset,
-      contentImdbId: _menuImdbId,
-      contentType: _menuContentType,
-      contentSeason: _menuSeason,
-      contentEpisode: _menuEpisode,
-      cachedAddonSlots: _menuCachedSlots,
-      onAddonSlotsFetched: (slots) {
-        if (cacheKey == null) return;
-        if (_cachedSubtitleKey != null && _cachedSubtitleKey != cacheKey) {
-          return;
-        }
-        _cachedAddonSlots = slots;
-        _cachedStremioSubtitles = AddonSubtitleSlot.flatten(slots);
-        _cachedSubtitleKey = cacheKey;
-      },
-      onIdentifyTitle: _identify.identifyTitleAndFetchSubtitles,
-      subtitleIdentityLabel: _identify.subtitleIdentityLabelForSheet(),
-      onSubtitleStyleChanged: _subtitleSync.onSubtitleStyleChanged,
-      onSyncRequested: _subtitleSync.showSyncOverlayPanel,
-      showSpeed: !_iptvZapBannerOwnsIdentity,
-      speed: _display.playbackSpeed,
-      onSpeedSelected: _display.setPlaybackSpeed,
-      aspectMode: _display.aspectMode,
-      onAspectSelected: _display.setAspectModeDirect,
-      sleepMode: _sleep.sleepTimerMode,
-      sleepArmedMinutes: _sleep.sleepTimerArmedMinutes,
-      sleepMinutesLeft: _sleep.sleepTimerMinutesLeft,
-      allowEndOfItem: _currentIptvChannel?.isLive != true,
-      onSleepSelected: _sleep.applySleepTimerSelection,
-      hasPlaylist:
-          (_activePlaylist != null && _activePlaylist!.isNotEmpty) ||
-          _canFetchEpisodes,
-      continuousShuffle: _continuousShuffleEnabled,
-      onShuffleOnce: () {
-        _hidePlayerMenu();
-        unawaited(_playRandomOnce(disableContinuousShuffle: true));
-      },
-      onShuffleContinuousToggle: () => unawaited(_toggleContinuousShuffle()),
-    );
-  }
-
   /// Reset subtitle-related state when switching content.
   void _resetSubtitleState() {
     _cachedStremioSubtitles = null;
@@ -14463,6 +13367,403 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
     return null;
   }
+}
+
+class _VpIptvRecordingResourcesHostAdapter
+    implements VpIptvRecordingResourcesHost {
+  _VpIptvRecordingResourcesHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  IptvChannel? get currentIptvChannel => _s._currentIptvChannel;
+  @override
+  String? get currentStreamUrl => _s._currentStreamUrl;
+  @override
+  mk.Player get player => _s._player;
+  @override
+  StreamSubscription<mk.PlayerLog>? get recordLogSub => _s._recordLogSub;
+  @override
+  set recordLogSub(StreamSubscription<mk.PlayerLog>? v) => _s._recordLogSub = v;
+  @override
+  String? get iptvSourceId => _s.widget.iptvSourceId;
+  @override
+  List<Map<String, dynamic>>? get iptvSources => _s.widget.iptvSources;
+}
+
+class _VpIptvRecordingHostAdapter implements VpIptvRecordingHost {
+  _VpIptvRecordingHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  void setState(VoidCallback fn) => _s._vpSetState(fn);
+  @override
+  BuildContext get context => _s.context;
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  IptvChannel? get currentIptvChannel => _s._currentIptvChannel;
+  @override
+  Future<({String id, int revision})?> currentRecordingResource() =>
+      _s._recordingResources.currentRecordingResource();
+  @override
+  DesktopRecordingCapture? desktopCaptureForCurrent() =>
+      _s._recordingResources.desktopCaptureForCurrent();
+  @override
+  bool get engineFlagOn => _s._engineFlagOn;
+  @override
+  Future<String?> engineRecordUrlForCurrent() =>
+      _s._recordingResources.engineRecordUrlForCurrent();
+  @override
+  String? get engineTaskId => _s._engineTaskId;
+  @override
+  set engineTaskId(String? v) => _s._engineTaskId = v;
+  @override
+  bool get iptvZapBannerOwnsIdentity => _s._iptvZapBannerOwnsIdentity;
+  @override
+  bool get isRecording => _s._isRecording;
+  @override
+  set isRecording(bool v) => _s._isRecording = v;
+  @override
+  mk.Player get player => _s._player;
+  @override
+  bool get playerCreated => _s._playerCreated;
+  @override
+  String? playingLiveUrl(IptvChannel channel) =>
+      _s._recordingResources.playingLiveUrl(channel);
+  @override
+  String recordingFileName(String channelName) =>
+      _s._recordingResources.recordingFileName(channelName);
+  @override
+  int get recordingStartGen => _s._recordingStartGen;
+  @override
+  set recordingStartGen(int v) => _s._recordingStartGen = v;
+  @override
+  bool get recordingSupported => _s._recordingSupported;
+  @override
+  Future<String> recordingTargetPath(
+    String channelName, {
+    String extension = 'mkv',
+  }) => _s._recordingResources.recordingTargetPath(
+    channelName,
+    extension: extension,
+  );
+  @override
+  String? get recordingTempPath => _s._recordingTempPath;
+  @override
+  set recordingTempPath(String? v) => _s._recordingTempPath = v;
+  @override
+  void tapMpvLogsForRecording() =>
+      _s._recordingResources.tapMpvLogsForRecording();
+  @override
+  void untapMpvLogs() => _s._recordingResources.untapMpvLogs();
+  @override
+  bool get isIOS => VpS2Hooks.isIOS;
+}
+
+class _VpPlayerMenuHostAdapter implements VpPlayerMenuHost {
+  _VpPlayerMenuHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  void setState(VoidCallback fn) => _s._vpSetState(fn);
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  int get addonSubtitleFetchToken => _s._addonSubtitleFetchToken;
+  @override
+  List<AddonSubtitleSlot>? get cachedAddonSlots => _s._cachedAddonSlots;
+  @override
+  String? get cachedSubtitleKey => _s._cachedSubtitleKey;
+  @override
+  void captureIptvAudioLanguage(String audioId) =>
+      _s._captureIptvAudioLanguage(audioId);
+  @override
+  ValueNotifier<bool> get controlsVisible => _s._controlsVisible;
+  @override
+  int get currentIndex => _s._currentIndex;
+  @override
+  int? get effectiveContentEpisode => _s._effectiveContentEpisode;
+  @override
+  String? get effectiveContentImdbId => _s._effectiveContentImdbId;
+  @override
+  int? get effectiveContentSeason => _s._effectiveContentSeason;
+  @override
+  String? get effectiveContentType => _s._effectiveContentType;
+  @override
+  bool get hasSubtitlePolicy => _s._hasSubtitlePolicy;
+  @override
+  void hideIptvZapBanner({bool immediate = false}) =>
+      _s._hideIptvZapBanner(immediate: immediate);
+  @override
+  Timer? get hideTimer => _s._hideTimer;
+  @override
+  List<AddonSubtitleSlot>? get injectedSubtitleSlots =>
+      _s._injectedSubtitleSlots;
+  @override
+  int? get manualContentEpisode => _s._manualContentEpisode;
+  @override
+  String? get manualContentImdbId => _s._manualContentImdbId;
+  @override
+  int? get manualContentSeason => _s._manualContentSeason;
+  @override
+  String? get manualContentType => _s._manualContentType;
+  @override
+  set menuCacheKey(String? v) => _s._menuCacheKey = v;
+  @override
+  set menuCachedSlots(List<AddonSubtitleSlot>? v) => _s._menuCachedSlots = v;
+  @override
+  set menuContentType(String? v) => _s._menuContentType = v;
+  @override
+  set menuEpisode(int? v) => _s._menuEpisode = v;
+  @override
+  set menuImdbId(String? v) => _s._menuImdbId = v;
+  @override
+  set menuSeason(int? v) => _s._menuSeason = v;
+  @override
+  mk.Player get player => _s._player;
+  @override
+  set playerMenuInitialSection(PlayerMenuSection v) =>
+      _s._playerMenuInitialSection = v;
+  @override
+  set selectedStremioSubtitleId(String? v) => _s._selectedStremioSubtitleId = v;
+  @override
+  SeriesPlaylist? get seriesPlaylist => _s._seriesPlaylist;
+  @override
+  bool get showPlayerMenu => _s._showPlayerMenu;
+  @override
+  set showPlayerMenu(bool v) => _s._showPlayerMenu = v;
+  @override
+  String? get singleFileImdbId => _s._singleFileImdbId;
+  @override
+  int get subtitleAudioRevision => _s._subtitleAudioRevision;
+  @override
+  set subtitleAudioRevision(int v) => _s._subtitleAudioRevision = v;
+  @override
+  void tvReleaseFocusForOverlay() => _s._tvReleaseFocusForOverlay();
+  @override
+  FocusNode get tvRootFocus => _s._tvRootFocus;
+  @override
+  bool get userManuallySelectedSubtitle => _s._userManuallySelectedSubtitle;
+  @override
+  set userManuallySelectedSubtitle(bool v) =>
+      _s._userManuallySelectedSubtitle = v;
+  @override
+  String currentPlaybackTitleForIdentity() =>
+      _s._identify.currentPlaybackTitleForIdentity();
+  @override
+  void setActiveExternalSubtitlePath(String? path) =>
+      _s._subtitleSync.setActiveExternalSubtitlePath(path);
+  @override
+  Future<void> persistTrackChoice(String audioId, String subtitleId) =>
+      _s._trackPreferences.persistTrackChoice(audioId, subtitleId);
+  @override
+  Future<bool> setSubtitleTrackWithDiagnostics(
+    mk.SubtitleTrack track, {
+    required String source,
+    bool Function()? isCurrent,
+  }) => _s._subtitleApply.setSubtitleTrackWithDiagnostics(
+    track,
+    source: source,
+    isCurrent: isCurrent,
+  );
+  @override
+  void showSubtitleFailureMessage(String message) =>
+      _s._subtitleApply.showSubtitleFailureMessage(message);
+  @override
+  Future<void> refreshSubtitleAudioPolicy({bool reselect = true}) =>
+      _s._subtitleLanguage.refreshSubtitleAudioPolicy(reselect: reselect);
+  @override
+  Future<String?> downloadStremioSubtitleToTempFile(StremioSubtitle sub) =>
+      _s._addonSubtitles.downloadStremioSubtitleToTempFile(sub);
+  @override
+  Future<bool> applyExternalSubtitleTrack(mk.SubtitleTrack track) =>
+      _s._addonSubtitles.applyExternalSubtitleTrack(track);
+}
+
+class _VpPlayerMenuUiHostAdapter implements VpPlayerMenuUiHost {
+  _VpPlayerMenuUiHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  List<PlaylistEntry>? get activePlaylist => _s._activePlaylist;
+  @override
+  Future<bool> applyStremioSubtitleFromTracksSheet(StremioSubtitle sub) =>
+      _s._menu.applyStremioSubtitleFromTracksSheet(sub);
+  @override
+  bool get audioPassthroughEnabled => _s._audioPassthroughEnabled;
+  @override
+  Future<void> audioTrackChoiceChanged(String audioId, String currentSubId) =>
+      _s._menu.audioTrackChoiceChanged(audioId, currentSubId);
+  @override
+  List<AddonSubtitleSlot>? get cachedAddonSlots => _s._cachedAddonSlots;
+  @override
+  set cachedAddonSlots(List<AddonSubtitleSlot>? v) => _s._cachedAddonSlots = v;
+  @override
+  set cachedStremioSubtitles(List<StremioSubtitle>? v) =>
+      _s._cachedStremioSubtitles = v;
+  @override
+  String? get cachedSubtitleKey => _s._cachedSubtitleKey;
+  @override
+  set cachedSubtitleKey(String? v) => _s._cachedSubtitleKey = v;
+  @override
+  bool get canFetchEpisodes => _s._canFetchEpisodes;
+  @override
+  void captureIptvAudioLanguage(String audioId) =>
+      _s._captureIptvAudioLanguage(audioId);
+  @override
+  bool get continuousShuffleEnabled => _s._continuousShuffleEnabled;
+  @override
+  int get currentIndex => _s._currentIndex;
+  @override
+  IptvChannel? get currentIptvChannel => _s._currentIptvChannel;
+  @override
+  int? get effectiveContentEpisode => _s._effectiveContentEpisode;
+  @override
+  String? get effectiveContentImdbId => _s._effectiveContentImdbId;
+  @override
+  int? get effectiveContentSeason => _s._effectiveContentSeason;
+  @override
+  String? get effectiveContentType => _s._effectiveContentType;
+  @override
+  Future<void> fetchSingleFileMovieMetadata() =>
+      _s._fetchSingleFileMovieMetadata();
+  @override
+  void hidePlayerMenu() => _s._menu.hidePlayerMenu();
+  @override
+  List<AddonSubtitleSlot>? get injectedSubtitleSlots =>
+      _s._injectedSubtitleSlots;
+  @override
+  bool get iptvZapBannerOwnsIdentity => _s._iptvZapBannerOwnsIdentity;
+  @override
+  int? get manualContentEpisode => _s._manualContentEpisode;
+  @override
+  String? get manualContentImdbId => _s._manualContentImdbId;
+  @override
+  int? get manualContentSeason => _s._manualContentSeason;
+  @override
+  String? get manualContentType => _s._manualContentType;
+  @override
+  String? get menuCacheKey => _s._menuCacheKey;
+  @override
+  List<AddonSubtitleSlot>? get menuCachedSlots => _s._menuCachedSlots;
+  @override
+  String? get menuContentType => _s._menuContentType;
+  @override
+  int? get menuEpisode => _s._menuEpisode;
+  @override
+  String? get menuImdbId => _s._menuImdbId;
+  @override
+  int? get menuSeason => _s._menuSeason;
+  @override
+  Future<bool> menuSelectAddonSubtitle(StremioSubtitle sub, String audioId) =>
+      _s._menu.menuSelectAddonSubtitle(sub, audioId);
+  @override
+  Future<void> menuSelectAudio(String audioId, String currentSubId) =>
+      _s._menu.menuSelectAudio(audioId, currentSubId);
+  @override
+  Future<bool> menuSelectEmbeddedSubtitle(String subId, String audioId) =>
+      _s._menu.menuSelectEmbeddedSubtitle(subId, audioId);
+  @override
+  Future<bool> menuSubtitlesOff(String audioId) =>
+      _s._menu.menuSubtitlesOff(audioId);
+  @override
+  void openPlayerMenuAt(
+    PlayerMenuSection section, {
+    String? imdbId,
+    String? contentType,
+    int? season,
+    int? episode,
+    List<AddonSubtitleSlot>? cachedSlots,
+    String? cacheKey,
+  }) => _s._menu.openPlayerMenuAt(
+    section,
+    imdbId: imdbId,
+    contentType: contentType,
+    season: season,
+    episode: episode,
+    cachedSlots: cachedSlots,
+    cacheKey: cacheKey,
+  );
+  @override
+  Future<void> playRandomOnce({bool disableContinuousShuffle = false}) =>
+      _s._playRandomOnce(disableContinuousShuffle: disableContinuousShuffle);
+  @override
+  mk.Player get player => _s._player;
+  @override
+  PlayerMenuSection get playerMenuInitialSection =>
+      _s._playerMenuInitialSection;
+  @override
+  GlobalKey<PlayerMenuPanelState> get playerMenuKey => _s._playerMenuKey;
+  @override
+  String? get selectedStremioSubtitleId => _s._selectedStremioSubtitleId;
+  @override
+  set selectedStremioSubtitleId(String? v) => _s._selectedStremioSubtitleId = v;
+  @override
+  SeriesPlaylist? get seriesPlaylist => _s._seriesPlaylist;
+  @override
+  Future<void> setAudioPassthroughLive(bool enabled) =>
+      _s._setAudioPassthroughLive(enabled);
+  @override
+  bool get singleFileImdbFetched => _s._singleFileImdbFetched;
+  @override
+  String? get singleFileImdbId => _s._singleFileImdbId;
+  @override
+  ValueNotifier<String?> get subtitleSelectionCorrection =>
+      _s._subtitleSelectionCorrection;
+  @override
+  Future<void> toggleContinuousShuffle() => _s._toggleContinuousShuffle();
+  @override
+  set userManuallySelectedSubtitle(bool v) =>
+      _s._userManuallySelectedSubtitle = v;
+  @override
+  Future<bool> withManualSubtitleChoice(Future<bool> Function() apply) =>
+      _s._menu.withManualSubtitleChoice(apply);
+  @override
+  String currentPlaybackTitleForIdentity() =>
+      _s._identify.currentPlaybackTitleForIdentity();
+  @override
+  Future<TracksSheetSubtitleSearchResult?> identifyTitleAndFetchSubtitles() =>
+      _s._identify.identifyTitleAndFetchSubtitles();
+  @override
+  String? subtitleIdentityLabelForSheet() =>
+      _s._identify.subtitleIdentityLabelForSheet();
+  @override
+  void setActiveExternalSubtitlePath(String? path) =>
+      _s._subtitleSync.setActiveExternalSubtitlePath(path);
+  @override
+  void resetSubtitleSyncOffset() => _s._subtitleSync.resetSubtitleSyncOffset();
+  @override
+  void onSubtitleStyleChanged(SubtitleSettingsData settings) =>
+      _s._subtitleSync.onSubtitleStyleChanged(settings);
+  @override
+  void showSyncOverlayPanel() => _s._subtitleSync.showSyncOverlayPanel();
+  @override
+  Future<void> persistTrackChoice(String audioId, String subtitleId) =>
+      _s._trackPreferences.persistTrackChoice(audioId, subtitleId);
+  @override
+  Future<bool> setSubtitleTrackWithDiagnostics(
+    mk.SubtitleTrack track, {
+    required String source,
+    bool Function()? isCurrent,
+  }) => _s._subtitleApply.setSubtitleTrackWithDiagnostics(
+    track,
+    source: source,
+    isCurrent: isCurrent,
+  );
+  @override
+  double get playbackSpeed => _s._display.playbackSpeed;
+  @override
+  void setPlaybackSpeed(double speed) => _s._display.setPlaybackSpeed(speed);
+  @override
+  AspectMode get aspectMode => _s._display.aspectMode;
+  @override
+  void setAspectModeDirect(AspectMode mode) =>
+      _s._display.setAspectModeDirect(mode);
+  @override
+  SleepTimerMode get sleepTimerMode => _s._sleep.sleepTimerMode;
+  @override
+  int get sleepTimerArmedMinutes => _s._sleep.sleepTimerArmedMinutes;
+  @override
+  int get sleepTimerMinutesLeft => _s._sleep.sleepTimerMinutesLeft;
+  @override
+  void applySleepTimerSelection(SleepTimerSelection picked) =>
+      _s._sleep.applySleepTimerSelection(picked);
 }
 
 class _VpIdentifyTitleUiHostAdapter implements VpIdentifyTitleUiHost {
@@ -15141,7 +14442,7 @@ class _VpDisplayModeHostAdapter implements VpDisplayModeHost {
   Future<void> saveResume() => _s._saveResume();
   @override
   void openPlayerMenuQuick(PlayerMenuSection section) =>
-      _s._openPlayerMenuQuick(section);
+      _s._menu.openPlayerMenuQuick(section);
   @override
   ValueNotifier<AspectRatioHudState?> get aspectRatioHud => _s._aspectRatioHud;
   @override
@@ -15219,7 +14520,7 @@ class _VpSleepTimerHostAdapter implements VpSleepTimerHost {
   void setState(VoidCallback fn) => _s._vpSetState(fn);
   @override
   void openPlayerMenuQuick(PlayerMenuSection section) =>
-      _s._openPlayerMenuQuick(section);
+      _s._menu.openPlayerMenuQuick(section);
   @override
   Timer? get hideTimer => _s._hideTimer;
   @override

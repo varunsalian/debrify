@@ -164,6 +164,8 @@ def run(package):
     subtitle_sources_tests(package)
     from test_dart_identify_moves import run as identify_tests
     identify_tests(package)
+    from test_dart_menu_recording_moves import run as menu_recording_tests
+    menu_recording_tests(package)
     sleep_tests(package)
     skip_tests(package)
     display_tests(package)

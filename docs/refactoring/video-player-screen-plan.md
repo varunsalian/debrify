@@ -95,7 +95,7 @@ contracts, behaviour fixes and dead-code removal.
 | D3 | Formatting | The original is not formatter-clean. Phase 1 starts with a **format-only commit (a)** on the original with the token/comma proof (precedent: spotlight/catalog); (a) becomes R for phase 1. |
 | D4 | Testability of the original | No existing test **mounts and characterizes the player State** (tests construct `VideoPlayerScreen` only to inspect launch contracts, and route observers intercept before its State mounts — `iptv_channel_sheet_responsive_test.dart:61`, `stremio_tv_fixture.dart:55`). `initState` initializes native media_kit (1753) and `_createPlayerInstance` constructs `mk.Player`/`mkv.VideoController` directly; private members are unreachable (no reflection in `flutter test`). See "Characterization harness". |
 | D5 | Destination | New feature `lib/features/video_player/`: `models/` and `application/` for service-free pure code, `presentation/legacy_video_player/` (the bridge) for collaborators that call services, storage, platform channels or the player. Registered in `check_search_architecture.py` like the other bridges. |
-| D6 | `build` (1,172 lines) | Move-only cannot split one method. Decided in phase 25: either it stays in the facade or moves whole to a builder; either way a **bounded, measured exception** (exact line count registered at creation, shrink-only ratchet in `file_size_baseline.txt`) with a named exit: a behaviour-level `build` decomposition into layout widgets with goldens, its own goal. Widget + lifecycle are already ≈ 580 lines, so the facade's end state is registered by measurement, never as an unspecified size. |
+| D6 | `build` (1,172 lines) | Move-only cannot split one method. Decided in phase 21: either it stays in the facade or moves whole to a builder; either way a **bounded, measured exception** (exact line count registered at creation, shrink-only ratchet in `file_size_baseline.txt`) with a named exit: a behaviour-level `build` decomposition into layout widgets with goldens, its own goal. Widget + lifecycle are already ≈ 580 lines, so the facade's end state is registered by measurement, never as an unspecified size. |
 
 ## Shared rules for every phase
 
@@ -460,7 +460,7 @@ complete ownership transfer:
 Each phase section lists every field it moves (with its readers/writers
 from the analyzer binding scan) and every shared field its Host forwards.
 
-## Phase map (risk- and dependency-ordered)
+## Phase map (risk- and dependency-ordered) — superseded for phases 13+ by the 2026-10-15 revised map
 
 Line numbers at `ed728b078`; each phase section re-measures. "≈ out" is
 declaration lines leaving the facade (facade growth from imports, Host
@@ -2029,7 +2029,254 @@ Identify title on phone and TV: search, pick a movie, pick a series
 episode (dialog only when coordinates are missing); addon subtitles fetch
 for the chosen identity; trackers and skip keep the launch identity.
 
+## Speed-up decision (user, 2026-10-15) and revised remaining phase map
+
+The user chose options 1+2+3 to speed up the remaining work:
+
+1. **Per-phase gate without the full suite and release builds.** Each
+   phase gate runs the move checker (current + all `--at`), all seam
+   proofs, every Dart manifest self-test + Kotlin self-test, analyzer
+   comparator, format, size/architecture, and **all
+   `test/features/video_player/**` tests plus the source-text readers and
+   theme guard** (by identity vs the step-0 baseline). **The full Flutter
+   suite and both release builds run at integration milestones (M3, M4,
+   M5) and at the final phase**, consistent with AGENTS (broad suites at
+   planned integration gates; mechanical moves need no repeated full run).
+2. **Pipelining.** While phase N is in its gate/review, phase N+1's design
+   review, step T and step 0 run in a second worktree
+   (`../debrify-wt/vplayer-next`) based on phase N's step-1 commit; after N
+   merges, N+1 (docs/tests only until its step 1) is rebased onto the merge
+   and its step-0 tests re-run before step 1.
+3. **Bigger phases.** The remaining ~13 provisional phases become nine:
+
+| Phase | Content | Notes |
+|---|---|---|
+| 13 | Tracks sheet + unified player menu; IPTV recording | two independent collaborators |
+| 14 | Resume: keys, restore, seek/verify/landing, enhanced state, save + write guard | |
+| 15 | IPTV workflow (paging, guide categories, catch-up/Start Over, retune, channel switch, live open, audio preference, stream error) | several collaborators, one switch/recovery owner |
+| 16 | Startup (debrid direct, startup VOD, failover, gate) + source switching | **M3** after (full suite + builds) |
+| 17 | Stremio TV / Debrify TV channel navigation + banners; episode fetch + synthetic guide | |
+| 18 | Episode navigation (ended, next/prev, shuffle, series next, title info) + playlist load/resolve, metadata wait, PikPak retry, metadata preload | **M4** after |
+| 19 | Player engine I: audio/output lease/effects, passthrough, tvOS remedy/display match, decoder/renderer fallback | |
+| 20 | Player engine II: `_initializePlayer`, open media, network tuning, instance subscriptions, startup watchdog | **M5** after |
+| 21 | Controls runtime (auto-hide, TV bar/scrub, keys, overlays, gestures); `build` decision (D6); end-state exception; completion audit; CI structure; device checklist | final full suite + builds |
+
+Milestone scenarios: **M3** recording/resume/source handoff; **M4** guide/
+episode/tracker/subtitle identity; **M5** player replacement/output
+ownership/subscription/teardown. Shared rule 7's per-phase full suite and
+release builds are superseded by this section for phases 13+.
+
+Kept unchanged: Codex design review until "No P1s", step T, step 0 with
+per-test mutation proofs and the systematic sweep, Claude's independent
+sample (≥ 75 %), step 0b, the independent post-gate review.
+
+## Phase 13 — tracks sheet, unified player menu and IPTV recording
+
+Branch `refactor/vplayer-p13` (pipelined; prepared off phase-12 step-1
+`e4a9ab581`). Evidence `refactor-evidence/vplayer/p13/`. Line numbers at
+`e4a9ab581`. Phase 12 merged as `1d7699d2e`; rebased S2d
+`1099a0039dab6023aef8c95754e4595e862e9a67` is the final Phase-13
+original. Production moves remain blocked until Step 0 and Claude’s
+independent mutation sample are accepted.
+
+### Pipeline rebase rule (design review P2)
+
+After phase 12 merges, rebase this branch onto the accepted merge, then
+compare the facade, earlier destinations, fixtures, checker inputs and
+diagnostic inventory against the preparation snapshot. Reuse a proof only
+where its inputs are identical; otherwise refresh the affected step-T
+manifests/prototypes, analyzer probes and mutation witnesses. Record the
+final original revision and the new baseline; never accept changed
+outcomes by re-recording. P12's `--at` revision is its actual accepted
+merge. Protect all 25 earlier destinations.
+
+### Moves (frozen)
+
+**Menu (13 methods, 523 lines → two files):**
+- `vp_player_menu_ui.dart` — presentation helper: `_showTracksSheet` 13900
+  (a **live** action: it resolves metadata, captures subtitle
+  coordinates/cache identity, checks its *parameter* context's mounted
+  state and opens the unified menu; only `TracksSheet.show` and its
+  callbacks are dormant under the constant-true flag, so
+  `_applyStremioSubtitleFromTracksSheet` is dormant too) and
+  `_buildPlayerMenuPanel` 14342 (plain helper invocation, no new widget
+  boundary, GlobalKey retained; local `cacheKey` snapshot 14352 kept).
+- `vp_player_menu.dart` — controller: `_openPlayerMenuAt`,
+  `_openPlayerMenuQuick`, `_hidePlayerMenu`, `_menuApplyTrackChange`,
+  `_audioTrackChoiceChanged`, `_menuSelectAudio`,
+  `_withManualSubtitleChoice`, `_menuSubtitlesOff`,
+  `_menuSelectEmbeddedSubtitle`, `_menuSelectAddonSubtitle`,
+  `_applyStremioSubtitleFromTracksSheet`.
+- The helper and controller reach each other through **facade Host
+  routing**. The lexical `BuildContext context` parameter of
+  `_showTracksSheet` is preserved (the TV caller passes State context
+  through a Builder whose parameter is `_`, 11378).
+
+**State-owned (menu):** `_showPlayerMenu` (overlay, Back, keyboard,
+pointer and reset read/write it: 11495, 11500, 11507, 12726, 13851, 13886,
+14447), `_playerMenuKey`, `_controlsVisible`, `_subtitleSelectionCorrection`
+and the seven snapshot fields `_playerMenuInitialSection`, `_menuImdbId`,
+`_menuContentType`, `_menuSeason`, `_menuEpisode`, `_menuCachedSlots`,
+`_menuCacheKey` (avoids forwarding sibling-owned fields).
+
+**Recording (15 methods − 1 + 2 getters, ≈ 600 lines → two files):**
+`vp_iptv_recording.dart` (actions: `_toggleRecording`, `_startRecording`,
+`_stopRecording`, `_disarmStrayRecording`, `_refreshEngineRecordingState`,
+`_publishRecording`) and `vp_iptv_recording_resources.dart` (resources:
+`_desktopCaptureForCurrent`, `_playingLiveUrl`, `_engineRecordUrlForCurrent`,
+`_recordingFileName`, `_currentRecordingResource`, `_tapMpvLogsForRecording`,
+`_untapMpvLogs`, `_recordingTargetPath`; the filename helpers use
+`DateTime.now()` and stay in the bridge), plus the `_canRecord` /
+`_recordingActiveNow` getters. **`_recordIptvWatchForChannel` moves to
+phase 15** (it writes on-demand Continue Watching history; its caller
+excludes live channels).
+
+**Recording fields:** `_recordingSupported`, `_isRecording` (also read by
+retained renderer eligibility at 3206 → State-owned, forwarded),
+`_recordingTempPath`, `_engineTaskId`, `_engineFlagOn`,
+`_engineRefreshTicket`, `_recordLogSub`, `_desktopRecordingRevisionListener`,
+`_recordingStartGen` — each classified at step T by reader/writer count;
+literal/null initializers inert. Listener registration (1563–1569), removal
+(10153–10158) and log cancellation (10255) stay in place. Collaborators
+assigned eagerly after phase 12's; no constructor reads its Host.
+
+**Patched facade adapters (exactly two):** `_VpDisplayModeHostAdapter`
+(`openPlayerMenuQuick`, 15143–15144) and `_VpSleepTimerHostAdapter`
+(15221–15222): `_s._openPlayerMenuQuick(section)` → the owning
+collaborator, whole-class `patched_class_projection`, one counted rewrite
+each. Subtitle-apply key forwarder (14818), PiP, addon-subtitle and
+identify adapters unchanged.
+
+**Hosts (frozen at step T):** chains to P9–P12 collaborators, sleep and
+display as narrow facade-routed operations/values (never collaborator
+objects); recording needs live `iptvSourceId`/`iptvSources` selectors and
+preserves `Future<({String id, int revision})?>` (resource lookup),
+`stopRecording({bool userInitiated = true})`,
+`recordingTargetPath(String, {String extension = 'mkv'})`. Probe the four
+existing `_toggleRecording` async-context infos.
+
+**Retained references (Step-T scanner: 7 menu +20 recording =27):**
+
+The design prose counted five active-recording getter references but named
+four; Step T confirms all named sites, including the two adapter patches.
+No named site or production behavior changes. The complete measured ledger
+is `p13/stepT/retained-sites.json`.
+
+| Group | Facade lines |
+|---|---|
+| Tracks / quick menu / hide / panel | 11413, 13469 / 4405, 15144, 15222 / 11504 / 13852 |
+| Recording stop | 768, 883, 1556, 6924, 7118 |
+| Engine refresh | 2328, 7100, 11740 |
+| Recording toggle / publish | 11457, 13605 / 10200, 10205 |
+| Can-record / active getters | 11455, 11457, 13602, 13604 / 998, 11456, 12203, 13603 |
+
+(6978 watch registration moves with phase 15.) Stop-before-open ordering
+in retune, catch-up, channel switch and live-source replacement preserved.
+
+### Step S2d — two-predicate seam (reviewed separately)
+
+Recording uses raw platform predicates (2314–2315, 6385, 6563, 6704,
+6798, 6876, 10199) outside S2, across **three protocols**: libmpv TEE,
+Android foreground-service engine, desktop HTTP capture. **Decision:** S2d
+overrides only the facade's **two desktop-support checks** so the real
+Record button reaches the TEE path with the existing native fake (same
+rules as S2/S2b/S2c: native defaults, evaluation counts/order, installers
+unchanged, independent negatives). The **Android engine path and its
+publication are device-pending** (the service wrappers return early on
+desktop: `live_recording_service.dart:458`, `:521`;
+`android_native_downloader.dart:131`, `151`, `196`).
+
+**S2d sites (at `e4a9ab581`):** `initState` line **1563** (desktop
+revision-listener registration) and `_toggleRecording` line **6453**
+(desktop capture branch before the final TEE call). Each original
+`DesktopRecordingService.instance.isSupported` read stays first and once;
+append `&& !VpS2Hooks.isIOS` immediately after it, ahead of the toggle's
+existing `_recordingSupported` operand. The existing `ios: () => true`
+override suppresses these two desktop branches. No hook-class or installer
+change: native desktop support implies native `Platform.isIOS == false`,
+and unsupported platforms short-circuit before the extra read. The two
+native service reads and the remaining original operands retain their
+order. The checkpoint ledger is `dev/tool/dart_moves/vplayer_p13_seam.json`
+(two patched declarations, zero moves); earlier S/S2/S2b/S2c ledgers stay
+frozen. CI selects this checkpoint with the unchanged P12 diagnostic
+inventory; P12's historical `--at` waits for its accepted merge/rebase.
+
+**Temporary facade exception:** `lib/screens/video_player_screen.dart`
+remains oversized while P12 is in review and P13 moves are blocked. Menu,
+recording, resume, IPTV, startup/source, episode, engine and controls/build
+responsibilities remain; their exits are the revised phases 13–21. S2d
+adds only two formatter lines (15,329 → 15,331), explicitly registered in
+the size baseline; it does not complete an extraction milestone.
+
+### Step 0 — characterization of the original
+
+- **Menu:** open-at-section and quick sections (sleep, speed, aspect,
+  shuffle, tracks), hide; `_showTracksSheet` movie metadata success/failure,
+  content/profile change during metadata resolution, disposal, repeated
+  opens, quick-open's intentional absence of metadata fetches; audio change
+  + persistence/policy overlap; manual-choice failure restoration across
+  token/revision changes; closing the panel while an addon download/apply
+  is pending (closure permits cache write-back and sync reset,
+  `player_menu_panel.dart:382`, 702–707); TV focus/Back. Callback identity
+  is not compared by `didUpdateWidget` (345–379).
+- **Recording boundary matrix:** TEE start (captures player/channel/
+  generation before directory work, generation check before arming, disarm
+  after a stale property write, 6664–6696); desktop start (captures
+  channel/URL, awaits capacity, path/resource resolution and service start,
+  mostly `mounted`-guarded, 6386–6407, 6454–6491); refresh ticket bumped
+  only after the valid-live-channel check (6564–6579) — an older query
+  completing after a newer non-live/null-channel refresh; stop clears state
+  before awaiting the native clear (6759–6775) — overlapping stops, restart
+  during a held clear, failed clear, empty output, publication overlapping
+  restart; **disposal's distinct inline protocol** (generation bump/state
+  clear, property clear, unawaited publication, 10179–10205) — never
+  replaced by `stopRecording`. Profile capture happens inside service start
+  (`desktop_recording_service.dart:348`, `live_recording_service.dart:462`)
+  after earlier UI awaits: hold pre-service work across A→B and inspect
+  job/artifact ownership incl. revoked/deleted profiles; an already-started
+  capture keeps its owner. Desktop capture uses a continuous, cancellable
+  stream (the recordings fixture's real loopback technique,
+  `test/support/recordings_fixture.dart:167`); drain captures/artifacts
+  before resetting profiles. Defects → Follow-ups.
+- Early windows; mutation proofs; coverage; Claude sample.
+
+### Reduced-gate test inventory (design review P2)
+
+Freeze an explicit test-file inventory for base, step 0 and gate: every
+`test/features/video_player/**` file, the source readers and theme guards,
+and affected external boundary tests (`test/player_menu_panel_test.dart`,
+recording/profile contracts, recordings fixture tests). **Every expected
+suite must load** before identities/outcomes are compared (scoped
+`suite_evidence.py compare` filters the baseline to suites present, so an
+omitted file could otherwise pass). CI's curated behaviour list still runs
+on every `gate` push as additional coverage.
+
+### Device checklist (end of series)
+
+Player menu on phone/TV/desktop: every section opens and applies. IPTV
+recording, three contracts: **TEE** (Apple TV/iOS) stops on zap and player
+close; **Android engine** and **desktop capture** intentionally survive
+zaps and player closure; each saves to the expected place and appears in
+Recordings.
+
 ## Follow-ups
+
+- **Phase-13 original menu metadata windows (preserved):** a held tracks
+  lookup has no content/profile guard and can open its captured identity after
+  a still-mounted handoff. A single-file lookup sets its fetch latch before
+  completion, so a repeated tracks action can open immediately with no identity
+  while the first action still waits. The original completion may reopen the
+  subtitle section after a quick section has opened.
+- **Phase-13 original recording windows (preserved):** desktop format lookup
+  resumed after player disposal reads the dead State context before its mounted
+  check. TEE stop clears State before its native await: a held old clear can
+  disarm a newly started recording while State remains active, and old stop
+  completion cancels the newer log tap. With no launch fallback, a locally
+  disabled stored source is omitted by playback resource lookup and the
+  original capture starts without a resource binding. Disposal retains its
+  separate inline protocol. Android registry refresh increments its ticket only
+  after the valid live-channel check; the older-query/newer-invalid-refresh race
+  and native publication remain device-pending, without an S2d simulation claim.
 
 - **Phase-12 original identity-sheet windows (preserved):** the deferred initial
   search's first setter precedes liveness guards and can run after sheet
@@ -4361,6 +4608,259 @@ Claude sample 16/20 → 20/20 after closures. Merged; M2 follows.
   identity vs tracker/skip launch identity, dormant paths and original defects
   preserved. No production bug fix or later phase/push/merge/switch. STOP.
 
+### 2026-10-15 — Phase 13 S2d seam extension checkpoint (STOP)
+
+- Preparation `e4a9ab581`, approved design `6631611a9`; receipt in
+  `p13/s2d/commit.json`. Only `initState`:1563 and `_toggleRecording`:6453
+  append `&& !VpS2Hooks.isIOS` after the original desktop-service support
+  read, ahead of the toggle's recording flag. Existing hooks/installers,
+  earlier ledgers, 25 destinations and pubspec are byte-identical. No move.
+- Checkpoint ledger: **779 spans, 777 retained/two patched**, zero scaffolds.
+  Exact counted patches and native service read/order preserved. CI selects
+  S2d with unchanged P12 analyzer inventory; historical P12 CI registration
+  waits for its accepted merge/rebase. Evidence-only P12 preparation `--at
+  e4a9ab581`, S2b/S2c histories, current/universal and all seam proofs PASS.
+- All **36 earlier +15 S2d independent negatives** PASS. Extracted actual
+  hook/service/conditions: five mode controls, **624 site cases**, plus
+  **15 compiling runtime assertion kills**. Serialized S/S2 guards PASS
+  **7/7 true +7/7 installation-negative false**, unchanged identities and
+  stable tested trees. Native TEE muxing and Android engine/publication
+  remain device-pending; this is not Step-0 recording characterization.
+- Before/after scoped analysis: **124 identical diagnostic occurrences**,
+  zero additions; guard-test analysis clean. Format/idempotence, size,
+  architecture/negatives, exact byte/token delta and diff PASS; zero comma
+  edits. Explicit facade allowance **15,329 → 15,331** (+2 formatter lines),
+  remaining responsibilities/exit phases documented. Nice19, isolated copied
+  parsers with kernels removed; evidence only under `p13/s2d/`.
+- Receipt correction: the first audit assumed untracked contents were in
+  suite snapshots. Its error log and passing original guard runs are retained;
+  final **staged** guard runs both PASS7 with complete input-tree/hash receipts.
+  No application/checker/test input changed; only documentation followed.
+- No Step T/0, production move, bug fix, dependency change, application build,
+  device/run/install, push/merge/switch or work in the P12 worktree. STOP for
+  independent S2d review; P13 moves remain blocked until P12 merges.
+
+### 2026-10-15 — Phase 13 rebase and S2d review accepted
+
+Independent review `vp-rev13s2d` found no P1/P2/P3. The added
+`!VpS2Hooks.isIOS` conjunct preserves native behavior: desktop support
+implies `!Platform.isIOS` on every supported target. Phase 12 is accepted
+and merged as `1d7699d2e`; Claude rebased this branch onto it. The final
+Phase-13 original is rebased S2d
+`1099a0039dab6023aef8c95754e4595e862e9a67`. Both appended documentation
+sections survive the conflict resolution; their heading separation is
+normalized. The preparation-to-rebase delta changes only the plan and
+dependency report. Blob identity confirms the facade, all 25 earlier
+destinations, 1,805 test/fixture files, 545 checker/CI inputs, all 12 analyzer
+inventories and both pubspec files are identical to the reviewed S2d
+preparation snapshot. Evidence: `p13/rebase/audit.json` under the common Git
+evidence root. Step T and Step 0 use this original; production moves wait
+for Step 0 and Claude’s independent mutation sample.
+
+### 2026-10-15 — Phase 13 Step T complete (application still reviewed S2d)
+
+- **Original/rebase.** `1099a0039dab6023aef8c95754e4595e862e9a67`,
+  accepted Phase-12 merge `1d7699d2e`. Rebase input audit and independent
+  S2d review recorded above; no application bytes changed.
+- **Complete draft.** 779 declarations: 29 methods/getters plus the exclusively
+  owned, individually inert refresh-ticket field move virtually; 746 retained,
+  three patched. Four frozen Hosts route siblings through the facade. All
+  seven menu snapshots and eight retained recording fields stay State-owned.
+  Exactly one whole-class rewrite in each display/sleep adapter; State's
+  constructor appends four Host-only collaborators after P12's collaborators.
+- **Measured boundary.** UI/menu/actions/resources format to **377/332/463/209**
+  physical lines, all ≤500. Scanner confirms **27 retained runtime references**
+  (7 menu +20 recording); every named design site is present. The prose's fifth
+  active getter reference was an overcount; no production scope is dropped.
+- **Checks.** Complete materialization/current S2d comparison and 25 earlier
+  destinations; P1–P12 at the twelve prescribed accepted revisions; universal
+  Dart self-test including the real P13 four-file negatives; all 26 other Dart
+  manifest self-tests; Kotlin self-test; S/S2/S2b/S2c/S2d proofs; size,
+  architecture/negatives, format/idempotence and diff checks pass. Fresh parser
+  packages live under this worktree's `.dart_tool/vplayer_parser/`, with copied
+  kernels deleted. Commands and exact inputs are in `p13/stepT/`.
+- **Analyzer.** Root/strict/unformatted/formatted scoped inventories are
+  **154/198/140/145**; no scoped errors or new-destination/scaffold warnings.
+  The four original toggle async-context infos and the Host/formatter effects
+  are preserved by symbol/multiplicity in the proposed P13 inventory. Existing
+  repository analyzer issues remain; this is not a repository-wide clean claim.
+- **Next.** Step 0 characterizes this original. CI current/analyzer selection
+  remains S2d/P12; only P12's accepted historical revision is registered.
+  No production extraction, app build/device action, dependency change, push,
+  merge or branch switch. Production moves wait for Step 0 and Claude's sample.
+
+### 2026-10-15 — Phase 13 Step 0 complete (STOP before production moves)
+
+- **Revision/original.** Follows Step T `90fb429148059d7751b7be72a91e176594b6e67c`;
+  application remains reviewed, rebased S2d
+  `1099a0039dab6023aef8c95754e4595e862e9a67` on P12 merge `1d7699d2e`.
+  No application, installer/hook, dependency, production CI selection or size
+  ratchet changes.
+- **Characterization.** 174 new cases in 33 suites, with three test helpers:
+  live collection/single-file tracks metadata and handoff timing; quick/cache
+  identity, manual/audio policy and physical persistence completion; pending
+  panel close, cache publication, addon lifetime, sync reset, early focus,
+  controls/timers and shuffle. Recording covers S2d TEE and real desktop service
+  captures with continuous cancellable loopback streams, admission/resource/path
+  barriers, stale generations, overlapping stop/restart, empty output, errors,
+  actual job/artifact profile ownership, retained callers and disposal's distinct
+  inline protocol. Preserved original defects are listed in Follow-ups.
+- **Systematic proof.** All 30 moved declarations and all 27 measured retained
+  runtime occurrences accounted for (the Step-T correction from prose 28 is
+  retained). Of 976 nested points: 466 assertion-killed, 152 explicit app-library
+  compiler/flow exclusions, 75 linked nullable operands, 15 original-caller
+  source equivalences, 24 diagnostic-only, 173 device/inert pending and 71
+  dormant. The retained ledger has 22 assertion kills and five Android-pending
+  sites. All 174 new cases have current-input, assertion-failing mutations of
+  detached original S2d. Exact patches, commands, hashes, JSONL and exclusions
+  are in `p13/step0/`; the dependency report contains the full matrix/table.
+  Runtime errors, compiler failures and interrupted development runs receive no
+  kill/baseline credit. These counts are not Claude's independent sample score.
+- **Frozen baseline.** 192 explicit suite files, all loaded; **1,464 successes /
+  two observed pre-existing failures** (PiP startup-shield source check and direct
+  SharedPreferences profile guard). Stable tested tree and final input hashes;
+  identity comparison against the observed original PASS: no new failures, no
+  missing tests or new skips, 66 added identities. Canonical run:
+  `p13/step0/accepted192-original-baseline.jsonl`. Inventory enforcement has seven
+  positive/negative fixtures; all 33 new suites are registered in CI.
+- **Checks.** Changed-Dart format/analysis clean (36 files, then the final two
+  changed files refreshed); size, architecture/negatives, inventory fixtures
+  and diff pass. Step-T histories, seam proofs, Dart/Kotlin self-tests and app
+  analyzer inventories are reused only at identical affected inputs. Every
+  manifest/source-reader run uses a fresh isolated parser under the executing
+  worktree's `.dart_tool/vplayer_parser/`, with copied kernels deleted. Flutter
+  suites are serialized, nice19, no-pub, concurrency1 and test hooks enabled.
+- **Pending/stop.** Android service/engine query, refresh-ticket invalid-live
+  race and publication remain device-pending under S2d; legacy TracksSheet tail
+  and its apply callback remain dormant. Full suite/builds wait for the revised
+  integration milestones; no device/run/install, push, merge or branch switch.
+  STOP for Claude's independent mutation sample before production moves.
+
+### 2026-10-15 — Phase 13 Step 0b defect correction and sample closure
+
+- **Original/correction.** Review `1e841bf36` equals rebased S2d application
+  `1099a0039dab6023aef8c95754e4595e862e9a67`. Reproduced both standalone
+  pending-apply failures. The old `p13` matcher accidentally depended on the
+  evidence-directory name; the real subtitle cache basename hashes the URL.
+  Match the typed external subtitle track instead. The earlier “all 174 pass”
+  claim did not establish standalone correctness; no shared-state/order cause
+  was established. No application, hook/installer or dependency change.
+- **Independent sample/addendum.** Claude's sample is accepted: 18/23 kills
+  (78%), m4 compile-invalid, broken pending cases excluded. Exact original
+  m13/m15/m18 replays now assertion-fail for existing-empty output, suffixes
+  beyond `_2`, and manual episode identity/cache. m2 remains raw-Android
+  device-pending; m7 is equivalent through the desktop/TEE callers, with
+  Android refresh pending and the original private null guard frozen. The new
+  public unresolved-URL negative has its own admission mutation witness.
+- **Fixture and sweep proofs.** All 35 new P13 files pass separately with
+  directory overrides removed (36 files including the earlier menu suite).
+  Pending cases also pass randomized order, seed 13; three original mutants
+  assertion-kill all four pending cases. All 15 sweep points whose only witness
+  changed were refreshed; 451 other assertion-point witnesses have identical
+  test/import inputs. The 976-point and 27 retained-site ledgers stay accounted
+  for. Exact mutations, classifications and per-file receipts: `p13/step0b/`;
+  the dependency report includes the survivor/mutation table.
+- **Frozen baseline.** Updated 194-suite inventory, every suite loaded; **1,468
+  successes / the same two historical failures**, zero regressions, missing or
+  newly skipped identities versus Step 0. All 178 new cases pass on original
+  S2d; canonical `p13/step0b/accepted194-original-baseline.jsonl`. Same SDK,
+  stable tree, current test hashes. Changed-test analysis/format, seven inventory
+  fixtures and diff checks pass; both new suites registered in CI.
+- **Next.** Proceed to the authorized frozen Step-1 moves, then the clean-tree
+  reduced gate. No full suite/build/device work; M3 remains after Phase 16.
+
+### 2026-10-15 — Phase 13 Step 1 frozen production moves
+
+- **Revision/boundary.** Follows Step-0b `33dcebe38`; original application is
+  reviewed S2d `1099a0039`. Applied all 30 frozen moves (29 methods/getters and
+  the inert refresh-ticket field) to menu UI/controller and recording
+  actions/resources: **377 / 332 / 463 / 209** formatted lines. All menu
+  snapshots and the frozen recording fields stay State-owned. Live widget
+  selectors, lexical context, cache-key snapshot, facade Host routing and
+  disposal's inline protocol remain intact. The State constructor appends four
+  inert collaborators after P12; exactly one rewrite in each of the two
+  declared display/sleep adapters. All 27 retained runtime references accounted
+  for; all 25 earlier destinations unchanged.
+- **Mechanical/CI.** Fresh isolated-parser materialization equals Step T
+  byte-for-byte; applied P13 checker PASS with zero differences. CI current/self
+  and both analyzer inputs select P13; P1–P12 histories retain their named
+  revisions, including P12 `1d7699d2e`. All four destinations are in the theme
+  manifest/rendered set and all three guard lists. The Step-0b behaviour list
+  already registers every new suite. Facade ratchet **15,331 → 14,630**;
+  remaining oversized-facade responsibilities exit in phases 14–21.
+- **Proof/checks.** S/S2/S2b/S2c/S2d PASS on live owners; S2d follows the moved
+  toggle through the validated ledger and checks exact Host defaults, preserving
+  every old negative plus four new projection negatives. Hook/installer and seam
+  ledgers unchanged. CI formatting (2,518 files), shared analyzer allowlist,
+  P13 comparator (**145 scoped diagnostics / zero additions**), size,
+  architecture/negatives and diff PASS. Five probe-known unused facade imports
+  are recorded verbatim; the frozen diagnostic inventory retains the four
+  original toggle infos. Focused **197 tests / 38 suites PASS** on the
+  moved production code, including all 178 new cases and the updated guards.
+- **Next.** Clean-tree reduced gate follows this commit. Full Flutter suite,
+  builds and devices remain deferred to their revised milestones. No bug fix,
+  dependency change, push, merge, branch switch or later-phase work.
+
+### 2026-10-15 — Phase 13 reduced gate complete; STOP
+
+- **Clean revision/evidence.** Tested Step-1 `6b872fdbb` with the frozen
+  Step-0b inventory/baseline; evidence `p13/gate/`, gate revision recorded in
+  `p13/gate/commit.json`. Every **194 expected suite loaded**. The credited fresh
+  run, by identity:
+  **1468 successes / the same two historical failures**, zero changed, missing,
+  fixed, new failure or newly skipped identities. All 178 new cases pass;
+  stable tree, same SDK and hook define. No test, harness timing bound, failure
+  allowlist or baseline changed during the gate.
+- **Mechanical gate.** All **46 jobs PASS**: every other Dart manifest self-test,
+  universal P13 self-test/current ownership, P1–P12 at the twelve named merges
+  (P12 `1d7699d2e`), Kotlin self-test, S/S2/S2b/S2c/S2d proofs, size,
+  architecture and negatives. Fresh isolated parser packages and copied-kernel
+  deletion/nested routing audited for every invocation. Earlier 25 destinations
+  protected; facade **14630**, new files **377/332/463/209** formatted lines.
+- **Analysis/format.** CI formatting (2518 files, zero changes), changed guard
+  formatting, shared analyzer allowlist and P13 identity/multiplicity comparator
+  PASS: **145 scoped occurrences, zero additions**. Current hashes and clean
+  tested commit retained; only this documentation changes after the gate.
+- **Initial attempt/limitation.** A pre-player addon-install setup deadline
+  failed in the first attempt; that partial run was stopped and receives no gate
+  credit. Twenty original file replays, three original 42-suite sequence replays
+  and twenty moved-code file replays all pass. The initial failure was **not
+  reproduced and is not classified as pre-existing**. The complete fresh gate
+  was repeated without code/test/harness/allowlist changes; its trace and the
+  remaining uncertainty are retained in `p13/gate/focus-failure-investigation.json`.
+- **Limits/stop.** m2 remains Android device-pending; m7 is desktop/TEE observable
+  equivalence with Android refresh pending, preserving the original null guard.
+  Other native Android recording/publication and the dormant legacy TracksSheet
+  tail remain unclaimed. Full suite/release builds await M3 after Phase 16 per
+  the speed-up decision. No production bug fix, dependency change, device action,
+  push, merge, branch switch or Phase-14 work. STOP for independent review.
+
+### 2026-10-15 — Phase 13 independent review P2 characterization checkpoint
+
+- Review `vp-rev13`: no P1s; m7's directly seeded negative did not prove the
+  production-reachable addon → IPTV Play → unresolved player URL chain. The
+  previous broad desktop equivalence claim is superseded by this correction.
+- Tests/docs only: the real addon parser/resolver and IPTV Play/launcher now
+  reach the real Record control while open is held and after it fails. A real
+  public-service capture under the returned key, transported through cancellable
+  loopback, distinguishes the capture-lookup guard without private State access.
+  The fixture makes no claim that Record admits a non-HTTP capture start.
+- Exact m7 on detached ORIGINAL `1099a0039` is **assertion-killed twice**;
+  the revised file passes **5/5** on both original and moved code in isolated
+  processes. Evidence `p13/review-m7/`; details/caveats in the deps addendum.
+  Android refresh/query and m2 remain device-pending; no native credit claimed.
+- Clean checkpoint `a176c55a4`: **68/68 suites loaded**, original and current
+  both **425 passes / the same two accepted failures** (PiP startup shield and
+  SharedPreferences profile guard), zero identity additions, omissions, outcome
+  changes or new skips. All 422 unaffected identities also match the prior gate.
+  The revised file passes alone on both applications. Exact systematic p0177
+  also earns two assertion kills; its equivalence claim/totals are corrected.
+- Changed-test format and scoped analyzer pass; fresh isolated parser packages
+  and serialized suites audited. Finalization after the clean checkpoint changes
+  only docs. No production, pubspec, seam, allowlist, full suite, release/device,
+  push, merge, branch switch or Phase-14 work. Android refresh/query remains
+  device-pending. **STOP** for independent review.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
@@ -4517,3 +5017,16 @@ grouped with the sheet, facade Host routing, live State context for tile
 taps, lexical setters/contexts guarded); async matrix at the real guards
 and commit points. P3s: 8-method/7-reference ledger, no adapter patches,
 corrected phase-1 helper names; concrete TV and CI coverage.
+
+## Phase 13 design review resolution (Codex `vp-design`, 2026-10-15) — "No P1s"
+
+Speed-up plan judged sound with fixes: frozen reduced-gate inventory with
+required suite loading; pipeline rebase re-compares all inputs. Phase 13:
+S2d (two desktop-support predicates) for TEE coverage, Android engine
+device-pending; menu helper+controller and recording two files; menu
+snapshot fields, `_showPlayerMenu`, key and `_isRecording` State-owned;
+exactly two patched adapters (display, sleep); `_showTracksSheet` live
+(only the legacy sheet dormant); recording boundary matrix incl. disposal's
+inline protocol and profile capture inside service start; watch-history
+write moved to phase 15; three recording contracts in the checklist;
+milestone scenarios named; old map/rule 7 marked superseded.
