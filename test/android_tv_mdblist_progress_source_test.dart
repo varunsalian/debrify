@@ -206,10 +206,8 @@ void main() {
     }
     expect(player, contains('metadataReady: _episodeMetadataReady'));
 
-    final resume = _between(
-      player,
-      'Future<void> _maybeRestoreResume(',
-      '/// Get enhanced playback state for current content',
+    final resume = vpSourceDeclaration(
+      '_VideoPlayerScreenState._maybeRestoreResume',
     );
     expect(resume, contains('hasActiveTraktEpisodeRewatch'));
     expect(resume, contains('localMs = 0'));

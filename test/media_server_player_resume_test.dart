@@ -6,6 +6,8 @@ import 'package:debrify/services/storage/video_progress_storage.dart';
 import 'package:debrify/services/storage/video_resume_storage.dart';
 import 'package:debrify/services/video_player_launcher.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'features/video_player/support/vp_source_reader.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:debrify/services/debrify_tv_database.dart';
@@ -103,17 +105,46 @@ void main() {
   }
 
   test('Flutter load path uses the guarded final selection', () {
-    final source = File(
-      'lib/screens/video_player_screen.dart',
-    ).readAsStringSync();
-    final start = source.indexOf('final state = locallyFinishedMovie');
-    final selection = source.substring(
-      start,
-      source.indexOf('if (state != null)', start),
+    final source = vpSourceDeclaration(
+      '_VideoPlayerScreenState._maybeRestoreResume',
     );
-    expect(selection, contains('VideoPlayerScreen.readLocalResume('));
-    expect(selection, contains('contentId: _effectiveContentImdbId'));
-    expect(selection, contains('enhanced: _getEnhancedPlaybackState'));
+    final start = source.indexOf('final state = locallyFinishedMovie');
+    expect(start, isNonNegative);
+    final end = source.indexOf('if (state != null)', start);
+    expect(end, greaterThan(start));
+    final selection = source.substring(start, end);
+    final routed = selection.contains('_host.readLocalResume(');
+    expect(
+      selection,
+      contains('${routed ? '_host.' : 'VideoPlayerScreen.'}readLocalResume('),
+    );
+    expect(
+      selection,
+      contains(
+        'contentId: ${routed ? '_host.effectiveContentImdbId' : '_effectiveContentImdbId'}',
+      ),
+    );
+    expect(
+      selection,
+      contains(
+        'enhanced: ${routed ? '_host.getEnhancedPlaybackState' : '_getEnhancedPlaybackState'}',
+      ),
+    );
+    if (routed) {
+      final facade = File(
+        'lib/screens/video_player_screen.dart',
+      ).readAsStringSync();
+      final from = facade.indexOf('class _VpResumeRestoreHostAdapter');
+      expect(from, isNonNegative);
+      final to = facade.indexOf('class ', from + 6);
+      expect(to, greaterThan(from));
+      final adapter = facade.substring(from, to);
+      expect(adapter, contains('=> VideoPlayerScreen.readLocalResume('));
+      expect(adapter, contains('contentId: contentId'));
+      expect(adapter, contains('resumeKey: resumeKey'));
+      expect(adapter, contains('enhanced: enhanced'));
+      expect(adapter, isNot(contains('enhanced()')));
+    }
     expect(selection, isNot(contains('VideoResumeStorage.getVideoResume')));
   });
 }

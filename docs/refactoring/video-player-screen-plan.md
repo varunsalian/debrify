@@ -2418,6 +2418,20 @@ point to 0; speed/aspect/subtitle choices restore with the position.
   separate inline protocol. Android registry refresh increments its ticket only
   after the valid live-channel check; the older-query/newer-invalid-refresh race
   and native publication remain device-pending, without an S2d simulation claim.
+- **Phase-14 original resume windows (preserved):** restore has no internal
+  profile/media/mounted guard after its awaits; old work can apply presentation
+  or seek after handoff/disposal, and captures the verifier epoch after seeking.
+  Save samples the playback tuple at lock admission but reads legacy identity
+  and scope later. A delayed enhanced-map read can overwrite B with A's map;
+  an admitted physical write/DB handle stays with A while later work may use B.
+  The resume lock does not serialize track preferences, and an admitted save
+  can recreate a completed row. Tests inspect physical maps and DB rows.
+- **Phase-14 original early open (preserved):** source B can finish while initial
+  audio configuration is suspended. The late initial direct open can then
+  replace it; its outgoing server observation uses the current duration before
+  closing B. This window is characterized through the real keyboard/source
+  callers and native-property/storage barriers, without another seam or fix.
+  The late-startup autosave leak documented for phase 11 is also pinned here.
 
 - **Phase-12 original identity-sheet windows (preserved):** the deferred initial
   search's first setter precedes liveness guards and can run after sheet
@@ -5032,6 +5046,62 @@ for Step 0 and Claude’s independent mutation sample.
 - Prototype-only corrections: direct static receiver and the actual legacy
   `IptvGuideContext`/episode-rewatch imports fixed before freezing. Superseded
   compiler pilots are uncredited. Application code remains original.
+
+### 2026-10-15 — Phase 14 Step 0 (pipelined original characterization; STOP)
+
+- Follows provisional T `14de3e067`; original application `1d7699d2e`, lib
+  tree `338d6b0b279c3d4fac6897d667ea25600ccb37c2`. No application/dependency,
+  production CI or size-baseline changes. P13 worktree untouched. P14 history
+  remains PROVISIONAL and production remains blocked on the accepted P13 base.
+- Added public-caller resume characterization with the step-H fixture, passive
+  await/timer observation, controllable seek acknowledgements and real
+  service-prepared server-watch targets. Physical preference maps and legacy
+  DB rows are checked for A→B/A→B→A/deletion/disposal/content/replacement races;
+  request-time vs lock-admission sampling and the preference/resume lock gap
+  are pinned as-is. Keys, arbitration/ties/rewatch, early windows, stable and
+  transient landing/ABA aborts, URL fallback, standalone/collection saves,
+  autosave and server protocol/order are covered. Defects are documented,
+  never corrected in application code.
+- Five source guards now use the validating declaration reader, retaining
+  ordering and non-negative anchor checks and preparing exact static Host
+  forwarding. All five pass; 18 independent removal/reorder ownership negatives
+  reject. These are structural proofs, excluded from behavior-kill totals.
+- `final-original-proof.json`: **194/194 current scenarios** pass unchanged on
+  the original and have assertion-failing witnesses at current file hashes.
+  Systematic inventory **661 AST points / 13 methods + 28 retained references**:
+  **411 unique AST points and all 28 references killed**, 19 equivalent,
+  34 explicitly device-pending, 136 invalid deletion candidates and 61 null
+  components (not credited as standalone mutants); zero open observable points.
+  Valid alternatives cover hash return, lock/tuple/target declarations and
+  episode/held-speed fallback. The deps tables and evidence matrix retain every
+  exclusion and equivalence reason.
+- `final_suite.py` using `suite_evidence.py`: **206/206 suites loaded,
+  1,489 successes / zero failures or skips**, versus the frozen 153-suite /
+  1,295-test base: **194 additions only**, no missing/changed baseline identities.
+  The same Flutter 3.44.8 / Dart 3.12.2 SDK and stable tested tree are recorded.
+  `final-parity.json` independently matches all 194 original scenario identities.
+- `dart analyze` changed tests/support PASS; `dart format` 61 files unchanged;
+  `check_vplayer_analyzer.py` existing P12 inputs: **124 scoped diagnostics,
+  zero additions**; size/architecture PASS (**3,009 / 1,677 files**). P12 current
+  move comparison PASS (zero differences); provisional P14 materialization and
+  14 negatives are recorded at T. No P14 history pass is claimed before P13.
+  Commands, manifests/parser packages and commit receipts are in the evidence.
+- Real wall-time retry exhaustion and the write guard's 30-second settling,
+  native decoder/keyframe accuracy and the end-of-series device checklist
+  remain device-pending. No timeout parity claim or clock seam. The late
+  startup autosave leak is asserted before cancelling only its exact observed
+  test-clock handle; no blanket teardown cancellation or production fix.
+- Evidence `refactor-evidence/vplayer/p14/step0/`: original/current suite logs
+  and hashes, load/identity proof, per-test assertion witnesses, systematic
+  mutation audit, coverage matrix and explicit equivalence/device-pending
+  reasons. Interrupted/mixed-input and failed-positive pilots are uncredited;
+  all suites/copies/mutations/restores serialize on the worktree evidence lock.
+  Tooling runs use isolated copied parser packages with kernels deleted.
+- After P13 merges, follow its pipeline rebase rule: compare facade,
+  destinations, fixtures and diagnostics, regenerate all three overlapping
+  adapter proofs and construction/partition/import/order/history, refresh
+  affected mutation/analyzer inputs and record the rebased reduced baseline.
+  This checkpoint does not authorize production moves or rebase. STOP.
 
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 

@@ -170,9 +170,10 @@ class FakePlayer implements mk.Player {
   @override
   Future<void> seek(Duration position) async {
     await operation('seek', position);
-    state = state.copyWith(position: position, completed: false);
+    final landing = seekAcknowledgementPosition ?? position;
+    state = state.copyWith(position: landing, completed: false);
     if (publishPositionOnSeekAcknowledgement) {
-      emit('position', position);
+      emit('position', landing);
     }
     emit('completed', false);
   }
@@ -180,6 +181,10 @@ class FakePlayer implements mk.Player {
   /// Native progress can arrive before a command Future acknowledges it.
   /// Tests that publish that real stream edge early can omit a duplicate edge.
   bool publishPositionOnSeekAcknowledgement = true;
+
+  /// Model a native acknowledgement that restarts the stream at a shallow
+  /// position. Null preserves the shared fixture's ordinary landing contract.
+  Duration? seekAcknowledgementPosition;
 
   @override
   Future<void> setRate(double rate) async {

@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'features/video_player/support/vp_source_reader.dart';
+
 String _between(String source, String start, String end) {
   final from = source.indexOf(start);
   expect(from, isNonNegative, reason: 'Missing start marker: $start');
@@ -258,23 +260,29 @@ void main() {
       'Future<void> _onPlaybackEnded()',
       'void _startTransitionOverlay()',
     );
-    final resume = _between(
-      flutterPlayer,
-      'Future<void> _saveResume(',
-      'bool _tvAutoHideBlocked',
-    );
+    final resume = vpSourceDeclaration('_VideoPlayerScreenState._saveResume');
     // The gate moved into _resumeSaveBlocked when saves became serialized;
     // the contract follows the indirection: every save path consults the
     // blocker, and the blocker still enforces the validation gate.
-    final resumeBlocked = _between(
-      flutterPlayer,
-      'bool _resumeSaveBlocked(',
-      'Future<void> _saveResume(',
+    final resumeBlocked = vpSourceDeclaration(
+      '_VideoPlayerScreenState._resumeSaveBlocked',
+    );
+    final method = resume.contains('Future<void> _saveResume(') ? '_' : '';
+    final fields = resumeBlocked.contains('_host.validationGateActive')
+        ? '_host.'
+        : '_';
+    final locked = vpSourceDeclaration(
+      '_VideoPlayerScreenState._saveResumeLocked',
     );
 
     expect(ended, contains('if (_validationGateActive) return;'));
-    expect(resume, contains('_resumeSaveBlocked'));
-    expect(resumeBlocked, contains('_validationGateActive'));
+    expect(resume, contains('${method}resumeSaveBlocked(debounced)'));
+    expect(locked, contains('${method}resumeSaveBlocked(debounced)'));
+    expect(resumeBlocked, contains('${fields}validationGateActive'));
+    expect(
+      resumeBlocked.indexOf('${fields}validationGateActive'),
+      lessThan(resumeBlocked.indexOf('${fields}isReady')),
+    );
     expect(
       flutterPlayer,
       contains('void _resumeTrackingAfterValidationGate()'),

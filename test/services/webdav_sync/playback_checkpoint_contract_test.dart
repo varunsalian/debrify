@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../features/video_player/support/vp_source_reader.dart';
+
 String _between(String source, String start, String end) {
   final from = source.indexOf(start);
   expect(from, isNonNegative, reason: 'Missing start marker: $start');
@@ -27,7 +29,14 @@ void main() {
       '// IPTV episode list',
     );
 
-    expect(toggle, contains('_saveResume(positionOverride: _position)'));
+    expect(
+      toggle,
+      contains(
+        RegExp(
+          r'(?:_saveResume|_resumeSave\.saveResume)\(positionOverride: _position\)',
+        ),
+      ),
+    );
     expect(seek, contains('positionOverride: settledPosition'));
     expect(seek, contains('unawaited('));
   });
@@ -35,27 +44,39 @@ void main() {
   test(
     'resume saves serialize and recheck transition guards after queueing',
     () {
-      final save = _between(
-        player,
-        'bool _resumeSaveBlocked(bool debounced)',
-        'bool _tvAutoHideBlocked',
+      final save = vpSourceDeclaration('_VideoPlayerScreenState._saveResume');
+      final locked = vpSourceDeclaration(
+        '_VideoPlayerScreenState._saveResumeLocked',
       );
-
+      final blocked = vpSourceDeclaration(
+        '_VideoPlayerScreenState._resumeSaveBlocked',
+      );
+      final method = save.contains('Future<void> _saveResume(') ? '_' : '';
+      final fields = save.contains('_host.resumeSaveLock') ? '_host.' : '_';
       expect(player, contains('final Lock _resumeSaveLock = Lock();'));
-      expect(save, contains('if (_resumeSaveBlocked(debounced))'));
-      expect(save, contains('if (debounced && _resumeSaveLock.locked)'));
-      expect(save, contains('return _resumeSaveLock.synchronized('));
-      expect(save, contains('Future<void> _saveResumeLocked('));
-      final lockedSave = save.indexOf('Future<void> _saveResumeLocked(');
-      expect(
-        save.indexOf('if (_resumeSaveBlocked(debounced))', lockedSave),
-        greaterThan(lockedSave),
-      );
+      expect(save, contains('if (${method}resumeSaveBlocked(debounced))'));
       expect(
         save,
-        contains('_effectiveIptvChannels != null && _isTransitioning'),
+        contains('if (debounced && ${fields}resumeSaveLock.locked)'),
       );
-      expect(save, contains('_isManualEpisodeSelection && debounced'));
+      expect(save, contains('return ${fields}resumeSaveLock.synchronized('));
+      expect(save, contains('${method}saveResumeLocked('));
+      final recheck = locked.indexOf(
+        'if (${method}resumeSaveBlocked(debounced))',
+      );
+      final position = locked.indexOf('var pos = positionOverride ??');
+      expect(recheck, isNonNegative);
+      expect(position, greaterThan(recheck));
+      expect(
+        blocked,
+        contains(
+          '${fields}effectiveIptvChannels != null && ${fields}isTransitioning',
+        ),
+      );
+      expect(
+        blocked,
+        contains('${fields}isManualEpisodeSelection && debounced'),
+      );
     },
   );
 }
