@@ -2765,6 +2765,15 @@ fades, hands off to the dock and its countdown ticks while paused.
 
 ### Follow-ups found (record, do not fix)
 
+- **Route-wide audio session memory (Step 0 addendum):** a French pick in
+  one series survives a switch to another series whose stored language is
+  absent or English. `_preferredIptvAudioLanguage` belongs to the route;
+  preserve this precedence without adding a per-series reset.
+- **Drain-proof premise (Step 0 addendum):** current production launch routes
+  retain the browse-provider function for the State lifetime. An in-place
+  replacement with null while paging is active would invalidate i14's
+  reachability argument. Keep the existing break; re-audit before introducing
+  such route updates. No production change is authorized here.
 - **Cancelled replay still writes history:** `_playIptvCatchup` writes the
   replay row (5938) before the final request check (5946); a replay
   cancelled during the write leaves a Continue Watching row for an item
@@ -5777,6 +5786,45 @@ for Step 0 and Claude’s independent mutation sample.
   probes and changed witnesses. History still rejects absent P13/P14; no dummy
   manifest or waiver. Full suite/builds deferred to M3 under pipeline rules.
   STOP before production moves; no push, merge, branch switch or device action.
+
+
+### 2026-10-15 — Phase 15 Step 0 independent-sample survivor addendum (STOP)
+
+- **Acceptance remains pending.** Claude's original sample at `4f8222e03`
+  (application `1d7699d2e`) killed **16/26 = 62%**, below 75%. The earlier
+  declaration/reference sweep did not establish adequate branch coverage.
+  Step 0 is **not accepted**; Claude will draw a fresh second sample.
+- **Nine exact assertion kills.** Three new suites add **11 original-caller
+  cases**, each file passing alone on the detached original. Exact original
+  patches i5/i6/i7/i9/i11/i20/i21/i23/i26 now fail assertions: changed category
+  lists at an equal selection; persisted content type; unrelated snackbar;
+  page reset followed by same-category reanchor; backward paging at nonzero
+  offset; session audio against absent/differing destination-series storage;
+  visible dock vs floating banner; recovery pill vs real zap; unnumbered
+  channel ordinals 1 and 3 through the displayed identity.
+- **i14 source proof, not a kill.** The two requeue paths either already have
+  a request or synchronously start one before the first break. At the window
+  boundary, the page-prefetch predicate necessarily holds. Each other path
+  consumes a press or clears the queue, bounding a synchronous drain by 24
+  iterations. The deps report records every writer/caller and the premise:
+  current production routes retain their launch browse-provider function.
+  Replacing that function with null in place would invalidate the proof;
+  retain the guard and re-audit if route updates change. No private-State
+  injection, guard deletion, timeout credit or blanket widget-update claim.
+  Exact i14 mutant completes **241/241 cases, 27/27 suites**, zero errors;
+  detached original verified restored. The incomplete 240-second-cap pilot
+  receives no credit; the completed retry has a sufficient external cap.
+- **Evidence/verification.** `p15/survivor-addendum/` holds isolated controls,
+  exact patches, assertion identities, source-bound reachability audit and
+  final reduced-baseline receipt. The frozen inventory and CI list include
+  all three new suites: **166/166 loaded, 1489 success / one unchanged failure**
+  in the hash-verified composite baseline. New-file analyzer: zero issues;
+  format/diff checks pass. Existing baseline inputs remain unchanged; no
+  allowances, application changes or bug fixes. The original startup-shield
+  source-format failure remains recorded without a fix.
+- **Pipeline.** Stop for the fresh sample/review. Production remains blocked
+  on accepted P13/P14 merges and regeneration of provisional tooling/proofs.
+  No push, merge, branch switch, app launch/install or device action.
 
 
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)

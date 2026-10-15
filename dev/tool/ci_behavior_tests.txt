@@ -689,3 +689,8 @@ test/features/video_player/video_player_iptv_source_races_test.dart
 test/features/video_player/video_player_iptv_start_over_test.dart
 test/features/video_player/video_player_iptv_switch_test.dart
 test/features/video_player/video_player_iptv_tv_test.dart
+
+# Phase 15 independent-sample survivor addendum.
+test/features/video_player/video_player_iptv_survivor_chrome_test.dart
+test/features/video_player/video_player_iptv_survivor_guide_test.dart
+test/features/video_player/video_player_iptv_survivor_memory_test.dart

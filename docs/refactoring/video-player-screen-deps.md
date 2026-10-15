@@ -12103,3 +12103,129 @@ retains initial survivors and invalid attempts; corrected witnesses use new IDs.
 | `aba-proof-refresh/c40a` | `_switchToIptvChannel + _openMedia` | assertion-killed | 1 |
 | `aba-proof-refresh/c42a` | `_noteLiveChannelPlaying` | assertion-killed | 3 |
 | `aba-proof-refresh/c43a` | `_noteLiveChannelPlaying` | assertion-killed | 2 |
+
+## Phase 15 Step 0 review addendum — independent survivors (2026-10-15)
+
+**Step 0 is not accepted.** Claude's sample at `4f8222e03` (application
+byte-identical to `1d7699d2e`) killed 16 of 26 mutants, **62%**, below the
+75% threshold. The earlier 221 assertion witnesses cover declarations and
+references, but missed the branches below. The original sample result stays
+unchanged in `p15/claude-mut2/results.json`; these closures do not replace the
+fresh independent second sample requested by the reviewer. Production remains
+blocked on accepted P13/P14 merges, proof refresh and review.
+
+Three new behavior files use the existing driver, real original screen/sheet/
+menu callbacks, storage and player boundary. **11 controls pass**, and each
+new file passes when loaded alone in the detached original worktree. No
+production seam, State injection, application change or bug fix. Exact mutation
+patches come from Claude's `before`/`after` strings, each matched uniquely in
+`git show 1d7699d2e:lib/screens/video_player_screen.dart`.
+
+### Independent-survivor mutation table addendum
+
+All ten rows originally survived. The nine kill rows below completed with
+assertion failures, without compile/load/runtime/timeout credit. Evidence paths
+are relative to `<git-common-dir>/refactor-evidence/vplayer/p15/`.
+
+| Sample | Original boundary and new original-caller observation | Closure / evidence |
+|---|---|---|
+| i5 | Persist `News` with `['News']`; select another News channel; reanchor returns `['News', 'New category']`. Reopened guide must publish the new list with the same selected category. | Assertion-killed, both `series`/`vod` cases; `survivor-addendum/exact-survivors/i5.jsonl`. |
+| i6 | Same flow starts with a persisted `series`/`vod` override and widget's default live content type. Category application must preserve the persisted content type. | Assertion-killed, both cases; `exact-survivors/i6.jsonl`. |
+| i7 | With no catch-up request, show unrelated 30-second snackbar, close the actual guide and wait past hide animation. Snackbar must remain. | Assertion-killed; `exact-survivors/i7.jsonl`. |
+| i9 | Hold forward page; pick within the same category, reset and finish a same-category reanchor; then deliver the old touching page. Guide remains the new two-row ring. Neither context generation nor a new page request masks the reset ticket. | Assertion-killed; `exact-survivors/i9.jsonl`. |
+| i11 | At index 0 of offset-10 News window, Previous must request News offset 0 with `fromEnd=false`, stay put while pending, then replay to channel 9 after merge. | Assertion-killed; `exact-survivors/i11.jsonl`. |
+| i14 | Second drain break's TRUE branch is unreachable for current production launch callers under the fixed-provider premise proved below. | Source reachability proof; **not a kill**. `survivor-addendum/drain-reachability.json` and `drain-survivor-results.json`. |
+| i20 | Pick French through unified menu in series A; switch to series B with no stored language or stored English, plus English default. The new episode must receive French from session memory. | Assertion-killed, both storage variants; `exact-survivors/i20.jsonl`. |
+| i21 | Recall dock over bare live video, zap using its actual Next callback; dock banner remains, floating (`flush=false`) banner stays absent and no new 4500ms hide timer starts. | Assertion-killed; `exact-survivors/i21.jsonl`. |
+| i23 | Installed Stremio fixture with empty candidates keeps recovery episode alive. First error retunes; after the real 300ms debounce, second error exposes pill. Next machine retune keeps `Reconnecting…`; real Next clears it. | Assertion-killed; `exact-survivors/i23.jsonl`. |
+| i26 | Actual guide picks unnumbered on-demand channels at indices 0/2 with channel chrome enabled. The displayed `DebrifyTvBanner` (replacement for legacy corner badges) receives number 1/3 and the new name. | Assertion-killed, both ordinals; `exact-survivors/i26.jsonl`. |
+
+`survivor-addendum/exact-survivors-results.json` binds each complete run to its
+command, original source hash, test/support hashes and failing test identities.
+All `exact-survivors/` paths in the table share that `survivor-addendum/` parent.
+The control input hashes match those exact mutation runs.
+
+### i14 reachability and termination proof
+
+This is a source proof for **current production callers**, with a separate
+completed mutant behavior run. It is not an assertion kill or permission to
+remove the guard. Original line numbers below refer to `1d7699d2e`.
+
+1. Paging becomes active only at `_reanchorIptvRingToCategory` (5380) and
+   `_installIptvZapWindow` (5652). Reanchor requires a non-null provider (5309);
+   install's callers receive pages through `_requestIptvZapPage`. Reset (5462)
+   deactivates paging and clears pending inputs (5469). A null-provider launch
+   cannot arm paging. The launch args hold a final provider; IPTV launch
+   (`iptv_playback.dart:256`), its composition (`iptv_playback_composition.dart:71`),
+   launch router's final route push (`launch_router.dart:559`) and `toWidget`
+   (`video_player_launch_widget.dart:46`) forward that same function. The other
+   direct screen constructors are Debrify-TV paths without this IPTV provider.
+   Args copies at router 189/290 happen before push. No current production
+   caller replaces this function on an already-mounted player State.
+2. There are exactly two paths that put a removed press back on the queue:
+   the `hasAnotherPage` branch of `_zapIptvChannel` (5534) and the in-flight
+   early return of `_requestAdjacentIptvCategory` (5812). The second already
+   makes the drain's **first** break true. Queue add/remove/clear sites and all
+   paging/in-flight writers are in the bound original-source audit.
+3. At `hasAnotherPage`, the active ring is nonempty and the press crosses its
+   edge. Forward means index `n-1`, hence `index >= n-12` for every `n >= 1`;
+   backward means index `0`, hence `index < 12`. The corresponding absolute
+   continuation test is identical in zap and prefetch. Thus prefetch cannot
+   decline on its edge-margin predicate. No await separates queueing from
+   prefetch, and the queue is an ordinary built-in list.
+4. If another request exists, the first break fires. Otherwise the retained
+   non-null provider lets `_requestIptvZapPage` set in-flight **before** its
+   first await (5554). An asynchronous null/error response cannot clear that
+   flag within the synchronous drain. Even a provider throwing synchronously
+   is caught and its null-result path clears the queue (5580), so it cannot
+   cause a non-consuming iteration. No async completion interleaves between
+   return from `_zapIptvChannel` and the first break.
+5. Other zap branches consume the removed press; they do not requeue it.
+   Therefore every iteration reduces queue length, clears it, or takes the
+   first break. With the queue capped at 24, synchronous drain terminates in
+   at most 24 iterations even with i14 applied. The second break's TRUE branch
+   cannot occur under these premises.
+
+`drain-reachability.json` includes the nine original declaration spans/hashes,
+launch-file hashes, assumptions and a 12,672-configuration integer predicate
+check (10,368 continuation edges); the algebra above covers arbitrary positive
+window length, rather than relying on that finite enumeration. The exact i14
+mutant is also exercised through all **27** frozen IPTV/zap/catch-up suites,
+including the three additions: **241/241 pass, 27/27 suites load, zero errors**,
+completed in 382 seconds. The detached original source is verified restored.
+An earlier external 240-second cap stopped an incomplete broad run; that pilot
+is archived separately and receives no proof credit. The completed retry uses
+a 600-second external cap, with the same mutant and unchanged test inputs.
+
+**Scope limit:** Flutter could receive a newly configured widget on the same
+State. Replacing the provider with null while paging/request work survives
+would violate the proof premise; `didUpdateWidget` currently handles geometry
+and channel name, not provider withdrawal. No existing production launcher
+performs that replacement. The defensive break remains unchanged; record this
+as a re-audit prerequisite for future route-update work. This proof makes no
+universal claim about arbitrary widget replacement or injected/reentrant
+private state.
+
+### Reduced inventory, checks and handoff
+
+The frozen inventory now contains **166** expected suites and registers every
+new suite in `ci_behavior_tests.txt`. Baseline reuse requires all prior 195
+suite/support hashes, unchanged application/dependency/analyzer inputs, and the
+same SDK. The addendum's baseline receipt combines that complete 163-suite
+baseline with the three fresh isolated original controls, checks each expected
+suite actually loaded, and preserves exact test identities. The resulting
+composite is **1489 successes / one unchanged failure, 166/166 suites loaded**. The historical
+startup-shield source-format failure remains a failure, without allowance or
+application fix. No broad rerun of unchanged baseline inputs is required by
+the speed-up rules.
+
+All evidence is under `p15/survivor-addendum/`: original controls, exact patches,
+source audit, commands/results, checks and baseline receipt. `flutter analyze
+--no-pub` on the three new files reports zero issues; format and diff checks
+pass. Application, packages, pubspec/lock and analyzer configuration are
+byte-identical to `1d7699d2e`; the prior application diagnostic baseline applies. Flutter/Dart runs
+use nice19 and local serialization; tests use the required test-hook define.
+No existing test/support file changed. A session language picked in series A
+carrying into series B is pinned as the original route-wide memory behavior,
+not reset or repaired. Pending native/device checks and the accepted-P14 tooling
+regeneration remain unchanged. Stop for the new independent sample.
