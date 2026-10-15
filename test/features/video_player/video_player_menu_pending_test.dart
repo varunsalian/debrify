@@ -6,6 +6,7 @@ import 'package:debrify/screens/video_player/services/subtitle_settings_service.
 import 'package:debrify/screens/video_player_screen.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:media_kit/media_kit.dart' as mk;
 
 import 'support/subtitle_apply_driver.dart';
 
@@ -74,7 +75,11 @@ void main() {
                   ? d.f.network.requests.any((r) => r.url == Uri.parse(sub.url))
                   : d.player.calls.any(
                       (c) =>
-                          c.$1 == 'subtitle' && c.$2.toString().contains('p13'),
+                          c.$1 == 'subtitle' &&
+                          c.$2 is mk.SubtitleTrack &&
+                          (c.$2 as mk.SubtitleTrack).id.contains(
+                            'stremio_sub_',
+                          ),
                     ),
             );
             panel.onClose();

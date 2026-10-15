@@ -607,3 +607,5 @@ test/features/video_player/video_player_menu_manual_throw_test.dart
 test/features/video_player/video_player_menu_addon_lifetime_test.dart
 test/features/video_player/video_player_menu_cache_publication_test.dart
 test/features/video_player/video_player_menu_shuffle_window_test.dart
+test/features/video_player/video_player_menu_review_test.dart
+test/features/video_player/video_player_recording_review_test.dart

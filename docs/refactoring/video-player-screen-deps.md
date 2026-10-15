@@ -10847,3 +10847,59 @@ Exact original→mutant patches, commands, full JSONL/stderr, original hashes an
 The final original baseline has **1464 successes / 2 pre-existing failures**, every suite loaded, stable tested-tree metadata and inputs matching the final tests. Failure identities match the observed original and P12 gate: `playback_startup_view_test.dart::startup shield remains opaque and noninteractive in PiP`; `profiles/profile_source_guard_test.dart::direct SharedPreferences opens stay inside reviewed adapters/stores`. No previously passing test regresses or becomes skipped. Partial exploratory baseline runs interrupted while closing coverage are not credited.
 
 All Flutter suites use `nice -n 19`, the shared P13 suite lock, `--no-pub --concurrency=1 --dart-define=DEBRIFY_VP_TEST_HOOKS=true`. Manifest/source-reader invocations use fresh isolated packages under the executing worktree’s `.dart_tool/vplayer_parser/`, deleting copied kernels. Format, changed-Dart analyzer, size, architecture and negative guards, inventory validation and diff checks pass. Step-T app/tooling proofs and the legacy analyzer inventory are reused only for identical inputs; repository analyzer issues remain pre-existing. Full Flutter suite, release builds and devices are deferred by the speed-up decision. No app/dependency edit, production move, push, merge or branch switch. Stop for Claude’s independent mutation sample before production moves.
+
+## Phase 13 Step 0b — standalone fixture defect and sample closure (2026-10-15)
+
+Review ORIGINAL `1e841bf36681286cc506760c0c1340dc669522aa` has exactly
+rebased S2d `1099a0039dab6023aef8c95754e4595e862e9a67` application code.
+All replays below mutate that application in the detached original checkout;
+original source is restored after every replay. No production change or seam
+extension accompanies this addendum.
+
+**Correction to Step 0:** its “all 174 pass” evidence did not establish
+standalone correctness. The two pending native-apply cases matched `p13` in
+`SubtitleTrack.toString()`, although the real cache basename hashes the subtitle
+URL. The evidence-directory prefix happened to contain `/p13/`; an ordinary
+temporary directory does not. The native call occurred, but the waiter could not
+recognize it. Original standalone reproduction fails both cases. Matching a typed
+`mk.SubtitleTrack` cache id (`stremio_sub_`) removes the directory dependence.
+No run-order/shared-state cause was established. Each of the 35 new P13 files
+now passes in its own process with both evidence-directory overrides removed
+(36 isolated files including the earlier menu suite). The pending file also
+passes with randomized case order, seed 13, without those overrides.
+
+Claude's independent sample remains **18/23 assertion kills (78%)**, with m4
+compile-invalid and the broken pending cases excluded. The following are the
+Step-0b closures, not a replacement independent sample score:
+
+| Mutant | Original caller / observation | Original replay result |
+|---|---|---|
+| m2 — remove the engine-task clear before `LiveRecordingService.stop` | `_toggleRecording:6362–6365`; only non-null task writers are raw Android start/refresh. S2d overrides neither raw guard, and service start/query independently return unsupported/empty off Android. No private State injection. The native button-before-stop-resolves contract remains on the device checklist. | **Device-pending**; desktop replay survives, no kill credited. |
+| m7 — allow an unresolved `stremio-tv://` playing URL | `_playingLiveUrl:6520–6524` originally returns null. The real Record action with the same unresolved launch/playing URL has no active-button match, capture, target-directory request or native recording write. `_engineRecordUrlForCurrent` rejects non-HTTP before probing; normally-created desktop captures are HTTP-only (all three production start sites traced). Thus null and an unresolved pseudo URL have identical desktop/TEE outcomes through original callers. Android refresh could query/delay instead of clearing immediately. | **Desktop observable equivalence; Android refresh device-pending.** Original and exact m7 replay pass the new negative. The private null rejection remains frozen by the move manifest; no assertion kill or synthetic pseudo capture is credited. |
+| m13 — replace actual file length with 1 | Real TEE Record/Stop; first create an **existing zero-length file**, assert exists/length, dismiss start notice, stop, require `Recording failed — mpv wrote no file (see logs)` and no saved notice. | **Assertion-killed** by `p13 TEE existing empty output reports mpv wrote no file`. |
+| m15 — reduce suffix loop bound from 100 to 3 | Real TEE Record; occupy base plus `_2`, `_3`, `_4` in the target directory, require the unused `_5.mkv`. | **Assertion-killed** by `p13 TEE occupied base and suffixes two through four choose suffix five`. |
+| m18 — drop manual episode from quick-menu precedence | Real Identify Title series selection and season/episode dialog on a filename with no episode; close and reopen Speed through the real control. Require manual S3E4 and its already-fetched subtitle cache, without another fetch. | **Assertion-killed** by `p13 quick menu keys plain filename by the manually identified episode`. |
+| Pending success | Remove the panel's sync-reset callback from the original facade helper. | **Two assertion kills**, download/apply success cases retain the wrong offset. |
+| Pending apply failure | Return true after the real native apply returns false. | **Assertion-killed**, apply failure must retain its previous offset and selection. |
+| Pending download failure | Return true on failed download from the original menu action. | **Assertion-killed**, download failure must retain its previous offset and selection. |
+| New unresolved-URL case witness | Mutate the original null/empty URL admission to return an HTTP recording target. | **Assertion-killed** by the new public unresolved-URL case; this is a test witness, **not m7 kill credit**. |
+
+Canonical evidence is `p13/step0b/`: exact patches/commands/hashes in the review,
+unresolved-admission and pending-sweep-refresh plans/results; each artifact has
+the complete JSONL. All 15 systematic points relying exclusively on the changed
+pending file were replayed and assertion-killed. The other 451 assertion-point
+credits were checked against an unchanged failing test and its complete local
+Dart import graph, rather than reusing a changed broad-run fingerprint.
+`coverage-final.json`, `unchanged-witness-audit.json` and `receipt.json` preserve
+this distinction; the 976-point classifications and 27-site retained ledger remain
+unchanged. Runtime/timeout/compiler failures receive no assertion credit.
+
+The updated frozen reduced inventory has **194 suites**, every suite loaded:
+**1,468 successes / the same two historical failures**, no missing/newly skipped
+identities or new failures versus Step 0. Canonical baseline:
+`p13/step0b/accepted194-original-baseline.jsonl` with stable-tree/SDK metadata.
+The two failures remain the PiP startup-shield source check and the direct
+SharedPreferences profile guard. All 178 new cases pass; the two new suites are
+registered in CI. Seven inventory enforcement fixtures and changed-test
+format/analyzer checks pass. Android engine/publication and the dormant legacy
+TracksSheet tail remain explicitly unclaimed.

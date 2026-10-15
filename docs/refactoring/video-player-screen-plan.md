@@ -4736,6 +4736,39 @@ for Step 0 and Claude’s independent mutation sample.
   integration milestones; no device/run/install, push, merge or branch switch.
   STOP for Claude's independent mutation sample before production moves.
 
+### 2026-10-15 — Phase 13 Step 0b defect correction and sample closure
+
+- **Original/correction.** Review `1e841bf36` equals rebased S2d application
+  `1099a0039dab6023aef8c95754e4595e862e9a67`. Reproduced both standalone
+  pending-apply failures. The old `p13` matcher accidentally depended on the
+  evidence-directory name; the real subtitle cache basename hashes the URL.
+  Match the typed external subtitle track instead. The earlier “all 174 pass”
+  claim did not establish standalone correctness; no shared-state/order cause
+  was established. No application, hook/installer or dependency change.
+- **Independent sample/addendum.** Claude's sample is accepted: 18/23 kills
+  (78%), m4 compile-invalid, broken pending cases excluded. Exact original
+  m13/m15/m18 replays now assertion-fail for existing-empty output, suffixes
+  beyond `_2`, and manual episode identity/cache. m2 remains raw-Android
+  device-pending; m7 is equivalent through the desktop/TEE callers, with
+  Android refresh pending and the original private null guard frozen. The new
+  public unresolved-URL negative has its own admission mutation witness.
+- **Fixture and sweep proofs.** All 35 new P13 files pass separately with
+  directory overrides removed (36 files including the earlier menu suite).
+  Pending cases also pass randomized order, seed 13; three original mutants
+  assertion-kill all four pending cases. All 15 sweep points whose only witness
+  changed were refreshed; 451 other assertion-point witnesses have identical
+  test/import inputs. The 976-point and 27 retained-site ledgers stay accounted
+  for. Exact mutations, classifications and per-file receipts: `p13/step0b/`;
+  the dependency report includes the survivor/mutation table.
+- **Frozen baseline.** Updated 194-suite inventory, every suite loaded; **1,468
+  successes / the same two historical failures**, zero regressions, missing or
+  newly skipped identities versus Step 0. All 178 new cases pass on original
+  S2d; canonical `p13/step0b/accepted194-original-baseline.jsonl`. Same SDK,
+  stable tree, current test hashes. Changed-test analysis/format, seven inventory
+  fixtures and diff checks pass; both new suites registered in CI.
+- **Next.** Proceed to the authorized frozen Step-1 moves, then the clean-tree
+  reduced gate. No full suite/build/device work; M3 remains after Phase 16.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
