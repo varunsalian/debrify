@@ -2464,6 +2464,11 @@ machine's `performRetune`, see Open questions).
 
 ### Frozen field ownership
 
+> **Superseded in part by the Phase 15 design review resolution below**
+> (cross-collaborator fields stay State-owned; Hosts re-derived for seven
+> collaborators). Where this section and the resolution differ, the
+> resolution wins.
+
 Principle: a field moves only to the collaborator that is its **single
 writer** and only when **no retained code, build, lifecycle or other phase
 reads it**; multi-writer and build-read state stays State-owned. Every
@@ -2615,7 +2620,7 @@ recording adapters (`currentIptvChannel`, `iptvZapBannerOwnsIdentity`,
 `playingLiveUrl`), every P14 adapter (P14 manifest reads only
 `_currentIptvChannel`/`_effectiveIptvChannels`, both State-owned).
 
-### Retained references (62 facade sites + 2 initializer)
+### Retained references (62 entries: 60 facade sites + 2 initializer)
 
 Measured by scanning non-comment code outside the moved spans; Step T's
 scanner is authoritative (`p15/stepT/retained-sites.json`).
@@ -2655,7 +2660,7 @@ applied manifests (≈ 32: 25 + P13's four + P14's three), P12 `--at
 seam proofs. No dummy manifests; no history relaxation. The theme
 frozen-path list (`theme_surface_manifest.txt:26`,
 `theme_rendered_set.py:57`, `source_guard_test.dart` exact list) gains the
-six files in the commit that creates them. Analyzer: the P12 inventory has
+seven files in the commit that creates them. Analyzer: the P12 inventory has
 **no** diagnostics on these members; the receiver probe must check for
 new `use_build_context_synchronously` infos where `_host.context` follows
 an await behind `_host.mounted` (877, 6029 sync, 5902 captured).
@@ -5844,3 +5849,91 @@ stale-result matrix; landing timeouts via a bounded real-time driver or
 device-pending; five source-text guards retargeted. P3: 28-reference ledger,
 CI transition. Final accepted-P13 proofs and measurements are recorded in
 Progress; the preparation line numbers and provisional checkpoint stay historical.
+## Phase 15 design review resolution (Codex `vp-design`, 2026-10-15) — "No P1s"
+
+Reviewed at `a5ce21c49` (facade byte-identical to `1d7699d2e`); five P2s
+and two P3s, all adopted:
+
+1. **Ownership vs the binding guard** (`occurrence_field_bindings.py:145`
+   rejects an owned field forwarded through a Host). Fields read or
+   written by more than one collaborator stay **State-owned** with narrow
+   live accessors: `_iptvSwitchTicket` (the switch owner remains its only
+   operational writer through its Host setter; every other Host gets a
+   getter only — so the P11 adapter's `iptvSwitchTicket` forwarder is
+   **not** patched), `_iptvGuideContextGeneration`, the ring paging fields
+   read by ladder/owner (`_iptvZapWindowOffset`, `_iptvZapCategoryTotal`,
+   `_iptvZapPagingActive`, `_iptvZapCategory`, `_iptvZapCategories`,
+   `_iptvZapRequestInFlight`), `_iptvZapPendingInputs` (ring `clear()`s
+   5469/5580/5586 + ladder add/remove) and `_kIptvZapPageSize` (stays a
+   State `static const`; no cross-class static move — finding 6). Still
+   moving: ring-only `_iptvZapSourceId`, `_iptvZapRequestTicket`,
+   `_iptvZapArmingPaging`; ladder-only cached triple and
+   `_iptvZapDrainingInputs`; guide `_iptvCatchupRequests`; memory
+   `_preferredIptvAudioLanguage` + last-live trio; banner timers/ticket/
+   `_iptvArchiveRetryAt`. Checker extension not pursued; binding
+   protection unchanged.
+2. **Seven Hosts, frozen at step T.** Pre-correction distinct-name counts
+   ring 14 / ladder 17 / guide 31 / switch 53 / sources 23 / memory 8 /
+   banner 13 (re-derived after finding 1). Memory Host exactly `mounted`,
+   `player`, `currentIptvChannel`, `iptvGuideContextOverride`,
+   `iptvSourceId`, `iptvSwitchTicket`, `isIptvSeriesContext`, `isPlaying`;
+   Sources drops those memory-only names and keeps live `iptvStartIndex`
+   and `videoUrl`. Signatures frozen: resolver `Future<String?>
+   Function(Torrent)?`; `tryOpenLiveStream` keeps its 12 s default and
+   typed headers; `openMedia` includes the synchronous `bool Function()?
+   beforeOpen`; the `_sleep.sleepTimerMode → _host.sleepTimerMode` chain
+   is registered. Step T measures all seven formatted prototypes (imports,
+   Host, receiver wraps); the owner's ≤ 500 is a step-T prerequisite.
+3. **Stale switches characterized as-is, not idealized.** Separate outcomes
+   at recording stop, pause, player stop, resolution, pre-open setup,
+   issued open and probe completion. Known original effects to pin and
+   record as Follow-ups: after `await _player.pause()` (≈ 6980) the switch
+   clears sources / stops / resolves / opens without re-checking the
+   ticket, so an older direct switch released late can still `_openMedia`;
+   `_tryOpenLiveStream` (7118) opens after recording stop with no ticket
+   (caller checks afterwards); winner marking (7022) checks the ticket but
+   not `mounted`, and disposal does not bump the ticket. Include same-turn
+   repeated zap inputs: the ticket advances synchronously but the index
+   only after recording stop (contra the 5513 comment). Preserve all.
+4. **Probe driver + wall clock.** `FakePlayer.open` emits its default frame
+   before returning (`fake_player.dart:129`) and the probe ignores events
+   until `_openMedia` returns (7125), so step 0 adds a driver controlling
+   open acknowledgement separately from later width/position/error events
+   (pre-ack events leave the probe pending; a post-ack event wins); drain
+   timed-out/disposed probes before teardown. No new app seam: candidate
+   and catch-up HTTP via an installed fixture addon (`stream`/`tv`), the
+   existing transport or `debugStreamHttpClientFactory`, controlled Xtream
+   responses, unique identities (candidate/catch-up-form caches can bypass
+   barriers). `DateTime.now()` deadlines (6 s error debounce, 60 s archive
+   retry at 11829) need bounded real-time cases or are device-pending; the
+   4.5 s hide timer and 12 s probe timeout use timer advancement.
+5. **Profile matrix at real boundaries.** Last-channel storage awaits a
+   playlist lookup before taking preferences
+   (`iptv_last_channel_storage.dart:49`); audio takes a profile-bound
+   preferences object before editing (`iptv_audio_storage.dart:32`);
+   history awaits the tracking preference before `IptvMediaStore`'s scoped
+   admission (`iptv_history_storage.dart:71`, `debrify_tv_database.dart:164`).
+   Hold pre-preference capture, post-capture/pre-write, pre-admission and
+   admitted transaction; inspect physical keys and rows in both profiles
+   incl. A→B→A and deletion; record rejection / outgoing completion /
+   incoming writes separately. Also hold reads (browse/re-anchor,
+   candidate resolution, catch-up lookup, banner EPG, audio preference)
+   across handoff/disposal, and audio application across renderer
+   replacement while storage is pending. Outcomes pinned as Follow-ups.
+6. **Tooling fallbacks dropped.** No static-to-static or top-level constant
+   move (constant stays State-owned); no ≤ 520 owner exception (the
+   500-line cap in `check_search_architecture.py:104` stands); stream-error
+   classification stays outside the owner (it classifies and routes through
+   the facade).
+7. **Ledger + CI.** 62 entries = 60 facade sites + 2 initializer; seven
+   theme files. CI transition: current/self-test manifest and both analyzer
+   inputs → P15; P1–P14 `--at` at accepted merges; all seam proofs incl.
+   S2d; every new test in `ci_behavior_tests.txt`; seven destinations in
+   theme lists; facade size ratchet; reduced-gate expected-suite loading;
+   M3 full suite + builds after phase 16.
+
+Patched adapters after finding 1: P8 PiP (`cancelPendingIptvCatchup`),
+P13 menu UI and menu controller (`captureIptvAudioLanguage`,
+`hideIptvZapBanner`), P11 track preferences only for
+`applyIptvAudioPreference` (→ memory). Regenerated on the accepted P14 base.
+
