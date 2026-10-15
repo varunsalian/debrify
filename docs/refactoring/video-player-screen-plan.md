@@ -2258,14 +2258,17 @@ recording, three contracts: **TEE** (Apple TV/iOS) stops on zap and player
 close; **Android engine** and **desktop capture** intentionally survive
 zaps and player closure; each saves to the expected place and appears in
 Recordings.
+
 ## Phase 14 — resume: keys, restore and save
 
 Branch `refactor/vplayer-p14` (pipelined; prepared off the phase-12 merge
-`1d7699d2e` while phase 13 runs in `../debrify-wt/vplayer-next`; rebased
-onto the phase-13 merge before step 1 under the pipeline rebase rule).
+`1d7699d2e` while phase 13 ran in `../debrify-wt/vplayer-next`; Claude rebased
+onto accepted phase-13 merge `238df16f4` before step 1 under the pipeline
+rebase rule).
 Evidence `refactor-evidence/vplayer/p14/`. Line numbers at `1d7699d2e`.
-Note: this branch's plan file lacks the phase-13 section edits made on the
-phase-13 branch; they reconcile at rebase.
+Both phase-13 and phase-14 design, resolution and Progress sections are
+retained after the documentation-only conflict resolution. Preparation line
+numbers below stay historical; final proofs use `238df16f4`.
 
 ≈ 830 lines into three files (sizes proved at step T, ≤ 500 each):
 
@@ -5136,6 +5139,53 @@ for Step 0 and Claude’s independent mutation sample.
   shared serial lock, `nice -n 19`, test-hook define and isolated parser
   packages. Production/history manifests remain PROVISIONAL. STOP.
 
+### 2026-10-15 — Phase 14 accepted-P13 rebase / final Step T
+
+- Follows rebased preparation `a91051cd2`; final original `238df16f4`, lib
+  tree `838731954da033b5f1aa6ee0200cc2fccdbf4b70`. Audited both
+  conflict-resolved documents: both phases,
+  resolutions and Progress retained in order; no duplicate paragraphs or
+  conflict markers. Tidied the stale rebase note and heading separation.
+- Regenerated FINAL materialization: **761 declarations (744 retained,
+  four patched, 13 moved), zero fields moved; 25 retained substitutions plus
+  three adapter rewrites = 28**. Hosts **9/27/37 names (9/31/37 declarations)**;
+  formatted destinations **137/381/457 lines**. All three adapter proofs use
+  P13 bodies, including display/sleep's `openPlayerMenuQuick`. Exact static
+  `readLocalResume` forwarding has independent eager/copy/guard/argument/
+  await/owner negatives; two independent stale-P13-menu negatives also reject.
+  Constructor assignments follow all four P13 collaborators. Full partition,
+  member order/import lists/frozen scaffolding and optional-comma/idempotence
+  proofs pass. All **29 history-derived earlier destinations** protected.
+- Input audit: all 13 moved bodies token-identical to preparation; five
+  retained callers changed. All **198** cases pass on the rebased original;
+  **56/56 files pass alone**. Refreshed **90 assertion-killed mutations**:
+  28 retained occurrences + four sample closures + 58 grouped witnesses for
+  every earlier case. Original 661-point matrix classifications remain valid;
+  no source-only guard is credited as a behavioral witness.
+- Reduced original baseline: **246 suites / 1,680 successes / one
+  pre-existing failure**; every expected suite loaded;
+  all **1,493 accepted Step-0b outcomes unchanged**. Expanded inventory adds
+  every current video-player suite and two previously omitted source readers.
+  Their separate preparation-original replay reproduces the existing raw-text
+  PiP startup-shield failure; this is recorded, not allowlisted or repaired.
+- All **43** manifest/history/seam checks pass: every Dart manifest
+  self-test, Kotlin self-test, P1–P13 `--at` (P13 `238df16f4`), S/S2/S2b/S2c/S2d.
+  Analyzer original root/strict/prototype **145/221/159** diagnostics: no errors
+  or new async-context identity; four moved infos retained; six preserved
+  facade directives become unused, and eight destination import infos arise.
+  P14 inventory preserves every P1–P13 mapping and original maximum.
+- Restart note: interrupted mechanical/suite logs are uncredited. Reused only
+  complete, input-matching evidence; reran the interrupted reduced baseline
+  from scratch. Flutter is serial with concurrency 1. Evidence-only persistent
+  parser transport has exact stock-adapter equality, invalid-input and repeated
+  request proofs; the complete Dart self-test used one VM for 372 requests
+  (3,184 cached source hits) and avoided 808 repeated immutable Git reads.
+  Each invocation retains an isolated copied parser package
+  with copied kernels deleted. Heavy jobs use `nice -n 19`.
+- Evidence: `refactor-evidence/vplayer/p14/rebase/` and `low_churn/` (commands,
+  source hashes, complete JSON runs, mutation receipts, analyzer identities,
+  parser routing and commit receipt). No application/dependency changes here.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
@@ -5305,6 +5355,7 @@ exactly two patched adapters (display, sleep); `_showTracksSheet` live
 inline protocol and profile capture inside service start; watch-history
 write moved to phase 15; three recording contracts in the checklist;
 milestone scenarios named; old map/rule 7 marked superseded.
+
 ## Phase 14 design review resolution (Codex `vp-design`, 2026-10-15) — "No P1s"
 
 P2s folded: zero field moves and the exact `readLocalResume` Host forwarder;
@@ -5313,4 +5364,5 @@ merge); provisional history until phase 13 merges; corrected save semantics
 and the save/profile matrix at real capture points; restore arbitration and
 stale-result matrix; landing timeouts via a bounded real-time driver or
 device-pending; five source-text guards retargeted. P3: 28-reference ledger,
-CI transition.
+CI transition. Final accepted-P13 proofs and measurements are recorded in
+Progress; the preparation line numbers and provisional checkpoint stay historical.

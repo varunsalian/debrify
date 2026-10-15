@@ -11393,3 +11393,40 @@ All Flutter runs use the shared serial lock, `nice -n 19`, `--no-pub` and
 `--dart-define=DEBRIFY_VP_TEST_HOOKS=true`; manifest readers use isolated parser
 packages. No source-only failure, runtime-only failure or interrupted run is
 credited. No production move, bug fix, allowlist or dependency change.
+
+## Phase 14 accepted-P13 rebase — FINAL boundary (2026-10-15)
+
+Final original **238df16f4**, lib tree
+`838731954da033b5f1aa6ee0200cc2fccdbf4b70`. Preparation's
+13 moved method bodies are token-identical; changed retained callers are
+`_initializePlayer`, `dispose`, `build`, display and sleep adapters. Existing
+shared support is unchanged (P13 adds four support files). The final manifest
+classifies all **761 declarations: 744 retained, four patched, 13 moved**;
+zero field moves. Constructor and three adapter patches preserve P13's menu
+rewrites. Every one of the **29 earlier destinations** is history-derived and
+protected; P1–P13 historical comparisons and all seams pass without relaxation.
+
+| Proof | Final outcome / evidence under `p14/rebase/` |
+|---|---|
+| Frozen destinations and Hosts | keys **137 lines / 9 names**, restore **381 / 27 names, 31 declarations**, save **457 / 37 names**; exact forwarders and scaffolding, no facade back-import. `prototype/hosts.json`, `frozen/`, `optional-commas.json`. |
+| Static boundary / P13 patches | Six independent exact-forwarder negatives; two independent stale menu-projection negatives; all 16 real-config negatives reject. |
+| Positive original parity | **198 cases / 56 files**, each file passes alone; exact final input hashes. `characterization-proof.json`. |
+| Retained occurrence mutation refresh | **28/28 assertion kills** at P13 input positions, plus q11/q13/q18/q22: **32/32**. `mutation-refresh-results.json`. |
+| Per-case witness refresh | **58/58 assertion kills**, covering all 194 prior cases; four sample cases covered above. `case-witness-refresh-results.json`, `refreshed-case-witnesses.json`. |
+| Systematic matrix | Original **661 AST points / 28 references** preserved; **412 killed, 19 equivalent, 33 device-pending, 136 invalid deletion candidates, 61 null components**. All 28 references re-killed; no source-only witness credit. |
+| Reduced baseline | **246 suites / 1,680 successes / 1 pre-existing failure**, every suite loaded, all previous **1,493 outcomes unchanged**. `rebased-baseline-proof.json`. |
+| Analyzer | original root **145**, strict **221**, final formatted probe **159**, no errors/new async-context identity; P1–P13 mappings preserved. Four original moved infos retained. |
+
+The expanded inventory includes two readers missing from the preparation gate.
+Their independent replay on **1d7699d2e application code** records seven passes
+and the already-existing `startup shield remains opaque and noninteractive in
+PiP` raw-text guard failure. No accepted outcome changed; no allowlist or fix.
+The three sample source-text guards remain structural evidence only.
+
+The OS restart interrupted the first expanded suite and some mechanical runs;
+those logs are retained as interrupted and uncredited. The fresh baseline and
+missing checks run serially, Flutter concurrency 1. An evidence-only persistent
+Dart transport preserves the adapter's complete output exactly (including
+binding/ownership, Unicode offsets, invalid then valid inputs and A→B→A), while
+isolating every parser package and deleting copied kernels. No production
+parser/comparison rule is changed. Evidence in `p14/low_churn/`.

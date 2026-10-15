@@ -166,6 +166,8 @@ def run(package):
     identify_tests(package)
     from test_dart_menu_recording_moves import run as menu_recording_tests
     menu_recording_tests(package)
+    from test_dart_resume_moves import run as resume_tests
+    resume_tests(package)
     sleep_tests(package)
     skip_tests(package)
     display_tests(package)

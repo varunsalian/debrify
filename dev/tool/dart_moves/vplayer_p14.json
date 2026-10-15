@@ -2,8 +2,8 @@
   "schema": 1,
   "series": "vplayer",
   "phase": 14,
-  "status": "PROVISIONAL",
-  "base": "1d7699d2e",
+  "status": "FINAL",
+  "base": "238df16f4",
   "source": "lib/screens/video_player_screen.dart",
   "feature": "lib/features/video_player",
   "split_containers": [
@@ -193,6 +193,10 @@
     "import '../features/video_player/presentation/legacy_video_player/vp_addon_subtitles.dart';",
     "import '../features/video_player/presentation/legacy_video_player/vp_identify_title.dart';",
     "import '../features/video_player/presentation/legacy_video_player/vp_identify_title_ui.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_player_menu_ui.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_player_menu.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_iptv_recording.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_iptv_recording_resources.dart';",
     "import '../features/video_player/presentation/legacy_video_player/vp_resume_keys.dart';",
     "import '../features/video_player/presentation/legacy_video_player/vp_resume_restore.dart';",
     "import '../features/video_player/presentation/legacy_video_player/vp_resume_save.dart';"
@@ -384,7 +388,11 @@
       "@directive:182",
       "@directive:183",
       "@directive:184",
-      "@directive:185"
+      "@directive:185",
+      "@directive:186",
+      "@directive:187",
+      "@directive:188",
+      "@directive:189"
     ],
     "": [
       "VideoPlayerScreen",
@@ -392,6 +400,10 @@
       "_VpResumeSaveHostAdapter",
       "_VpResumeRestoreHostAdapter",
       "_VpResumeKeysHostAdapter",
+      "_VpIptvRecordingResourcesHostAdapter",
+      "_VpIptvRecordingHostAdapter",
+      "_VpPlayerMenuHostAdapter",
+      "_VpPlayerMenuUiHostAdapter",
       "_VpIdentifyTitleUiHostAdapter",
       "_VpIdentifyTitleHostAdapter",
       "_VpAddonSubtitlesHostAdapter",
@@ -555,7 +567,6 @@
       "_VideoPlayerScreenState._pausedByLifecycle",
       "_VideoPlayerScreenState._engineTaskId",
       "_VideoPlayerScreenState._engineFlagOn",
-      "_VideoPlayerScreenState._engineRefreshTicket",
       "_VideoPlayerScreenState._recordLogSub",
       "_VideoPlayerScreenState._subtitleDiagnosticLogSub",
       "_VideoPlayerScreenState._subtitleDiagnosticGeneration",
@@ -563,7 +574,6 @@
       "_VideoPlayerScreenState._subtitleSelectionCorrection",
       "_VideoPlayerScreenState._desktopRecordingRevisionListener",
       "_VideoPlayerScreenState._recordingStartGen",
-      "_VideoPlayerScreenState._canRecord",
       "_VideoPlayerScreenState._iptvGuideContextGeneration",
       "_VideoPlayerScreenState._persistIptvGuideContext",
       "_VideoPlayerScreenState._anchorIptvGuideCategory",
@@ -633,6 +643,10 @@
       "_VideoPlayerScreenState._addonSubtitles",
       "_VideoPlayerScreenState._identify",
       "_VideoPlayerScreenState._identifyUi",
+      "_VideoPlayerScreenState._menuUi",
+      "_VideoPlayerScreenState._menu",
+      "_VideoPlayerScreenState._recording",
+      "_VideoPlayerScreenState._recordingResources",
       "_VideoPlayerScreenState._resumeKeys",
       "_VideoPlayerScreenState._resumeRestore",
       "_VideoPlayerScreenState._resumeSave",
@@ -843,20 +857,6 @@
       "_VideoPlayerScreenState._captureIptvAudioLanguage",
       "_VideoPlayerScreenState._applyIptvAudioPreference",
       "_VideoPlayerScreenState._recordIptvWatchForChannel",
-      "_VideoPlayerScreenState._desktopCaptureForCurrent",
-      "_VideoPlayerScreenState._toggleRecording",
-      "_VideoPlayerScreenState._playingLiveUrl",
-      "_VideoPlayerScreenState._engineRecordUrlForCurrent",
-      "_VideoPlayerScreenState._refreshEngineRecordingState",
-      "_VideoPlayerScreenState._recordingFileName",
-      "_VideoPlayerScreenState._currentRecordingResource",
-      "_VideoPlayerScreenState._tapMpvLogsForRecording",
-      "_VideoPlayerScreenState._untapMpvLogs",
-      "_VideoPlayerScreenState._startRecording",
-      "_VideoPlayerScreenState._disarmStrayRecording",
-      "_VideoPlayerScreenState._stopRecording",
-      "_VideoPlayerScreenState._publishRecording",
-      "_VideoPlayerScreenState._recordingTargetPath",
       "_VideoPlayerScreenState._switchToIptvChannel",
       "_VideoPlayerScreenState._tryOpenLiveStream",
       "_VideoPlayerScreenState._openStartupDebridDirect",
@@ -937,7 +937,6 @@
       "_VideoPlayerScreenState._buildCustomAspectRatioVideo",
       "_VideoPlayerScreenState._buildTransitionOverlay",
       "_VideoPlayerScreenState._buildStremioTvNextLoadingOverlay",
-      "_VideoPlayerScreenState._recordingActiveNow",
       "_VideoPlayerScreenState._debrifyTvOwnsIdentity",
       "_VideoPlayerScreenState._buildDebrifyTvInfoPanel",
       "_VideoPlayerScreenState._syncPlaybackClockVisibility",
@@ -960,19 +959,6 @@
       "_VideoPlayerScreenState.build",
       "_VideoPlayerScreenState._isAnyOverlayOpen",
       "_VideoPlayerScreenState._wakeControlsOnPointer",
-      "_VideoPlayerScreenState._showTracksSheet",
-      "_VideoPlayerScreenState._openPlayerMenuAt",
-      "_VideoPlayerScreenState._openPlayerMenuQuick",
-      "_VideoPlayerScreenState._hidePlayerMenu",
-      "_VideoPlayerScreenState._menuApplyTrackChange",
-      "_VideoPlayerScreenState._audioTrackChoiceChanged",
-      "_VideoPlayerScreenState._menuSelectAudio",
-      "_VideoPlayerScreenState._withManualSubtitleChoice",
-      "_VideoPlayerScreenState._menuSubtitlesOff",
-      "_VideoPlayerScreenState._menuSelectEmbeddedSubtitle",
-      "_VideoPlayerScreenState._menuSelectAddonSubtitle",
-      "_VideoPlayerScreenState._applyStremioSubtitleFromTracksSheet",
-      "_VideoPlayerScreenState._buildPlayerMenuPanel",
       "_VideoPlayerScreenState._resetSubtitleState",
       "_VideoPlayerScreenState._findSeriesEpisodeForCurrentIndex"
     ]
@@ -1196,7 +1182,7 @@
   },
   "scaffolding": {
     "lib/screens/video_player_screen.dart": {
-      "@directive:183": [
+      "@directive:187": [
         "import",
         "'../features/video_player/presentation/legacy_video_player/vp_resume_keys.dart'",
         ";"
@@ -1332,7 +1318,7 @@
         ";",
         "}"
       ],
-      "@directive:184": [
+      "@directive:188": [
         "import",
         "'../features/video_player/presentation/legacy_video_player/vp_resume_restore.dart'",
         ";"
@@ -1867,7 +1853,7 @@
         ";",
         "}"
       ],
-      "@directive:185": [
+      "@directive:189": [
         "import",
         "'../features/video_player/presentation/legacy_video_player/vp_resume_save.dart'",
         ";"
@@ -3820,6 +3806,22 @@
       "fate": "retained"
     },
     {
+      "original": "@directive:183",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:184",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:185",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:186",
+      "fate": "retained"
+    },
+    {
       "original": "VideoPlayerScreen",
       "fate": "retained"
     },
@@ -3830,7 +3832,7 @@
     {
       "original": "_VideoPlayerScreenState._VideoPlayerScreenState",
       "fate": "patched",
-      "reason": "PROVISIONAL inert assignments after P12; regenerate after P13 assignments.",
+      "reason": "P14 inert assignments after all four accepted P13 collaborators.",
       "test": "dev/tool/test_dart_resume_moves.py",
       "patches": [
         {
@@ -4449,10 +4451,6 @@
       "fate": "retained"
     },
     {
-      "original": "_VideoPlayerScreenState._engineRefreshTicket",
-      "fate": "retained"
-    },
-    {
       "original": "_VideoPlayerScreenState._recordLogSub",
       "fate": "retained"
     },
@@ -4478,10 +4476,6 @@
     },
     {
       "original": "_VideoPlayerScreenState._recordingStartGen",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._canRecord",
       "fate": "retained"
     },
     {
@@ -4758,6 +4752,22 @@
     },
     {
       "original": "_VideoPlayerScreenState._identifyUi",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._menuUi",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._menu",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._recording",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._recordingResources",
       "fate": "retained"
     },
     {
@@ -5695,62 +5705,6 @@
     },
     {
       "original": "_VideoPlayerScreenState._recordIptvWatchForChannel",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._desktopCaptureForCurrent",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._toggleRecording",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._playingLiveUrl",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._engineRecordUrlForCurrent",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._refreshEngineRecordingState",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._recordingFileName",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._currentRecordingResource",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._tapMpvLogsForRecording",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._untapMpvLogs",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._startRecording",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._disarmStrayRecording",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._stopRecording",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._publishRecording",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._recordingTargetPath",
       "fate": "retained"
     },
     {
@@ -7776,10 +7730,6 @@
       "fate": "retained"
     },
     {
-      "original": "_VideoPlayerScreenState._recordingActiveNow",
-      "fate": "retained"
-    },
-    {
       "original": "_VideoPlayerScreenState._debrifyTvOwnsIdentity",
       "fate": "retained"
     },
@@ -7881,58 +7831,6 @@
       "fate": "retained"
     },
     {
-      "original": "_VideoPlayerScreenState._showTracksSheet",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._openPlayerMenuAt",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._openPlayerMenuQuick",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._hidePlayerMenu",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._menuApplyTrackChange",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._audioTrackChoiceChanged",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._menuSelectAudio",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._withManualSubtitleChoice",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._menuSubtitlesOff",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._menuSelectEmbeddedSubtitle",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._menuSelectAddonSubtitle",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._applyStremioSubtitleFromTracksSheet",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._buildPlayerMenuPanel",
-      "fate": "retained"
-    },
-    {
       "original": "_VideoPlayerScreenState._resetSubtitleState",
       "fate": "retained"
     },
@@ -7946,6 +7844,22 @@
     },
     {
       "original": "_VideoPlayerScreenState:close",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpIptvRecordingResourcesHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpIptvRecordingHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpPlayerMenuHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpPlayerMenuUiHostAdapter",
       "fate": "retained"
     },
     {
@@ -7983,7 +7897,7 @@
     {
       "original": "_VpLocalCompletionHostAdapter",
       "fate": "patched",
-      "reason": "PROVISIONAL P14 receiver rewrite; regenerate preserving P13 openPlayerMenuQuick rewrites on accepted P13 base.",
+      "reason": "P14 receiver rewrite; preserves the accepted P13 openPlayerMenuQuick rewrites.",
       "test": "dev/tool/test_dart_resume_moves.py",
       "patches": [
         {
@@ -8014,7 +7928,7 @@
     {
       "original": "_VpDisplayModeHostAdapter",
       "fate": "patched",
-      "reason": "PROVISIONAL P14 receiver rewrite; regenerate preserving P13 openPlayerMenuQuick rewrites on accepted P13 base.",
+      "reason": "P14 receiver rewrite; preserves the accepted P13 openPlayerMenuQuick rewrites.",
       "test": "dev/tool/test_dart_resume_moves.py",
       "patches": [
         {
@@ -8037,7 +7951,7 @@
     {
       "original": "_VpSleepTimerHostAdapter",
       "fate": "patched",
-      "reason": "PROVISIONAL P14 receiver rewrite; regenerate preserving P13 openPlayerMenuQuick rewrites on accepted P13 base.",
+      "reason": "P14 receiver rewrite; preserves the accepted P13 openPlayerMenuQuick rewrites.",
       "test": "dev/tool/test_dart_resume_moves.py",
       "patches": [
         {
@@ -8253,6 +8167,10 @@
     "@directive:183",
     "@directive:184",
     "@directive:185",
+    "@directive:186",
+    "@directive:187",
+    "@directive:188",
+    "@directive:189",
     "VideoPlayerScreen",
     "_VideoPlayerScreenState:header",
     "_VideoPlayerScreenState._VideoPlayerScreenState",
@@ -8399,7 +8317,6 @@
     "_VideoPlayerScreenState._pausedByLifecycle",
     "_VideoPlayerScreenState._engineTaskId",
     "_VideoPlayerScreenState._engineFlagOn",
-    "_VideoPlayerScreenState._engineRefreshTicket",
     "_VideoPlayerScreenState._recordLogSub",
     "_VideoPlayerScreenState._subtitleDiagnosticLogSub",
     "_VideoPlayerScreenState._subtitleDiagnosticGeneration",
@@ -8407,7 +8324,6 @@
     "_VideoPlayerScreenState._subtitleSelectionCorrection",
     "_VideoPlayerScreenState._desktopRecordingRevisionListener",
     "_VideoPlayerScreenState._recordingStartGen",
-    "_VideoPlayerScreenState._canRecord",
     "_VideoPlayerScreenState._iptvGuideContextGeneration",
     "_VideoPlayerScreenState._persistIptvGuideContext",
     "_VideoPlayerScreenState._anchorIptvGuideCategory",
@@ -8477,6 +8393,10 @@
     "_VideoPlayerScreenState._addonSubtitles",
     "_VideoPlayerScreenState._identify",
     "_VideoPlayerScreenState._identifyUi",
+    "_VideoPlayerScreenState._menuUi",
+    "_VideoPlayerScreenState._menu",
+    "_VideoPlayerScreenState._recording",
+    "_VideoPlayerScreenState._recordingResources",
     "_VideoPlayerScreenState._resumeKeys",
     "_VideoPlayerScreenState._resumeRestore",
     "_VideoPlayerScreenState._resumeSave",
@@ -8687,20 +8607,6 @@
     "_VideoPlayerScreenState._captureIptvAudioLanguage",
     "_VideoPlayerScreenState._applyIptvAudioPreference",
     "_VideoPlayerScreenState._recordIptvWatchForChannel",
-    "_VideoPlayerScreenState._desktopCaptureForCurrent",
-    "_VideoPlayerScreenState._toggleRecording",
-    "_VideoPlayerScreenState._playingLiveUrl",
-    "_VideoPlayerScreenState._engineRecordUrlForCurrent",
-    "_VideoPlayerScreenState._refreshEngineRecordingState",
-    "_VideoPlayerScreenState._recordingFileName",
-    "_VideoPlayerScreenState._currentRecordingResource",
-    "_VideoPlayerScreenState._tapMpvLogsForRecording",
-    "_VideoPlayerScreenState._untapMpvLogs",
-    "_VideoPlayerScreenState._startRecording",
-    "_VideoPlayerScreenState._disarmStrayRecording",
-    "_VideoPlayerScreenState._stopRecording",
-    "_VideoPlayerScreenState._publishRecording",
-    "_VideoPlayerScreenState._recordingTargetPath",
     "_VideoPlayerScreenState._switchToIptvChannel",
     "_VideoPlayerScreenState._tryOpenLiveStream",
     "_VideoPlayerScreenState._openStartupDebridDirect",
@@ -8781,7 +8687,6 @@
     "_VideoPlayerScreenState._buildCustomAspectRatioVideo",
     "_VideoPlayerScreenState._buildTransitionOverlay",
     "_VideoPlayerScreenState._buildStremioTvNextLoadingOverlay",
-    "_VideoPlayerScreenState._recordingActiveNow",
     "_VideoPlayerScreenState._debrifyTvOwnsIdentity",
     "_VideoPlayerScreenState._buildDebrifyTvInfoPanel",
     "_VideoPlayerScreenState._syncPlaybackClockVisibility",
@@ -8804,19 +8709,6 @@
     "_VideoPlayerScreenState.build",
     "_VideoPlayerScreenState._isAnyOverlayOpen",
     "_VideoPlayerScreenState._wakeControlsOnPointer",
-    "_VideoPlayerScreenState._showTracksSheet",
-    "_VideoPlayerScreenState._openPlayerMenuAt",
-    "_VideoPlayerScreenState._openPlayerMenuQuick",
-    "_VideoPlayerScreenState._hidePlayerMenu",
-    "_VideoPlayerScreenState._menuApplyTrackChange",
-    "_VideoPlayerScreenState._audioTrackChoiceChanged",
-    "_VideoPlayerScreenState._menuSelectAudio",
-    "_VideoPlayerScreenState._withManualSubtitleChoice",
-    "_VideoPlayerScreenState._menuSubtitlesOff",
-    "_VideoPlayerScreenState._menuSelectEmbeddedSubtitle",
-    "_VideoPlayerScreenState._menuSelectAddonSubtitle",
-    "_VideoPlayerScreenState._applyStremioSubtitleFromTracksSheet",
-    "_VideoPlayerScreenState._buildPlayerMenuPanel",
     "_VideoPlayerScreenState._resetSubtitleState",
     "_VideoPlayerScreenState._findSeriesEpisodeForCurrentIndex",
     "_VideoPlayerScreenState:tail",
@@ -8824,6 +8716,10 @@
     "_VpResumeSaveHostAdapter",
     "_VpResumeRestoreHostAdapter",
     "_VpResumeKeysHostAdapter",
+    "_VpIptvRecordingResourcesHostAdapter",
+    "_VpIptvRecordingHostAdapter",
+    "_VpPlayerMenuHostAdapter",
+    "_VpPlayerMenuUiHostAdapter",
     "_VpIdentifyTitleUiHostAdapter",
     "_VpIdentifyTitleHostAdapter",
     "_VpAddonSubtitlesHostAdapter",
@@ -8848,10 +8744,11 @@
     "_VpDisplayModeHostAdapter",
     "_VpSleepTimerHostAdapter"
   ],
-  "provisional": {
-    "label": "PROVISIONAL \u2014 no P13 history claim",
+  "finalization": {
+    "label": "FINAL evidence-only materialization",
+    "accepted_p13_base": "238df16f4",
     "preparation_base": "1d7699d2e",
-    "required_regeneration": "After accepted P13 merge: all facade/import/order/adapter proofs, frozen construction after P13, analyzer and mutation inputs; P13 manifest/history and S2d proof. No dummy manifest or history relaxation."
+    "history": "All thirteen applied historical manifests; earlier destinations derived without a whitelist."
   },
   "guards": {
     "occurrence_field_bindings": {

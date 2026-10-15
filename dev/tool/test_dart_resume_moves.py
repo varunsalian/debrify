@@ -1,4 +1,4 @@
-"""PROVISIONAL P14 real-manifest tests; deliberately makes no history claim."""
+"""Final P14 real-manifest tests, including accepted P13 adapter preservation."""
 import argparse
 import json
 from pathlib import Path
@@ -12,7 +12,8 @@ import re
 
 def run(package):
     spec = json.loads((d.ROOT / 'dev/tool/dart_moves/vplayer_p14.json').read_text())
-    assert spec['status'] == 'PROVISIONAL'
+    assert spec['status'] in {'FINAL', 'applied'}
+    assert spec['base'] == '238df16f4'
     original = git_text(spec['base'], spec['source'])
     sources = materialize(spec, original, package)
     assert not d.check(spec, original, sources, package)
@@ -20,6 +21,9 @@ def run(package):
     assert sum(e['count'] for r in spec['declarations'] if r['fate'] == 'retained'
                for e in r.get('substitutions', [])) == 25
     assert len(spec['patched_class_projection']) == 3
+    from dart_move_history import earlier_sources, check_earlier
+    assert len(earlier_sources(spec)) == 29
+    assert not check_earlier(spec, package)
     for adapter in spec['patched_class_projection']:
         row = next(r for r in spec['declarations'] if r['original'] == adapter)
         assert row['fate'] == 'patched' and len(row['patches']) == 1
@@ -57,7 +61,20 @@ def run(package):
         errors = d.check(spec, original, changed, package)
         assert errors, label
         print('P14 ' + label + ': rejected')
-    print('PASS PROVISIONAL: 13 moves, 28 reference rewrites incl. three adapters; history BLOCKED')
+    # Each adapter carries its own accepted P13 menu projection alongside the
+    # one P14 save rewrite. A good display adapter cannot mask a stale sleep one.
+    for adapter in ['_VpDisplayModeHostAdapter', '_VpSleepTimerHostAdapter']:
+        start = sources[facade].index('class ' + adapter)
+        end = sources[facade].index('\n}', start) + 2
+        body = sources[facade][start:end]
+        pattern = r'\s*'.join(re.escape(t) for t in snippet_tokens(
+            '_s._menu.openPlayerMenuQuick(section)'))
+        assert len(list(re.finditer(pattern, body))) == 1, adapter
+        stale = re.sub(pattern, '_s._openPlayerMenuQuick(section)', body)
+        changed = dict(sources, **{facade: sources[facade][:start] + stale + sources[facade][end:]})
+        assert d.check(spec, original, changed, package), adapter
+        print('P14 accepted P13 menu projection in ' + adapter + ': stale body rejected')
+    print('PASS FINAL: 13 moves, 28 reference rewrites incl. three adapters; accepted P13 base')
 
 
 if __name__ == '__main__':

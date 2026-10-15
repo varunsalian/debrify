@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Evidence-only PROVISIONAL P14 split; history must be regenerated after P13."""
+"""Evidence-only FINAL P14 split on the accepted P13 merge; no production write."""
 import argparse,json,subprocess,re
 from pathlib import Path
 from check_verbatim_moves import ROOT as R,ensure_parser_package,parse
@@ -8,7 +8,7 @@ from check_dart_moves import retained_manifest,check
 from dart_move_partition import partition,frozen
 from dart_move_history import git_text
 from dart_move_fixture import edited_text
-SOURCE='lib/screens/video_player_screen.dart';FEATURE='lib/features/video_player';STATE='_VideoPlayerScreenState';BASE='1d7699d2e'
+SOURCE='lib/screens/video_player_screen.dart';FEATURE='lib/features/video_player';STATE='_VideoPlayerScreenState';BASE='238df16f4'
 GROUPS=[dict(name='VpResumeKeys',receiver='_resumeKeys',file='vp_resume_keys.dart',names=['_resumeKey','_torboxResumeKeyForEntry','_pikpakResumeKeyForEntry','_resumeIdForEntry']),dict(name='VpResumeRestore',receiver='_resumeRestore',file='vp_resume_restore.dart',names=['_maybeRestoreResume','_seekForResume','_verifyResumeLanding','_resumeSeekLanded']),dict(name='VpResumeSave',receiver='_resumeSave',file='vp_resume_save.dart',names=['_getEnhancedPlaybackState','_resumeSaveBlocked','_observeServerWatch','_saveResume','_saveResumeLocked'])]
 TYPES={'_activePlaylist':'List<PlaylistEntry>?','_currentIndex':'int','_currentIptvIndex':'int','_effectiveContentEpisode':'int?','_effectiveContentImdbId':'String?','_effectiveContentSeason':'int?','_effectiveIptvChannels':'List<IptvChannel>?','_allowResumeForManualSelection':'bool','_duration':'Duration','_isAutoAdvancing':'bool','_isManualEpisodeSelection':'bool','_player':'mk.Player','_resumeVerifyEpoch':'int','_resumeWriteGuard':'ResumeWriteGuard','_screenDisposed':'bool','_currentIptvChannel':'IptvChannel?','_currentStreamUrl':'String?','_currentStremioTvContentTitle':'String?','_effectiveContentTitle':'String?','_effectiveContentType':'String?','_iptvGuideContextOverride':'IptvGuideContext?','_isPlaying':'bool','_isReady':'bool','_isTransitioning':'bool','_openedWatchSource':'Torrent?','_position':'Duration','_resumeSaveLock':'Lock','_seriesPlaylist':'SeriesPlaylist?','_serverWatch':'MediaServerWatchController','_validationGateActive':'bool'}
 ACTIONS={'_waitForDuration':('Future<void> waitForDuration()','()'),'_traktSeasonEpisode':('({int? season, int? episode}) traktSeasonEpisode()','()'),'_getEnhancedPlaybackState':('Future<Map<String, dynamic>?> getEnhancedPlaybackState()','()'),'_resumeIdForEntry':('String resumeIdForEntry(PlaylistEntry entry)','(entry)'), '_resumeKey':('String get resumeKey','')}
@@ -96,7 +96,7 @@ def build(package):
     if write:g['forwarders'].append('set '+name+'('+c['type']+' v) => '+target+' = v;')
    else:g['forwarders'].append(c['signature']+' => '+target+c['args']+';')
   names=[(re.search(r'\b(?:get|set)\s+(\w+)',f.split(' => ')[0]) or re.search(r'(\w+)\s*\(',f.split(' => ')[0])).group(1) for f in g['forwarders']];expected={'VpResumeKeys':(9,9),'VpResumeRestore':(27,31),'VpResumeSave':(37,37)}[g['name']];assert (len(set(names)),len(names))==expected,(g['name'],names,expected)
- spec.update(phase=14,status='PROVISIONAL',span_order=list(spans),patched_class_projection=PATCHED,provisional=dict(label='PROVISIONAL — no P13 history claim',preparation_base=BASE,required_regeneration='After accepted P13 merge: all facade/import/order/adapter proofs, frozen construction after P13, analyzer and mutation inputs; P13 manifest/history and S2d proof. No dummy manifest or history relaxation.'))
+ spec.update(phase=14,status='FINAL',span_order=list(spans),patched_class_projection=PATCHED,finalization=dict(label='FINAL evidence-only materialization',accepted_p13_base=BASE,preparation_base='1d7699d2e',history='All thirteen applied historical manifests; earlier destinations derived without a whitelist.'))
  registrations=[dict(before=['widget','.',n],after=['_host','.',n],binding='unbound',role_change='live widget selector') for n in WIDGET]+[dict(before=c['before'],after=['_host','.',c['name']],binding='unbound',role_change='Complete live chain or static readLocalResume to exact facade Host projection') for c in CHAINS]
  spec['guards']=dict(occurrence_field_bindings=dict(owners=[STATE],state_classes=[STATE],mandatory_qualification=True,owner_scoped_bare_fields={}),record_owners=[STATE],record_fields={STATE:[]},receiver_owners={g['receiver']:g['name'] for g in GROUPS},receiver_paths={g['receiver']:g['name'] for g in GROUPS},receiver_members={g['name']:[n[1:] for n in g['names']] for g in GROUPS},receivers=['_host',*[g['receiver'] for g in GROUPS]],live_state_receivers=['_host'],require_live_state_callbacks=True,host_property_bindings=hostbindings,registered_occurrence_substitutions=registrations)
  for row in spec['declarations']:
@@ -110,13 +110,13 @@ def build(package):
     indices=occurrences(vals,before)
     if indices:edits.append(dict(before=before,after=after,count=len(indices)))
   if key in PATCHED:
-   assert len(edits)==1 and edits[0]['count']==1,(key,edits);row.update(fate='patched',reason='PROVISIONAL P14 receiver rewrite; regenerate preserving P13 openPlayerMenuQuick rewrites on accepted P13 base.',test='dev/tool/test_dart_resume_moves.py',patches=edits);edits=[]
+   assert len(edits)==1 and edits[0]['count']==1,(key,edits);row.update(fate='patched',reason='P14 receiver rewrite; preserves the accepted P13 openPlayerMenuQuick rewrites.',test='dev/tool/test_dart_resume_moves.py',patches=edits);edits=[]
   if edits:row['substitutions']=sorted(edits,key=lambda e:json.dumps(e['before']));measured.append(dict(declaration=key,fate=row['fate'],edits=edits))
   if key==STATE+'.'+STATE:
    append=[]
    for g2 in GROUPS:append += [g2['receiver'],'=',g2['name'],'(','_'+g2['name']+'HostAdapter','(','this',')',')',';']
-   row.update(fate='patched',reason='PROVISIONAL inert assignments after P12; regenerate after P13 assignments.',test='dev/tool/test_dart_resume_moves.py',patches=[dict(before=[';','}'],after=[';',*append,'}'],count=1)])
- retained={r['original'] for r in spec['declarations'] if r['fate']!='moved'};spec['span_order']=[k for k in spans if k in retained];scaff={};previous=STATE+'._identifyUi'
+   row.update(fate='patched',reason='P14 inert assignments after all four accepted P13 collaborators.',test='dev/tool/test_dart_resume_moves.py',patches=[dict(before=[';','}'],after=[';',*append,'}'],count=1)])
+ retained={r['original'] for r in spec['declarations'] if r['fate']!='moved'};spec['span_order']=[k for k in spans if k in retained];scaff={};previous=STATE+'._recordingResources'
  for i,g in enumerate(GROUPS):
   host=g['name']+'Host';adapter='_'+host+'Adapter';key=STATE+'.'+g['receiver'];scaff['@directive:'+str(len(u['directives'])+i)]="import '../"+g['dest'][4:]+"';";scaff[key]='late final '+g['name']+' '+g['receiver']+';';scaff[adapter]='class '+adapter+' implements '+host+' {\n  '+adapter+'(this._s);\n  final _VideoPlayerScreenState _s;\n'+''.join('  @override\n  '+f+'\n' for f in g['forwarders'])+'}\n';at=spec['span_order'].index(previous)+1;spec['span_order'].insert(at,key);previous=key
  for key in scaff:
@@ -137,5 +137,5 @@ def main():
   out=a.probe/path;out.parent.mkdir(parents=True,exist_ok=True);out.write_text(text);subprocess.run(['nice','-n','19','dart','format',str(out)],check=True,stdout=subprocess.DEVNULL)
  formatted={path:(a.probe/path).read_text() for path in sources};errors=check(spec,original,formatted,a.parser_package);assert not errors,errors
  sizes={g['name']:len(formatted[g['dest']].splitlines()) for g in GROUPS};assert all(v<=500 for v in sizes.values()),sizes
- (R/'dev/tool/dart_moves/vplayer_p14.json').write_text(json.dumps(spec,indent=2)+'\n');(a.probe/'membership.json').write_text(json.dumps(measured,indent=2)+'\n');(a.probe/'hosts.json').write_text(json.dumps({g['name']:g['forwarders'] for g in GROUPS},indent=2)+'\n');(a.probe/'result.json').write_text(json.dumps(dict(label='PROVISIONAL',comparison_errors=errors,sizes=sizes,history='BLOCKED until accepted P13; no check_earlier claim',patched_adapters=PATCHED),indent=2)+'\n');print('PROVISIONAL zero comparison differences',sizes,'NO history claim')
+ (R/'dev/tool/dart_moves/vplayer_p14.json').write_text(json.dumps(spec,indent=2)+'\n');(a.probe/'membership.json').write_text(json.dumps(measured,indent=2)+'\n');(a.probe/'hosts.json').write_text(json.dumps({g['name']:g['forwarders'] for g in GROUPS},indent=2)+'\n');(a.probe/'result.json').write_text(json.dumps(dict(label='FINAL',comparison_errors=errors,sizes=sizes,history='Accepted P13 base; history protection checked separately',patched_adapters=PATCHED),indent=2)+'\n');print('FINAL zero comparison differences',sizes,'accepted P13 base',BASE)
 if __name__=='__main__':main()
