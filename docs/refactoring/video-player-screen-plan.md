@@ -4769,6 +4769,38 @@ for Step 0 and Claude’s independent mutation sample.
 - **Next.** Proceed to the authorized frozen Step-1 moves, then the clean-tree
   reduced gate. No full suite/build/device work; M3 remains after Phase 16.
 
+### 2026-10-15 — Phase 13 Step 1 frozen production moves
+
+- **Revision/boundary.** Follows Step-0b `33dcebe38`; original application is
+  reviewed S2d `1099a0039`. Applied all 30 frozen moves (29 methods/getters and
+  the inert refresh-ticket field) to menu UI/controller and recording
+  actions/resources: **377 / 332 / 463 / 209** formatted lines. All menu
+  snapshots and the frozen recording fields stay State-owned. Live widget
+  selectors, lexical context, cache-key snapshot, facade Host routing and
+  disposal's inline protocol remain intact. The State constructor appends four
+  inert collaborators after P12; exactly one rewrite in each of the two
+  declared display/sleep adapters. All 27 retained runtime references accounted
+  for; all 25 earlier destinations unchanged.
+- **Mechanical/CI.** Fresh isolated-parser materialization equals Step T
+  byte-for-byte; applied P13 checker PASS with zero differences. CI current/self
+  and both analyzer inputs select P13; P1–P12 histories retain their named
+  revisions, including P12 `1d7699d2e`. All four destinations are in the theme
+  manifest/rendered set and all three guard lists. The Step-0b behaviour list
+  already registers every new suite. Facade ratchet **15,331 → 14,630**;
+  remaining oversized-facade responsibilities exit in phases 14–21.
+- **Proof/checks.** S/S2/S2b/S2c/S2d PASS on live owners; S2d follows the moved
+  toggle through the validated ledger and checks exact Host defaults, preserving
+  every old negative plus four new projection negatives. Hook/installer and seam
+  ledgers unchanged. CI formatting (2,518 files), shared analyzer allowlist,
+  P13 comparator (**145 scoped diagnostics / zero additions**), size,
+  architecture/negatives and diff PASS. Five probe-known unused facade imports
+  are recorded verbatim; the frozen diagnostic inventory retains the four
+  original toggle infos. Focused **197 tests / 38 suites PASS** on the
+  moved production code, including all 178 new cases and the updated guards.
+- **Next.** Clean-tree reduced gate follows this commit. Full Flutter suite,
+  builds and devices remain deferred to their revised milestones. No bug fix,
+  dependency change, push, merge, branch switch or later-phase work.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

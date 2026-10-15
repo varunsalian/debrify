@@ -55,6 +55,14 @@ void main() {
         contains('S2c _setSubtitleTrackWithDiagnostics: $negative'),
       );
     }
+    for (final negative in [
+      'bypassed override',
+      'wrong default',
+      'duplicate predicate',
+      'wrong support field',
+    ]) {
+      expect(result.stdout, contains('S2d Host projection: $negative'));
+    }
     for (final site in ['initState', '_toggleRecording']) {
       for (final negative in [
         'wrong predicate',

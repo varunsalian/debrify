@@ -135,6 +135,17 @@ def subtitle_projection_errors(members):
             for name, body in expected.items() if members.get(name) != body]
 
 
+def recording_projection_errors(members):
+    """Check relocated S2d defaults independently of ownership normalization."""
+    expected = {
+        'isIOS': ['@', 'override', 'bool', 'get', 'isIOS', '=>', HOOK, '.', 'isIOS', ';'],
+        'recordingSupported': ['@', 'override', 'bool', 'get', 'recordingSupported',
+                               '=>', '_s', '.', '_recordingSupported', ';'],
+    }
+    return ['S2d live Host projection changed: ' + name
+            for name, body in expected.items() if members.get(name) != body]
+
+
 def recording_site_errors(members):
     """Independent exact sites: original support read precedes the live override."""
     errors = []
@@ -236,6 +247,29 @@ def prove(package, self_test=False):
     errors += renderer_site_errors(renderer_members)
     recording_members = {n['name']: [t['text'] for t in n['tokens'] if not t['comment']]
                          for n in state['members'] if n['name'] in S2D_PATCHES}
+    recording_projection_members = None
+    if '_toggleRecording' not in recording_members:
+        # Resolve the LIVE owner through the current exhaustive move ledger.
+        # Restore only its two typed Host projections for the independent
+        # original-condition proof; never substitute historical source text.
+        resolved = read('_VideoPlayerScreenState._toggleRecording', package)
+        assert resolved['path'] == 'lib/features/video_player/presentation/legacy_video_player/vp_iptv_recording.dart'
+        moved = parse({'live': resolved['source']}, package, ownership=True)['live']['declarations'][0]
+        body = [t['text'] for t in moved['tokens'] if not t['comment']]
+        for before, after in [
+            (['_host', '.', 'isIOS'], [HOOK, '.', 'isIOS']),
+            (['_host', '.', 'recordingSupported'], ['_recordingSupported']),
+        ]:
+            hits = includes(body, before)
+            assert hits, (before, hits)
+            for at in reversed(hits):
+                body[at:at + len(before)] = after
+        recording_members['_toggleRecording'] = body
+        adapter = next(n for n in unit['declarations'] if n['name'] == '_VpIptvRecordingHostAdapter')
+        recording_projection_members = {
+            n['name']: [t['text'] for t in n['tokens'] if not t['comment']]
+            for n in adapter['members'] if not n.get('isSetter')}
+        errors += recording_projection_errors(recording_projection_members)
     errors += recording_site_errors(recording_members)
     negatives = []
     if self_test:
@@ -327,6 +361,23 @@ def prove(package, self_test=False):
             body[start:start + len(before)] = after
             assert renderer_site_errors(mutated), 'independent S2c site guard accepted ' + name
             negatives.append('S2c ' + S2C_SITE + ': ' + name)
+        if recording_projection_members is not None:
+            for name, before, after in [
+                ('bypassed override', [HOOK], ['Platform']),
+                ('wrong default', [HOOK, '.', 'isIOS'], [HOOK, '.', 'isAndroid']),
+                ('duplicate predicate', [HOOK, '.', 'isIOS'],
+                 [HOOK, '.', 'isIOS', '||', HOOK, '.', 'isIOS']),
+                ('wrong support field', ['_s', '.', '_recordingSupported'],
+                 ['_s', '.', '_isRecording']),
+            ]:
+                mutated = copy.deepcopy(recording_projection_members)
+                body = mutated['recordingSupported' if name == 'wrong support field' else 'isIOS']
+                hits = includes(body, before)
+                assert len(hits) == 1
+                at = hits[0]
+                body[at:at + len(before)] = after
+                assert recording_projection_errors(mutated), name
+                negatives.append('S2d Host projection: ' + name)
         for site, patch in S2D_PATCHES.items():
             changes = [
                 ('wrong predicate', [HOOK, '.', 'isIOS'], [HOOK, '.', 'isAndroid']),

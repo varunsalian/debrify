@@ -10903,3 +10903,45 @@ SharedPreferences profile guard. All 178 new cases pass; the two new suites are
 registered in CI. Seven inventory enforcement fixtures and changed-test
 format/analyzer checks pass. Android engine/publication and the dormant legacy
 TracksSheet tail remain explicitly unclaimed.
+
+## Phase 13 Step 1 — applied ownership (2026-10-15)
+
+Step-0b `33dcebe38` accepted the fixture correction and survivor classifications.
+The complete frozen `vplayer_p13.json` is now applied; only its status changes
+from the Step-T ledger. Materialization with a fresh isolated parser, normal
+formatting and exact Step-T prototype comparison passes before production files
+are written. The current ownership checker reports zero differences.
+
+| Owner | Formatted lines | Preserved boundary |
+|---|---:|---|
+| `vp_player_menu_ui.dart` | 377 | Live tracks metadata path and plain panel helper; lexical context and captured cache key |
+| `vp_player_menu.dart` | 332 | Eleven menu actions through facade Host routing; snapshots remain State-owned |
+| `vp_iptv_recording.dart` | 463 | Recording actions/getters and inert refresh ticket; eight frozen recording fields remain State-owned |
+| `vp_iptv_recording_resources.dart` | 209 | URL/resource/path/log helpers, live widget selectors, exact named record/default parameter types |
+| Facade | 14630 | 27 retained references, constructor after P12, two declared whole-adapter patches (one rewrite each), distinct inline disposal protocol |
+
+All 25 earlier destinations are unchanged. Exactly the four new files and facade
+constitute the production diff. No hook/installer, service, persisted format or
+pubspec change. The facade exception ratchets from 15331 to 14630; resume, IPTV,
+startup/source, episode, engine and controls/build responsibilities exit in
+phases 14–21. Each new file is at most 500 physical formatted lines.
+
+CI current/self-test and both analyzer inputs select P13, while P1–P12 histories
+and every frozen seam ledger remain. All theme/rendered/source-guard lists include
+the four destinations; every new behaviour suite was registered by Step 0/0b.
+The S2d proof resolves the current moved toggle through the ownership reader,
+normalizes only its two typed Host projections for the independent condition
+check, and verifies the actual facade getter defaults. All original negatives
+remain; four additional projection negatives cover override bypass, wrong
+predicate, duplicate evaluation and wrong State support field. The updated Dart
+source guard requires their successful execution. No historical body can satisfy
+the moved-site proof.
+
+Step-1 evidence: `p13/step1/`. Current move proof, all seam proofs, format, size,
+architecture/negative checks and diff pass. Analyzer comparator accepts 145 scoped
+diagnostics with zero additions against the frozen probe inventory; the shared
+allowlist contains only the five exact move-induced unused facade imports
+identified at Step T. The four original toggle infos remain in the inventory.
+197 focused tests in 38 suites pass, including every new P13 behaviour case
+and the retargeted platform/theme guards. The reduced gate follows on the clean
+production commit; these focused results do not replace its full frozen inventory.
