@@ -2261,6 +2261,23 @@ Recordings.
 
 ## Follow-ups
 
+- **Phase-13 original menu metadata windows (preserved):** a held tracks
+  lookup has no content/profile guard and can open its captured identity after
+  a still-mounted handoff. A single-file lookup sets its fetch latch before
+  completion, so a repeated tracks action can open immediately with no identity
+  while the first action still waits. The original completion may reopen the
+  subtitle section after a quick section has opened.
+- **Phase-13 original recording windows (preserved):** desktop format lookup
+  resumed after player disposal reads the dead State context before its mounted
+  check. TEE stop clears State before its native await: a held old clear can
+  disarm a newly started recording while State remains active, and old stop
+  completion cancels the newer log tap. With no launch fallback, a locally
+  disabled stored source is omitted by playback resource lookup and the
+  original capture starts without a resource binding. Disposal retains its
+  separate inline protocol. Android registry refresh increments its ticket only
+  after the valid live-channel check; the older-query/newer-invalid-refresh race
+  and native publication remain device-pending, without an S2d simulation claim.
+
 - **Phase-12 original identity-sheet windows (preserved):** the deferred initial
   search's first setter precedes liveness guards and can run after sheet
   dismissal; result-tile taps use live State context and throw after player
@@ -4671,6 +4688,53 @@ for Step 0 and Claude’s independent mutation sample.
   remains S2d/P12; only P12's accepted historical revision is registered.
   No production extraction, app build/device action, dependency change, push,
   merge or branch switch. Production moves wait for Step 0 and Claude's sample.
+
+### 2026-10-15 — Phase 13 Step 0 complete (STOP before production moves)
+
+- **Revision/original.** Follows Step T `90fb429148059d7751b7be72a91e176594b6e67c`;
+  application remains reviewed, rebased S2d
+  `1099a0039dab6023aef8c95754e4595e862e9a67` on P12 merge `1d7699d2e`.
+  No application, installer/hook, dependency, production CI selection or size
+  ratchet changes.
+- **Characterization.** 174 new cases in 33 suites, with three test helpers:
+  live collection/single-file tracks metadata and handoff timing; quick/cache
+  identity, manual/audio policy and physical persistence completion; pending
+  panel close, cache publication, addon lifetime, sync reset, early focus,
+  controls/timers and shuffle. Recording covers S2d TEE and real desktop service
+  captures with continuous cancellable loopback streams, admission/resource/path
+  barriers, stale generations, overlapping stop/restart, empty output, errors,
+  actual job/artifact profile ownership, retained callers and disposal's distinct
+  inline protocol. Preserved original defects are listed in Follow-ups.
+- **Systematic proof.** All 30 moved declarations and all 27 measured retained
+  runtime occurrences accounted for (the Step-T correction from prose 28 is
+  retained). Of 976 nested points: 466 assertion-killed, 152 explicit app-library
+  compiler/flow exclusions, 75 linked nullable operands, 15 original-caller
+  source equivalences, 24 diagnostic-only, 173 device/inert pending and 71
+  dormant. The retained ledger has 22 assertion kills and five Android-pending
+  sites. All 174 new cases have current-input, assertion-failing mutations of
+  detached original S2d. Exact patches, commands, hashes, JSONL and exclusions
+  are in `p13/step0/`; the dependency report contains the full matrix/table.
+  Runtime errors, compiler failures and interrupted development runs receive no
+  kill/baseline credit. These counts are not Claude's independent sample score.
+- **Frozen baseline.** 192 explicit suite files, all loaded; **1,464 successes /
+  two observed pre-existing failures** (PiP startup-shield source check and direct
+  SharedPreferences profile guard). Stable tested tree and final input hashes;
+  identity comparison against the observed original PASS: no new failures, no
+  missing tests or new skips, 66 added identities. Canonical run:
+  `p13/step0/accepted192-original-baseline.jsonl`. Inventory enforcement has seven
+  positive/negative fixtures; all 33 new suites are registered in CI.
+- **Checks.** Changed-Dart format/analysis clean (36 files, then the final two
+  changed files refreshed); size, architecture/negatives, inventory fixtures
+  and diff pass. Step-T histories, seam proofs, Dart/Kotlin self-tests and app
+  analyzer inventories are reused only at identical affected inputs. Every
+  manifest/source-reader run uses a fresh isolated parser under the executing
+  worktree's `.dart_tool/vplayer_parser/`, with copied kernels deleted. Flutter
+  suites are serialized, nice19, no-pub, concurrency1 and test hooks enabled.
+- **Pending/stop.** Android service/engine query, refresh-ticket invalid-live
+  race and publication remain device-pending under S2d; legacy TracksSheet tail
+  and its apply callback remain dormant. Full suite/builds wait for the revised
+  integration milestones; no device/run/install, push, merge or branch switch.
+  STOP for Claude's independent mutation sample before production moves.
 
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 

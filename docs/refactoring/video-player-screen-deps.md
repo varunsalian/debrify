@@ -9486,3 +9486,1364 @@ issues remain pre-existing. Exact commands, SDK/configuration, parser-isolation
 and copied-kernel deletion audit, hashes, prototypes and receipts are under
 `p13/stepT/`. Failed development probes are archived and receive no pass credit.
 No production application, pubspec or lockfile edit. Step 0 follows separately.
+
+## Phase 13 Step 0 — original menu and recording characterization
+
+Original application: reviewed, rebased S2d `1099a0039dab6023aef8c95754e4595e862e9a67`, after accepted P12 merge `1d7699d2e`. Step T is `90fb429148059d7751b7be72a91e176594b6e67c`. All application and dependency bytes remain that original. Tests, fixtures, inventory enforcement and documentation are the only Step-0 changes.
+
+| Moved declaration(s) | Observable original boundary |
+|---|---|
+| `_showTracksSheet` | live movie-collection and post-handoff single-file metadata success/empty; A→B content/profile/dispose/repeated opens and single-file latch timing; captured coordinates and menu identity; TV tracks caller |
+| `_openPlayerMenuAt`, `_openPlayerMenuQuick` | exact section and metadata values, quick opens do not fetch; an older pending tracks completion can reopen subtitles later; manual/parsed identity and coordinate precedence |
+| `_hidePlayerMenu` | real TV Back pane→rail→closed and root focus; public close during pending actions |
+| `_menuApplyTrackChange`, `_audioTrackChoiceChanged`, `_menuSelectAudio` | physical native-setter and preference-write completion, IPTV audio-language storage, plus unchanged P10/P11 persistence/policy/revision contracts |
+| `_withManualSubtitleChoice`, `_menuSubtitlesOff`, `_menuSelectEmbeddedSubtitle` | pending manual apply suppresses automatic policy; failure/throw restores it only for the same token/revision; existing persistence/rollback contracts |
+| `_menuSelectAddonSubtitle` | panel close during held download/apply, success/failure, cache write-back and reset timing; existing stale token/persistence cases |
+| `_buildPlayerMenuPanel` | filtered current tracks and selections, retained GlobalKey, stale-title and flat-cache publication, write-back after close, held-inventory shuffle close, existing identify/reset contracts |
+| `_applyStremioSubtitleFromTracksSheet` | dormant: only caller lies beyond constant-true unified-menu branch; no behavioral coverage claimed |
+| `_toggleRecording` | desktop native defaults; S2d TEE; 0/1/188-byte endings; continuous capture stop/zap/pause/dispose; capacity cancellation; captured channel and URL; profile/job/artifact ownership inside service start |
+| `_startRecording`, `_disarmStrayRecording` | directory/property-arm/property-echo holds across pause/zap/dispose, post-write disarm and stub deletion; directory/arm/echo failures; pending starts and generation cancellation |
+| `_stopRecording` | synchronous State clear before native await; held/failed clear, restart/overlapping stops; byte count feedback; all five retained stop callers and distinct disposal protocol |
+| `_canRecord`, `_recordingActiveNow`, `_desktopCaptureForCurrent` | desktop/TV public eligibility/active callbacks; real current-service lookup before/after zap, Stremio resolution and Xtream twin |
+| `_playingLiveUrl`, `_engineRecordUrlForCurrent` | 5 format outcomes ×3 URL kinds, native probe throw, original channel URL after zap, resolved/unresolved Stremio URL |
+| `_currentRecordingResource` | fresh storage over launch revision, channel source/series attributes, missing identity; live launch selectors after held storage; jobs/artifacts inspected before profile reset |
+| `_tapMpvLogsForRecording`, `_untapMpvLogs` | error/fatal/case normalization vs warning/info, cancellation after stop and overlapping restart |
+| `_recordingTargetPath` | sanitized/default/truncated names, Downloads/documents fallback, .mkv/.ts defaults, suffix and microsecond collision fallback |
+| `_refreshEngineRecordingState`, `_engineRefreshTicket` | device-pending: raw Android registry query; invalid/live/null refresh ticket ordering explicitly not simulated by S2d. Ticket literal 0 individually inert at Step T |
+| `_recordingFileName`, `_publishRecording` | device-pending: raw Android engine/publisher callers; pending registration and inline disposal publication not claimed as desktop behavior |
+
+The detached original is under `p13/step0/original1099`. Exact AST sites,
+original patches, selections, input hashes, complete JSONL logs, assertion
+witnesses and exclusions are retained beside this report. The systematic
+inventory has 30 moved declarations, 976 nested statement/branch/operator/
+return/literal/await points, and all 27 actual retained runtime references.
+The two extra identifier matches in documentation links are excluded; they
+are not runtime references. All named design sites remain in scope.
+
+Fixture ownership: real loopback streams continuously emit TS-sized chunks and
+remain open until capture cancellation. Pending public callback futures settle,
+then all service captures/artifacts drain while their originating profile
+registry is still alive; servers/timers close before profile reset. Native
+property barriers use the native fake's channel log. Existing root-owned
+wakelock cursor draining is reused for mixed renderer/ordinary fixtures.
+
+Original defects preserved: metadata completion has no content/profile guard
+and can open the old identity after a still-mounted handoff; desktop format
+completion after disposal reads dead State context before its mounted check;
+a held old TEE clear can clear a newer property target while State remains
+recording, and old stop completion cancels the new log tap. Profile ownership
+is captured inside service start after pre-service awaits; a capture that has
+already started keeps its original owner. These are follow-ups, not fixes.
+
+The fixture uses actual rendered controls/panels, public callbacks, existing native fakes and the real desktop capture service. Continuous cancellable loopback streams exercise ordinary captures; silent and one-byte open connections pin output boundaries. Pending callbacks and captures settle before profile registry reset. The native generation checks are isolated with channel handoff and a held renderer-disposal gap, and callback completion is observed before cleanup can cancel unwanted work. No private State entry point, new production seam, installer change or bug fix is added.
+
+Original observations preserved: collection and single-file metadata have different repeated-open timing; cached collection tracks can finish synchronously before a later quick action. Metadata can publish an old identity across content/profile handoff. Desktop post-format disposal still reads dead context. An old TEE clear can disarm a restarted target, and old stop completion cancels its newer log tap. Profile ownership is captured inside service start, after earlier UI awaits; started captures retain their owner. Playback lookup excludes locally disabled committed sources; with no launch fallback the original starts without a resource binding. These are characterized, not changed.
+
+Android engine queries, the invalid-live refresh-ticket race, pending native registration and publication remain device-pending under the reviewed S2d scope. Physical muxing, native player/device output and real remote focus remain pending. Legacy `TracksSheet.show` and its apply callback are dormant behind the constant-true unified-menu flag.
+
+### Coverage accounting
+
+The systematic ledger has **976 nested AST points in 30 moved declarations** and **27 retained runtime occurrences**. The former prose overcount of 28 is resolved in Step T: all named sites are present (7 menu, 20 recording); two documentation-link matches are not runtime occurrences. Point counts are not a random-sample mutation score. The full exact patches and every attempt are retained in the common evidence directory.
+
+| Classification | Points |
+| --- | --- |
+| assertion-killed | 466 |
+| device-pending: native pending-file registration | 3 |
+| device-pending: raw Android engine dispatch | 57 |
+| device-pending: raw Android notification/publication arm | 2 |
+| device-pending: raw Android service/publication protocol | 94 |
+| device-pending: task ID can only be populated by native Android refresh/start | 16 |
+| diagnostic-only (manifest frozen) | 24 |
+| dormant: constant-true unified-menu flag excludes TracksSheet callback | 35 |
+| dormant: constant-true unified-menu flag excludes legacy sheet | 36 |
+| equivalent-original-callers | 15 |
+| inert/device-pending | 1 |
+| invalid-candidate | 152 |
+| typed-null-operand | 75 |
+
+Assertion kills require exit 1, a complete runner outcome, an actual `Expected:` assertion failure, the original app hash and current selected test/transitive-import hashes. Compiler failures and runtime-only failures receive no kill credit. Compiler/flow exclusions may reuse explicit app-library diagnostics when app source, dependencies, SDK and compile flags are identical; changed test expectation tables cannot repair an app-library type error. No behavioral proof uses that relaxation. Null operands link to their enclosing guard/write/return; they are not counted as standalone literal kills. Diagnostic-only points are frozen by the manifest and receive neither behavioral equivalence nor kill credit. Source equivalences state their original-reader/caller invariants; the Stremio pseudo-URL result explicitly retains Android query timing as pending.
+
+### Declaration coverage matrix
+
+| Original declaration | Points | Outcomes | Representative original witnesses |
+| --- | --- | --- | --- |
+| `_engineRefreshTicket` | 1 | inert/device-pending: 1 | explicit device/dormant/inert classification above |
+| `_canRecord` | 2 | assertion-killed: 2 | `arrow-plan:arrow-p0002`, `quick-sweep-plan:q-p0003` |
+| `_desktopCaptureForCurrent` | 24 | assertion-killed: 3; invalid-candidate: 14; typed-null-operand: 7 | `quick-sweep-plan:q-p0018`, `quick-sweep-plan:q-p0019`, `quick-sweep-plan:q-p0023` |
+| `_toggleRecording` | 141 | assertion-killed: 36; device-pending: raw Android engine dispatch: 57; device-pending: task ID can only be populated by native Android refresh/start: 16; equivalent-original-callers: 4; invalid-candidate: 24; typed-null-operand: 4 | `cleanup-closure-plan:cleanup-p0036`, `cleanup-closure-plan:cleanup-p0041`, `cleanup-closure-plan:cleanup-p0064` |
+| `_playingLiveUrl` | 12 | assertion-killed: 5; equivalent-original-callers: 1; invalid-candidate: 4; typed-null-operand: 2 | `remaining-sweep-plan:p0169`, `remaining-sweep-plan:p0170`, `remaining-sweep-plan:p0173` |
+| `_engineRecordUrlForCurrent` | 38 | assertion-killed: 18; invalid-candidate: 15; typed-null-operand: 5 | `current-input-refresh-plan:refresh-p0186`, `current-input-refresh-plan:refresh-p0187`, `current-input-refresh-plan:refresh-p0197` |
+| `_refreshEngineRecordingState` | 52 | device-pending: raw Android service/publication protocol: 52 | explicit device/dormant/inert classification above |
+| `_recordingFileName` | 23 | device-pending: raw Android service/publication protocol: 23 | explicit device/dormant/inert classification above |
+| `_currentRecordingResource` | 41 | assertion-killed: 24; equivalent-original-callers: 1; invalid-candidate: 9; typed-null-operand: 7 | `completion-closure-plan:completion-p0305`, `quick-sweep-plan:q-p0298`, `quick-sweep-plan:q-p0299` |
+| `_tapMpvLogsForRecording` | 12 | assertion-killed: 10; diagnostic-only (manifest frozen): 1; invalid-candidate: 1 | `current-input-refresh-plan:refresh-p0336`, `current-input-refresh-plan:refresh-p0338`, `current-input-refresh-plan:refresh-p0339` |
+| `_untapMpvLogs` | 3 | assertion-killed: 1; equivalent-original-callers: 1; typed-null-operand: 1 | `current-input-refresh-plan:refresh-p0347` |
+| `_startRecording` | 62 | assertion-killed: 40; device-pending: native pending-file registration: 3; device-pending: raw Android notification/publication arm: 1; diagnostic-only (manifest frozen): 5; equivalent-original-callers: 1; invalid-candidate: 11; typed-null-operand: 1 | `cleanup-closure-plan:cleanup-p0408`, `completion-closure-plan:completion-p0371`, `completion-closure-plan:completion-p0372` |
+| `_disarmStrayRecording` | 13 | assertion-killed: 8; diagnostic-only (manifest frozen): 2; invalid-candidate: 3 | `cleanup-closure-plan:cleanup-p0412`, `cleanup-closure-plan:cleanup-p0422`, `quick-sweep-plan:q-p0412` |
+| `_stopRecording` | 52 | assertion-killed: 29; device-pending: raw Android notification/publication arm: 1; diagnostic-only (manifest frozen): 4; equivalent-original-callers: 4; invalid-candidate: 10; typed-null-operand: 4 | `diagnostics-plan:text-p0475`, `log-cleanup-closure-plan:logs-p0472`, `quick-sweep-plan:q-p0425` |
+| `_publishRecording` | 19 | device-pending: raw Android service/publication protocol: 19 | explicit device/dormant/inert classification above |
+| `_recordingTargetPath` | 48 | assertion-killed: 29; equivalent-original-callers: 1; invalid-candidate: 18 | `arrow-plan:arrow-p0512`, `cleanup-closure-plan:cleanup-p0507`, `current-input-refresh-plan:refresh-p0496` |
+| `_recordingActiveNow` | 7 | assertion-killed: 5; typed-null-operand: 2 | `arrow-plan:arrow-p0544`, `quick-sweep-plan:q-p0545`, `quick-sweep-plan:q-p0547` |
+| `_showTracksSheet` | 135 | assertion-killed: 66; diagnostic-only (manifest frozen): 10; dormant: constant-true unified-menu flag excludes legacy sheet: 36; invalid-candidate: 6; typed-null-operand: 17 | `coordinate-closure-plan:coordinates-p0621`, `coordinate-closure-plan:coordinates-p0622`, `coordinate-closure-plan:coordinates-p0623` |
+| `_openPlayerMenuAt` | 15 | assertion-killed: 15 | `quick-sweep-plan:q-p0690`, `quick-sweep-plan:q-p0691`, `quick-sweep-plan:q-p0692` |
+| `_openPlayerMenuQuick` | 65 | assertion-killed: 41; invalid-candidate: 11; typed-null-operand: 13 | `cache-url-plan:cache-typed-p0742`, `cache-url-plan:cache-typed-p0754`, `cache-url-plan:cache-typed-p0761` |
+| `_hidePlayerMenu` | 7 | assertion-killed: 6; invalid-candidate: 1 | `arrow-plan:arrow-p0769`, `live-menu-closure-plan:live-closure-p0771`, `quick-sweep-plan:q-p0766` |
+| `_menuApplyTrackChange` | 9 | assertion-killed: 8; typed-null-operand: 1 | `iptv-audio-closure-plan:iptv-audio-p0779`, `live-menu-closure-plan:live-closure-p0777`, `quick-sweep-plan:q-p0780` |
+| `_audioTrackChoiceChanged` | 8 | assertion-killed: 8 | `current-input-refresh-plan:refresh-p0784`, `iptv-audio-closure-plan:iptv-audio-p0782`, `quick-sweep-plan:q-p0783` |
+| `_menuSelectAudio` | 11 | assertion-killed: 7; invalid-candidate: 3; typed-null-operand: 1 | `arrow-plan:arrow-p0791`, `current-input-refresh-plan:refresh-p0798`, `quick-sweep-plan:q-p0799` |
+| `_withManualSubtitleChoice` | 21 | assertion-killed: 17; invalid-candidate: 4 | `current-input-refresh-plan:refresh-p0810`, `manual-path-closure-plan:manual-revision-overlap`, `manual-pending-closure-plan:manual-pending-p0807` |
+| `_menuSubtitlesOff` | 14 | assertion-killed: 10; diagnostic-only (manifest frozen): 1; invalid-candidate: 2; typed-null-operand: 1 | `arrow-plan:arrow-p0822`, `current-input-refresh-plan:refresh-p0832`, `final-inputs-closure-plan:final-inputs-p0827` |
+| `_menuSelectEmbeddedSubtitle` | 23 | assertion-killed: 16; invalid-candidate: 5; typed-null-operand: 2 | `arrow-plan:arrow-p0836`, `arrow-plan:arrow-p0838`, `quick-sweep-plan:q-p0839` |
+| `_menuSelectAddonSubtitle` | 40 | assertion-killed: 31; diagnostic-only (manifest frozen): 1; invalid-candidate: 7; typed-null-operand: 1 | `arrow-plan:arrow-p0859`, `final-inputs-closure-plan:final-inputs-p0871`, `final-inputs-closure-plan:final-inputs-p0873` |
+| `_applyStremioSubtitleFromTracksSheet` | 35 | dormant: constant-true unified-menu flag excludes TracksSheet callback: 35 | explicit device/dormant/inert classification above |
+| `_buildPlayerMenuPanel` | 43 | assertion-killed: 31; equivalent-original-callers: 2; invalid-candidate: 4; typed-null-operand: 6 | `arrow-plan:arrow-p0935`, `arrow-plan:arrow-p0947`, `arrow-plan:arrow-p0976` |
+
+### Retained occurrence ledger
+
+| ID | Original owner / line | Reference | Outcome | Witness |
+| --- | --- | --- | --- | --- |
+| `ref1` | _performIptvLiveRetune:768 | `_stopRecording` | assertion-killed | references-plan:ref1 |
+| `ref2` | _startIptvProgrammeFromBeginning:883 | `_stopRecording` | assertion-killed | references-plan:ref2 |
+| `ref3` | _infoPanelSignature:998 | `_recordingActiveNow` | assertion-killed | references-plan:ref3 |
+| `ref4` | initState:1556 | `_stopRecording` | assertion-killed | references-plan:ref4 |
+| `ref5` | _initializePlayer:2328 | `_refreshEngineRecordingState` | device-pending |  |
+| `ref6` | _showRandomPlaybackMenu:4405 | `_openPlayerMenuQuick` | assertion-killed | references-plan:ref6 |
+| `ref7` | _switchToIptvChannel:6926 | `_stopRecording` | assertion-killed | references-plan:ref7 |
+| `ref8` | _switchToIptvChannel:7102 | `_refreshEngineRecordingState` | device-pending |  |
+| `ref9` | _tryOpenLiveStream:7120 | `_stopRecording` | assertion-killed | references-plan:ref9 |
+| `ref10` | dispose:10202 | `_publishRecording` | device-pending |  |
+| `ref11` | dispose:10207 | `_publishRecording` | device-pending |  |
+| `ref12` | _buildTvControls:11415 | `_showTracksSheet` | assertion-killed | references-plan:ref12 |
+| `ref13` | _buildTvControls:11457 | `_canRecord` | assertion-killed | references-plan:ref13 |
+| `ref14` | _buildTvControls:11458 | `_recordingActiveNow` | assertion-killed | references-plan:ref14 |
+| `ref15` | _buildTvControls:11459 | `_canRecord` | assertion-killed | references-plan:ref15 |
+| `ref16` | _buildTvControls:11459 | `_toggleRecording` | assertion-killed | references-plan:ref16 |
+| `ref17` | _closeTopPlayerOverlay:11506 | `_hidePlayerMenu` | assertion-killed | references-plan:ref17 |
+| `ref18` | _onControlsVisibilityChanged:11742 | `_refreshEngineRecordingState` | device-pending |  |
+| `ref19` | _buildIptvInfoPanel:12205 | `_recordingActiveNow` | assertion-killed | references-plan:ref19 |
+| `ref20` | build:13471 | `_showTracksSheet` | assertion-killed | references-plan:ref20 |
+| `ref21` | build:13604 | `_canRecord` | assertion-killed | references-plan:ref21 |
+| `ref22` | build:13605 | `_recordingActiveNow` | assertion-killed | references-plan:ref22 |
+| `ref23` | build:13606 | `_canRecord` | assertion-killed | references-plan:ref23 |
+| `ref24` | build:13607 | `_toggleRecording` | assertion-killed | references-plan:ref24 |
+| `ref25` | build:13854 | `_buildPlayerMenuPanel` | assertion-killed | references-plan:ref25 |
+| `ref26` | _VpDisplayModeHostAdapter:15146 | `_openPlayerMenuQuick` | assertion-killed | references-plan:ref26 |
+| `ref27` | _VpSleepTimerHostAdapter:15224 | `_openPlayerMenuQuick` | assertion-killed | references-plan:ref27 |
+
+### Source-audited equivalences
+
+| Point | Original site | Specific invariant |
+| --- | --- | --- |
+| `p0037` | _toggleRecording:6348 | DesktopRecordingService._finish removes the capture and increments revision before the awaited stop result; initState registers the live revision listener on every natively supported desktop (native defaults imply !iOS). That listener setState already repaints; the additional empty setState has no State writes. Unsupported/retired State cannot reach this mounted desktop branch. Pathological dropped notifications are not modeled as a second platform protocol. |
+| `p0063` | _toggleRecording:6379 | The two original _toggleRecording tear-offs are passed as VoidCallbacks to TV/desktop controls; their production button/key handlers discard the returned Future. This await is followed solely by return. Removing await leaves the same _stopRecording child, synchronous State clearing, native operation, caught failure and notification chain, with no subsequent parent work; no production caller observes earlier completion of the discarded outer Future. |
+| `p0162` | _toggleRecording:6500 | DesktopRecordingService.start registers the capture and increments revision before returning it; the live initState listener already schedules the repaint. The later empty setState changes no fields. This audit concerns original native callers; test-only changing iOS override between init and dispatch is not a native platform handoff. |
+| `p0168` | _toggleRecording:6511 | The two production onRecord handlers consume _toggleRecording as a VoidCallback and discard its Future. This is its final await with no following operation. Removing await invokes the identical _startRecording child, whose own admission, generation checks, native operations and catches remain; only completion of the discarded outer Future changes. |
+| `p0177` | _playingLiveUrl:6523 | On the characterized desktop/TEE protocols, a still-unresolved Stremio URL is non-HTTP and cannot be a DesktopRecordingService capture identity. Returning that pseudo-URL instead of null still misses both capture map lookups, and _engineRecordUrlForCurrent rejects it before any probe. TEE does not use this helper. Android registry query timing after the changed null result remains DEVICE-PENDING; no all-target equivalence is claimed. |
+| `p0333` | _currentRecordingResource:6646 | The return type is Future<nullable-record>. Falling through the end of this async function returns null implicitly, exactly as the deleted final return null. No statement follows it; no caller distinguishes explicit and implicit null. |
+| `p0348` | _untapMpvLogs:6661 | _untapMpvLogs first cancels the subscription; every remaining read is another ?.cancel in tap/untap/dispose. No caller observes subscription identity/nullness. Keeping the already-canceled subscription changes only repeated idempotent cancellation; it cannot receive logs or replace the next assignment. |
+| `p0392` | _startRecording:6697 | The stale-start branch has already canceled its log tap and is followed solely by return. The same _disarmStrayRecording child still clears the captured platform and cleans the path, with both native and file errors caught inside that child. Only completion of the discarded outer start/toggle Future changes; both original production Record consumers are void handlers and perform no action after awaiting this helper. |
+| `p0438` | _stopRecording:6769 | Only _stopRecording and the distinct inline dispose block read _recordingTempPath, both after an _isRecording guard. Stop clears that flag synchronously before this null write, and every later successful start writes a fresh non-null path in the same setState closure as setting the flag true. Retaining the old String while inactive is unobservable to these original readers; the in-flight stop uses its already-captured local path. |
+| `p0440` | _stopRecording:6772 | This is the non-mounted arm of _stopRecording after its _isRecording guard and before its first await. The only true writer is start, which checks mounted and writes flag/path in one synchronous closure; inline dispose clears the flag before unmount, and stop has no intervening await before this check. Thus recording=true and mounted=false cannot reach this arm through original State writers. A saved callback after disposal returns at the earlier false recording guard. |
+| `p0441` | _stopRecording:6772 | This is the non-mounted arm of _stopRecording after its _isRecording guard and before its first await. The only true writer is start, which checks mounted and writes flag/path in one synchronous closure; inline dispose clears the flag before unmount, and stop has no intervening await before this check. Thus recording=true and mounted=false cannot reach this arm through original State writers. A saved callback after disposal returns at the earlier false recording guard. |
+| `p0442` | _stopRecording:6773 | This is the non-mounted arm of _stopRecording after its _isRecording guard and before its first await. The only true writer is start, which checks mounted and writes flag/path in one synchronous closure; inline dispose clears the flag before unmount, and stop has no intervening await before this check. Thus recording=true and mounted=false cannot reach this arm through original State writers. A saved callback after disposal returns at the earlier false recording guard. |
+| `p0506` | _recordingTargetPath:6870 | Changing base.length > 60 to >= 60 adds only the length-equals-60 case, where substring(0,60) equals base. Sanitization produces ASCII and all other lengths take the same branch. The threshold-literal 60-to-61 mutant is distinct and tested at 61 characters. |
+| `p0938` | _buildPlayerMenuPanel:14347 | The temporary filtered audios list is immediately iterated by LanguageMapper.audioTrackOptions to construct a separate options list. Neither that mapper nor another reader grows the temporary list or exposes its identity; changing only growable:false to true leaves every yielded track and output option unchanged. This is not a claim that caller-visible lists may change mutability. |
+| `p0957` | _buildPlayerMenuPanel:14392 | Deleting the first cacheKey==null return leaves the following different-key guard intact. A non-null current cache key therefore still rejects a captured null key. When both keys are null the extra assignments remain unobservable: the two menu cache readers require a non-null open-time key, and proactive discovery rejects a null/empty IMDb identity before computing its non-null cache key; on a later resolved identity, the null key cannot match and all cache components are replaced together. The callback has no awaits or listeners on these fields. The enclosing return/guard mutants with a non-null key are separately assertion-tested. |
+
+The independent inline-dispose generation mutation `G04-dispose-generation` also survives for a specific reason: both generation readers in start also test mounted, and dispose makes that condition decisive. The retained bump stays intact. The independent inline native-clear mutation is assertion-killed; disposal is never characterized as a call to `stopRecording`.
+
+### Systematic mutation table
+
+Exact original→mutant patches, commands, full JSONL/stderr, original hashes and current-input receipts live in `p13/step0/`. Initial single-case survivors are replayed with broader selections before closure or a stated source audit. Invalid, incomplete and runtime-only development attempts remain archived and uncredited. The zero-fill timestamp mutant was replayed at second 0/1 under the suite lock, without changing the app clock or tests, so a one-digit seconds value makes the fill character observable. Its earlier non-padding survivor remains archived.
+
+| Named original witness | Mutation (excerpt) | Outcome | Failing assertion case |
+| --- | --- | --- | --- |
+| `W01-tee-dispatch` | await _startRecording(); → return; | assertion-killed | p13 TEE arm failure preserves original admission and feedback, p13 TEE directory failure delivered after disposal stays quiet, p13 TEE directory failure preserves original admission and feedback, p13 TEE dispose issues clear before player teardown without awaiting it, p13 TEE dispose output=0 preserves its stop protocol, p13 TEE dispose output=1 preserves its stop protocol, p13 TEE dispose output=188 preserves its stop protocol, p13 TEE echo failure preserves original admission and feedback, p13 TEE filename sanitizes " / Live  News ? " without changing path policy, p13 TEE filename sanitizes "" without changing path policy, p13 TEE filename sanitizes "***" without changing path policy, p13 TEE filename sanitizes "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" without changing path policy, p13 TEE filename sanitizes "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" without changing path policy, p13 TEE held arm then dispose rejects or disarms the captured start, p13 TEE held arm then pause rejects or disarms the captured start, p13 TEE held arm then zap rejects or disarms the captured start, p13 TEE held clear failure=false permits restart before old stop completes, p13 TEE held clear failure=true permits restart before old stop completes, p13 TEE held directory then dispose rejects or disarms the captured start, p13 TEE held directory then pause rejects or disarms the captured start, p13 TEE held directory then zap rejects or disarms the captured start, p13 TEE held echo then dispose rejects or disarms the captured start, p13 TEE held echo then pause rejects or disarms the captured start, p13 TEE held echo then zap rejects or disarms the captured start, p13 TEE null Downloads path uses documents without another target policy, p13 TEE occupied target crowded=false preserves suffix and microsecond fallback, p13 TEE occupied target crowded=true preserves suffix and microsecond fallback, p13 TEE overlapping stops issue one clear while a later zap can finish first, p13 TEE pause output=0 preserves its stop protocol, p13 TEE pause output=1 preserves its stop protocol, p13 TEE pause output=188 preserves its stop protocol, p13 TEE stale start file-delete failure retains its independent cleanup catches, p13 TEE stale start native-clear failure retains its independent cleanup catches, p13 TEE two pending starts followed by stop invalidate both original generations, p13 TEE user output=0 preserves its stop protocol, p13 TEE user output=1 preserves its stop protocol, p13 TEE user output=188 preserves its stop protocol, p13 TEE user stop cannot start another recording after its saved notice, p13 TEE warning logs are filtered and stop cancels the recording log tap, p13 TEE zap output=0 preserves its stop protocol, p13 TEE zap output=1 preserves its stop protocol, p13 TEE zap output=188 preserves its stop protocol, p13 recording TV dock uses the same real Record and active-state callbacks, p13 recording caller IPTV source replacement awaits its own TEE stop, p13 recording caller Start Over awaits the native clear before timeshift open, p13 recording caller live eof retune awaits the native clear, p13 recording caller live error retune awaits the native clear |
+| `W02-desktop-service-dispatch` | final capture = await DesktopRecordingService.instance.start( → return; final capture = await DesktopRecordingService.instance.start( | assertion-killed | p13 desktop Stremio playing URL resolved=true controls capture identity, p13 desktop URL admission format= url=plain, p13 desktop URL admission format= url=xtream, p13 desktop URL admission format=dash url=xtream, p13 desktop URL admission format=hls url=xtream, p13 desktop URL admission format=mpegts url=plain, p13 desktop URL admission format=mpegts url=xtream, p13 desktop URL admission format=probe-error url=plain, p13 desktop URL admission format=probe-error url=xtream, p13 desktop continuous capture button preserves background ownership, p13 desktop continuous capture dispose preserves background ownership, p13 desktop continuous capture pause preserves background ownership, p13 desktop continuous capture zap preserves background ownership, p13 desktop held directory then zap retains original capture and mounted windows, p13 desktop held format then zap retains original capture and mounted windows, p13 desktop held resource then zap retains original capture and mounted windows, p13 desktop held service then dispose retains original capture and mounted windows, p13 desktop held service then zap retains original capture and mounted windows, p13 desktop one captured byte is saved after cancellation, p13 desktop profile handoff after-start owner=deleted pins jobs and artifacts, p13 desktop profile handoff after-start owner=revoked pins jobs and artifacts, p13 desktop profile handoff after-start owner=valid pins jobs and artifacts, p13 desktop profile handoff before-service owner=deleted pins jobs and artifacts, p13 desktop profile handoff before-service owner=revoked pins jobs and artifacts, p13 desktop profile handoff before-service owner=valid pins jobs and artifacts, p13 desktop stop delivered after disposal performs no late State update, p13 recording resource fresh preserves fresh-read precedence and launch fallback, p13 recording resource launch preserves fresh-read precedence and launch fallback, p13 recording resource none preserves fresh-read precedence and launch fallback, p13 recording resource series-attribute preserves fresh-read precedence and launch fallback, p13 recording resource source-attribute preserves fresh-read precedence and launch fallback, p13 resource await reads launch selectors live after a public widget update |
+| `W03-desktop-rejection-feedback` | This channel can't be recorded on desktop (HLS stream) → p13 mutated stream rejection | assertion-killed | p13 desktop Stremio playing URL resolved=false controls capture identity, p13 desktop URL admission format= url=non-http, p13 desktop URL admission format=dash url=non-http, p13 desktop URL admission format=dash url=plain, p13 desktop URL admission format=hls url=non-http, p13 desktop URL admission format=hls url=plain, p13 desktop URL admission format=mpegts url=non-http, p13 desktop URL admission format=probe-error url=non-http |
+| `W04-capacity-cancel` | if (!await ensureRecordingCapacity(context)) return; → await ensureRecordingCapacity(context); | assertion-killed | p13 desktop capacity cancel starts no second capture and never falls through to TEE |
+| `W05-live-metadata-action` | // Dynamically parse season/episode → return; // Dynamically parse season/episode | assertion-killed | p13 live tracks metadata success=false event=content preserves original snapshots, p13 live tracks metadata success=false event=dispose preserves original snapshots, p13 live tracks metadata success=false event=none preserves original snapshots, p13 live tracks metadata success=false event=profile preserves original snapshots, p13 live tracks metadata success=false event=repeated preserves original snapshots, p13 live tracks metadata success=true event=content preserves original snapshots, p13 live tracks metadata success=true event=dispose preserves original snapshots, p13 live tracks metadata success=true event=none preserves original snapshots, p13 live tracks metadata success=true event=profile preserves original snapshots, p13 live tracks metadata success=true event=repeated preserves original snapshots |
+| `W06-quick-menu-action` | final currentTitle = → return; final currentTitle = | assertion-killed | p13 quick PlayerMenuSection.aspect opens without awaiting or fetching metadata, p13 quick PlayerMenuSection.shuffle opens without awaiting or fetching metadata, p13 quick PlayerMenuSection.sleep opens without awaiting or fetching metadata, p13 quick PlayerMenuSection.speed opens without awaiting or fetching metadata |
+| `W07-pending-addon-entry` | // Playback continues behind → return false; // Playback continues behind | assertion-killed | p13 close panel during apply failure=false retains apply-owned sync reset, p13 close panel during apply failure=true retains apply-owned sync reset, p13 close panel during download failure=false retains apply-owned sync reset, p13 close panel during download failure=true retains apply-owned sync reset |
+| `W08-focus-return` | if (PlatformUtil.isTelevision) _tvRootFocus.requestFocus(); → ∅ | assertion-killed | p13 TV close restores root focus before the panel-removal frame |
+| `W09-closed-cache-write` | _cachedAddonSlots = slots; → _cachedAddonSlots = null; | assertion-killed | p13 panel discovery completion after close writes the open identity cache |
+| `G01-directory-generation` | if (gen != _recordingStartGen \|\| !mounted \|\| !_playerCreated) return; → if (!mounted \|\| !_playerCreated) return; | assertion-killed | p13 TEE held directory then pause rejects or disarms the captured start, p13 TEE held directory then zap rejects or disarms the captured start |
+| `G02-post-arm-generation` | if (gen != _recordingStartGen \|\| !mounted) { → if (!mounted) { | assertion-killed | p13 TEE held arm then pause rejects or disarms the captured start, p13 TEE held arm then zap rejects or disarms the captured start, p13 TEE held echo then pause rejects or disarms the captured start, p13 TEE held echo then zap rejects or disarms the captured start |
+| `G03-stop-before-native-clear` | _isRecording = false; → _isRecording = true; | assertion-killed | p13 TEE held clear failure=false permits restart before old stop completes, p13 TEE held clear failure=true permits restart before old stop completes |
+| `G04-dispose-generation` | _recordingStartGen++; → ∅ | source-equivalent; retained bump preserved |  |
+| `G05-dispose-native-clear` | .setProperty('stream-record', '') → .setProperty('stream-record', 'p13-mutated') | assertion-killed | p13 TEE dispose issues clear before player teardown without awaiting it |
+| `G06-stop-before-open` | await _stopRecording(userInitiated: false); → unawaited(_stopRecording(userInitiated: false)); | assertion-killed | p13 channel switch awaits TEE clear before opening its replacement |
+| `G07-lexical-context-guard` | if (!context.mounted) return; → ∅ | assertion-killed | p13 live tracks metadata success=false event=dispose preserves original snapshots, p13 live tracks metadata success=true event=dispose preserves original snapshots |
+| `G08-captured-cache-key` | final cacheKey = _menuCacheKey; → final cacheKey = null; | assertion-killed | p13 panel discovery completion after close writes the open identity cache |
+| `G09-recording-log-level` | if (level != 'error' && level != 'fatal') return; → ∅ | assertion-killed | p13 TEE warning logs are filtered and stop cancels the recording log tap |
+| `G10-log-cancellation` | _recordLogSub?.cancel(); → ∅ | assertion-killed | p13 TEE warning logs are filtered and stop cancels the recording log tap |
+| `G11-resource-widget-fallback` | widget.iptvSourceId; → null; | assertion-killed | p13 recording resource fresh preserves fresh-read precedence and launch fallback, p13 recording resource launch preserves fresh-read precedence and launch fallback |
+| `G12-direct-playing-identity` | if (!channel.url.startsWith('stremio-tv://')) return channel.url; → ∅ | assertion-killed | p13 desktop continuous capture zap preserves background ownership |
+| `G13-format-dispose-context-order` | if (channel == null) return; → if (channel == null \|\| !mounted) return; | assertion-killed | p13 desktop held format then dispose retains original capture and mounted windows |
+| `G14-wrong-focus-return` | _tvRootFocus.requestFocus(); → _tvRootFocus.unfocus(); | assertion-killed | p13 TV tracks Back leaves pane then closes and restores player focus |
+
+| Point | Original declaration / line / kind | Mutation (excerpt) | Classification | Proof / exclusion |
+| --- | --- | --- | --- | --- |
+| `p0001` | _engineRefreshTicket:1115 / integer | explicit exclusion / no standalone mutation | inert/device-pending | Literal counter initializer; owner-only reads behind raw Android refresh. No eager Host read or scheduling. |
+| `p0002` | _canRecord:1154 / arrow-body | _recordingSupported && _iptvZapBannerOwnsIdentity → false | assertion-killed | arrow-plan:arrow-p0002 |
+| `p0003` | _canRecord:1154 / operator | && → \|\| | assertion-killed | quick-sweep-plan:q-p0003 |
+| `p0004` | _desktopCaptureForCurrent:6327 / declaration-statement | final channel = _currentIptvChannel; → ∅ | invalid-candidate | replay-candidate |
+| `p0005` | _desktopCaptureForCurrent:6328 / branch | channel == null → !(channel == null) | invalid-candidate | replay-candidate |
+| `p0006` | _desktopCaptureForCurrent:6328 / operator | == → != | invalid-candidate | replay-candidate |
+| `p0007` | _desktopCaptureForCurrent:6328 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0008` | _desktopCaptureForCurrent:6328 / return | return null; → ∅ | invalid-candidate | replay-candidate |
+| `p0009` | _desktopCaptureForCurrent:6328 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0010` | _desktopCaptureForCurrent:6329 / declaration-statement | final playing = _playingLiveUrl(channel); → String? playing = null; | invalid-candidate | replay-candidate |
+| `p0011` | _desktopCaptureForCurrent:6330 / branch | playing == null → !(playing == null) | invalid-candidate | replay-candidate |
+| `p0012` | _desktopCaptureForCurrent:6330 / operator | == → != | invalid-candidate | replay-candidate |
+| `p0013` | _desktopCaptureForCurrent:6330 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0014` | _desktopCaptureForCurrent:6330 / return | return null; → ∅ | invalid-candidate | replay-candidate |
+| `p0015` | _desktopCaptureForCurrent:6330 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0016` | _desktopCaptureForCurrent:6331 / declaration-statement | final service = DesktopRecordingService.instance; → ∅ | invalid-candidate | replay-candidate |
+| `p0017` | _desktopCaptureForCurrent:6332 / declaration-statement | final direct = service.captureForUrl(playing); → DesktopRecordingCapture? direct = null; | invalid-candidate | replay-candidate |
+| `p0018` | _desktopCaptureForCurrent:6333 / branch | direct != null → !(direct != null) | assertion-killed | quick-sweep-plan:q-p0018 |
+| `p0019` | _desktopCaptureForCurrent:6333 / operator | != → == | assertion-killed | quick-sweep-plan:q-p0019 |
+| `p0020` | _desktopCaptureForCurrent:6333 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0021` | _desktopCaptureForCurrent:6333 / return | return direct; → ∅ | invalid-candidate | replay-candidate |
+| `p0022` | _desktopCaptureForCurrent:6334 / declaration-statement | final twin = LiveRecordingService.xtreamTsTwin(playing); → String? twin = null; | invalid-candidate | replay-candidate |
+| `p0023` | _desktopCaptureForCurrent:6335 / return | return twin != null ? service.captureForUrl(twin) : null; → ∅ | assertion-killed | quick-sweep-plan:q-p0023 |
+| `p0024` | _desktopCaptureForCurrent:6335 / conditional | twin != null → !(twin != null) | invalid-candidate | replay-candidate |
+| `p0025` | _desktopCaptureForCurrent:6335 / operator | != → == | invalid-candidate | replay-candidate |
+| `p0026` | _desktopCaptureForCurrent:6335 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0027` | _desktopCaptureForCurrent:6335 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0028` | _toggleRecording:6340 / declaration-statement | final desktopCapture = _desktopCaptureForCurrent(); → DesktopRecordingCapture? desktopCapture = null; | invalid-candidate | replay-candidate |
+| `p0029` | _toggleRecording:6341 / branch | desktopCapture != null → !(desktopCapture != null) | invalid-candidate | replay-candidate |
+| `p0030` | _toggleRecording:6341 / operator | != → == | invalid-candidate | replay-candidate |
+| `p0031` | _toggleRecording:6341 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0032` | _toggleRecording:6342 / declaration-statement | final savedPath = desktopCapture.path; → final savedPath = 'mutant'; | invalid-candidate | replay-candidate |
+| `p0033` | _toggleRecording:6343 / declaration-statement | final bytes = await desktopCapture.stop(); → await desktopCapture.stop(); final bytes = 0; | invalid-candidate | replay-candidate |
+| `p0034` | _toggleRecording:6343 / await | await desktopCapture.stop() → desktopCapture.stop() | invalid-candidate | replay-candidate |
+| `p0035` | _toggleRecording:6344 / branch | !mounted → !(!mounted) | assertion-killed | current-input-refresh-plan:refresh-p0035 |
+| `p0036` | _toggleRecording:6344 / return | return; → ∅ | assertion-killed | cleanup-closure-plan:cleanup-p0036 |
+| `p0037` | _toggleRecording:6348 / statement | setState(() {}); → ∅ | equivalent-original-callers | DesktopRecordingService._finish removes the capture and increments revision before the awaited stop result; initState registers the live revision listener on every natively supported desktop (native defaults imply !iOS). That listener setState already repaints; the additional empty setState has no State writes. Unsupported/retired State cannot reach this mounted desktop branch. Pathological dropped notifications are not modeled as a second platform protocol. |
+| `p0038` | _toggleRecording:6349 / statement | ScaffoldMessenger.of(context).showSnackBar( SnackBar( content: Text( bytes > 0 ? ... → ∅ | assertion-killed | current-input-refresh-plan:refresh-p0038 |
+| `p0039` | _toggleRecording:6352 / conditional | bytes > 0 → !(bytes > 0) | assertion-killed | current-input-refresh-plan:refresh-p0039 |
+| `p0040` | _toggleRecording:6352 / operator | > → >= | assertion-killed | empty-closure-plan:empty-p0040 |
+| `p0041` | _toggleRecording:6352 / integer | 0 → 1 | assertion-killed | cleanup-closure-plan:cleanup-p0041 |
+| `p0042` | _toggleRecording:6353 / interpolated-string | 'Recording saved: $savedPath' → 'MUTRecording saved: $savedPath' | assertion-killed | current-input-refresh-plan:refresh-p0042 |
+| `p0043` | _toggleRecording:6354 / string | 'Recording failed — nothing was captured' → 'mutated empty recording' | assertion-killed | empty-closure-plan:empty-p0043 |
+| `p0044` | _toggleRecording:6358 / return | return; → ∅ | assertion-killed | current-input-refresh-plan:refresh-p0044 |
+| `p0045` | _toggleRecording:6362 / declaration-statement | explicit exclusion / no standalone mutation | device-pending: task ID can only be populated by native Android refresh/start | device-pending: task ID can only be populated by native Android refresh/start |
+| `p0046` | _toggleRecording:6363 / branch | explicit exclusion / no standalone mutation | device-pending: task ID can only be populated by native Android refresh/start | device-pending: task ID can only be populated by native Android refresh/start |
+| `p0047` | _toggleRecording:6363 / operator | explicit exclusion / no standalone mutation | device-pending: task ID can only be populated by native Android refresh/start | device-pending: task ID can only be populated by native Android refresh/start |
+| `p0048` | _toggleRecording:6363 / null | explicit exclusion / no standalone mutation | device-pending: task ID can only be populated by native Android refresh/start | device-pending: task ID can only be populated by native Android refresh/start |
+| `p0049` | _toggleRecording:6364 / statement | explicit exclusion / no standalone mutation | device-pending: task ID can only be populated by native Android refresh/start | device-pending: task ID can only be populated by native Android refresh/start |
+| `p0050` | _toggleRecording:6364 / arrow-body | explicit exclusion / no standalone mutation | device-pending: task ID can only be populated by native Android refresh/start | device-pending: task ID can only be populated by native Android refresh/start |
+| `p0051` | _toggleRecording:6364 / null | explicit exclusion / no standalone mutation | device-pending: task ID can only be populated by native Android refresh/start | device-pending: task ID can only be populated by native Android refresh/start |
+| `p0052` | _toggleRecording:6365 / declaration-statement | explicit exclusion / no standalone mutation | device-pending: task ID can only be populated by native Android refresh/start | device-pending: task ID can only be populated by native Android refresh/start |
+| `p0053` | _toggleRecording:6365 / await | explicit exclusion / no standalone mutation | device-pending: task ID can only be populated by native Android refresh/start | device-pending: task ID can only be populated by native Android refresh/start |
+| `p0054` | _toggleRecording:6366 / branch | explicit exclusion / no standalone mutation | device-pending: task ID can only be populated by native Android refresh/start | device-pending: task ID can only be populated by native Android refresh/start |
+| `p0055` | _toggleRecording:6366 / return | explicit exclusion / no standalone mutation | device-pending: task ID can only be populated by native Android refresh/start | device-pending: task ID can only be populated by native Android refresh/start |
+| `p0056` | _toggleRecording:6367 / statement | explicit exclusion / no standalone mutation | device-pending: task ID can only be populated by native Android refresh/start | device-pending: task ID can only be populated by native Android refresh/start |
+| `p0057` | _toggleRecording:6370 / conditional | explicit exclusion / no standalone mutation | device-pending: task ID can only be populated by native Android refresh/start | device-pending: task ID can only be populated by native Android refresh/start |
+| `p0058` | _toggleRecording:6371 / string | explicit exclusion / no standalone mutation | device-pending: task ID can only be populated by native Android refresh/start | device-pending: task ID can only be populated by native Android refresh/start |
+| `p0059` | _toggleRecording:6372 / string | explicit exclusion / no standalone mutation | device-pending: task ID can only be populated by native Android refresh/start | device-pending: task ID can only be populated by native Android refresh/start |
+| `p0060` | _toggleRecording:6376 / return | explicit exclusion / no standalone mutation | device-pending: task ID can only be populated by native Android refresh/start | device-pending: task ID can only be populated by native Android refresh/start |
+| `p0061` | _toggleRecording:6378 / branch | _isRecording → !(_isRecording) | assertion-killed | quick-sweep-plan:q-p0061 |
+| `p0062` | _toggleRecording:6379 / statement | await _stopRecording(); → ∅ | assertion-killed | quick-sweep-plan:q-p0062 |
+| `p0063` | _toggleRecording:6379 / await | await _stopRecording() → _stopRecording() | equivalent-original-callers | The two original _toggleRecording tear-offs are passed as VoidCallbacks to TV/desktop controls; their production button/key handlers discard the returned Future. This await is followed solely by return. Removing await leaves the same _stopRecording child, synchronous State clearing, native operation, caught failure and notification chain, with no subsequent parent work; no production caller observes earlier completion of the discarded outer Future. |
+| `p0064` | _toggleRecording:6380 / return | return; → ∅ | assertion-killed | cleanup-closure-plan:cleanup-p0064 |
+| `p0065` | _toggleRecording:6385 / branch | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0066` | _toggleRecording:6385 / operator | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0067` | _toggleRecording:6385 / operator | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0068` | _toggleRecording:6386 / declaration-statement | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0069` | _toggleRecording:6387 / declaration-statement | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0070` | _toggleRecording:6387 / await | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0071` | _toggleRecording:6388 / branch | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0072` | _toggleRecording:6388 / operator | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0073` | _toggleRecording:6388 / operator | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0074` | _toggleRecording:6388 / null | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0075` | _toggleRecording:6388 / operator | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0076` | _toggleRecording:6388 / null | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0077` | _toggleRecording:6389 / branch | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0078` | _toggleRecording:6389 / await | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0079` | _toggleRecording:6389 / return | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0080` | _toggleRecording:6390 / branch | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0081` | _toggleRecording:6390 / return | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0082` | _toggleRecording:6394 / statement | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0083` | _toggleRecording:6395 / declaration-statement | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0084` | _toggleRecording:6395 / await | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0085` | _toggleRecording:6396 / branch | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0086` | _toggleRecording:6396 / return | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0087` | _toggleRecording:6397 / declaration-statement | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0088` | _toggleRecording:6397 / await | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0089` | _toggleRecording:6405 / branch | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0090` | _toggleRecording:6405 / return | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0091` | _toggleRecording:6406 / branch | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0092` | _toggleRecording:6407 / statement | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0093` | _toggleRecording:6407 / arrow-body | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0094` | _toggleRecording:6408 / statement | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0095` | _toggleRecording:6411 / string | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0096` | _toggleRecording:6412 / string | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0097` | _toggleRecording:6416 / branch | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0098` | _toggleRecording:6416 / operator | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0099` | _toggleRecording:6416 / string | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0100` | _toggleRecording:6417 / statement | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0101` | _toggleRecording:6420 / string | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0102` | _toggleRecording:6421 / string | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0103` | _toggleRecording:6425 / branch | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0104` | _toggleRecording:6425 / operator | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0105` | _toggleRecording:6426 / operator | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0106` | _toggleRecording:6426 / operator | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0107` | _toggleRecording:6426 / operator | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0108` | _toggleRecording:6426 / string | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0109` | _toggleRecording:6427 / operator | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0110` | _toggleRecording:6427 / string | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0111` | _toggleRecording:6428 / operator | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0112` | _toggleRecording:6428 / string | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0113` | _toggleRecording:6430 / statement | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0114` | _toggleRecording:6430 / await | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0115` | _toggleRecording:6432 / statement | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0116` | _toggleRecording:6433 / string | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0117` | _toggleRecording:6436 / return | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0118` | _toggleRecording:6440 / branch | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0119` | _toggleRecording:6441 / statement | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0120` | _toggleRecording:6443 / string | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0121` | _toggleRecording:6446 / return | explicit exclusion / no standalone mutation | device-pending: raw Android engine dispatch | device-pending: raw Android engine dispatch |
+| `p0122` | _toggleRecording:6453 / branch | DesktopRecordingService.instance.isSupported && !VpS2Hooks.isIOS && _recordingSup... → !(DesktopRecordingService.instance.isSupported && !VpS2Hooks.isIOS && _recordingS... | assertion-killed | current-input-refresh-plan:refresh-p0122 |
+| `p0123` | _toggleRecording:6453 / operator | && → \|\| | assertion-killed | current-input-refresh-plan:refresh-p0123 |
+| `p0124` | _toggleRecording:6453 / operator | && → \|\| | assertion-killed | current-input-refresh-plan:refresh-p0124 |
+| `p0125` | _toggleRecording:6456 / declaration-statement | final channel = _currentIptvChannel; → IptvChannel? channel = null; | invalid-candidate | replay-candidate |
+| `p0126` | _toggleRecording:6457 / declaration-statement | final recordUrl = await _engineRecordUrlForCurrent(); → String? recordUrl = null; | invalid-candidate | replay-candidate |
+| `p0127` | _toggleRecording:6457 / await | await _engineRecordUrlForCurrent() → _engineRecordUrlForCurrent() | invalid-candidate | replay-candidate |
+| `p0128` | _toggleRecording:6458 / branch | channel == null → !(channel == null) | invalid-candidate | replay-candidate |
+| `p0129` | _toggleRecording:6458 / operator | == → != | invalid-candidate | replay-candidate |
+| `p0130` | _toggleRecording:6458 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0131` | _toggleRecording:6458 / return | return; → ∅ | invalid-candidate | replay-candidate |
+| `p0132` | _toggleRecording:6459 / branch | recordUrl == null → !(recordUrl == null) | invalid-candidate | replay-candidate |
+| `p0133` | _toggleRecording:6459 / operator | == → != | invalid-candidate | replay-candidate |
+| `p0134` | _toggleRecording:6459 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0135` | _toggleRecording:6460 / statement | ScaffoldMessenger.of(context).showSnackBar( const SnackBar( content: Text( "This ... → ∅ | assertion-killed | current-input-refresh-plan:refresh-p0135 |
+| `p0136` | _toggleRecording:6463 / string | "This channel can't be recorded on desktop (HLS stream)" → "This channel can't be recorded on desktop (HLS stream) mutant" | assertion-killed | current-input-refresh-plan:refresh-p0136 |
+| `p0137` | _toggleRecording:6467 / return | return; → ∅ | invalid-candidate | replay-candidate |
+| `p0138` | _toggleRecording:6469 / branch | !await ensureRecordingCapacity(context) → !(!await ensureRecordingCapacity(context)) | assertion-killed | current-input-refresh-plan:refresh-p0138 |
+| `p0139` | _toggleRecording:6469 / await | await ensureRecordingCapacity(context) → ensureRecordingCapacity(context) | invalid-candidate | replay-candidate |
+| `p0140` | _toggleRecording:6469 / return | return; → ∅ | assertion-killed | current-input-refresh-plan:refresh-p0140 |
+| `p0141` | _toggleRecording:6470 / branch | !mounted → !(!mounted) | assertion-killed | current-input-refresh-plan:refresh-p0141 |
+| `p0142` | _toggleRecording:6470 / return | return; → ∅ | invalid-candidate | replay-candidate |
+| `p0143` | _toggleRecording:6473 / declaration-statement | final path = await _recordingTargetPath(channel.name, extension: 'ts'); → final path = (await _recordingTargetPath(channel.name, extension: 'ts')) + '.muta... | invalid-candidate | replay-candidate |
+| `p0144` | _toggleRecording:6473 / await | await _recordingTargetPath(channel.name, extension: 'ts') → _recordingTargetPath(channel.name, extension: 'ts') | invalid-candidate | replay-candidate |
+| `p0145` | _toggleRecording:6473 / string | 'ts' → "ts mutant" | assertion-killed | cleanup-closure-plan:cleanup-p0145 |
+| `p0146` | _toggleRecording:6478 / branch | !mounted → !(!mounted) | assertion-killed | current-input-refresh-plan:refresh-p0146 |
+| `p0147` | _toggleRecording:6478 / return | return; → ∅ | invalid-candidate | replay-candidate |
+| `p0148` | _toggleRecording:6483 / declaration-statement | final resource = await _currentRecordingResource(); → ({String id, int revision})? resource = null; | invalid-candidate | replay-candidate |
+| `p0149` | _toggleRecording:6483 / await | await _currentRecordingResource() → _currentRecordingResource() | invalid-candidate | replay-candidate |
+| `p0150` | _toggleRecording:6484 / branch | !mounted → !(!mounted) | assertion-killed | current-input-refresh-plan:refresh-p0150 |
+| `p0151` | _toggleRecording:6484 / return | return; → ∅ | invalid-candidate | replay-candidate |
+| `p0152` | _toggleRecording:6485 / declaration-statement | final capture = await DesktopRecordingService.instance.start( url: recordUrl, pat... → ∅ | invalid-candidate | replay-candidate |
+| `p0153` | _toggleRecording:6485 / await | await DesktopRecordingService.instance.start( url: recordUrl, path: path, channel... → DesktopRecordingService.instance.start(url: recordUrl, path: path, channelName: c... | assertion-killed | current-input-refresh-plan:refresh-p0153 |
+| `p0154` | _toggleRecording:6493 / branch | !mounted → !(!mounted) | assertion-killed | current-input-refresh-plan:refresh-p0154 |
+| `p0155` | _toggleRecording:6493 / return | return; → ∅ | assertion-killed | current-input-refresh-plan:refresh-p0155 |
+| `p0156` | _toggleRecording:6494 / branch | capture == null → false | assertion-killed | empty-closure-plan:empty-p0156 |
+| `p0157` | _toggleRecording:6494 / operator | == → != | assertion-killed | current-input-refresh-plan:refresh-p0157 |
+| `p0158` | _toggleRecording:6494 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0159` | _toggleRecording:6495 / statement | ScaffoldMessenger.of(context).showSnackBar( const SnackBar(content: Text("Couldn'... → ∅ | assertion-killed | current-input-refresh-plan:refresh-p0159 |
+| `p0160` | _toggleRecording:6496 / string | "Couldn't start recording" → "Couldn't start recording mutant" | assertion-killed | current-input-refresh-plan:refresh-p0160 |
+| `p0161` | _toggleRecording:6498 / return | return; → ∅ | assertion-killed | empty-closure-plan:empty-p0161 |
+| `p0162` | _toggleRecording:6500 / statement | setState(() {}); → ∅ | equivalent-original-callers | DesktopRecordingService.start registers the capture and increments revision before returning it; the live initState listener already schedules the repaint. The later empty setState changes no fields. This audit concerns original native callers; test-only changing iOS override between init and dispatch is not a native platform handoff. |
+| `p0163` | _toggleRecording:6501 / statement | ScaffoldMessenger.of(context).showSnackBar( const SnackBar( content: Text( 'Recor... → ∅ | assertion-killed | current-input-refresh-plan:refresh-p0163 |
+| `p0164` | _toggleRecording:6504 / string | 'Recording in background — keeps going if you zap or leave. ' → 'mutated start feedback ' | assertion-killed | empty-closure-plan:empty-p0164 |
+| `p0165` | _toggleRecording:6505 / string | 'Stop from here or Settings → Recordings.' → "Stop from here or Settings → Recordings. mutant" | assertion-killed | remaining-sweep-plan:p0165 |
+| `p0166` | _toggleRecording:6509 / return | return; → ∅ | assertion-killed | remaining-sweep-plan:p0166 |
+| `p0167` | _toggleRecording:6511 / statement | await _startRecording(); → ∅ | assertion-killed | remaining-sweep-plan:p0167 |
+| `p0168` | _toggleRecording:6511 / await | await _startRecording() → _startRecording() | equivalent-original-callers | The two production onRecord handlers consume _toggleRecording as a VoidCallback and discard its Future. This is its final await with no following operation. Removing await invokes the identical _startRecording child, whose own admission, generation checks, native operations and catches remain; only completion of the discarded outer Future changes. |
+| `p0169` | _playingLiveUrl:6521 / branch | !channel.url.startsWith('stremio-tv://') → !(!channel.url.startsWith('stremio-tv://')) | assertion-killed | remaining-sweep-plan:p0169 |
+| `p0170` | _playingLiveUrl:6521 / string | 'stremio-tv://' → "stremio-tv:// mutant" | assertion-killed | remaining-sweep-plan:p0170 |
+| `p0171` | _playingLiveUrl:6521 / return | return channel.url; → ∅ | invalid-candidate | replay-candidate |
+| `p0172` | _playingLiveUrl:6522 / declaration-statement | final resolved = _currentStreamUrl; → String? resolved = null; | invalid-candidate | replay-candidate |
+| `p0173` | _playingLiveUrl:6523 / branch | resolved == null \|\| resolved.startsWith('stremio-tv://') → !(resolved == null \|\| resolved.startsWith('stremio-tv://')) | assertion-killed | remaining-sweep-plan:p0173 |
+| `p0174` | _playingLiveUrl:6523 / operator | \|\| → && | invalid-candidate | replay-candidate |
+| `p0175` | _playingLiveUrl:6523 / operator | == → != | invalid-candidate | replay-candidate |
+| `p0176` | _playingLiveUrl:6523 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0177` | _playingLiveUrl:6523 / string | 'stremio-tv://' → "stremio-tv:// mutant" | equivalent-original-callers | On the characterized desktop/TEE protocols, a still-unresolved Stremio URL is non-HTTP and cannot be a DesktopRecordingService capture identity. Returning that pseudo-URL instead of null still misses both capture map lookups, and _engineRecordUrlForCurrent rejects it before any probe. TEE does not use this helper. Android registry query timing after the changed null result remains DEVICE-PENDING; no all-target equivalence is claimed. |
+| `p0178` | _playingLiveUrl:6523 / return | return null; → ∅ | assertion-killed | remaining-sweep-plan:p0178 |
+| `p0179` | _playingLiveUrl:6523 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0180` | _playingLiveUrl:6524 / return | return resolved; → ∅ | assertion-killed | remaining-sweep-plan:p0180 |
+| `p0181` | _engineRecordUrlForCurrent:6532 / declaration-statement | final channel = _currentIptvChannel; → IptvChannel? channel = null; | invalid-candidate | replay-candidate |
+| `p0182` | _engineRecordUrlForCurrent:6533 / branch | channel == null \|\| channel.isLive != true → !(channel == null \|\| channel.isLive != true) | invalid-candidate | replay-candidate |
+| `p0183` | _engineRecordUrlForCurrent:6533 / operator | \|\| → && | invalid-candidate | replay-candidate |
+| `p0184` | _engineRecordUrlForCurrent:6533 / operator | == → != | invalid-candidate | replay-candidate |
+| `p0185` | _engineRecordUrlForCurrent:6533 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0186` | _engineRecordUrlForCurrent:6533 / operator | != → == | assertion-killed | current-input-refresh-plan:refresh-p0186 |
+| `p0187` | _engineRecordUrlForCurrent:6533 / boolean | true → false | assertion-killed | current-input-refresh-plan:refresh-p0187 |
+| `p0188` | _engineRecordUrlForCurrent:6533 / return | return null; → ∅ | invalid-candidate | replay-candidate |
+| `p0189` | _engineRecordUrlForCurrent:6533 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0190` | _engineRecordUrlForCurrent:6534 / declaration-statement | final playing = _playingLiveUrl(channel); → String? playing = null; | invalid-candidate | replay-candidate |
+| `p0191` | _engineRecordUrlForCurrent:6535 / branch | playing == null \|\| playing.isEmpty → !(playing == null \|\| playing.isEmpty) | invalid-candidate | replay-candidate |
+| `p0192` | _engineRecordUrlForCurrent:6535 / operator | \|\| → && | invalid-candidate | replay-candidate |
+| `p0193` | _engineRecordUrlForCurrent:6535 / operator | == → != | invalid-candidate | replay-candidate |
+| `p0194` | _engineRecordUrlForCurrent:6535 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0195` | _engineRecordUrlForCurrent:6535 / return | return null; → ∅ | invalid-candidate | replay-candidate |
+| `p0196` | _engineRecordUrlForCurrent:6535 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0197` | _engineRecordUrlForCurrent:6539 / branch | !playing.startsWith('http://') && !playing.startsWith('https://') → !(!playing.startsWith('http://') && !playing.startsWith('https://')) | assertion-killed | current-input-refresh-plan:refresh-p0197 |
+| `p0198` | _engineRecordUrlForCurrent:6539 / operator | && → \|\| | assertion-killed | current-input-refresh-plan:refresh-p0198 |
+| `p0199` | _engineRecordUrlForCurrent:6539 / string | 'http://' → "http:// mutant" | assertion-killed | current-input-refresh-plan:refresh-p0199 |
+| `p0200` | _engineRecordUrlForCurrent:6539 / string | 'https://' → "https:// mutant" | assertion-killed | remaining-sweep-plan:p0200 |
+| `p0201` | _engineRecordUrlForCurrent:6540 / return | return null; → ∅ | assertion-killed | remaining-sweep-plan:p0201 |
+| `p0202` | _engineRecordUrlForCurrent:6540 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0203` | _engineRecordUrlForCurrent:6542 / declaration-statement | String format = ''; → String format = 'hls'; | invalid-candidate | replay-candidate |
+| `p0204` | _engineRecordUrlForCurrent:6542 / string | '' → " mutant" | assertion-killed | remaining-sweep-plan:p0204 |
+| `p0205` | _engineRecordUrlForCurrent:6543 / declaration-statement | final platform = _player.platform; → final platform = null; | invalid-candidate | replay-candidate |
+| `p0206` | _engineRecordUrlForCurrent:6544 / branch | platform is mk.NativePlayer → !(platform is mk.NativePlayer) | invalid-candidate | replay-candidate |
+| `p0207` | _engineRecordUrlForCurrent:6546 / statement | format = await platform.getProperty('file-format'); → ∅ | assertion-killed | remaining-sweep-plan:p0207 |
+| `p0208` | _engineRecordUrlForCurrent:6546 / await | await platform.getProperty('file-format') → platform.getProperty('file-format') | invalid-candidate | replay-candidate |
+| `p0209` | _engineRecordUrlForCurrent:6546 / string | 'file-format' → "file-format mutant" | assertion-killed | remaining-sweep-plan:p0209 |
+| `p0210` | _engineRecordUrlForCurrent:6549 / declaration-statement | final lower = format.toLowerCase(); → final lower = ''; | invalid-candidate | replay-candidate |
+| `p0211` | _engineRecordUrlForCurrent:6550 / branch | lower.contains('hls') \|\| lower.contains('dash') → !(lower.contains('hls') \|\| lower.contains('dash')) | assertion-killed | current-input-refresh-plan:refresh-p0211 |
+| `p0212` | _engineRecordUrlForCurrent:6550 / operator | \|\| → && | assertion-killed | remaining-sweep-plan:p0212 |
+| `p0213` | _engineRecordUrlForCurrent:6550 / string | 'hls' → "hls mutant" | assertion-killed | remaining-sweep-plan:p0213 |
+| `p0214` | _engineRecordUrlForCurrent:6550 / string | 'dash' → "dash mutant" | assertion-killed | remaining-sweep-plan:p0214 |
+| `p0215` | _engineRecordUrlForCurrent:6552 / return | return LiveRecordingService.xtreamTsTwin(playing); → ∅ | assertion-killed | remaining-sweep-plan:p0215 |
+| `p0216` | _engineRecordUrlForCurrent:6554 / branch | lower.isNotEmpty → !(lower.isNotEmpty) | assertion-killed | remaining-sweep-plan:p0216 |
+| `p0217` | _engineRecordUrlForCurrent:6556 / return | return playing; → ∅ | assertion-killed | remaining-sweep-plan:p0217 |
+| `p0218` | _engineRecordUrlForCurrent:6558 / return | return LiveRecordingService.engineRecordableUrl(playing); → ∅ | assertion-killed | remaining-sweep-plan:p0218 |
+| `p0219` | _refreshEngineRecordingState:6565 / branch | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0220` | _refreshEngineRecordingState:6565 / operator | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0221` | _refreshEngineRecordingState:6565 / return | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0222` | _refreshEngineRecordingState:6566 / declaration-statement | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0223` | _refreshEngineRecordingState:6567 / branch | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0224` | _refreshEngineRecordingState:6567 / operator | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0225` | _refreshEngineRecordingState:6567 / operator | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0226` | _refreshEngineRecordingState:6567 / null | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0227` | _refreshEngineRecordingState:6567 / operator | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0228` | _refreshEngineRecordingState:6567 / boolean | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0229` | _refreshEngineRecordingState:6568 / branch | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0230` | _refreshEngineRecordingState:6568 / operator | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0231` | _refreshEngineRecordingState:6568 / operator | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0232` | _refreshEngineRecordingState:6568 / null | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0233` | _refreshEngineRecordingState:6569 / statement | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0234` | _refreshEngineRecordingState:6569 / arrow-body | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0235` | _refreshEngineRecordingState:6569 / null | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0236` | _refreshEngineRecordingState:6571 / return | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0237` | _refreshEngineRecordingState:6573 / declaration-statement | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0238` | _refreshEngineRecordingState:6573 / prefix | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0239` | _refreshEngineRecordingState:6574 / declaration-statement | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0240` | _refreshEngineRecordingState:6575 / branch | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0241` | _refreshEngineRecordingState:6575 / operator | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0242` | _refreshEngineRecordingState:6575 / null | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0243` | _refreshEngineRecordingState:6576 / branch | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0244` | _refreshEngineRecordingState:6576 / operator | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0245` | _refreshEngineRecordingState:6576 / null | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0246` | _refreshEngineRecordingState:6576 / statement | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0247` | _refreshEngineRecordingState:6576 / arrow-body | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0248` | _refreshEngineRecordingState:6576 / null | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0249` | _refreshEngineRecordingState:6577 / return | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0250` | _refreshEngineRecordingState:6579 / declaration-statement | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0251` | _refreshEngineRecordingState:6580 / declaration-statement | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0252` | _refreshEngineRecordingState:6580 / await | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0253` | _refreshEngineRecordingState:6581 / branch | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0254` | _refreshEngineRecordingState:6581 / operator | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0255` | _refreshEngineRecordingState:6581 / operator | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0256` | _refreshEngineRecordingState:6581 / return | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0257` | _refreshEngineRecordingState:6582 / declaration-statement | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0258` | _refreshEngineRecordingState:6584 / branch | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0259` | _refreshEngineRecordingState:6584 / operator | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0260` | _refreshEngineRecordingState:6585 / operator | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0261` | _refreshEngineRecordingState:6585 / operator | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0262` | _refreshEngineRecordingState:6585 / operator | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0263` | _refreshEngineRecordingState:6585 / operator | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0264` | _refreshEngineRecordingState:6585 / null | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0265` | _refreshEngineRecordingState:6585 / operator | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0266` | _refreshEngineRecordingState:6586 / statement | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0267` | _refreshEngineRecordingState:6590 / branch | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0268` | _refreshEngineRecordingState:6590 / operator | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0269` | _refreshEngineRecordingState:6591 / statement | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0270` | _refreshEngineRecordingState:6591 / arrow-body | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0271` | _recordingFileName:6599 / declaration-statement | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0272` | _recordingFileName:6600 / string | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0273` | _recordingFileName:6600 / string | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0274` | _recordingFileName:6602 / string | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0275` | _recordingFileName:6602 / string | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0276` | _recordingFileName:6603 / declaration-statement | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0277` | _recordingFileName:6603 / conditional | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0278` | _recordingFileName:6603 / string | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0279` | _recordingFileName:6604 / branch | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0280` | _recordingFileName:6604 / operator | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0281` | _recordingFileName:6604 / integer | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0282` | _recordingFileName:6604 / statement | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0283` | _recordingFileName:6604 / integer | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0284` | _recordingFileName:6604 / integer | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0285` | _recordingFileName:6605 / declaration-statement | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0286` | _recordingFileName:6606 / arrow-body | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0287` | _recordingFileName:6606 / integer | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0288` | _recordingFileName:6606 / string | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0289` | _recordingFileName:6607 / declaration-statement | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0290` | _recordingFileName:6608 / interpolated-string | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0291` | _recordingFileName:6609 / interpolated-string | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0292` | _recordingFileName:6610 / return | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0293` | _recordingFileName:6610 / interpolated-string | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0294` | _currentRecordingResource:6614 / declaration-statement | final channel = _currentIptvChannel; → IptvChannel? channel = null; | assertion-killed | remaining-typed-plan:typed-p0294 |
+| `p0295` | _currentRecordingResource:6615 / declaration-statement | final sourceId = channel?.attributes['source_playlist_id'] ?? channel?.attributes... → String? sourceId = null; | assertion-killed | quick-typed-plan:q-typed-p0295 |
+| `p0296` | _currentRecordingResource:6616 / string | 'source_playlist_id' → "source_playlist_id mutant" | assertion-killed | remaining-sweep-plan:p0296 |
+| `p0297` | _currentRecordingResource:6617 / string | 'series_playlist_id' → "series_playlist_id mutant" | assertion-killed | remaining-sweep-plan:p0297 |
+| `p0298` | _currentRecordingResource:6619 / branch | sourceId == null → !(sourceId == null) | assertion-killed | quick-sweep-plan:q-p0298 |
+| `p0299` | _currentRecordingResource:6619 / operator | == → != | assertion-killed | quick-sweep-plan:q-p0299 |
+| `p0300` | _currentRecordingResource:6619 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0301` | _currentRecordingResource:6619 / return | return null; → ∅ | assertion-killed | quick-sweep-plan:q-p0301 |
+| `p0302` | _currentRecordingResource:6619 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0303` | _currentRecordingResource:6624 / declaration-statement | final playlists = await IptvPlaylistStorage.getIptvPlaylists( forSettings: false, ); → final playlists = <IptvPlaylist>[]; | assertion-killed | quick-typed-plan:q-typed-p0303 |
+| `p0304` | _currentRecordingResource:6624 / await | await IptvPlaylistStorage.getIptvPlaylists( forSettings: false, ) → IptvPlaylistStorage.getIptvPlaylists(forSettings: false) | invalid-candidate | replay-candidate |
+| `p0305` | _currentRecordingResource:6625 / boolean | false → true | assertion-killed | completion-closure-plan:completion-p0305 |
+| `p0306` | _currentRecordingResource:6628 / branch | playlist.id != sourceId → !(playlist.id != sourceId) | assertion-killed | quick-sweep-plan:q-p0306 |
+| `p0307` | _currentRecordingResource:6628 / operator | != → == | assertion-killed | quick-sweep-plan:q-p0307 |
+| `p0308` | _currentRecordingResource:6629 / declaration-statement | final id = playlist.connectionResourceId; → final id = playlist.connectionResourceId ?? 'mutant'; | assertion-killed | quick-typed-plan:q-typed-p0308, resource-negatives-plan:resource-fresh-id-default |
+| `p0309` | _currentRecordingResource:6630 / declaration-statement | final revision = playlist.connectionResourceRevision; → final revision = playlist.connectionResourceRevision ?? 0; | assertion-killed | quick-typed-plan:q-typed-p0309, resource-negatives-plan:resource-fresh-revision-default |
+| `p0310` | _currentRecordingResource:6631 / branch | id != null && id.isNotEmpty && revision != null → id != null && revision != null | assertion-killed | resource-negatives-plan:resource-fresh-empty-check |
+| `p0311` | _currentRecordingResource:6631 / operator | && → \|\| | invalid-candidate | replay-candidate |
+| `p0312` | _currentRecordingResource:6631 / operator | && → \|\| | invalid-candidate | replay-candidate |
+| `p0313` | _currentRecordingResource:6631 / operator | != → == | invalid-candidate | replay-candidate |
+| `p0314` | _currentRecordingResource:6631 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0315` | _currentRecordingResource:6631 / operator | != → == | invalid-candidate | replay-candidate |
+| `p0316` | _currentRecordingResource:6631 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0317` | _currentRecordingResource:6632 / return | return (id: id, revision: revision); → ∅ | assertion-killed | quick-sweep-plan:q-p0317 |
+| `p0318` | _currentRecordingResource:6639 / branch | source['id'] != sourceId → !(source['id'] != sourceId) | assertion-killed | remaining-sweep-plan:p0318 |
+| `p0319` | _currentRecordingResource:6639 / operator | != → == | assertion-killed | remaining-sweep-plan:p0319 |
+| `p0320` | _currentRecordingResource:6639 / string | 'id' → "id mutant" | assertion-killed | remaining-sweep-plan:p0320 |
+| `p0321` | _currentRecordingResource:6640 / declaration-statement | final id = source['connectionResourceId']?.toString(); → final id = source['connectionResourceId']?.toString() ?? 'mutant'; | assertion-killed | remaining-typed-plan:typed-p0321, resource-negatives-plan:resource-launch-id-default |
+| `p0322` | _currentRecordingResource:6640 / string | 'connectionResourceId' → "connectionResourceId mutant" | assertion-killed | remaining-sweep-plan:p0322 |
+| `p0323` | _currentRecordingResource:6641 / declaration-statement | final revision = (source['connectionResourceRevision'] as num?)?.toInt(); → final revision = (source['connectionResourceRevision'] as num?)?.toInt() ?? 0; | assertion-killed | remaining-typed-plan:typed-p0323, resource-negatives-plan:resource-launch-revision-default |
+| `p0324` | _currentRecordingResource:6641 / string | 'connectionResourceRevision' → "connectionResourceRevision mutant" | assertion-killed | remaining-sweep-plan:p0324 |
+| `p0325` | _currentRecordingResource:6642 / branch | id != null && id.isNotEmpty && revision != null → !(id != null && id.isNotEmpty && revision != null) | invalid-candidate | replay-candidate |
+| `p0326` | _currentRecordingResource:6642 / operator | id != null && id.isNotEmpty && revision != null → id != null && revision != null | assertion-killed | resource-negatives-plan:resource-launch-empty-check |
+| `p0327` | _currentRecordingResource:6642 / operator | && → \|\| | invalid-candidate | replay-candidate |
+| `p0328` | _currentRecordingResource:6642 / operator | != → == | invalid-candidate | replay-candidate |
+| `p0329` | _currentRecordingResource:6642 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0330` | _currentRecordingResource:6642 / operator | != → == | invalid-candidate | replay-candidate |
+| `p0331` | _currentRecordingResource:6642 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0332` | _currentRecordingResource:6643 / return | return (id: id, revision: revision); → ∅ | assertion-killed | remaining-sweep-plan:p0332 |
+| `p0333` | _currentRecordingResource:6646 / return | return null; → ∅ | equivalent-original-callers | The return type is Future<nullable-record>. Falling through the end of this async function returns null implicitly, exactly as the deleted final return null. No statement follows it; no caller distinguishes explicit and implicit null. |
+| `p0334` | _currentRecordingResource:6646 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0335` | _tapMpvLogsForRecording:6651 / statement | _recordLogSub?.cancel(); → ∅ | assertion-killed | remaining-sweep-plan:p0335 |
+| `p0336` | _tapMpvLogsForRecording:6652 / statement | _recordLogSub = _player.stream.log.listen((log) { final level = log.level.toLower... → ∅ | assertion-killed | current-input-refresh-plan:refresh-p0336 |
+| `p0337` | _tapMpvLogsForRecording:6653 / declaration-statement | final level = log.level.toLowerCase(); → final level = 'info'; | invalid-candidate | replay-candidate |
+| `p0338` | _tapMpvLogsForRecording:6654 / branch | level != 'error' && level != 'fatal' → !(level != 'error' && level != 'fatal') | assertion-killed | current-input-refresh-plan:refresh-p0338 |
+| `p0339` | _tapMpvLogsForRecording:6654 / operator | && → \|\| | assertion-killed | current-input-refresh-plan:refresh-p0339 |
+| `p0340` | _tapMpvLogsForRecording:6654 / operator | != → == | assertion-killed | current-input-refresh-plan:refresh-p0340 |
+| `p0341` | _tapMpvLogsForRecording:6654 / string | 'error' → "error mutant" | assertion-killed | current-input-refresh-plan:refresh-p0341 |
+| `p0342` | _tapMpvLogsForRecording:6654 / operator | != → == | assertion-killed | current-input-refresh-plan:refresh-p0342 |
+| `p0343` | _tapMpvLogsForRecording:6654 / string | 'fatal' → "fatal mutant" | assertion-killed | current-input-refresh-plan:refresh-p0343 |
+| `p0344` | _tapMpvLogsForRecording:6654 / return | return; → ∅ | assertion-killed | current-input-refresh-plan:refresh-p0344 |
+| `p0345` | _tapMpvLogsForRecording:6655 / statement | debugPrint('VideoPlayer: mpv[${log.level}] ${log.prefix}: ${log.text}'); → ∅ | diagnostic-only (manifest frozen) | Diagnostic-only mutation; no product UI, persistence, action, subscription or filter change. Text/body remains frozen by move checker. No behavior equivalence or assertion-kill credit claimed. |
+| `p0346` | _tapMpvLogsForRecording:6655 / interpolated-string | 'VideoPlayer: mpv[${log.level}] ${log.prefix}: ${log.text}' → 'MUTVideoPlayer: mpv[${log.level}] ${log.prefix}: ${log.text}' | assertion-killed | diagnostics-plan:text-p0346 |
+| `p0347` | _untapMpvLogs:6660 / statement | _recordLogSub?.cancel(); → ∅ | assertion-killed | current-input-refresh-plan:refresh-p0347 |
+| `p0348` | _untapMpvLogs:6661 / statement | _recordLogSub = null; → ∅ | equivalent-original-callers | _untapMpvLogs first cancels the subscription; every remaining read is another ?.cancel in tap/untap/dispose. No caller observes subscription identity/nullness. Keeping the already-canceled subscription changes only repeated idempotent cancellation; it cannot receive logs or replace the next assignment. |
+| `p0349` | _untapMpvLogs:6661 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0350` | _startRecording:6665 / branch | !_playerCreated → !(!_playerCreated) | assertion-killed | final-witness-plan:final-early-renderer, quick-sweep-plan:q-p0350 |
+| `p0351` | _startRecording:6665 / return | return; → ∅ | invalid-candidate | replay-candidate |
+| `p0352` | _startRecording:6666 / declaration-statement | final platform = _player.platform; → final platform = null; | assertion-killed | quick-typed-plan:q-typed-p0352 |
+| `p0353` | _startRecording:6667 / branch | platform is! mk.NativePlayer → !(platform is! mk.NativePlayer) | invalid-candidate | replay-candidate |
+| `p0354` | _startRecording:6667 / return | return; → ∅ | invalid-candidate | replay-candidate |
+| `p0355` | _startRecording:6668 / declaration-statement | final channel = _currentIptvChannel; → IptvChannel? channel = null; | assertion-killed | quick-typed-plan:q-typed-p0355 |
+| `p0356` | _startRecording:6669 / branch | channel == null → !(channel == null) | invalid-candidate | replay-candidate |
+| `p0357` | _startRecording:6669 / operator | == → != | invalid-candidate | replay-candidate |
+| `p0358` | _startRecording:6669 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0359` | _startRecording:6669 / return | return; → ∅ | invalid-candidate | replay-candidate |
+| `p0360` | _startRecording:6670 / declaration-statement | final gen = ++_recordingStartGen; → final gen = ++_recordingStartGen + 1; | assertion-killed | quick-typed-plan:q-typed-p0360 |
+| `p0361` | _startRecording:6670 / prefix | ++_recordingStartGen → --_recordingStartGen | assertion-killed | remaining-sweep-plan:p0361 |
+| `p0362` | _startRecording:6672 / declaration-statement | final path = await _recordingTargetPath(channel.name); → final path = (await _recordingTargetPath(channel.name)) + '.mutant'; | assertion-killed | quick-typed-plan:q-typed-p0362 |
+| `p0363` | _startRecording:6672 / await | await _recordingTargetPath(channel.name) → _recordingTargetPath(channel.name) | invalid-candidate | replay-candidate |
+| `p0364` | _startRecording:6673 / declaration-statement | final parent = Directory(path).parent; → ∅ | invalid-candidate | replay-candidate |
+| `p0365` | _startRecording:6674 / branch | !await parent.exists() → !(!await parent.exists()) | assertion-killed | quick-sweep-plan:q-p0365 |
+| `p0366` | _startRecording:6674 / await | await parent.exists() → parent.exists() | invalid-candidate | replay-candidate |
+| `p0367` | _startRecording:6675 / statement | await parent.create(recursive: true); → ∅ | assertion-killed | quick-sweep-plan:q-p0367 |
+| `p0368` | _startRecording:6675 / await | await parent.create(recursive: true) → parent.create(recursive: true) | assertion-killed | quick-sweep-plan:q-p0368 |
+| `p0369` | _startRecording:6675 / boolean | true → false | assertion-killed | quick-sweep-plan:q-p0369 |
+| `p0370` | _startRecording:6679 / branch | gen != _recordingStartGen \|\| !mounted \|\| !_playerCreated → !(gen != _recordingStartGen \|\| !mounted \|\| !_playerCreated) | assertion-killed | quick-sweep-plan:q-p0370 |
+| `p0371` | _startRecording:6679 / operator | \|\| → && | assertion-killed | completion-closure-plan:completion-p0371 |
+| `p0372` | _startRecording:6679 / operator | \|\| → && | assertion-killed | completion-closure-plan:completion-p0372, remaining-sweep-plan:p0372 |
+| `p0373` | _startRecording:6679 / operator | != → == | assertion-killed | quick-sweep-plan:q-p0373 |
+| `p0374` | _startRecording:6679 / return | return; → ∅ | assertion-killed | remaining-sweep-plan:p0374 |
+| `p0375` | _startRecording:6680 / statement | _tapMpvLogsForRecording(); → ∅ | assertion-killed | remaining-sweep-plan:p0375 |
+| `p0376` | _startRecording:6681 / statement | await platform.setProperty('stream-record', path); → ∅ | assertion-killed | quick-sweep-plan:q-p0376 |
+| `p0377` | _startRecording:6681 / await | await platform.setProperty('stream-record', path) → platform.setProperty('stream-record', path) | assertion-killed | remaining-sweep-plan:p0377 |
+| `p0378` | _startRecording:6681 / string | 'stream-record' → "stream-record mutant" | assertion-killed | quick-sweep-plan:q-p0378 |
+| `p0379` | _startRecording:6685 / declaration-statement | var echoed = ''; → ∅ | invalid-candidate | replay-candidate |
+| `p0380` | _startRecording:6685 / string | '' → " mutant" | diagnostic-only (manifest frozen) | Initial echoed text is consumed only by the arm diagnostic; native query, admission and state do not branch on this value. Native query operation and log subscription remain independently covered. |
+| `p0381` | _startRecording:6687 / statement | echoed = await platform.getProperty('stream-record'); → ∅ | assertion-killed | remaining-sweep-plan:p0381 |
+| `p0382` | _startRecording:6687 / await | await platform.getProperty('stream-record') → platform.getProperty('stream-record') | invalid-candidate | replay-candidate |
+| `p0383` | _startRecording:6687 / string | 'stream-record' → "stream-record mutant" | assertion-killed | remaining-sweep-plan:p0383 |
+| `p0384` | _startRecording:6689 / statement | debugPrint( 'VideoPlayer: stream-record armed — mpv reports "$echoed" ' '(want "$... → ∅ | diagnostic-only (manifest frozen) | Diagnostic-only mutation; no product UI, persistence, action, subscription or filter change. Text/body remains frozen by move checker. No behavior equivalence or assertion-kill credit claimed. |
+| `p0385` | _startRecording:6690 / interpolated-string | 'VideoPlayer: stream-record armed — mpv reports "$echoed" ' → 'MUTVideoPlayer: stream-record armed — mpv reports "$echoed" ' | diagnostic-only (manifest frozen) | Diagnostic-only mutation; no product UI, persistence, action, subscription or filter change. Text/body remains frozen by move checker. No behavior equivalence or assertion-kill credit claimed. |
+| `p0386` | _startRecording:6691 / interpolated-string | '(want "$path")' → 'MUT(want "$path")' | diagnostic-only (manifest frozen) | Diagnostic-only mutation; no product UI, persistence, action, subscription or filter change. Text/body remains frozen by move checker. No behavior equivalence or assertion-kill credit claimed. |
+| `p0387` | _startRecording:6693 / branch | gen != _recordingStartGen \|\| !mounted → !(gen != _recordingStartGen \|\| !mounted) | assertion-killed | quick-sweep-plan:q-p0387 |
+| `p0388` | _startRecording:6693 / operator | \|\| → && | assertion-killed | remaining-sweep-plan:p0388 |
+| `p0389` | _startRecording:6693 / operator | != → == | assertion-killed | quick-sweep-plan:q-p0389 |
+| `p0390` | _startRecording:6696 / statement | _untapMpvLogs(); → ∅ | assertion-killed | log-cleanup-closure-plan:logs-p0390 |
+| `p0391` | _startRecording:6697 / statement | await _disarmStrayRecording(platform, path); → ∅ | assertion-killed | remaining-sweep-plan:p0391 |
+| `p0392` | _startRecording:6697 / await | await _disarmStrayRecording(platform, path) → _disarmStrayRecording(platform, path) | equivalent-original-callers | The stale-start branch has already canceled its log tap and is followed solely by return. The same _disarmStrayRecording child still clears the captured platform and cleans the path, with both native and file errors caught inside that child. Only completion of the discarded outer start/toggle Future changes; both original production Record consumers are void handlers and perform no action after awaiting this helper. |
+| `p0393` | _startRecording:6698 / return | return; → ∅ | assertion-killed | remaining-sweep-plan:p0393 |
+| `p0394` | _startRecording:6700 / statement | setState(() { _isRecording = true; _recordingTempPath = path; }); → ∅ | assertion-killed | quick-sweep-plan:q-p0394 |
+| `p0395` | _startRecording:6701 / statement | _isRecording = true; → ∅ | assertion-killed | quick-sweep-plan:q-p0395 |
+| `p0396` | _startRecording:6701 / boolean | true → false | assertion-killed | quick-sweep-plan:q-p0396 |
+| `p0397` | _startRecording:6702 / statement | _recordingTempPath = path; → ∅ | assertion-killed | quick-sweep-plan:q-p0397 |
+| `p0398` | _startRecording:6706 / branch | explicit exclusion / no standalone mutation | device-pending: native pending-file registration | device-pending: native pending-file registration |
+| `p0399` | _startRecording:6707 / statement | explicit exclusion / no standalone mutation | device-pending: native pending-file registration | device-pending: native pending-file registration |
+| `p0400` | _startRecording:6711 / string | explicit exclusion / no standalone mutation | device-pending: native pending-file registration | device-pending: native pending-file registration |
+| `p0401` | _startRecording:6715 / statement | ScaffoldMessenger.of(context).showSnackBar( SnackBar( content: Text( // The tee r... → ∅ | assertion-killed | remaining-sweep-plan:p0401 |
+| `p0402` | _startRecording:6720 / conditional | Platform.isAndroid → !(Platform.isAndroid) | assertion-killed | remaining-sweep-plan:p0402 |
+| `p0403` | _startRecording:6721 / string | 'Recording started (stops if you leave the channel)' → "Recording started (stops if you leave the channel) mutant" | device-pending: raw Android notification/publication arm | Direct Platform.isAndroid controls this original arm; S2d does not override Android. No desktop/TEE behavior coverage claimed. |
+| `p0404` | _startRecording:6722 / string | 'Recording started' → "Recording started mutant" | assertion-killed | remaining-sweep-plan:p0404 |
+| `p0405` | _startRecording:6727 / statement | _untapMpvLogs(); → ∅ | assertion-killed | log-cleanup-closure-plan:logs-p0405 |
+| `p0406` | _startRecording:6728 / statement | debugPrint('VideoPlayer: start recording failed: $e'); → ∅ | assertion-killed | remaining-sweep-plan:p0406 |
+| `p0407` | _startRecording:6728 / interpolated-string | 'VideoPlayer: start recording failed: $e' → 'MUTVideoPlayer: start recording failed: $e' | diagnostic-only (manifest frozen) | Diagnostic-only mutation; no product UI, persistence, action, subscription or filter change. Text/body remains frozen by move checker. No behavior equivalence or assertion-kill credit claimed. |
+| `p0408` | _startRecording:6729 / branch | !mounted → !(!mounted) | assertion-killed | cleanup-closure-plan:cleanup-p0408, remaining-sweep-plan:p0408 |
+| `p0409` | _startRecording:6729 / return | return; → ∅ | assertion-killed | remaining-sweep-plan:p0409 |
+| `p0410` | _startRecording:6730 / statement | ScaffoldMessenger.of(context).showSnackBar( const SnackBar(content: Text('Could n... → ∅ | assertion-killed | remaining-sweep-plan:p0410 |
+| `p0411` | _startRecording:6731 / string | 'Could not start recording' → "Could not start recording mutant" | assertion-killed | remaining-sweep-plan:p0411 |
+| `p0412` | _disarmStrayRecording:6744 / statement | await platform.setProperty('stream-record', ''); → ∅ | assertion-killed | cleanup-closure-plan:cleanup-p0412, quick-sweep-plan:q-p0412 |
+| `p0413` | _disarmStrayRecording:6744 / await | await platform.setProperty('stream-record', '') → platform.setProperty('stream-record', '') | assertion-killed | remaining-sweep-plan:p0413 |
+| `p0414` | _disarmStrayRecording:6744 / string | 'stream-record' → "stream-record mutant" | assertion-killed | quick-sweep-plan:q-p0414 |
+| `p0415` | _disarmStrayRecording:6744 / string | '' → " mutant" | assertion-killed | quick-sweep-plan:q-p0415 |
+| `p0416` | _disarmStrayRecording:6746 / statement | debugPrint('VideoPlayer: disarm stray recording failed: $e'); → ∅ | assertion-killed | remaining-sweep-plan:p0416 |
+| `p0417` | _disarmStrayRecording:6746 / interpolated-string | 'VideoPlayer: disarm stray recording failed: $e' → 'MUTVideoPlayer: disarm stray recording failed: $e' | diagnostic-only (manifest frozen) | Diagnostic-only mutation; no product UI, persistence, action, subscription or filter change. Text/body remains frozen by move checker. No behavior equivalence or assertion-kill credit claimed. |
+| `p0418` | _disarmStrayRecording:6749 / declaration-statement | final file = File(path); → ∅ | invalid-candidate | replay-candidate |
+| `p0419` | _disarmStrayRecording:6750 / branch | await file.exists() → !(await file.exists()) | assertion-killed | quick-sweep-plan:q-p0419 |
+| `p0420` | _disarmStrayRecording:6750 / await | await file.exists() → file.exists() | invalid-candidate | replay-candidate |
+| `p0421` | _disarmStrayRecording:6750 / statement | await file.delete(); → ∅ | invalid-candidate | replay-candidate |
+| `p0422` | _disarmStrayRecording:6750 / await | await file.delete() → file.delete() | assertion-killed | cleanup-closure-plan:cleanup-p0422, remaining-sweep-plan:p0422 |
+| `p0423` | _disarmStrayRecording:6752 / statement | debugPrint('VideoPlayer: stray recording cleanup failed: $e'); → ∅ | assertion-killed | remaining-sweep-plan:p0423 |
+| `p0424` | _disarmStrayRecording:6752 / interpolated-string | 'VideoPlayer: stray recording cleanup failed: $e' → 'MUTVideoPlayer: stray recording cleanup failed: $e' | diagnostic-only (manifest frozen) | Diagnostic-only mutation; no product UI, persistence, action, subscription or filter change. Text/body remains frozen by move checker. No behavior equivalence or assertion-kill credit claimed. |
+| `p0425` | _stopRecording:6758 / boolean | true → false | assertion-killed | quick-sweep-plan:q-p0425 |
+| `p0426` | _stopRecording:6761 / statement | _recordingStartGen++; → ∅ | assertion-killed | remaining-sweep-plan:p0426 |
+| `p0427` | _stopRecording:6761 / postfix | _recordingStartGen++ → _recordingStartGen-- | assertion-killed | remaining-sweep-plan:p0427 |
+| `p0428` | _stopRecording:6762 / branch | !_isRecording → !(!_isRecording) | assertion-killed | quick-sweep-plan:q-p0428 |
+| `p0429` | _stopRecording:6762 / return | return; → ∅ | invalid-candidate | replay-candidate |
+| `p0430` | _stopRecording:6763 / declaration-statement | final path = _recordingTempPath; → String? path = null; | assertion-killed | quick-typed-plan:q-typed-p0430 |
+| `p0431` | _stopRecording:6764 / declaration-statement | final platform = _playerCreated ? _player.platform : null; → final platform = null; | assertion-killed | quick-typed-plan:q-typed-p0431 |
+| `p0432` | _stopRecording:6764 / conditional | _playerCreated → !(_playerCreated) | assertion-killed | quick-sweep-plan:q-p0432 |
+| `p0433` | _stopRecording:6764 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0434` | _stopRecording:6766 / branch | mounted → !(mounted) | assertion-killed | quick-sweep-plan:q-p0434 |
+| `p0435` | _stopRecording:6767 / statement | setState(() { _isRecording = false; _recordingTempPath = null; }); → ∅ | assertion-killed | quick-sweep-plan:q-p0435 |
+| `p0436` | _stopRecording:6768 / statement | _isRecording = false; → ∅ | assertion-killed | quick-sweep-plan:q-p0436 |
+| `p0437` | _stopRecording:6768 / boolean | false → true | assertion-killed | quick-sweep-plan:q-p0437 |
+| `p0438` | _stopRecording:6769 / statement | _recordingTempPath = null; → ∅ | equivalent-original-callers | Only _stopRecording and the distinct inline dispose block read _recordingTempPath, both after an _isRecording guard. Stop clears that flag synchronously before this null write, and every later successful start writes a fresh non-null path in the same setState closure as setting the flag true. Retaining the old String while inactive is unobservable to these original readers; the in-flight stop uses its already-captured local path. |
+| `p0439` | _stopRecording:6769 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0440` | _stopRecording:6772 / statement | _isRecording = false; → ∅ | equivalent-original-callers | This is the non-mounted arm of _stopRecording after its _isRecording guard and before its first await. The only true writer is start, which checks mounted and writes flag/path in one synchronous closure; inline dispose clears the flag before unmount, and stop has no intervening await before this check. Thus recording=true and mounted=false cannot reach this arm through original State writers. A saved callback after disposal returns at the earlier false recording guard. |
+| `p0441` | _stopRecording:6772 / boolean | false → true | equivalent-original-callers | This is the non-mounted arm of _stopRecording after its _isRecording guard and before its first await. The only true writer is start, which checks mounted and writes flag/path in one synchronous closure; inline dispose clears the flag before unmount, and stop has no intervening await before this check. Thus recording=true and mounted=false cannot reach this arm through original State writers. A saved callback after disposal returns at the earlier false recording guard. |
+| `p0442` | _stopRecording:6773 / statement | _recordingTempPath = null; → ∅ | equivalent-original-callers | This is the non-mounted arm of _stopRecording after its _isRecording guard and before its first await. The only true writer is start, which checks mounted and writes flag/path in one synchronous closure; inline dispose clears the flag before unmount, and stop has no intervening await before this check. Thus recording=true and mounted=false cannot reach this arm through original State writers. A saved callback after disposal returns at the earlier false recording guard. |
+| `p0443` | _stopRecording:6773 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0444` | _stopRecording:6776 / branch | platform is mk.NativePlayer → !(platform is mk.NativePlayer) | invalid-candidate | replay-candidate |
+| `p0445` | _stopRecording:6777 / statement | await platform.setProperty('stream-record', ''); → ∅ | assertion-killed | quick-sweep-plan:q-p0445 |
+| `p0446` | _stopRecording:6777 / await | await platform.setProperty('stream-record', '') → platform.setProperty('stream-record', '') | assertion-killed | remaining-sweep-plan:p0446 |
+| `p0447` | _stopRecording:6777 / string | 'stream-record' → "stream-record mutant" | assertion-killed | quick-sweep-plan:q-p0447 |
+| `p0448` | _stopRecording:6777 / string | '' → " mutant" | assertion-killed | quick-sweep-plan:q-p0448 |
+| `p0449` | _stopRecording:6780 / statement | debugPrint('VideoPlayer: stop recording failed: $e'); → ∅ | diagnostic-only (manifest frozen) | Diagnostic-only mutation; no product UI, persistence, action, subscription or filter change. Text/body remains frozen by move checker. No behavior equivalence or assertion-kill credit claimed. |
+| `p0450` | _stopRecording:6780 / interpolated-string | 'VideoPlayer: stop recording failed: $e' → 'MUTVideoPlayer: stop recording failed: $e' | diagnostic-only (manifest frozen) | Diagnostic-only mutation; no product UI, persistence, action, subscription or filter change. Text/body remains frozen by move checker. No behavior equivalence or assertion-kill credit claimed. |
+| `p0451` | _stopRecording:6782 / statement | _untapMpvLogs(); → ∅ | assertion-killed | remaining-sweep-plan:p0451 |
+| `p0452` | _stopRecording:6783 / branch | path == null → !(path == null) | invalid-candidate | replay-candidate |
+| `p0453` | _stopRecording:6783 / operator | == → != | invalid-candidate | replay-candidate |
+| `p0454` | _stopRecording:6783 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0455` | _stopRecording:6783 / return | return; → ∅ | invalid-candidate | replay-candidate |
+| `p0456` | _stopRecording:6788 / declaration-statement | var fileBytes = 0; → ∅ | invalid-candidate | replay-candidate |
+| `p0457` | _stopRecording:6788 / integer | 0 → 1 | assertion-killed | remaining-sweep-plan:p0457 |
+| `p0458` | _stopRecording:6790 / declaration-statement | final file = File(path); → ∅ | invalid-candidate | replay-candidate |
+| `p0459` | _stopRecording:6791 / branch | await file.exists() → !(await file.exists()) | assertion-killed | quick-sweep-plan:q-p0459 |
+| `p0460` | _stopRecording:6791 / await | await file.exists() → file.exists() | invalid-candidate | replay-candidate |
+| `p0461` | _stopRecording:6791 / statement | fileBytes = await file.length(); → ∅ | invalid-candidate | replay-candidate |
+| `p0462` | _stopRecording:6791 / await | await file.length() → file.length() | invalid-candidate | replay-candidate |
+| `p0463` | _stopRecording:6793 / statement | debugPrint( 'VideoPlayer: tee recording stopped — $fileBytes bytes on disk at $pa... → ∅ | diagnostic-only (manifest frozen) | Diagnostic-only mutation; no product UI, persistence, action, subscription or filter change. Text/body remains frozen by move checker. No behavior equivalence or assertion-kill credit claimed. |
+| `p0464` | _stopRecording:6794 / interpolated-string | 'VideoPlayer: tee recording stopped — $fileBytes bytes on disk at $path' → 'MUTVideoPlayer: tee recording stopped — $fileBytes bytes on disk at $path' | diagnostic-only (manifest frozen) | Diagnostic-only mutation; no product UI, persistence, action, subscription or filter change. Text/body remains frozen by move checker. No behavior equivalence or assertion-kill credit claimed. |
+| `p0465` | _stopRecording:6796 / declaration-statement | final fileOk = fileBytes > 0; → final fileOk = false; | assertion-killed | quick-typed-plan:q-typed-p0465 |
+| `p0466` | _stopRecording:6796 / operator | > → >= | assertion-killed | remaining-sweep-plan:p0466 |
+| `p0467` | _stopRecording:6796 / integer | 0 → 1 | assertion-killed | quick-sweep-plan:q-p0467 |
+| `p0468` | _stopRecording:6800 / branch | fileOk && Platform.isAndroid → !(fileOk && Platform.isAndroid) | assertion-killed | quick-sweep-plan:q-p0468 |
+| `p0469` | _stopRecording:6800 / operator | && → \|\| | assertion-killed | quick-sweep-plan:q-p0469 |
+| `p0470` | _stopRecording:6801 / statement | unawaited(_publishRecording(path, userInitiated: userInitiated)); → ∅ | device-pending: raw Android notification/publication arm | Direct Platform.isAndroid controls this original arm; S2d does not override Android. No desktop/TEE behavior coverage claimed. |
+| `p0471` | _stopRecording:6802 / branch | userInitiated && mounted → !(userInitiated && mounted) | assertion-killed | quick-sweep-plan:q-p0471 |
+| `p0472` | _stopRecording:6802 / operator | && → \|\| | assertion-killed | log-cleanup-closure-plan:logs-p0472 |
+| `p0473` | _stopRecording:6803 / statement | ScaffoldMessenger.of(context).showSnackBar( SnackBar( content: Text( fileOk ? 'Re... → ∅ | assertion-killed | quick-sweep-plan:q-p0473 |
+| `p0474` | _stopRecording:6806 / conditional | fileOk → !(fileOk) | assertion-killed | quick-sweep-plan:q-p0474 |
+| `p0475` | _stopRecording:6807 / interpolated-string | 'Recording saved: $path' → 'MUTRecording saved: $path' | assertion-killed | diagnostics-plan:text-p0475 |
+| `p0476` | _stopRecording:6808 / string | 'Recording failed — mpv wrote no file (see logs)' → "Recording failed — mpv wrote no file (see logs) mutant" | assertion-killed | remaining-sweep-plan:p0476 |
+| `p0477` | _publishRecording:6819 / declaration-statement | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0478` | _publishRecording:6819 / boolean | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0479` | _publishRecording:6821 / declaration-statement | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0480` | _publishRecording:6822 / declaration-statement | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0481` | _publishRecording:6822 / await | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0482` | _publishRecording:6825 / string | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0483` | _publishRecording:6827 / statement | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0484` | _publishRecording:6827 / operator | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0485` | _publishRecording:6827 / null | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0486` | _publishRecording:6829 / statement | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0487` | _publishRecording:6829 / interpolated-string | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0488` | _publishRecording:6831 / branch | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0489` | _publishRecording:6831 / operator | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0490` | _publishRecording:6831 / return | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0491` | _publishRecording:6835 / statement | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0492` | _publishRecording:6838 / conditional | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0493` | _publishRecording:6839 / string | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0494` | _publishRecording:6840 / string | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0495` | _publishRecording:6841 / string | explicit exclusion / no standalone mutation | device-pending: raw Android service/publication protocol | device-pending: raw Android service/publication protocol |
+| `p0496` | _recordingTargetPath:6863 / string | 'mkv' → "mkv mutant" | assertion-killed | current-input-refresh-plan:refresh-p0496 |
+| `p0497` | _recordingTargetPath:6865 / declaration-statement | final safeName = channelName .replaceAll(RegExp(r'[^A-Za-z0-9 _-]'), '') .trim() ... → final safeName = 'mutant'; | invalid-candidate | replay-candidate |
+| `p0498` | _recordingTargetPath:6866 / string | r'[^A-Za-z0-9 _-]' → "[^A-Za-z0-9 _-] mutant" | assertion-killed | remaining-sweep-plan:p0498 |
+| `p0499` | _recordingTargetPath:6866 / string | '' → " mutant" | assertion-killed | remaining-sweep-plan:p0499 |
+| `p0500` | _recordingTargetPath:6868 / string | r'\s+' → "\\s+ mutant" | assertion-killed | remaining-sweep-plan:p0500 |
+| `p0501` | _recordingTargetPath:6868 / string | '_' → "_ mutant" | assertion-killed | remaining-sweep-plan:p0501 |
+| `p0502` | _recordingTargetPath:6869 / declaration-statement | var base = safeName.isEmpty ? 'recording' : safeName; → var base = 'mutant'; | invalid-candidate | replay-candidate |
+| `p0503` | _recordingTargetPath:6869 / conditional | safeName.isEmpty → !(safeName.isEmpty) | assertion-killed | current-input-refresh-plan:refresh-p0503 |
+| `p0504` | _recordingTargetPath:6869 / string | 'recording' → "recording mutant" | assertion-killed | remaining-sweep-plan:p0504 |
+| `p0505` | _recordingTargetPath:6870 / branch | base.length > 60 → !(base.length > 60) | assertion-killed | current-input-refresh-plan:refresh-p0505 |
+| `p0506` | _recordingTargetPath:6870 / operator | > → >= | equivalent-original-callers | Changing base.length > 60 to >= 60 adds only the length-equals-60 case, where substring(0,60) equals base. Sanitization produces ASCII and all other lengths take the same branch. The threshold-literal 60-to-61 mutant is distinct and tested at 61 characters. |
+| `p0507` | _recordingTargetPath:6870 / integer | 60 → 61 | assertion-killed | cleanup-closure-plan:cleanup-p0507, remaining-sweep-plan:p0507 |
+| `p0508` | _recordingTargetPath:6870 / statement | base = base.substring(0, 60); → ∅ | invalid-candidate | replay-candidate |
+| `p0509` | _recordingTargetPath:6870 / integer | 0 → 1 | assertion-killed | remaining-sweep-plan:p0509 |
+| `p0510` | _recordingTargetPath:6870 / integer | 60 → 61 | assertion-killed | remaining-sweep-plan:p0510 |
+| `p0511` | _recordingTargetPath:6871 / declaration-statement | final now = DateTime.now(); → final now = DateTime(2000); | invalid-candidate | replay-candidate |
+| `p0512` | _recordingTargetPath:6872 / arrow-body | v.toString().padLeft(2, '0') → v.toString() | assertion-killed | arrow-plan:arrow-p0512 |
+| `p0513` | _recordingTargetPath:6872 / integer | 2 → 3 | assertion-killed | current-input-refresh-plan:refresh-p0513 |
+| `p0514` | _recordingTargetPath:6872 / string | '0' → "0 mutant" | assertion-killed | zero-padding-plan:zero-padding-p0514 |
+| `p0515` | _recordingTargetPath:6873 / declaration-statement | final stamp = '${now.year}${two(now.month)}${two(now.day)}_' '${two(now.hour)}${t... → final stamp = 'mutant'; | invalid-candidate | replay-candidate |
+| `p0516` | _recordingTargetPath:6874 / interpolated-string | '${now.year}${two(now.month)}${two(now.day)}_' → 'MUT${now.year}${two(now.month)}${two(now.day)}_' | assertion-killed | current-input-refresh-plan:refresh-p0516 |
+| `p0517` | _recordingTargetPath:6875 / interpolated-string | '${two(now.hour)}${two(now.minute)}${two(now.second)}' → 'MUT${two(now.hour)}${two(now.minute)}${two(now.second)}' | assertion-killed | current-input-refresh-plan:refresh-p0517 |
+| `p0518` | _recordingTargetPath:6877 / declaration-statement | Directory dir; → ∅ | invalid-candidate | replay-candidate |
+| `p0519` | _recordingTargetPath:6878 / branch | Platform.isAndroid → !(Platform.isAndroid) | assertion-killed | current-input-refresh-plan:refresh-p0519 |
+| `p0520` | _recordingTargetPath:6879 / statement | dir = (await getExternalStorageDirectory()) ?? await AppStorage.documents(); → ∅ | invalid-candidate | replay-candidate |
+| `p0521` | _recordingTargetPath:6880 / await | await getExternalStorageDirectory() → getExternalStorageDirectory() | invalid-candidate | replay-candidate |
+| `p0522` | _recordingTargetPath:6880 / await | await AppStorage.documents() → AppStorage.documents() | invalid-candidate | replay-candidate |
+| `p0523` | _recordingTargetPath:6882 / statement | dir = (await getDownloadsDirectory()) ?? await AppStorage.documents(); → ∅ | invalid-candidate | replay-candidate |
+| `p0524` | _recordingTargetPath:6882 / await | await getDownloadsDirectory() → getDownloadsDirectory() | invalid-candidate | replay-candidate |
+| `p0525` | _recordingTargetPath:6882 / await | await AppStorage.documents() → AppStorage.documents() | invalid-candidate | replay-candidate |
+| `p0526` | _recordingTargetPath:6884 / declaration-statement | final sep = Platform.pathSeparator; → ∅ | invalid-candidate | replay-candidate |
+| `p0527` | _recordingTargetPath:6885 / declaration-statement | final prefix = '${dir.path}${sep}Debrify${sep}Recordings$sep${base}_$stamp'; → final prefix = '${dir.path}${sep}mutant'; | invalid-candidate | replay-candidate |
+| `p0528` | _recordingTargetPath:6885 / interpolated-string | '${dir.path}${sep}Debrify${sep}Recordings$sep${base}_$stamp' → 'MUT${dir.path}${sep}Debrify${sep}Recordings$sep${base}_$stamp' | assertion-killed | current-input-refresh-plan:refresh-p0528 |
+| `p0529` | _recordingTargetPath:6887 / declaration-statement | var candidate = '$prefix.$extension'; → var candidate = '$prefix.mutant'; | invalid-candidate | replay-candidate |
+| `p0530` | _recordingTargetPath:6887 / interpolated-string | '$prefix.$extension' → 'MUT$prefix.$extension' | assertion-killed | current-input-refresh-plan:refresh-p0530 |
+| `p0531` | _recordingTargetPath:6888 / integer | 2 → 3 | assertion-killed | remaining-sweep-plan:p0531 |
+| `p0532` | _recordingTargetPath:6888 / operator | && → \|\| | assertion-killed | current-input-refresh-plan:refresh-p0532 |
+| `p0533` | _recordingTargetPath:6888 / operator | < → <= | assertion-killed | current-input-refresh-plan:refresh-p0533 |
+| `p0534` | _recordingTargetPath:6888 / integer | 100 → 101 | assertion-killed | current-input-refresh-plan:refresh-p0534 |
+| `p0535` | _recordingTargetPath:6888 / await | await File(candidate).exists() → File(candidate).exists() | invalid-candidate | replay-candidate |
+| `p0536` | _recordingTargetPath:6888 / postfix | n++ → n-- | assertion-killed | current-input-refresh-plan:refresh-p0536 |
+| `p0537` | _recordingTargetPath:6889 / statement | candidate = '${prefix}_$n.$extension'; → ∅ | assertion-killed | remaining-sweep-plan:p0537 |
+| `p0538` | _recordingTargetPath:6889 / interpolated-string | '${prefix}_$n.$extension' → 'MUT${prefix}_$n.$extension' | assertion-killed | current-input-refresh-plan:refresh-p0538 |
+| `p0539` | _recordingTargetPath:6893 / branch | await File(candidate).exists() → !(await File(candidate).exists()) | assertion-killed | current-input-refresh-plan:refresh-p0539 |
+| `p0540` | _recordingTargetPath:6893 / await | await File(candidate).exists() → File(candidate).exists() | invalid-candidate | replay-candidate |
+| `p0541` | _recordingTargetPath:6894 / statement | candidate = '${prefix}_${now.microsecondsSinceEpoch}.$extension'; → ∅ | assertion-killed | current-input-refresh-plan:refresh-p0541 |
+| `p0542` | _recordingTargetPath:6894 / interpolated-string | '${prefix}_${now.microsecondsSinceEpoch}.$extension' → 'MUT${prefix}_${now.microsecondsSinceEpoch}.$extension' | assertion-killed | current-input-refresh-plan:refresh-p0542 |
+| `p0543` | _recordingTargetPath:6896 / return | return candidate; → ∅ | invalid-candidate | replay-candidate |
+| `p0544` | _recordingActiveNow:12102 / arrow-body | _isRecording \|\| _engineTaskId != null \|\| _desktopCaptureForCurrent() != null → false | assertion-killed | arrow-plan:arrow-p0544 |
+| `p0545` | _recordingActiveNow:12102 / operator | \|\| → && | assertion-killed | quick-sweep-plan:q-p0545 |
+| `p0546` | _recordingActiveNow:12102 / operator | \|\| → && | assertion-killed | remaining-sweep-plan:p0546 |
+| `p0547` | _recordingActiveNow:12103 / operator | != → == | assertion-killed | quick-sweep-plan:q-p0547 |
+| `p0548` | _recordingActiveNow:12103 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0549` | _recordingActiveNow:12104 / operator | != → == | assertion-killed | quick-sweep-plan:q-p0549 |
+| `p0550` | _recordingActiveNow:12104 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0551` | _showTracksSheet:13904 / declaration-statement | final currentTitle = _identify.currentPlaybackTitleForIdentity(); → final currentTitle = 'Mutation.S99E98.mkv'; | assertion-killed | current-input-refresh-plan:refresh-p0551 |
+| `p0552` | _showTracksSheet:13905 / declaration-statement | final seriesInfo = SeriesParser.parseFilename(currentTitle); → final seriesInfo = SeriesParser.parseFilename('Mutation.S99E98.mkv'); | assertion-killed | current-input-refresh-plan:refresh-p0552 |
+| `p0553` | _showTracksSheet:13906 / declaration-statement | final season = seriesInfo.season ?? _manualContentSeason ?? _effectiveContentSeason; → int? season = 99; | assertion-killed | current-input-refresh-plan:refresh-p0553 |
+| `p0554` | _showTracksSheet:13908 / declaration-statement | final episode = seriesInfo.episode ?? _manualContentEpisode ?? _effectiveContentE... → int? episode = 98; | assertion-killed | current-input-refresh-plan:refresh-p0554 |
+| `p0555` | _showTracksSheet:13914 / declaration-statement | String? effectiveImdbId; → ∅ | invalid-candidate | replay-candidate |
+| `p0556` | _showTracksSheet:13915 / declaration-statement | final seriesPlaylist = _seriesPlaylist; → SeriesPlaylist? seriesPlaylist = null; | assertion-killed | current-input-refresh-plan:refresh-p0556 |
+| `p0557` | _showTracksSheet:13917 / branch | _manualContentImdbId != null && _manualContentImdbId!.isNotEmpty → !(_manualContentImdbId != null && _manualContentImdbId!.isNotEmpty) | assertion-killed | quick-sweep-plan:q-p0557 |
+| `p0558` | _showTracksSheet:13917 / operator | && → \|\| | assertion-killed | quick-sweep-plan:q-p0558 |
+| `p0559` | _showTracksSheet:13917 / operator | != → == | assertion-killed | quick-sweep-plan:q-p0559 |
+| `p0560` | _showTracksSheet:13917 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0561` | _showTracksSheet:13918 / statement | effectiveImdbId = _manualContentImdbId; → ∅ | assertion-killed | remaining-sweep-plan:p0561 |
+| `p0562` | _showTracksSheet:13919 / branch | seriesPlaylist != null → !(seriesPlaylist != null) | invalid-candidate | replay-candidate |
+| `p0563` | _showTracksSheet:13919 / operator | != → == | invalid-candidate | replay-candidate |
+| `p0564` | _showTracksSheet:13919 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0565` | _showTracksSheet:13920 / branch | seriesPlaylist.isSeries → !(seriesPlaylist.isSeries) | assertion-killed | quick-sweep-plan:q-p0565 |
+| `p0566` | _showTracksSheet:13922 / statement | effectiveImdbId = seriesPlaylist.imdbId ?? _effectiveContentImdbId; → ∅ | assertion-killed | live-menu-closure-plan:live-closure-p0566 |
+| `p0567` | _showTracksSheet:13925 / statement | effectiveImdbId = seriesPlaylist.getImdbIdForIndex(_currentIndex); → ∅ | assertion-killed | fallback-closure-plan:fallback-p0567 |
+| `p0568` | _showTracksSheet:13928 / branch | effectiveImdbId == null && _effectiveContentImdbId == null → !(effectiveImdbId == null && _effectiveContentImdbId == null) | assertion-killed | quick-sweep-plan:q-p0568 |
+| `p0569` | _showTracksSheet:13928 / operator | && → \|\| | assertion-killed | fallback-closure-plan:fallback-p0569 |
+| `p0570` | _showTracksSheet:13928 / operator | == → != | assertion-killed | quick-sweep-plan:q-p0570 |
+| `p0571` | _showTracksSheet:13928 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0572` | _showTracksSheet:13928 / operator | == → != | assertion-killed | quick-sweep-plan:q-p0572 |
+| `p0573` | _showTracksSheet:13928 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0574` | _showTracksSheet:13929 / statement | debugPrint( 'VideoPlayer: Fetching movie metadata for index $_currentIndex before... → ∅ | diagnostic-only (manifest frozen) | Diagnostic-only mutation; no product UI, persistence, action, subscription or filter change. Text/body remains frozen by move checker. No behavior equivalence or assertion-kill credit claimed. |
+| `p0575` | _showTracksSheet:13930 / interpolated-string | 'VideoPlayer: Fetching movie metadata for index $_currentIndex before showing tra... → 'MUTVideoPlayer: Fetching movie metadata for index $_currentIndex before showing ... | diagnostic-only (manifest frozen) | Diagnostic-only mutation; no product UI, persistence, action, subscription or filter change. Text/body remains frozen by move checker. No behavior equivalence or assertion-kill credit claimed. |
+| `p0576` | _showTracksSheet:13932 / statement | effectiveImdbId = await seriesPlaylist.fetchMovieMetadataForIndex( _currentIndex, ); → ∅ | assertion-killed | quick-sweep-plan:q-p0576 |
+| `p0577` | _showTracksSheet:13932 / await | await seriesPlaylist.fetchMovieMetadataForIndex( _currentIndex, ) → seriesPlaylist.fetchMovieMetadataForIndex(_currentIndex) | invalid-candidate | replay-candidate |
+| `p0578` | _showTracksSheet:13938 / statement | effectiveImdbId ??= _effectiveContentImdbId; → ∅ | assertion-killed | fallback-closure-plan:fallback-p0578 |
+| `p0579` | _showTracksSheet:13943 / statement | effectiveImdbId = _singleFileImdbId ?? _effectiveContentImdbId; → ∅ | assertion-killed | remaining-sweep-plan:p0579 |
+| `p0580` | _showTracksSheet:13946 / branch | effectiveImdbId == null && !_singleFileImdbFetched → !(effectiveImdbId == null && !_singleFileImdbFetched) | assertion-killed | remaining-sweep-plan:p0580 |
+| `p0581` | _showTracksSheet:13946 / operator | && → \|\| | assertion-killed | remaining-sweep-plan:p0581, single-closure-plan:single-p0581 |
+| `p0582` | _showTracksSheet:13946 / operator | == → != | assertion-killed | remaining-sweep-plan:p0582, single-closure-plan:single-p0582 |
+| `p0583` | _showTracksSheet:13946 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0584` | _showTracksSheet:13947 / statement | debugPrint( 'VideoPlayer: Fetching single-file movie metadata before showing trac... → ∅ | diagnostic-only (manifest frozen) | Diagnostic-only mutation; no product UI, persistence, action, subscription or filter change. Text/body remains frozen by move checker. No behavior equivalence or assertion-kill credit claimed. |
+| `p0585` | _showTracksSheet:13948 / string | 'VideoPlayer: Fetching single-file movie metadata before showing tracks' → "VideoPlayer: Fetching single-file movie metadata before showing tracks mutant" | diagnostic-only (manifest frozen) | Diagnostic-only mutation; no product UI, persistence, action, subscription or filter change. Text/body remains frozen by move checker. No behavior equivalence or assertion-kill credit claimed. |
+| `p0586` | _showTracksSheet:13950 / statement | await _fetchSingleFileMovieMetadata(); → ∅ | assertion-killed | remaining-sweep-plan:p0586, single-closure-plan:single-p0586 |
+| `p0587` | _showTracksSheet:13950 / await | await _fetchSingleFileMovieMetadata() → _fetchSingleFileMovieMetadata() | assertion-killed | remaining-sweep-plan:p0587, single-closure-plan:single-p0587 |
+| `p0588` | _showTracksSheet:13951 / statement | effectiveImdbId = _singleFileImdbId; → ∅ | assertion-killed | remaining-sweep-plan:p0588, single-closure-plan:single-p0588 |
+| `p0589` | _showTracksSheet:13957 / declaration-statement | String? effectiveContentType = _manualContentType ?? _effectiveContentType; → String? effectiveContentType = 'mutant'; | assertion-killed | quick-typed-plan:q-typed-p0589 |
+| `p0590` | _showTracksSheet:13958 / branch | effectiveContentType == null → !(effectiveContentType == null) | assertion-killed | quick-sweep-plan:q-p0590 |
+| `p0591` | _showTracksSheet:13958 / operator | == → != | assertion-killed | quick-sweep-plan:q-p0591 |
+| `p0592` | _showTracksSheet:13958 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0593` | _showTracksSheet:13959 / branch | seriesPlaylist?.isSeries == true → !(seriesPlaylist?.isSeries == true) | assertion-killed | quick-sweep-plan:q-p0593 |
+| `p0594` | _showTracksSheet:13959 / operator | == → != | assertion-killed | quick-sweep-plan:q-p0594 |
+| `p0595` | _showTracksSheet:13959 / boolean | true → false | assertion-killed | quick-sweep-plan:q-p0595 |
+| `p0596` | _showTracksSheet:13960 / statement | effectiveContentType = 'series'; → ∅ | assertion-killed | fallback-closure-plan:fallback-p0596 |
+| `p0597` | _showTracksSheet:13960 / string | 'series' → "series mutant" | assertion-killed | live-menu-closure-plan:live-closure-p0597 |
+| `p0598` | _showTracksSheet:13961 / branch | effectiveImdbId != null → !(effectiveImdbId != null) | assertion-killed | quick-sweep-plan:q-p0598 |
+| `p0599` | _showTracksSheet:13961 / operator | != → == | assertion-killed | quick-sweep-plan:q-p0599 |
+| `p0600` | _showTracksSheet:13961 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0601` | _showTracksSheet:13964 / statement | effectiveContentType = 'movie'; → ∅ | assertion-killed | quick-sweep-plan:q-p0601 |
+| `p0602` | _showTracksSheet:13964 / string | 'movie' → "movie mutant" | assertion-killed | quick-sweep-plan:q-p0602 |
+| `p0603` | _showTracksSheet:13968 / statement | debugPrint( 'VideoPlayer: Opening TracksSheet with contentImdbId=$effectiveImdbId... → ∅ | diagnostic-only (manifest frozen) | Diagnostic-only mutation; no product UI, persistence, action, subscription or filter change. Text/body remains frozen by move checker. No behavior equivalence or assertion-kill credit claimed. |
+| `p0604` | _showTracksSheet:13969 / interpolated-string | 'VideoPlayer: Opening TracksSheet with contentImdbId=$effectiveImdbId, ' → 'MUTVideoPlayer: Opening TracksSheet with contentImdbId=$effectiveImdbId, ' | diagnostic-only (manifest frozen) | Diagnostic-only mutation; no product UI, persistence, action, subscription or filter change. Text/body remains frozen by move checker. No behavior equivalence or assertion-kill credit claimed. |
+| `p0605` | _showTracksSheet:13970 / interpolated-string | 'contentType=$effectiveContentType, ' → 'MUTcontentType=$effectiveContentType, ' | diagnostic-only (manifest frozen) | Diagnostic-only mutation; no product UI, persistence, action, subscription or filter change. Text/body remains frozen by move checker. No behavior equivalence or assertion-kill credit claimed. |
+| `p0606` | _showTracksSheet:13971 / interpolated-string | 'season=$season, episode=$episode (parsed from: $currentTitle)' → 'MUTseason=$season, episode=$episode (parsed from: $currentTitle)' | diagnostic-only (manifest frozen) | Diagnostic-only mutation; no product UI, persistence, action, subscription or filter change. Text/body remains frozen by move checker. No behavior equivalence or assertion-kill credit claimed. |
+| `p0607` | _showTracksSheet:13974 / declaration-statement | final subtitleSeason = effectiveContentType == 'series' ? season : null; → int? subtitleSeason = 99; | assertion-killed | quick-typed-plan:q-typed-p0607 |
+| `p0608` | _showTracksSheet:13974 / conditional | effectiveContentType == 'series' → !(effectiveContentType == 'series') | assertion-killed | remaining-sweep-plan:p0608 |
+| `p0609` | _showTracksSheet:13974 / operator | == → != | assertion-killed | remaining-sweep-plan:p0609 |
+| `p0610` | _showTracksSheet:13974 / string | 'series' → "series mutant" | assertion-killed | remaining-sweep-plan:p0610 |
+| `p0611` | _showTracksSheet:13974 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0612` | _showTracksSheet:13975 / declaration-statement | final subtitleEpisode = effectiveContentType == 'series' ? episode : null; → int? subtitleEpisode = 98; | assertion-killed | quick-typed-plan:q-typed-p0612 |
+| `p0613` | _showTracksSheet:13975 / conditional | effectiveContentType == 'series' → !(effectiveContentType == 'series') | assertion-killed | remaining-sweep-plan:p0613 |
+| `p0614` | _showTracksSheet:13975 / operator | == → != | assertion-killed | remaining-sweep-plan:p0614 |
+| `p0615` | _showTracksSheet:13975 / string | 'series' → "series mutant" | assertion-killed | remaining-sweep-plan:p0615 |
+| `p0616` | _showTracksSheet:13975 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0617` | _showTracksSheet:13978 / declaration-statement | final String? cacheKey = effectiveImdbId != null ? (subtitleSeason != null && sub... → String? cacheKey = null; | assertion-killed | current-input-refresh-plan:refresh-p0617 |
+| `p0618` | _showTracksSheet:13978 / conditional | effectiveImdbId != null → !(effectiveImdbId != null) | assertion-killed | remaining-sweep-plan:p0618 |
+| `p0619` | _showTracksSheet:13978 / operator | != → == | assertion-killed | remaining-sweep-plan:p0619 |
+| `p0620` | _showTracksSheet:13978 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0621` | _showTracksSheet:13979 / conditional | subtitleSeason != null && subtitleEpisode != null → !(subtitleSeason != null && subtitleEpisode != null) | assertion-killed | coordinate-closure-plan:coordinates-p0621 |
+| `p0622` | _showTracksSheet:13979 / operator | && → \|\| | assertion-killed | coordinate-closure-plan:coordinates-p0622 |
+| `p0623` | _showTracksSheet:13979 / operator | != → == | assertion-killed | coordinate-closure-plan:coordinates-p0623 |
+| `p0624` | _showTracksSheet:13979 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0625` | _showTracksSheet:13979 / operator | != → == | assertion-killed | coordinate-closure-plan:coordinates-p0625 |
+| `p0626` | _showTracksSheet:13979 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0627` | _showTracksSheet:13980 / interpolated-string | '$effectiveImdbId:$subtitleSeason:$subtitleEpisode' → 'MUT$effectiveImdbId:$subtitleSeason:$subtitleEpisode' | assertion-killed | coordinate-closure-plan:coordinates-p0627 |
+| `p0628` | _showTracksSheet:13982 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0629` | _showTracksSheet:13985 / declaration-statement | final List<AddonSubtitleSlot>? baseSlots = (cacheKey != null && _cachedSubtitleKe... → List<AddonSubtitleSlot>? baseSlots = null; | assertion-killed | current-input-refresh-plan:refresh-p0629 |
+| `p0630` | _showTracksSheet:13986 / conditional | (cacheKey != null && _cachedSubtitleKey == cacheKey) → !((cacheKey != null && _cachedSubtitleKey == cacheKey)) | assertion-killed | remaining-sweep-plan:p0630 |
+| `p0631` | _showTracksSheet:13986 / operator | && → \|\| | assertion-killed | coordinate-closure-plan:coordinates-p0631 |
+| `p0632` | _showTracksSheet:13986 / operator | != → == | assertion-killed | remaining-sweep-plan:p0632 |
+| `p0633` | _showTracksSheet:13986 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0634` | _showTracksSheet:13986 / operator | == → != | assertion-killed | remaining-sweep-plan:p0634 |
+| `p0635` | _showTracksSheet:13988 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0636` | _showTracksSheet:13993 / declaration-statement | final List<AddonSubtitleSlot>? cachedSlots = _injectedSubtitleSlots != null ? [..... → List<AddonSubtitleSlot>? cachedSlots = null; | assertion-killed | current-input-refresh-plan:refresh-p0636 |
+| `p0637` | _showTracksSheet:13993 / conditional | _injectedSubtitleSlots != null → !(_injectedSubtitleSlots != null) | assertion-killed | quick-sweep-plan:q-p0637 |
+| `p0638` | _showTracksSheet:13993 / operator | != → == | assertion-killed | quick-sweep-plan:q-p0638 |
+| `p0639` | _showTracksSheet:13993 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0640` | _showTracksSheet:13997 / branch | cachedSlots != null → !(cachedSlots != null) | invalid-candidate | replay-candidate |
+| `p0641` | _showTracksSheet:13997 / operator | != → == | invalid-candidate | replay-candidate |
+| `p0642` | _showTracksSheet:13997 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0643` | _showTracksSheet:13998 / statement | debugPrint( 'VideoPlayer: Using ${cachedSlots.length} cached addon slots for key:... → ∅ | diagnostic-only (manifest frozen) | Diagnostic-only mutation; no product UI, persistence, action, subscription or filter change. Text/body remains frozen by move checker. No behavior equivalence or assertion-kill credit claimed. |
+| `p0644` | _showTracksSheet:13999 / interpolated-string | 'VideoPlayer: Using ${cachedSlots.length} cached addon slots for key: $cacheKey' → 'MUTVideoPlayer: Using ${cachedSlots.length} cached addon slots for key: $cacheKey' | diagnostic-only (manifest frozen) | Diagnostic-only mutation; no product UI, persistence, action, subscription or filter change. Text/body remains frozen by move checker. No behavior equivalence or assertion-kill credit claimed. |
+| `p0645` | _showTracksSheet:14003 / branch | !context.mounted → !(!context.mounted) | assertion-killed | quick-sweep-plan:q-p0645 |
+| `p0646` | _showTracksSheet:14003 / return | return; → ∅ | assertion-killed | quick-sweep-plan:q-p0646 |
+| `p0647` | _showTracksSheet:14005 / branch | kUnifiedPlayerMenuEnabled → !(kUnifiedPlayerMenuEnabled) | assertion-killed | quick-sweep-plan:q-p0647 |
+| `p0648` | _showTracksSheet:14006 / statement | _openPlayerMenuAt( PlayerMenuSection.subtitles, imdbId: effectiveImdbId, contentT... → ∅ | assertion-killed | quick-sweep-plan:q-p0648 |
+| `p0649` | _showTracksSheet:14015 / return | return; → ∅ | assertion-killed | remaining-sweep-plan:p0649 |
+| `p0650` | _showTracksSheet:14018 / statement | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes legacy sheet | dormant: constant-true unified-menu flag excludes legacy sheet |
+| `p0651` | _showTracksSheet:14018 / await | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes legacy sheet | dormant: constant-true unified-menu flag excludes legacy sheet |
+| `p0652` | _showTracksSheet:14023 / statement | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes legacy sheet | dormant: constant-true unified-menu flag excludes legacy sheet |
+| `p0653` | _showTracksSheet:14023 / boolean | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes legacy sheet | dormant: constant-true unified-menu flag excludes legacy sheet |
+| `p0654` | _showTracksSheet:14024 / branch | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes legacy sheet | dormant: constant-true unified-menu flag excludes legacy sheet |
+| `p0655` | _showTracksSheet:14024 / string | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes legacy sheet | dormant: constant-true unified-menu flag excludes legacy sheet |
+| `p0656` | _showTracksSheet:14025 / statement | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes legacy sheet | dormant: constant-true unified-menu flag excludes legacy sheet |
+| `p0657` | _showTracksSheet:14025 / null | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes legacy sheet | dormant: constant-true unified-menu flag excludes legacy sheet |
+| `p0658` | _showTracksSheet:14029 / statement | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes legacy sheet | dormant: constant-true unified-menu flag excludes legacy sheet |
+| `p0659` | _showTracksSheet:14030 / statement | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes legacy sheet | dormant: constant-true unified-menu flag excludes legacy sheet |
+| `p0660` | _showTracksSheet:14030 / await | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes legacy sheet | dormant: constant-true unified-menu flag excludes legacy sheet |
+| `p0661` | _showTracksSheet:14037 / conditional | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes legacy sheet | dormant: constant-true unified-menu flag excludes legacy sheet |
+| `p0662` | _showTracksSheet:14037 / operator | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes legacy sheet | dormant: constant-true unified-menu flag excludes legacy sheet |
+| `p0663` | _showTracksSheet:14039 / null | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes legacy sheet | dormant: constant-true unified-menu flag excludes legacy sheet |
+| `p0664` | _showTracksSheet:14040 / conditional | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes legacy sheet | dormant: constant-true unified-menu flag excludes legacy sheet |
+| `p0665` | _showTracksSheet:14040 / operator | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes legacy sheet | dormant: constant-true unified-menu flag excludes legacy sheet |
+| `p0666` | _showTracksSheet:14042 / null | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes legacy sheet | dormant: constant-true unified-menu flag excludes legacy sheet |
+| `p0667` | _showTracksSheet:14056 / branch | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes legacy sheet | dormant: constant-true unified-menu flag excludes legacy sheet |
+| `p0668` | _showTracksSheet:14056 / operator | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes legacy sheet | dormant: constant-true unified-menu flag excludes legacy sheet |
+| `p0669` | _showTracksSheet:14056 / null | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes legacy sheet | dormant: constant-true unified-menu flag excludes legacy sheet |
+| `p0670` | _showTracksSheet:14056 / return | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes legacy sheet | dormant: constant-true unified-menu flag excludes legacy sheet |
+| `p0671` | _showTracksSheet:14057 / branch | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes legacy sheet | dormant: constant-true unified-menu flag excludes legacy sheet |
+| `p0672` | _showTracksSheet:14057 / operator | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes legacy sheet | dormant: constant-true unified-menu flag excludes legacy sheet |
+| `p0673` | _showTracksSheet:14057 / operator | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes legacy sheet | dormant: constant-true unified-menu flag excludes legacy sheet |
+| `p0674` | _showTracksSheet:14057 / null | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes legacy sheet | dormant: constant-true unified-menu flag excludes legacy sheet |
+| `p0675` | _showTracksSheet:14057 / operator | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes legacy sheet | dormant: constant-true unified-menu flag excludes legacy sheet |
+| `p0676` | _showTracksSheet:14058 / return | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes legacy sheet | dormant: constant-true unified-menu flag excludes legacy sheet |
+| `p0677` | _showTracksSheet:14060 / statement | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes legacy sheet | dormant: constant-true unified-menu flag excludes legacy sheet |
+| `p0678` | _showTracksSheet:14061 / statement | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes legacy sheet | dormant: constant-true unified-menu flag excludes legacy sheet |
+| `p0679` | _showTracksSheet:14062 / statement | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes legacy sheet | dormant: constant-true unified-menu flag excludes legacy sheet |
+| `p0680` | _showTracksSheet:14067 / statement | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes legacy sheet | dormant: constant-true unified-menu flag excludes legacy sheet |
+| `p0681` | _showTracksSheet:14068 / statement | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes legacy sheet | dormant: constant-true unified-menu flag excludes legacy sheet |
+| `p0682` | _showTracksSheet:14068 / boolean | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes legacy sheet | dormant: constant-true unified-menu flag excludes legacy sheet |
+| `p0683` | _showTracksSheet:14070 / arrow-body | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes legacy sheet | dormant: constant-true unified-menu flag excludes legacy sheet |
+| `p0684` | _showTracksSheet:14071 / arrow-body | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes legacy sheet | dormant: constant-true unified-menu flag excludes legacy sheet |
+| `p0685` | _showTracksSheet:14073 / string | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes legacy sheet | dormant: constant-true unified-menu flag excludes legacy sheet |
+| `p0686` | _openPlayerMenuAt:14095 / statement | _hideIptvZapBanner(); → ∅ | assertion-killed | window-closure-plan:window-p0686 |
+| `p0687` | _openPlayerMenuAt:14096 / statement | _hideTimer?.cancel(); → ∅ | assertion-killed | window-closure-plan:window-p0687 |
+| `p0688` | _openPlayerMenuAt:14097 / statement | _tvReleaseFocusForOverlay(); → ∅ | assertion-killed | window-closure-plan:window-p0688 |
+| `p0689` | _openPlayerMenuAt:14098 / statement | setState(() { _playerMenuInitialSection = section; _menuImdbId = imdbId; _menuCon... → ∅ | assertion-killed | remaining-sweep-plan:p0689 |
+| `p0690` | _openPlayerMenuAt:14099 / statement | _playerMenuInitialSection = section; → ∅ | assertion-killed | quick-sweep-plan:q-p0690 |
+| `p0691` | _openPlayerMenuAt:14100 / statement | _menuImdbId = imdbId; → ∅ | assertion-killed | quick-sweep-plan:q-p0691 |
+| `p0692` | _openPlayerMenuAt:14101 / statement | _menuContentType = contentType; → ∅ | assertion-killed | quick-sweep-plan:q-p0692 |
+| `p0693` | _openPlayerMenuAt:14102 / statement | _menuSeason = season; → ∅ | assertion-killed | quick-sweep-plan:q-p0693 |
+| `p0694` | _openPlayerMenuAt:14103 / statement | _menuEpisode = episode; → ∅ | assertion-killed | quick-sweep-plan:q-p0694 |
+| `p0695` | _openPlayerMenuAt:14104 / statement | _menuCachedSlots = cachedSlots; → ∅ | assertion-killed | remaining-sweep-plan:p0695 |
+| `p0696` | _openPlayerMenuAt:14105 / statement | _menuCacheKey = cacheKey; → ∅ | assertion-killed | remaining-sweep-plan:p0696 |
+| `p0697` | _openPlayerMenuAt:14106 / statement | _showPlayerMenu = true; → ∅ | assertion-killed | remaining-sweep-plan:p0697 |
+| `p0698` | _openPlayerMenuAt:14106 / boolean | true → false | assertion-killed | remaining-sweep-plan:p0698 |
+| `p0699` | _openPlayerMenuAt:14107 / statement | _controlsVisible.value = false; → ∅ | assertion-killed | window-closure-plan:window-p0699 |
+| `p0700` | _openPlayerMenuAt:14107 / boolean | false → true | assertion-killed | window-closure-plan:window-p0700 |
+| `p0701` | _openPlayerMenuQuick:14116 / declaration-statement | final currentTitle = _identify.currentPlaybackTitleForIdentity(); → final currentTitle = 'Mutation.S99E98.mkv'; | invalid-candidate | replay-candidate |
+| `p0702` | _openPlayerMenuQuick:14117 / declaration-statement | final seriesInfo = SeriesParser.parseFilename(currentTitle); → final seriesInfo = SeriesParser.parseFilename('Mutation.S99E98.mkv'); | invalid-candidate | replay-candidate |
+| `p0703` | _openPlayerMenuQuick:14118 / declaration-statement | final season = seriesInfo.season ?? _manualContentSeason ?? _effectiveContentSeason; → int? season = 99; | invalid-candidate | replay-candidate |
+| `p0704` | _openPlayerMenuQuick:14120 / declaration-statement | final episode = seriesInfo.episode ?? _manualContentEpisode ?? _effectiveContentE... → int? episode = 98; | invalid-candidate | replay-candidate |
+| `p0705` | _openPlayerMenuQuick:14123 / declaration-statement | String? imdbId; → ∅ | invalid-candidate | replay-candidate |
+| `p0706` | _openPlayerMenuQuick:14124 / declaration-statement | final seriesPlaylist = _seriesPlaylist; → SeriesPlaylist? seriesPlaylist = null; | invalid-candidate | replay-candidate |
+| `p0707` | _openPlayerMenuQuick:14125 / branch | _manualContentImdbId != null && _manualContentImdbId!.isNotEmpty → !(_manualContentImdbId != null && _manualContentImdbId!.isNotEmpty) | assertion-killed | quick-sweep-plan:q-p0707 |
+| `p0708` | _openPlayerMenuQuick:14125 / operator | && → \|\| | assertion-killed | remaining-sweep-plan:p0708 |
+| `p0709` | _openPlayerMenuQuick:14125 / operator | != → == | assertion-killed | remaining-sweep-plan:p0709 |
+| `p0710` | _openPlayerMenuQuick:14125 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0711` | _openPlayerMenuQuick:14126 / statement | imdbId = _manualContentImdbId; → ∅ | assertion-killed | collection-closure-plan:collection-p0711 |
+| `p0712` | _openPlayerMenuQuick:14127 / branch | seriesPlaylist != null → !(seriesPlaylist != null) | invalid-candidate | replay-candidate |
+| `p0713` | _openPlayerMenuQuick:14127 / operator | != → == | invalid-candidate | replay-candidate |
+| `p0714` | _openPlayerMenuQuick:14127 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0715` | _openPlayerMenuQuick:14128 / statement | imdbId = seriesPlaylist.isSeries ? (seriesPlaylist.imdbId ?? _effectiveContentImd... → ∅ | assertion-killed | remaining-sweep-plan:p0715 |
+| `p0716` | _openPlayerMenuQuick:14128 / conditional | seriesPlaylist.isSeries → !(seriesPlaylist.isSeries) | assertion-killed | collection-closure-plan:collection-p0716 |
+| `p0717` | _openPlayerMenuQuick:14133 / statement | imdbId = _singleFileImdbId ?? _effectiveContentImdbId; → ∅ | assertion-killed | quick-sweep-plan:q-p0717 |
+| `p0718` | _openPlayerMenuQuick:14136 / declaration-statement | String? contentType = _manualContentType ?? _effectiveContentType; → String? contentType = 'mutant'; | invalid-candidate | replay-candidate |
+| `p0719` | _openPlayerMenuQuick:14137 / branch | contentType == null → !(contentType == null) | assertion-killed | quick-sweep-plan:q-p0719 |
+| `p0720` | _openPlayerMenuQuick:14137 / operator | == → != | assertion-killed | quick-sweep-plan:q-p0720 |
+| `p0721` | _openPlayerMenuQuick:14137 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0722` | _openPlayerMenuQuick:14138 / branch | seriesPlaylist?.isSeries == true → !(seriesPlaylist?.isSeries == true) | assertion-killed | remaining-sweep-plan:p0722 |
+| `p0723` | _openPlayerMenuQuick:14138 / operator | == → != | assertion-killed | remaining-sweep-plan:p0723 |
+| `p0724` | _openPlayerMenuQuick:14138 / boolean | true → false | assertion-killed | remaining-sweep-plan:p0724 |
+| `p0725` | _openPlayerMenuQuick:14139 / statement | contentType = 'series'; → ∅ | assertion-killed | collection-closure-plan:collection-p0725 |
+| `p0726` | _openPlayerMenuQuick:14139 / string | 'series' → "series mutant" | assertion-killed | collection-closure-plan:collection-p0726 |
+| `p0727` | _openPlayerMenuQuick:14140 / branch | imdbId != null → !(imdbId != null) | assertion-killed | remaining-sweep-plan:p0727 |
+| `p0728` | _openPlayerMenuQuick:14140 / operator | != → == | assertion-killed | remaining-sweep-plan:p0728 |
+| `p0729` | _openPlayerMenuQuick:14140 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0730` | _openPlayerMenuQuick:14141 / statement | contentType = 'movie'; → ∅ | assertion-killed | remaining-sweep-plan:p0730 |
+| `p0731` | _openPlayerMenuQuick:14141 / string | 'movie' → "movie mutant" | assertion-killed | remaining-sweep-plan:p0731 |
+| `p0732` | _openPlayerMenuQuick:14145 / declaration-statement | final subtitleSeason = contentType == 'series' ? season : null; → int? subtitleSeason = 99; | invalid-candidate | replay-candidate |
+| `p0733` | _openPlayerMenuQuick:14145 / conditional | contentType == 'series' → !(contentType == 'series') | assertion-killed | quick-sweep-plan:q-p0733 |
+| `p0734` | _openPlayerMenuQuick:14145 / operator | == → != | assertion-killed | quick-sweep-plan:q-p0734 |
+| `p0735` | _openPlayerMenuQuick:14145 / string | 'series' → "series mutant" | assertion-killed | quick-sweep-plan:q-p0735 |
+| `p0736` | _openPlayerMenuQuick:14145 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0737` | _openPlayerMenuQuick:14146 / declaration-statement | final subtitleEpisode = contentType == 'series' ? episode : null; → int? subtitleEpisode = 98; | invalid-candidate | replay-candidate |
+| `p0738` | _openPlayerMenuQuick:14146 / conditional | contentType == 'series' → !(contentType == 'series') | assertion-killed | quick-sweep-plan:q-p0738 |
+| `p0739` | _openPlayerMenuQuick:14146 / operator | == → != | assertion-killed | quick-sweep-plan:q-p0739 |
+| `p0740` | _openPlayerMenuQuick:14146 / string | 'series' → "series mutant" | assertion-killed | quick-sweep-plan:q-p0740 |
+| `p0741` | _openPlayerMenuQuick:14146 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0742` | _openPlayerMenuQuick:14147 / declaration-statement | final String? cacheKey = imdbId != null ? (subtitleSeason != null && subtitleEpis... → String? cacheKey = null; | assertion-killed | cache-url-plan:cache-typed-p0742 |
+| `p0743` | _openPlayerMenuQuick:14147 / conditional | imdbId != null → !(imdbId != null) | assertion-killed | remaining-sweep-plan:p0743 |
+| `p0744` | _openPlayerMenuQuick:14147 / operator | != → == | assertion-killed | remaining-sweep-plan:p0744 |
+| `p0745` | _openPlayerMenuQuick:14147 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0746` | _openPlayerMenuQuick:14148 / conditional | subtitleSeason != null && subtitleEpisode != null → !(subtitleSeason != null && subtitleEpisode != null) | assertion-killed | remaining-sweep-plan:p0746 |
+| `p0747` | _openPlayerMenuQuick:14148 / operator | && → \|\| | assertion-killed | live-menu-closure-plan:live-closure-p0747 |
+| `p0748` | _openPlayerMenuQuick:14148 / operator | != → == | assertion-killed | live-menu-closure-plan:live-closure-p0748 |
+| `p0749` | _openPlayerMenuQuick:14148 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0750` | _openPlayerMenuQuick:14148 / operator | != → == | assertion-killed | live-menu-closure-plan:live-closure-p0750 |
+| `p0751` | _openPlayerMenuQuick:14148 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0752` | _openPlayerMenuQuick:14149 / interpolated-string | '$imdbId:$subtitleSeason:$subtitleEpisode' → 'MUT$imdbId:$subtitleSeason:$subtitleEpisode' | assertion-killed | live-menu-closure-plan:live-closure-p0752 |
+| `p0753` | _openPlayerMenuQuick:14151 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0754` | _openPlayerMenuQuick:14152 / declaration-statement | final baseSlots = (cacheKey != null && _cachedSubtitleKey == cacheKey) ? _cachedA... → List<AddonSubtitleSlot>? baseSlots = null; | assertion-killed | cache-url-plan:cache-typed-p0754 |
+| `p0755` | _openPlayerMenuQuick:14152 / conditional | (cacheKey != null && _cachedSubtitleKey == cacheKey) → !((cacheKey != null && _cachedSubtitleKey == cacheKey)) | assertion-killed | remaining-sweep-plan:p0755 |
+| `p0756` | _openPlayerMenuQuick:14152 / operator | && → \|\| | assertion-killed | live-menu-closure-plan:live-closure-p0756 |
+| `p0757` | _openPlayerMenuQuick:14152 / operator | != → == | assertion-killed | remaining-sweep-plan:p0757 |
+| `p0758` | _openPlayerMenuQuick:14152 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0759` | _openPlayerMenuQuick:14152 / operator | == → != | assertion-killed | live-menu-closure-plan:live-closure-p0759 |
+| `p0760` | _openPlayerMenuQuick:14154 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0761` | _openPlayerMenuQuick:14155 / declaration-statement | final cachedSlots = _injectedSubtitleSlots != null ? [...?baseSlots, ..._injected... → List<AddonSubtitleSlot>? cachedSlots = null; | assertion-killed | cache-url-plan:cache-typed-p0761 |
+| `p0762` | _openPlayerMenuQuick:14155 / conditional | _injectedSubtitleSlots != null → !(_injectedSubtitleSlots != null) | assertion-killed | live-menu-closure-plan:live-closure-p0762 |
+| `p0763` | _openPlayerMenuQuick:14155 / operator | != → == | assertion-killed | live-menu-closure-plan:live-closure-p0763 |
+| `p0764` | _openPlayerMenuQuick:14155 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0765` | _openPlayerMenuQuick:14159 / statement | _openPlayerMenuAt( section, imdbId: imdbId, contentType: contentType, season: sub... → ∅ | assertion-killed | live-menu-closure-plan:live-closure-p0765 |
+| `p0766` | _hidePlayerMenu:14171 / branch | !_showPlayerMenu → !(!_showPlayerMenu) | assertion-killed | quick-sweep-plan:q-p0766 |
+| `p0767` | _hidePlayerMenu:14171 / return | return; → ∅ | assertion-killed | quick-sweep-plan:q-p0767 |
+| `p0768` | _hidePlayerMenu:14172 / statement | setState(() => _showPlayerMenu = false); → ∅ | assertion-killed | quick-sweep-plan:q-p0768 |
+| `p0769` | _hidePlayerMenu:14172 / arrow-body | _showPlayerMenu = false → _showPlayerMenu = true | assertion-killed | arrow-plan:arrow-p0769, arrow-plan:arrow-p0769 |
+| `p0770` | _hidePlayerMenu:14172 / boolean | false → true | assertion-killed | quick-sweep-plan:q-p0770 |
+| `p0771` | _hidePlayerMenu:14173 / branch | PlatformUtil.isTelevision → !(PlatformUtil.isTelevision) | assertion-killed | live-menu-closure-plan:live-closure-p0771 |
+| `p0772` | _hidePlayerMenu:14173 / statement | _tvRootFocus.requestFocus(); → ∅ | invalid-candidate | replay-candidate |
+| `p0773` | _menuApplyTrackChange:14178 / statement | _userManuallySelectedSubtitle = true; → ∅ | assertion-killed | remaining-sweep-plan:p0773 |
+| `p0774` | _menuApplyTrackChange:14178 / boolean | true → false | assertion-killed | remaining-sweep-plan:p0774 |
+| `p0775` | _menuApplyTrackChange:14179 / branch | !subtitleId.startsWith('stremio:') → !(!subtitleId.startsWith('stremio:')) | assertion-killed | remaining-sweep-plan:p0775 |
+| `p0776` | _menuApplyTrackChange:14179 / string | 'stremio:' → "stremio: mutant" | assertion-killed | remaining-sweep-plan:p0776 |
+| `p0777` | _menuApplyTrackChange:14180 / statement | _subtitleSync.setActiveExternalSubtitlePath(null); → ∅ | assertion-killed | live-menu-closure-plan:live-closure-p0777 |
+| `p0778` | _menuApplyTrackChange:14180 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0779` | _menuApplyTrackChange:14182 / statement | _captureIptvAudioLanguage(audioId); → ∅ | assertion-killed | iptv-audio-closure-plan:iptv-audio-p0779 |
+| `p0780` | _menuApplyTrackChange:14183 / statement | await _trackPreferences.persistTrackChoice(audioId, subtitleId); → ∅ | assertion-killed | quick-sweep-plan:q-p0780 |
+| `p0781` | _menuApplyTrackChange:14183 / await | await _trackPreferences.persistTrackChoice(audioId, subtitleId) → _trackPreferences.persistTrackChoice(audioId, subtitleId) | assertion-killed | remaining-sweep-plan:p0781 |
+| `p0782` | _audioTrackChoiceChanged:14190 / statement | _captureIptvAudioLanguage(audioId); → ∅ | assertion-killed | iptv-audio-closure-plan:iptv-audio-p0782 |
+| `p0783` | _audioTrackChoiceChanged:14191 / statement | await _trackPreferences.persistTrackChoice( audioId, _hasSubtitlePolicy && !_user... → ∅ | assertion-killed | quick-sweep-plan:q-p0783 |
+| `p0784` | _audioTrackChoiceChanged:14191 / await | await _trackPreferences.persistTrackChoice( audioId, _hasSubtitlePolicy && !_user... → _trackPreferences.persistTrackChoice(audioId, _hasSubtitlePolicy && !_userManuall... | assertion-killed | current-input-refresh-plan:refresh-p0784 |
+| `p0785` | _audioTrackChoiceChanged:14193 / conditional | _hasSubtitlePolicy && !_userManuallySelectedSubtitle → !(_hasSubtitlePolicy && !_userManuallySelectedSubtitle) | assertion-killed | quick-sweep-plan:q-p0785 |
+| `p0786` | _audioTrackChoiceChanged:14193 / operator | && → \|\| | assertion-killed | quick-sweep-plan:q-p0786 |
+| `p0787` | _audioTrackChoiceChanged:14194 / string | 'auto' → "auto mutant" | assertion-killed | remaining-sweep-plan:p0787 |
+| `p0788` | _audioTrackChoiceChanged:14197 / statement | await _subtitleLanguage.refreshSubtitleAudioPolicy(); → ∅ | assertion-killed | remaining-sweep-plan:p0788 |
+| `p0789` | _audioTrackChoiceChanged:14197 / await | await _subtitleLanguage.refreshSubtitleAudioPolicy() → _subtitleLanguage.refreshSubtitleAudioPolicy() | assertion-killed | remaining-sweep-plan:p0789 |
+| `p0790` | _menuSelectAudio:14201 / declaration-statement | final track = _player.state.tracks.audio .where((a) => a.id == audioId) .firstOrN... → mk.AudioTrack? track = null; | assertion-killed | quick-typed-plan:q-typed-p0790 |
+| `p0791` | _menuSelectAudio:14202 / arrow-body | a.id == audioId → false | assertion-killed | arrow-plan:arrow-p0791 |
+| `p0792` | _menuSelectAudio:14202 / operator | == → != | assertion-killed | remaining-sweep-plan:p0792 |
+| `p0793` | _menuSelectAudio:14204 / branch | track == null → !(track == null) | invalid-candidate | replay-candidate |
+| `p0794` | _menuSelectAudio:14204 / operator | == → != | invalid-candidate | replay-candidate |
+| `p0795` | _menuSelectAudio:14204 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0796` | _menuSelectAudio:14204 / return | return; → ∅ | invalid-candidate | replay-candidate |
+| `p0797` | _menuSelectAudio:14205 / statement | await _player.setAudioTrack(track); → ∅ | assertion-killed | remaining-sweep-plan:p0797 |
+| `p0798` | _menuSelectAudio:14205 / await | await _player.setAudioTrack(track) → _player.setAudioTrack(track) | assertion-killed | current-input-refresh-plan:refresh-p0798 |
+| `p0799` | _menuSelectAudio:14206 / statement | await _audioTrackChoiceChanged(audioId, currentSubId); → ∅ | assertion-killed | quick-sweep-plan:q-p0799 |
+| `p0800` | _menuSelectAudio:14206 / await | await _audioTrackChoiceChanged(audioId, currentSubId) → _audioTrackChoiceChanged(audioId, currentSubId) | assertion-killed | remaining-sweep-plan:p0800 |
+| `p0801` | _withManualSubtitleChoice:14210 / branch | !_hasSubtitlePolicy → !(!_hasSubtitlePolicy) | assertion-killed | quick-sweep-plan:q-p0801 |
+| `p0802` | _withManualSubtitleChoice:14210 / return | return apply(); → ∅ | invalid-candidate | replay-candidate |
+| `p0803` | _withManualSubtitleChoice:14211 / declaration-statement | final previouslyManual = _userManuallySelectedSubtitle; → final previouslyManual = !_userManuallySelectedSubtitle; | assertion-killed | remaining-typed-plan:typed-p0803 |
+| `p0804` | _withManualSubtitleChoice:14212 / declaration-statement | final token = _addonSubtitleFetchToken; → final token = _addonSubtitleFetchToken + 1; | assertion-killed | remaining-typed-plan:typed-p0804 |
+| `p0805` | _withManualSubtitleChoice:14213 / declaration-statement | final revision = ++_subtitleAudioRevision; → final revision = _subtitleAudioRevision; | assertion-killed | manual-path-closure-plan:manual-revision-overlap |
+| `p0806` | _withManualSubtitleChoice:14213 / prefix | ++_subtitleAudioRevision → --_subtitleAudioRevision | assertion-killed | quick-sweep-plan:q-p0806 |
+| `p0807` | _withManualSubtitleChoice:14214 / statement | _userManuallySelectedSubtitle = true; → ∅ | assertion-killed | manual-pending-closure-plan:manual-pending-p0807 |
+| `p0808` | _withManualSubtitleChoice:14214 / boolean | true → false | assertion-killed | manual-pending-closure-plan:manual-pending-p0808 |
+| `p0809` | _withManualSubtitleChoice:14215 / declaration-statement | var applied = false; → ∅ | invalid-candidate | replay-candidate |
+| `p0810` | _withManualSubtitleChoice:14215 / boolean | false → true | assertion-killed | current-input-refresh-plan:refresh-p0810, manual-throw-closure-plan:manual-throw-p0810 |
+| `p0811` | _withManualSubtitleChoice:14217 / statement | applied = await apply(); → ∅ | assertion-killed | remaining-sweep-plan:p0811 |
+| `p0812` | _withManualSubtitleChoice:14217 / await | await apply() → apply() | invalid-candidate | replay-candidate |
+| `p0813` | _withManualSubtitleChoice:14218 / return | return applied; → ∅ | invalid-candidate | replay-candidate |
+| `p0814` | _withManualSubtitleChoice:14220 / branch | !applied && mounted && token == _addonSubtitleFetchToken && revision == _subtitle... → !(!applied && mounted && token == _addonSubtitleFetchToken && revision == _subtit... | assertion-killed | remaining-sweep-plan:p0814 |
+| `p0815` | _withManualSubtitleChoice:14220 / operator | && → \|\| | assertion-killed | remaining-sweep-plan:p0815 |
+| `p0816` | _withManualSubtitleChoice:14220 / operator | && → \|\| | assertion-killed | remaining-sweep-plan:p0816 |
+| `p0817` | _withManualSubtitleChoice:14220 / operator | && → \|\| | assertion-killed | remaining-sweep-plan:p0817 |
+| `p0818` | _withManualSubtitleChoice:14222 / operator | == → != | assertion-killed | remaining-sweep-plan:p0818 |
+| `p0819` | _withManualSubtitleChoice:14223 / operator | == → != | assertion-killed | remaining-sweep-plan:p0819 |
+| `p0820` | _withManualSubtitleChoice:14224 / statement | _userManuallySelectedSubtitle = previouslyManual; → ∅ | assertion-killed | remaining-sweep-plan:p0820 |
+| `p0821` | _withManualSubtitleChoice:14225 / statement | unawaited(_subtitleLanguage.refreshSubtitleAudioPolicy()); → ∅ | assertion-killed | remaining-sweep-plan:p0821 |
+| `p0822` | _menuSubtitlesOff:14231 / arrow-body | _withManualSubtitleChoice(() async { final applied = await _subtitleApply.setSubt... → Future<bool>.value(false) | assertion-killed | arrow-plan:arrow-p0822 |
+| `p0823` | _menuSubtitlesOff:14232 / declaration-statement | final applied = await _subtitleApply.setSubtitleTrackWithDiagnostics( mk.Subtitle... → await _subtitleApply.setSubtitleTrackWithDiagnostics( mk.SubtitleTrack.no(), sour... | assertion-killed | quick-typed-plan:q-typed-p0823 |
+| `p0824` | _menuSubtitlesOff:14232 / await | await _subtitleApply.setSubtitleTrackWithDiagnostics( mk.SubtitleTrack.no(), sour... → _subtitleApply.setSubtitleTrackWithDiagnostics(mk.SubtitleTrack.no(), source: 'pl... | invalid-candidate | replay-candidate |
+| `p0825` | _menuSubtitlesOff:14234 / string | 'player-menu-off' → "player-menu-off mutant" | diagnostic-only (manifest frozen) | The source tag is retained in SubtitleApplyAttempt and read only by diagnostic messages in vp_subtitle_apply.dart; it does not branch selection, persistence or native payloads. Exact text remains frozen by the manifest; no behavior equivalence or kill credit claimed. |
+| `p0826` | _menuSubtitlesOff:14236 / branch | !applied → !(!applied) | assertion-killed | quick-sweep-plan:q-p0826 |
+| `p0827` | _menuSubtitlesOff:14236 / return | return false; → ∅ | assertion-killed | final-inputs-closure-plan:final-inputs-p0827 |
+| `p0828` | _menuSubtitlesOff:14236 / boolean | false → true | assertion-killed | final-inputs-closure-plan:final-inputs-p0828 |
+| `p0829` | _menuSubtitlesOff:14237 / statement | _selectedStremioSubtitleId = null; → ∅ | assertion-killed | final-inputs-closure-plan:final-inputs-p0829 |
+| `p0830` | _menuSubtitlesOff:14237 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0831` | _menuSubtitlesOff:14238 / statement | await _menuApplyTrackChange(audioId, 'no'); → ∅ | assertion-killed | quick-sweep-plan:q-p0831 |
+| `p0832` | _menuSubtitlesOff:14238 / await | await _menuApplyTrackChange(audioId, 'no') → _menuApplyTrackChange(audioId, 'no') | assertion-killed | current-input-refresh-plan:refresh-p0832 |
+| `p0833` | _menuSubtitlesOff:14238 / string | 'no' → "no mutant" | assertion-killed | quick-sweep-plan:q-p0833 |
+| `p0834` | _menuSubtitlesOff:14239 / return | return true; → ∅ | invalid-candidate | replay-candidate |
+| `p0835` | _menuSubtitlesOff:14239 / boolean | true → false | assertion-killed | quick-sweep-plan:q-p0835 |
+| `p0836` | _menuSelectEmbeddedSubtitle:14243 / arrow-body | _withManualSubtitleChoice(() async { final track = _player.state.tracks.subtitle ... → Future<bool>.value(false) | assertion-killed | arrow-plan:arrow-p0836, arrow-plan:arrow-p0836 |
+| `p0837` | _menuSelectEmbeddedSubtitle:14244 / declaration-statement | final track = _player.state.tracks.subtitle .where((s) => s.id == subId) .firstOr... → mk.SubtitleTrack? track = null; | assertion-killed | quick-typed-plan:q-typed-p0837 |
+| `p0838` | _menuSelectEmbeddedSubtitle:14245 / arrow-body | s.id == subId → false | assertion-killed | arrow-plan:arrow-p0838, arrow-plan:arrow-p0838 |
+| `p0839` | _menuSelectEmbeddedSubtitle:14245 / operator | == → != | assertion-killed | quick-sweep-plan:q-p0839 |
+| `p0840` | _menuSelectEmbeddedSubtitle:14247 / branch | track == null → !(track == null) | invalid-candidate | replay-candidate |
+| `p0841` | _menuSelectEmbeddedSubtitle:14247 / operator | == → != | invalid-candidate | replay-candidate |
+| `p0842` | _menuSelectEmbeddedSubtitle:14247 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0843` | _menuSelectEmbeddedSubtitle:14248 / statement | _subtitleApply.showSubtitleFailureMessage( 'That subtitle track is no longer avai... → ∅ | assertion-killed | remaining-sweep-plan:p0843 |
+| `p0844` | _menuSelectEmbeddedSubtitle:14249 / string | 'That subtitle track is no longer available. Try another track.' → "That subtitle track is no longer available. Try another track. mutant" | assertion-killed | remaining-sweep-plan:p0844 |
+| `p0845` | _menuSelectEmbeddedSubtitle:14251 / return | return false; → ∅ | invalid-candidate | replay-candidate |
+| `p0846` | _menuSelectEmbeddedSubtitle:14251 / boolean | false → true | assertion-killed | remaining-sweep-plan:p0846 |
+| `p0847` | _menuSelectEmbeddedSubtitle:14253 / declaration-statement | final applied = await _subtitleApply.setSubtitleTrackWithDiagnostics( track, sour... → await _subtitleApply.setSubtitleTrackWithDiagnostics( track, source: 'player-menu... | assertion-killed | quick-typed-plan:q-typed-p0847 |
+| `p0848` | _menuSelectEmbeddedSubtitle:14253 / await | await _subtitleApply.setSubtitleTrackWithDiagnostics( track, source: 'player-menu... → _subtitleApply.setSubtitleTrackWithDiagnostics(track, source: 'player-menu-embedd... | invalid-candidate | replay-candidate |
+| `p0849` | _menuSelectEmbeddedSubtitle:14255 / string | 'player-menu-embedded' → "player-menu-embedded mutant" | assertion-killed | remaining-sweep-plan:p0849 |
+| `p0850` | _menuSelectEmbeddedSubtitle:14257 / branch | !applied → !(!applied) | assertion-killed | quick-sweep-plan:q-p0850 |
+| `p0851` | _menuSelectEmbeddedSubtitle:14257 / return | return false; → ∅ | assertion-killed | remaining-sweep-plan:p0851 |
+| `p0852` | _menuSelectEmbeddedSubtitle:14257 / boolean | false → true | assertion-killed | remaining-sweep-plan:p0852 |
+| `p0853` | _menuSelectEmbeddedSubtitle:14258 / statement | _selectedStremioSubtitleId = null; → ∅ | assertion-killed | remaining-sweep-plan:p0853 |
+| `p0854` | _menuSelectEmbeddedSubtitle:14258 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0855` | _menuSelectEmbeddedSubtitle:14259 / statement | await _menuApplyTrackChange(audioId, subId); → ∅ | assertion-killed | quick-sweep-plan:q-p0855 |
+| `p0856` | _menuSelectEmbeddedSubtitle:14259 / await | await _menuApplyTrackChange(audioId, subId) → _menuApplyTrackChange(audioId, subId) | assertion-killed | remaining-sweep-plan:p0856 |
+| `p0857` | _menuSelectEmbeddedSubtitle:14260 / return | return true; → ∅ | invalid-candidate | replay-candidate |
+| `p0858` | _menuSelectEmbeddedSubtitle:14260 / boolean | true → false | assertion-killed | quick-sweep-plan:q-p0858 |
+| `p0859` | _menuSelectAddonSubtitle:14268 / arrow-body | _withManualSubtitleChoice(() async { // Playback continues behind the menu: if th... → Future<bool>.value(false) | assertion-killed | arrow-plan:arrow-p0859 |
+| `p0860` | _menuSelectAddonSubtitle:14272 / declaration-statement | final token = _addonSubtitleFetchToken; → final token = _addonSubtitleFetchToken + 1; | assertion-killed | quick-typed-plan:q-typed-p0860 |
+| `p0861` | _menuSelectAddonSubtitle:14274 / declaration-statement | final filePath = await _addonSubtitles.downloadStremioSubtitleToTempFile( sub, ); → String? filePath = null; | assertion-killed | quick-typed-plan:q-typed-p0861 |
+| `p0862` | _menuSelectAddonSubtitle:14274 / await | await _addonSubtitles.downloadStremioSubtitleToTempFile( sub, ) → _addonSubtitles.downloadStremioSubtitleToTempFile(sub) | invalid-candidate | replay-candidate |
+| `p0863` | _menuSelectAddonSubtitle:14277 / branch | filePath == null → !(filePath == null) | invalid-candidate | replay-candidate |
+| `p0864` | _menuSelectAddonSubtitle:14277 / operator | == → != | invalid-candidate | replay-candidate |
+| `p0865` | _menuSelectAddonSubtitle:14277 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0866` | _menuSelectAddonSubtitle:14278 / statement | _subtitleApply.showSubtitleFailureMessage( 'Couldn’t load subtitles. Check your c... → ∅ | assertion-killed | remaining-sweep-plan:p0866 |
+| `p0867` | _menuSelectAddonSubtitle:14279 / string | 'Couldn’t load subtitles. Check your connection or try another track.' → "Couldn’t load subtitles. Check your connection or try another track. mutant" | assertion-killed | remaining-sweep-plan:p0867 |
+| `p0868` | _menuSelectAddonSubtitle:14281 / return | return false; → ∅ | invalid-candidate | replay-candidate |
+| `p0869` | _menuSelectAddonSubtitle:14281 / boolean | false → true | assertion-killed | remaining-sweep-plan:p0869 |
+| `p0870` | _menuSelectAddonSubtitle:14283 / branch | token != _addonSubtitleFetchToken \|\| !mounted → !(token != _addonSubtitleFetchToken \|\| !mounted) | assertion-killed | quick-sweep-plan:q-p0870 |
+| `p0871` | _menuSelectAddonSubtitle:14283 / operator | \|\| → && | assertion-killed | final-inputs-closure-plan:final-inputs-p0871 |
+| `p0872` | _menuSelectAddonSubtitle:14283 / operator | != → == | assertion-killed | quick-sweep-plan:q-p0872 |
+| `p0873` | _menuSelectAddonSubtitle:14284 / return | return false; → ∅ | assertion-killed | final-inputs-closure-plan:final-inputs-p0873 |
+| `p0874` | _menuSelectAddonSubtitle:14284 / boolean | false → true | assertion-killed | final-inputs-closure-plan:final-inputs-p0874 |
+| `p0875` | _menuSelectAddonSubtitle:14286 / declaration-statement | final track = mk.SubtitleTrack.uri( filePath, title: sub.displayName, language: s... → final track = mk.SubtitleTrack.no(); | assertion-killed | quick-typed-plan:q-typed-p0875 |
+| `p0876` | _menuSelectAddonSubtitle:14291 / declaration-statement | final applied = await _addonSubtitles.applyExternalSubtitleTrack(track); → await _addonSubtitles.applyExternalSubtitleTrack(track); final applied = false; | assertion-killed | remaining-typed-plan:typed-p0876 |
+| `p0877` | _menuSelectAddonSubtitle:14291 / await | await _addonSubtitles.applyExternalSubtitleTrack(track) → _addonSubtitles.applyExternalSubtitleTrack(track) | invalid-candidate | replay-candidate |
+| `p0878` | _menuSelectAddonSubtitle:14292 / branch | !applied → !(!applied) | assertion-killed | quick-sweep-plan:q-p0878 |
+| `p0879` | _menuSelectAddonSubtitle:14292 / return | return false; → ∅ | assertion-killed | quick-sweep-plan:q-p0879 |
+| `p0880` | _menuSelectAddonSubtitle:14292 / boolean | false → true | assertion-killed | quick-sweep-plan:q-p0880 |
+| `p0881` | _menuSelectAddonSubtitle:14293 / branch | token != _addonSubtitleFetchToken \|\| !mounted → !(token != _addonSubtitleFetchToken \|\| !mounted) | assertion-killed | remaining-sweep-plan:p0881 |
+| `p0882` | _menuSelectAddonSubtitle:14293 / operator | \|\| → && | assertion-killed | final-inputs-closure-plan:final-inputs-p0882 |
+| `p0883` | _menuSelectAddonSubtitle:14293 / operator | != → == | assertion-killed | remaining-sweep-plan:p0883 |
+| `p0884` | _menuSelectAddonSubtitle:14293 / return | return false; → ∅ | assertion-killed | remaining-sweep-plan:p0884 |
+| `p0885` | _menuSelectAddonSubtitle:14293 / boolean | false → true | assertion-killed | live-menu-closure-plan:live-closure-p0885 |
+| `p0886` | _menuSelectAddonSubtitle:14294 / statement | _selectedStremioSubtitleId = sub.id; → ∅ | assertion-killed | remaining-sweep-plan:p0886 |
+| `p0887` | _menuSelectAddonSubtitle:14295 / statement | _subtitleSync.setActiveExternalSubtitlePath(filePath); → ∅ | assertion-killed | remaining-sweep-plan:p0887 |
+| `p0888` | _menuSelectAddonSubtitle:14296 / statement | await _menuApplyTrackChange(audioId, 'stremio:${sub.id}'); → ∅ | assertion-killed | remaining-sweep-plan:p0888 |
+| `p0889` | _menuSelectAddonSubtitle:14296 / await | await _menuApplyTrackChange(audioId, 'stremio:${sub.id}') → _menuApplyTrackChange(audioId, 'stremio:${sub.id}') | assertion-killed | live-menu-closure-plan:live-closure-p0889 |
+| `p0890` | _menuSelectAddonSubtitle:14296 / interpolated-string | 'stremio:${sub.id}' → 'MUTstremio:${sub.id}' | assertion-killed | remaining-sweep-plan:p0890 |
+| `p0891` | _menuSelectAddonSubtitle:14297 / return | return true; → ∅ | invalid-candidate | replay-candidate |
+| `p0892` | _menuSelectAddonSubtitle:14297 / boolean | true → false | assertion-killed | remaining-sweep-plan:p0892 |
+| `p0893` | _menuSelectAddonSubtitle:14299 / statement | debugPrint('PlayerMenu: subtitle apply failed - $e'); → ∅ | assertion-killed | remaining-sweep-plan:p0893 |
+| `p0894` | _menuSelectAddonSubtitle:14299 / interpolated-string | 'PlayerMenu: subtitle apply failed - $e' → 'MUTPlayerMenu: subtitle apply failed - $e' | diagnostic-only (manifest frozen) | Diagnostic-only mutation; no product UI, persistence, action, subscription or filter change. Text/body remains frozen by move checker. No behavior equivalence or assertion-kill credit claimed. |
+| `p0895` | _menuSelectAddonSubtitle:14300 / statement | _subtitleApply.showSubtitleFailureMessage( 'Couldn’t apply subtitles. Try another... → ∅ | assertion-killed | remaining-sweep-plan:p0895 |
+| `p0896` | _menuSelectAddonSubtitle:14301 / string | 'Couldn’t apply subtitles. Try another embedded or online track.' → "Couldn’t apply subtitles. Try another embedded or online track. mutant" | assertion-killed | remaining-sweep-plan:p0896 |
+| `p0897` | _menuSelectAddonSubtitle:14303 / return | return false; → ∅ | invalid-candidate | replay-candidate |
+| `p0898` | _menuSelectAddonSubtitle:14303 / boolean | false → true | assertion-killed | remaining-sweep-plan:p0898 |
+| `p0899` | _applyStremioSubtitleFromTracksSheet:14309 / arrow-body | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes TracksSheet callback | dormant: constant-true unified-menu flag excludes TracksSheet callback |
+| `p0900` | _applyStremioSubtitleFromTracksSheet:14310 / declaration-statement | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes TracksSheet callback | dormant: constant-true unified-menu flag excludes TracksSheet callback |
+| `p0901` | _applyStremioSubtitleFromTracksSheet:14312 / declaration-statement | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes TracksSheet callback | dormant: constant-true unified-menu flag excludes TracksSheet callback |
+| `p0902` | _applyStremioSubtitleFromTracksSheet:14312 / await | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes TracksSheet callback | dormant: constant-true unified-menu flag excludes TracksSheet callback |
+| `p0903` | _applyStremioSubtitleFromTracksSheet:14315 / branch | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes TracksSheet callback | dormant: constant-true unified-menu flag excludes TracksSheet callback |
+| `p0904` | _applyStremioSubtitleFromTracksSheet:14315 / operator | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes TracksSheet callback | dormant: constant-true unified-menu flag excludes TracksSheet callback |
+| `p0905` | _applyStremioSubtitleFromTracksSheet:14315 / null | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes TracksSheet callback | dormant: constant-true unified-menu flag excludes TracksSheet callback |
+| `p0906` | _applyStremioSubtitleFromTracksSheet:14316 / statement | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes TracksSheet callback | dormant: constant-true unified-menu flag excludes TracksSheet callback |
+| `p0907` | _applyStremioSubtitleFromTracksSheet:14317 / string | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes TracksSheet callback | dormant: constant-true unified-menu flag excludes TracksSheet callback |
+| `p0908` | _applyStremioSubtitleFromTracksSheet:14319 / return | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes TracksSheet callback | dormant: constant-true unified-menu flag excludes TracksSheet callback |
+| `p0909` | _applyStremioSubtitleFromTracksSheet:14319 / boolean | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes TracksSheet callback | dormant: constant-true unified-menu flag excludes TracksSheet callback |
+| `p0910` | _applyStremioSubtitleFromTracksSheet:14321 / branch | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes TracksSheet callback | dormant: constant-true unified-menu flag excludes TracksSheet callback |
+| `p0911` | _applyStremioSubtitleFromTracksSheet:14321 / operator | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes TracksSheet callback | dormant: constant-true unified-menu flag excludes TracksSheet callback |
+| `p0912` | _applyStremioSubtitleFromTracksSheet:14321 / operator | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes TracksSheet callback | dormant: constant-true unified-menu flag excludes TracksSheet callback |
+| `p0913` | _applyStremioSubtitleFromTracksSheet:14322 / return | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes TracksSheet callback | dormant: constant-true unified-menu flag excludes TracksSheet callback |
+| `p0914` | _applyStremioSubtitleFromTracksSheet:14322 / boolean | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes TracksSheet callback | dormant: constant-true unified-menu flag excludes TracksSheet callback |
+| `p0915` | _applyStremioSubtitleFromTracksSheet:14324 / declaration-statement | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes TracksSheet callback | dormant: constant-true unified-menu flag excludes TracksSheet callback |
+| `p0916` | _applyStremioSubtitleFromTracksSheet:14324 / await | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes TracksSheet callback | dormant: constant-true unified-menu flag excludes TracksSheet callback |
+| `p0917` | _applyStremioSubtitleFromTracksSheet:14331 / branch | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes TracksSheet callback | dormant: constant-true unified-menu flag excludes TracksSheet callback |
+| `p0918` | _applyStremioSubtitleFromTracksSheet:14331 / return | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes TracksSheet callback | dormant: constant-true unified-menu flag excludes TracksSheet callback |
+| `p0919` | _applyStremioSubtitleFromTracksSheet:14331 / boolean | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes TracksSheet callback | dormant: constant-true unified-menu flag excludes TracksSheet callback |
+| `p0920` | _applyStremioSubtitleFromTracksSheet:14332 / branch | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes TracksSheet callback | dormant: constant-true unified-menu flag excludes TracksSheet callback |
+| `p0921` | _applyStremioSubtitleFromTracksSheet:14332 / operator | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes TracksSheet callback | dormant: constant-true unified-menu flag excludes TracksSheet callback |
+| `p0922` | _applyStremioSubtitleFromTracksSheet:14332 / operator | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes TracksSheet callback | dormant: constant-true unified-menu flag excludes TracksSheet callback |
+| `p0923` | _applyStremioSubtitleFromTracksSheet:14332 / return | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes TracksSheet callback | dormant: constant-true unified-menu flag excludes TracksSheet callback |
+| `p0924` | _applyStremioSubtitleFromTracksSheet:14332 / boolean | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes TracksSheet callback | dormant: constant-true unified-menu flag excludes TracksSheet callback |
+| `p0925` | _applyStremioSubtitleFromTracksSheet:14333 / statement | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes TracksSheet callback | dormant: constant-true unified-menu flag excludes TracksSheet callback |
+| `p0926` | _applyStremioSubtitleFromTracksSheet:14334 / return | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes TracksSheet callback | dormant: constant-true unified-menu flag excludes TracksSheet callback |
+| `p0927` | _applyStremioSubtitleFromTracksSheet:14334 / boolean | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes TracksSheet callback | dormant: constant-true unified-menu flag excludes TracksSheet callback |
+| `p0928` | _applyStremioSubtitleFromTracksSheet:14336 / statement | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes TracksSheet callback | dormant: constant-true unified-menu flag excludes TracksSheet callback |
+| `p0929` | _applyStremioSubtitleFromTracksSheet:14336 / interpolated-string | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes TracksSheet callback | dormant: constant-true unified-menu flag excludes TracksSheet callback |
+| `p0930` | _applyStremioSubtitleFromTracksSheet:14337 / statement | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes TracksSheet callback | dormant: constant-true unified-menu flag excludes TracksSheet callback |
+| `p0931` | _applyStremioSubtitleFromTracksSheet:14338 / string | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes TracksSheet callback | dormant: constant-true unified-menu flag excludes TracksSheet callback |
+| `p0932` | _applyStremioSubtitleFromTracksSheet:14340 / return | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes TracksSheet callback | dormant: constant-true unified-menu flag excludes TracksSheet callback |
+| `p0933` | _applyStremioSubtitleFromTracksSheet:14340 / boolean | explicit exclusion / no standalone mutation | dormant: constant-true unified-menu flag excludes TracksSheet callback | dormant: constant-true unified-menu flag excludes TracksSheet callback |
+| `p0934` | _buildPlayerMenuPanel:14345 / declaration-statement | final audios = _player.state.tracks.audio .where((a) => a.id.toLowerCase() != 'no... → final audios = <mk.AudioTrack>[]; | invalid-candidate | replay-candidate |
+| `p0935` | _buildPlayerMenuPanel:14346 / arrow-body | a.id.toLowerCase() != 'no' → false | assertion-killed | arrow-plan:arrow-p0935, final-witness-plan:final-arrow-p0935 |
+| `p0936` | _buildPlayerMenuPanel:14346 / operator | != → == | assertion-killed | quick-sweep-plan:q-p0936 |
+| `p0937` | _buildPlayerMenuPanel:14346 / string | 'no' → "no mutant" | assertion-killed | quick-sweep-plan:q-p0937 |
+| `p0938` | _buildPlayerMenuPanel:14347 / boolean | false → true | equivalent-original-callers | The temporary filtered audios list is immediately iterated by LanguageMapper.audioTrackOptions to construct a separate options list. Neither that mapper nor another reader grows the temporary list or exposes its identity; changing only growable:false to true leaves every yielded track and output option unchanged. This is not a claim that caller-visible lists may change mutability. |
+| `p0939` | _buildPlayerMenuPanel:14348 / declaration-statement | final embedded = embeddedSubtitleTracks(_player.state.tracks.subtitle); → final embedded = <mk.SubtitleTrack>[]; | invalid-candidate | replay-candidate |
+| `p0940` | _buildPlayerMenuPanel:14349 / declaration-statement | final selectedSub = _selectedStremioSubtitleId != null ? 'stremio:$_selectedStrem... → final selectedSub = 'mutant'; | invalid-candidate | replay-candidate |
+| `p0941` | _buildPlayerMenuPanel:14349 / conditional | _selectedStremioSubtitleId != null → !(_selectedStremioSubtitleId != null) | assertion-killed | quick-sweep-plan:q-p0941 |
+| `p0942` | _buildPlayerMenuPanel:14349 / operator | != → == | assertion-killed | quick-sweep-plan:q-p0942 |
+| `p0943` | _buildPlayerMenuPanel:14349 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0944` | _buildPlayerMenuPanel:14350 / interpolated-string | 'stremio:$_selectedStremioSubtitleId' → 'MUTstremio:$_selectedStremioSubtitleId' | assertion-killed | live-menu-closure-plan:live-closure-p0944 |
+| `p0945` | _buildPlayerMenuPanel:14354 / declaration-statement | final cacheKey = _menuCacheKey; → String? cacheKey = null; | assertion-killed | remaining-typed-plan:typed-p0945 |
+| `p0946` | _buildPlayerMenuPanel:14356 / return | return PlayerMenuPanel( key: _playerMenuKey, initialSection: _playerMenuInitialSe... → ∅ | invalid-candidate | replay-candidate |
+| `p0947` | _buildPlayerMenuPanel:14367 / arrow-body | PlayerMenuTrackOption(id, label) → PlayerMenuTrackOption('mutant', label) | assertion-killed | arrow-plan:arrow-p0947, final-witness-plan:final-arrow-p0947 |
+| `p0948` | _buildPlayerMenuPanel:14371 / conditional | !kIsWeb && Platform.isAndroid → !(!kIsWeb && Platform.isAndroid) | assertion-killed | quick-sweep-plan:q-p0948 |
+| `p0949` | _buildPlayerMenuPanel:14371 / operator | && → \|\| | assertion-killed | quick-sweep-plan:q-p0949 |
+| `p0950` | _buildPlayerMenuPanel:14373 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0951` | _buildPlayerMenuPanel:14374 / conditional | !kIsWeb && Platform.isAndroid → !(!kIsWeb && Platform.isAndroid) | assertion-killed | quick-sweep-plan:q-p0951 |
+| `p0952` | _buildPlayerMenuPanel:14374 / operator | && → \|\| | assertion-killed | quick-sweep-plan:q-p0952 |
+| `p0953` | _buildPlayerMenuPanel:14376 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0954` | _buildPlayerMenuPanel:14392 / branch | cacheKey == null → !(cacheKey == null) | assertion-killed | final-inputs-closure-plan:final-inputs-p0954 |
+| `p0955` | _buildPlayerMenuPanel:14392 / operator | == → != | assertion-killed | final-inputs-closure-plan:final-inputs-p0955 |
+| `p0956` | _buildPlayerMenuPanel:14392 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0957` | _buildPlayerMenuPanel:14392 / return | return; → ∅ | equivalent-original-callers | Deleting the first cacheKey==null return leaves the following different-key guard intact. A non-null current cache key therefore still rejects a captured null key. When both keys are null the extra assignments remain unobservable: the two menu cache readers require a non-null open-time key, and proactive discovery rejects a null/empty IMDb identity before computing its non-null cache key; on a later resolved identity, the null key cannot match and all cache components are replaced together. The callback has no awaits or listeners on these fields. The enclosing return/guard mutants with a non-null key are separately assertion-tested. |
+| `p0958` | _buildPlayerMenuPanel:14393 / branch | _cachedSubtitleKey != null && _cachedSubtitleKey != cacheKey → !(_cachedSubtitleKey != null && _cachedSubtitleKey != cacheKey) | assertion-killed | final-inputs-closure-plan:final-inputs-p0958 |
+| `p0959` | _buildPlayerMenuPanel:14393 / operator | && → \|\| | assertion-killed | final-inputs-closure-plan:final-inputs-p0959 |
+| `p0960` | _buildPlayerMenuPanel:14393 / operator | != → == | assertion-killed | final-inputs-closure-plan:final-inputs-p0960 |
+| `p0961` | _buildPlayerMenuPanel:14393 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0962` | _buildPlayerMenuPanel:14393 / operator | != → == | assertion-killed | final-inputs-closure-plan:final-inputs-p0962 |
+| `p0963` | _buildPlayerMenuPanel:14394 / return | return; → ∅ | assertion-killed | cache-publication-final-plan:live-closure-p0963 |
+| `p0964` | _buildPlayerMenuPanel:14396 / statement | _cachedAddonSlots = slots; → ∅ | assertion-killed | final-inputs-closure-plan:final-inputs-p0964 |
+| `p0965` | _buildPlayerMenuPanel:14397 / statement | _cachedStremioSubtitles = AddonSubtitleSlot.flatten(slots); → ∅ | assertion-killed | cache-publication-final-plan:live-closure-p0965 |
+| `p0966` | _buildPlayerMenuPanel:14398 / statement | _cachedSubtitleKey = cacheKey; → ∅ | assertion-killed | final-inputs-closure-plan:final-inputs-p0966 |
+| `p0967` | _buildPlayerMenuPanel:14412 / operator | != → == | assertion-killed | live-menu-closure-plan:live-closure-p0967 |
+| `p0968` | _buildPlayerMenuPanel:14412 / boolean | true → false | assertion-killed | last-menu-plan:last-p0968 |
+| `p0969` | _buildPlayerMenuPanel:14415 / operator | \|\| → && | assertion-killed | last-menu-plan:last-p0969 |
+| `p0970` | _buildPlayerMenuPanel:14415 / operator | && → \|\| | assertion-killed | quick-sweep-plan:q-p0970 |
+| `p0971` | _buildPlayerMenuPanel:14415 / operator | != → == | assertion-killed | quick-sweep-plan:q-p0971 |
+| `p0972` | _buildPlayerMenuPanel:14415 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
+| `p0973` | _buildPlayerMenuPanel:14419 / statement | _hidePlayerMenu(); → ∅ | assertion-killed | shuffle-window-final-plan:live-closure-p0973 |
+| `p0974` | _buildPlayerMenuPanel:14420 / statement | unawaited(_playRandomOnce(disableContinuousShuffle: true)); → ∅ | assertion-killed | live-menu-closure-plan:live-closure-p0974, remaining-sweep-plan:p0974 |
+| `p0975` | _buildPlayerMenuPanel:14420 / boolean | true → false | assertion-killed | live-menu-closure-plan:live-closure-p0975, remaining-sweep-plan:p0975 |
+| `p0976` | _buildPlayerMenuPanel:14422 / arrow-body | unawaited(_toggleContinuousShuffle()) → null | assertion-killed | arrow-plan:arrow-p0976 |
+
+### Every new case has an original assertion witness
+
+| Case | Passing original control | Assertion-failing original mutation |
+| --- | --- | --- |
+| p13 TEE arm failure preserves original admission and feedback | accepted192-original-baseline.jsonl | mutation-plan:W01-tee-dispatch, remaining-sweep-plan:p0406 |
+| p13 TEE arm-failure completion cancels its recording log subscription | accepted192-original-baseline.jsonl | log-cleanup-closure-plan:logs-p0405 |
+| p13 TEE automatic zap stop has no saved notice after the start notice is dismissed | accepted192-original-baseline.jsonl | log-cleanup-closure-plan:logs-p0472 |
+| p13 TEE directory failure delivered after disposal stays quiet | accepted192-original-baseline.jsonl | cleanup-closure-plan:cleanup-p0408, current-input-refresh-plan:refresh-p0123 |
+| p13 TEE directory failure preserves original admission and feedback | accepted192-original-baseline.jsonl | mutation-plan:W01-tee-dispatch |
+| p13 TEE directory start completing in the renderer gap cannot arm its captured player | accepted192-original-baseline.jsonl | completion-closure-plan:completion-p0371 |
+| p13 TEE dispose issues clear before player teardown without awaiting it | accepted192-original-baseline.jsonl | mutation-plan:W01-tee-dispatch, mutation-plan:G05-dispose-native-clear |
+| p13 TEE dispose output=0 preserves its stop protocol | accepted192-original-baseline.jsonl | mutation-plan:W01-tee-dispatch |
+| p13 TEE dispose output=1 preserves its stop protocol | accepted192-original-baseline.jsonl | mutation-plan:W01-tee-dispatch |
+| p13 TEE dispose output=188 preserves its stop protocol | accepted192-original-baseline.jsonl | mutation-plan:W01-tee-dispatch |
+| p13 TEE echo failure preserves original admission and feedback | accepted192-original-baseline.jsonl | mutation-plan:W01-tee-dispatch, remaining-sweep-plan:p0401 |
+| p13 TEE filename sanitizes " / Live  News ? " without changing path policy | accepted192-original-baseline.jsonl | mutation-plan:W01-tee-dispatch, remaining-sweep-plan:p0500 |
+| p13 TEE filename sanitizes "" without changing path policy | accepted192-original-baseline.jsonl | mutation-plan:W01-tee-dispatch, remaining-sweep-plan:p0504 |
+| p13 TEE filename sanitizes "***" without changing path policy | accepted192-original-baseline.jsonl | mutation-plan:W01-tee-dispatch, remaining-sweep-plan:p0498 |
+| p13 TEE filename sanitizes "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" without changing path policy | accepted192-original-baseline.jsonl | cleanup-closure-plan:cleanup-p0507, mutation-plan:W01-tee-dispatch |
+| p13 TEE filename sanitizes "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" without changing path policy | accepted192-original-baseline.jsonl | mutation-plan:W01-tee-dispatch, remaining-sweep-plan:p0509 |
+| p13 TEE held arm then dispose rejects or disarms the captured start | accepted192-original-baseline.jsonl | mutation-plan:W01-tee-dispatch |
+| p13 TEE held arm then pause rejects or disarms the captured start | accepted192-original-baseline.jsonl | mutation-plan:W01-tee-dispatch, mutation-plan:G02-post-arm-generation |
+| p13 TEE held arm then zap rejects or disarms the captured start | accepted192-original-baseline.jsonl | mutation-plan:W01-tee-dispatch, mutation-plan:G02-post-arm-generation |
+| p13 TEE held clear failure=false permits restart before old stop completes | accepted192-original-baseline.jsonl | mutation-plan:W01-tee-dispatch, mutation-plan:G03-stop-before-native-clear |
+| p13 TEE held clear failure=true permits restart before old stop completes | accepted192-original-baseline.jsonl | mutation-plan:W01-tee-dispatch, mutation-plan:G03-stop-before-native-clear |
+| p13 TEE held directory then dispose rejects or disarms the captured start | accepted192-original-baseline.jsonl | mutation-plan:W01-tee-dispatch |
+| p13 TEE held directory then pause rejects or disarms the captured start | accepted192-original-baseline.jsonl | mutation-plan:W01-tee-dispatch, mutation-plan:G01-directory-generation |
+| p13 TEE held directory then zap rejects or disarms the captured start | accepted192-original-baseline.jsonl | mutation-plan:W01-tee-dispatch, mutation-plan:G01-directory-generation |
+| p13 TEE held echo then dispose rejects or disarms the captured start | accepted192-original-baseline.jsonl | mutation-plan:W01-tee-dispatch |
+| p13 TEE held echo then pause rejects or disarms the captured start | accepted192-original-baseline.jsonl | mutation-plan:W01-tee-dispatch, mutation-plan:G02-post-arm-generation |
+| p13 TEE held echo then zap rejects or disarms the captured start | accepted192-original-baseline.jsonl | mutation-plan:W01-tee-dispatch, mutation-plan:G02-post-arm-generation |
+| p13 TEE null Downloads path uses documents without another target policy | accepted192-original-baseline.jsonl | mutation-plan:W01-tee-dispatch |
+| p13 TEE occupied target crowded=false preserves suffix and microsecond fallback | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0512, mutation-plan:W01-tee-dispatch |
+| p13 TEE occupied target crowded=true preserves suffix and microsecond fallback | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0512, current-input-refresh-plan:refresh-p0496 |
+| p13 TEE overlapping stops issue one clear while a later zap can finish first | accepted192-original-baseline.jsonl | mutation-plan:W01-tee-dispatch |
+| p13 TEE pause output=0 preserves its stop protocol | accepted192-original-baseline.jsonl | mutation-plan:W01-tee-dispatch |
+| p13 TEE pause output=1 preserves its stop protocol | accepted192-original-baseline.jsonl | mutation-plan:W01-tee-dispatch, references-plan:ref4 |
+| p13 TEE pause output=188 preserves its stop protocol | accepted192-original-baseline.jsonl | mutation-plan:W01-tee-dispatch |
+| p13 TEE stale completion cancels its recording log subscription | accepted192-original-baseline.jsonl | log-cleanup-closure-plan:logs-p0390 |
+| p13 TEE stale start file-delete failure retains its independent cleanup catches | accepted192-original-baseline.jsonl | cleanup-closure-plan:cleanup-p0422, current-input-refresh-plan:refresh-p0123 |
+| p13 TEE stale start native-clear failure retains its independent cleanup catches | accepted192-original-baseline.jsonl | cleanup-closure-plan:cleanup-p0412, current-input-refresh-plan:refresh-p0123 |
+| p13 TEE two pending starts followed by stop invalidate both original generations | accepted192-original-baseline.jsonl | mutation-plan:W01-tee-dispatch, remaining-sweep-plan:p0361 |
+| p13 TEE user output=0 preserves its stop protocol | accepted192-original-baseline.jsonl | mutation-plan:W01-tee-dispatch, quick-sweep-plan:q-p0061 |
+| p13 TEE user output=1 preserves its stop protocol | accepted192-original-baseline.jsonl | current-input-refresh-plan:refresh-p0123, current-input-refresh-plan:refresh-p0124 |
+| p13 TEE user output=188 preserves its stop protocol | accepted192-original-baseline.jsonl | diagnostics-plan:text-p0475, mutation-plan:W01-tee-dispatch |
+| p13 TEE user stop cannot start another recording after its saved notice | accepted192-original-baseline.jsonl | cleanup-closure-plan:cleanup-p0064, mutation-plan:W01-tee-dispatch |
+| p13 TEE warning logs are filtered and stop cancels the recording log tap | accepted192-original-baseline.jsonl | current-input-refresh-plan:refresh-p0336, current-input-refresh-plan:refresh-p0338 |
+| p13 TEE zap output=0 preserves its stop protocol | accepted192-original-baseline.jsonl | mutation-plan:W01-tee-dispatch |
+| p13 TEE zap output=1 preserves its stop protocol | accepted192-original-baseline.jsonl | mutation-plan:W01-tee-dispatch |
+| p13 TEE zap output=188 preserves its stop protocol | accepted192-original-baseline.jsonl | mutation-plan:W01-tee-dispatch |
+| p13 TEE zapped directory start completes its public callback without arming | accepted192-original-baseline.jsonl | completion-closure-plan:completion-p0372 |
+| p13 TV close restores root focus before the panel-removal frame | accepted192-original-baseline.jsonl | final-witness-plan:final-focus-return, live-menu-closure-plan:live-closure-p0771 |
+| p13 TV menu opening releases root focus before the panel frame | accepted192-original-baseline.jsonl | window-closure-plan:window-p0688 |
+| p13 TV system Back delegates pane navigation then closes through the facade host | accepted192-original-baseline.jsonl | references-plan:ref17 |
+| p13 TV tracks Back leaves pane then closes and restores player focus | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0769, arrow-plan:arrow-p0769 |
+| p13 addon menu apply completing after dispose rejects stale publication | accepted192-original-baseline.jsonl | final-inputs-closure-plan:final-inputs-p0882, live-menu-closure-plan:live-closure-p0885 |
+| p13 addon menu apply completing after reset rejects stale publication | accepted192-original-baseline.jsonl | final-inputs-closure-plan:final-inputs-p0882, live-menu-closure-plan:live-closure-p0885 |
+| p13 addon menu download completing after dispose rejects stale publication | accepted192-original-baseline.jsonl | final-inputs-closure-plan:final-inputs-p0871, final-inputs-closure-plan:final-inputs-p0873 |
+| p13 addon menu download completing after reset rejects stale publication | accepted192-original-baseline.jsonl | final-inputs-closure-plan:final-inputs-p0871, final-inputs-closure-plan:final-inputs-p0873 |
+| p13 cached movie tracks opens synchronously before a later quick section | accepted192-original-baseline.jsonl | fallback-closure-plan:fallback-p0569, fallback-closure-plan:fallback-p0567 |
+| p13 channel switch awaits TEE clear before opening its replacement | accepted192-original-baseline.jsonl | mutation-plan:G06-stop-before-open, references-plan:ref7 |
+| p13 close panel during apply failure=false retains apply-owned sync reset | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0859, mutation-plan:W07-pending-addon-entry |
+| p13 close panel during apply failure=true retains apply-owned sync reset | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0859, mutation-plan:W07-pending-addon-entry |
+| p13 close panel during download failure=false retains apply-owned sync reset | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0859, mutation-plan:W07-pending-addon-entry |
+| p13 close panel during download failure=true retains apply-owned sync reset | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0859, mutation-plan:W07-pending-addon-entry |
+| p13 desktop HTTPS admission reaches directory work before a disposed caller is rejected | accepted192-original-baseline.jsonl | cache-url-plan:https-admission, remaining-sweep-plan:p0200 |
+| p13 desktop Stremio playing URL resolved=false controls capture identity | accepted192-original-baseline.jsonl | mutation-plan:W03-desktop-rejection-feedback |
+| p13 desktop Stremio playing URL resolved=true controls capture identity | accepted192-original-baseline.jsonl | mutation-plan:W02-desktop-service-dispatch, remaining-sweep-plan:p0170 |
+| p13 desktop URL admission format= url=non-http | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0002, mutation-plan:W03-desktop-rejection-feedback |
+| p13 desktop URL admission format= url=plain | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0002, mutation-plan:W02-desktop-service-dispatch |
+| p13 desktop URL admission format= url=xtream | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0002, mutation-plan:W02-desktop-service-dispatch |
+| p13 desktop URL admission format=dash url=non-http | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0002, mutation-plan:W03-desktop-rejection-feedback |
+| p13 desktop URL admission format=dash url=plain | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0002, mutation-plan:W03-desktop-rejection-feedback |
+| p13 desktop URL admission format=dash url=xtream | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0002, mutation-plan:W02-desktop-service-dispatch |
+| p13 desktop URL admission format=hls url=non-http | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0002, current-input-refresh-plan:refresh-p0135 |
+| p13 desktop URL admission format=hls url=plain | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0002, current-input-refresh-plan:refresh-p0135 |
+| p13 desktop URL admission format=hls url=xtream | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0002, mutation-plan:W02-desktop-service-dispatch |
+| p13 desktop URL admission format=mpegts url=non-http | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0002, current-input-refresh-plan:refresh-p0135 |
+| p13 desktop URL admission format=mpegts url=plain | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0002, current-input-refresh-plan:refresh-p0122 |
+| p13 desktop URL admission format=mpegts url=xtream | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0002, mutation-plan:W02-desktop-service-dispatch |
+| p13 desktop URL admission format=probe-error url=non-http | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0002, mutation-plan:W03-desktop-rejection-feedback |
+| p13 desktop URL admission format=probe-error url=plain | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0002, mutation-plan:W02-desktop-service-dispatch |
+| p13 desktop URL admission format=probe-error url=xtream | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0002, mutation-plan:W02-desktop-service-dispatch |
+| p13 desktop capacity cancel starts no second capture and never falls through to TEE | accepted192-original-baseline.jsonl | current-input-refresh-plan:refresh-p0140, mutation-plan:W04-capacity-cancel |
+| p13 desktop continuous capture button preserves background ownership | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0002, arrow-plan:arrow-p0544 |
+| p13 desktop continuous capture dispose preserves background ownership | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0002, arrow-plan:arrow-p0544 |
+| p13 desktop continuous capture pause preserves background ownership | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0002, arrow-plan:arrow-p0544 |
+| p13 desktop continuous capture zap preserves background ownership | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0002, arrow-plan:arrow-p0544 |
+| p13 desktop held directory then dispose retains original capture and mounted windows | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0002 |
+| p13 desktop held directory then zap retains original capture and mounted windows | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0002, mutation-plan:W02-desktop-service-dispatch |
+| p13 desktop held format then dispose retains original capture and mounted windows | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0002, mutation-plan:G13-format-dispose-context-order |
+| p13 desktop held format then zap retains original capture and mounted windows | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0002, mutation-plan:W02-desktop-service-dispatch |
+| p13 desktop held resource then dispose retains original capture and mounted windows | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0002 |
+| p13 desktop held resource then zap retains original capture and mounted windows | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0002, mutation-plan:W02-desktop-service-dispatch |
+| p13 desktop held service then dispose retains original capture and mounted windows | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0002, current-input-refresh-plan:refresh-p0153 |
+| p13 desktop held service then zap retains original capture and mounted windows | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0002, mutation-plan:W02-desktop-service-dispatch |
+| p13 desktop one captured byte is saved after cancellation | accepted192-original-baseline.jsonl | cleanup-closure-plan:cleanup-p0041, current-input-refresh-plan:refresh-p0044 |
+| p13 desktop profile handoff after-start owner=deleted pins jobs and artifacts | accepted192-original-baseline.jsonl | mutation-plan:W02-desktop-service-dispatch |
+| p13 desktop profile handoff after-start owner=revoked pins jobs and artifacts | accepted192-original-baseline.jsonl | mutation-plan:W02-desktop-service-dispatch |
+| p13 desktop profile handoff after-start owner=valid pins jobs and artifacts | accepted192-original-baseline.jsonl | mutation-plan:W02-desktop-service-dispatch |
+| p13 desktop profile handoff before-service owner=deleted pins jobs and artifacts | accepted192-original-baseline.jsonl | mutation-plan:W02-desktop-service-dispatch |
+| p13 desktop profile handoff before-service owner=revoked pins jobs and artifacts | accepted192-original-baseline.jsonl | mutation-plan:W02-desktop-service-dispatch |
+| p13 desktop profile handoff before-service owner=valid pins jobs and artifacts | accepted192-original-baseline.jsonl | mutation-plan:W02-desktop-service-dispatch |
+| p13 desktop service capacity rejection after directory work keeps its failure feedback | accepted192-original-baseline.jsonl | current-input-refresh-plan:refresh-p0044, current-input-refresh-plan:refresh-p0159 |
+| p13 desktop stop delivered after disposal performs no late State update | accepted192-original-baseline.jsonl | cleanup-closure-plan:cleanup-p0036, mutation-plan:W02-desktop-service-dispatch |
+| p13 desktop stopping a silent stream reports zero captured bytes and removes its empty file | accepted192-original-baseline.jsonl | current-input-refresh-plan:refresh-p0044, current-input-refresh-plan:refresh-p0157 |
+| p13 failed old manual choice cannot restore policy during a reopened menu choice | accepted192-original-baseline.jsonl | manual-path-closure-plan:manual-revision-overlap, remaining-sweep-plan:p0811 |
+| p13 live tracks metadata success=false event=content preserves original snapshots | accepted192-original-baseline.jsonl | mutation-plan:W05-live-metadata-action, mutation-plan:W05-live-metadata-action |
+| p13 live tracks metadata success=false event=dispose preserves original snapshots | accepted192-original-baseline.jsonl | mutation-plan:W05-live-metadata-action, mutation-plan:G07-lexical-context-guard |
+| p13 live tracks metadata success=false event=none preserves original snapshots | accepted192-original-baseline.jsonl | mutation-plan:W05-live-metadata-action, mutation-plan:W05-live-metadata-action |
+| p13 live tracks metadata success=false event=profile preserves original snapshots | accepted192-original-baseline.jsonl | mutation-plan:W05-live-metadata-action, mutation-plan:W05-live-metadata-action |
+| p13 live tracks metadata success=false event=repeated preserves original snapshots | accepted192-original-baseline.jsonl | current-input-refresh-plan:refresh-p0556, mutation-plan:W05-live-metadata-action |
+| p13 live tracks metadata success=true event=content preserves original snapshots | accepted192-original-baseline.jsonl | mutation-plan:W05-live-metadata-action, mutation-plan:W05-live-metadata-action |
+| p13 live tracks metadata success=true event=dispose preserves original snapshots | accepted192-original-baseline.jsonl | mutation-plan:W05-live-metadata-action, mutation-plan:G07-lexical-context-guard |
+| p13 live tracks metadata success=true event=none preserves original snapshots | accepted192-original-baseline.jsonl | mutation-plan:W05-live-metadata-action, mutation-plan:W05-live-metadata-action |
+| p13 live tracks metadata success=true event=profile preserves original snapshots | accepted192-original-baseline.jsonl | mutation-plan:W05-live-metadata-action, mutation-plan:W05-live-metadata-action |
+| p13 live tracks metadata success=true event=repeated preserves original snapshots | accepted192-original-baseline.jsonl | mutation-plan:W05-live-metadata-action, mutation-plan:W05-live-metadata-action |
+| p13 menu addon callback remains pending until its physical preference write completes | accepted192-original-baseline.jsonl | live-menu-closure-plan:live-closure-p0889 |
+| p13 menu audio callback awaits the player setter before completing | accepted192-original-baseline.jsonl | current-input-refresh-plan:refresh-p0798 |
+| p13 menu audio callback remains pending until its physical preference write completes | accepted192-original-baseline.jsonl | current-input-refresh-plan:refresh-p0784 |
+| p13 menu audio remembers the chosen IPTV series audio language | accepted192-original-baseline.jsonl | iptv-audio-closure-plan:iptv-audio-p0782, remaining-sweep-plan:p0792 |
+| p13 menu cache write publishes its flat projection before metadata retry | accepted192-original-baseline.jsonl | cache-publication-final-plan:live-closure-p0965 |
+| p13 menu factory publishes filtered track options and live selections | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0935, arrow-plan:arrow-p0947 |
+| p13 menu opening cancels the pending transport hide timer | accepted192-original-baseline.jsonl | window-closure-plan:window-p0687, window-closure-plan:window-p0699 |
+| p13 menu opening retires a floating live zap banner | accepted192-original-baseline.jsonl | window-closure-plan:window-p0686 |
+| p13 menu subtitle-off callback remains pending until its physical preference write completes | accepted192-original-baseline.jsonl | current-input-refresh-plan:refresh-p0832 |
+| p13 menu subtitle-off remembers the chosen IPTV series audio language | accepted192-original-baseline.jsonl | iptv-audio-closure-plan:iptv-audio-p0779 |
+| p13 menu tracks and quick sections preserve parsed series coordinates over launch fallback | accepted192-original-baseline.jsonl | current-input-refresh-plan:refresh-p0551, current-input-refresh-plan:refresh-p0552 |
+| p13 old menu cache delivery cannot overwrite an identified title | accepted192-original-baseline.jsonl | cache-publication-final-plan:live-closure-p0963 |
+| p13 panel discovery completion after close writes the open identity cache | accepted192-original-baseline.jsonl | mutation-plan:W09-closed-cache-write, mutation-plan:G08-captured-cache-key |
+| p13 pending manual menu choice blocks automatic off during an audio menu refresh | accepted192-original-baseline.jsonl | manual-pending-closure-plan:manual-pending-p0807, manual-pending-closure-plan:manual-pending-p0808 |
+| p13 quick PlayerMenuSection.aspect opens without awaiting or fetching metadata | accepted192-original-baseline.jsonl | mutation-plan:W06-quick-menu-action, mutation-plan:W06-quick-menu-action |
+| p13 quick PlayerMenuSection.shuffle opens without awaiting or fetching metadata | accepted192-original-baseline.jsonl | mutation-plan:W06-quick-menu-action, mutation-plan:W06-quick-menu-action |
+| p13 quick PlayerMenuSection.sleep opens without awaiting or fetching metadata | accepted192-original-baseline.jsonl | mutation-plan:W06-quick-menu-action, mutation-plan:W06-quick-menu-action |
+| p13 quick PlayerMenuSection.speed opens without awaiting or fetching metadata | accepted192-original-baseline.jsonl | mutation-plan:W06-quick-menu-action, mutation-plan:W06-quick-menu-action |
+| p13 quick menu keeps cached addon slots plus launch captions without another fetch | accepted192-original-baseline.jsonl | cache-url-plan:cache-typed-p0742, cache-url-plan:cache-typed-p0754 |
+| p13 quick menu keeps manually identified subtitle identity ahead of launch identity | accepted192-original-baseline.jsonl | collection-closure-plan:collection-p0711 |
+| p13 quick menu prefers the current movie cache over the shared first movie identity | accepted192-original-baseline.jsonl | collection-closure-plan:collection-p0716 |
+| p13 quick menu reuses live tracks movie metadata without another fetch | accepted192-original-baseline.jsonl | final-witness-plan:final-quick-metadata, live-menu-closure-plan:live-closure-p0765 |
+| p13 recording TV dock uses the same real Record and active-state callbacks | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0002, arrow-plan:arrow-p0544 |
+| p13 recording banner and dock measurement generation follow live capture state twin=false | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0544, references-plan:ref3 |
+| p13 recording banner and dock measurement generation follow live capture state twin=true | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0544, quick-sweep-plan:q-p0018 |
+| p13 recording caller IPTV source replacement awaits its own TEE stop | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0002, arrow-plan:arrow-p0544 |
+| p13 recording caller Start Over awaits the native clear before timeshift open | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0002, arrow-plan:arrow-p0544 |
+| p13 recording caller live eof retune awaits the native clear | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0002, arrow-plan:arrow-p0544 |
+| p13 recording caller live error retune awaits the native clear | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0002, arrow-plan:arrow-p0544 |
+| p13 recording disabled committed source is absent from the fresh resource binding | accepted192-original-baseline.jsonl | completion-closure-plan:completion-p0305 |
+| p13 recording resource edge fresh missing=empty-id preserves validation and fallback | accepted192-original-baseline.jsonl | remaining-typed-plan:typed-p0321, remaining-typed-plan:typed-p0323 |
+| p13 recording resource edge fresh missing=id preserves validation and fallback | accepted192-original-baseline.jsonl | remaining-typed-plan:typed-p0321, remaining-typed-plan:typed-p0323 |
+| p13 recording resource edge fresh missing=revision preserves validation and fallback | accepted192-original-baseline.jsonl | remaining-typed-plan:typed-p0321, remaining-typed-plan:typed-p0323 |
+| p13 recording resource edge launch missing=empty-id preserves validation and fallback | accepted192-original-baseline.jsonl | resource-negatives-plan:resource-launch-empty-check, resource-negatives-plan:resource-edges-service-dispatch |
+| p13 recording resource edge launch missing=id preserves validation and fallback | accepted192-original-baseline.jsonl | resource-negatives-plan:resource-launch-id-default, resource-negatives-plan:resource-edges-service-dispatch |
+| p13 recording resource edge launch missing=revision preserves validation and fallback | accepted192-original-baseline.jsonl | resource-negatives-plan:resource-launch-revision-default, resource-negatives-plan:resource-edges-service-dispatch |
+| p13 recording resource fresh preserves fresh-read precedence and launch fallback | accepted192-original-baseline.jsonl | mutation-plan:W02-desktop-service-dispatch, mutation-plan:G11-resource-widget-fallback |
+| p13 recording resource launch preserves fresh-read precedence and launch fallback | accepted192-original-baseline.jsonl | mutation-plan:W02-desktop-service-dispatch, mutation-plan:G11-resource-widget-fallback |
+| p13 recording resource none preserves fresh-read precedence and launch fallback | accepted192-original-baseline.jsonl | mutation-plan:W02-desktop-service-dispatch |
+| p13 recording resource series-attribute preserves fresh-read precedence and launch fallback | accepted192-original-baseline.jsonl | mutation-plan:W02-desktop-service-dispatch, remaining-sweep-plan:p0297 |
+| p13 recording resource source-attribute preserves fresh-read precedence and launch fallback | accepted192-original-baseline.jsonl | mutation-plan:W02-desktop-service-dispatch, remaining-sweep-plan:p0296 |
+| p13 recording saved callback in the renderer gap performs no directory work | accepted192-original-baseline.jsonl | final-witness-plan:final-early-renderer |
+| p13 recording saved callback with no current channel tee=false returns before IO | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0002, quick-sweep-plan:q-p0003 |
+| p13 recording saved callback with no current channel tee=true returns before IO | accepted192-original-baseline.jsonl | arrow-plan:arrow-p0002 |
+| p13 resource await reads launch selectors live after a public widget update | accepted192-original-baseline.jsonl | mutation-plan:W02-desktop-service-dispatch, remaining-typed-plan:typed-p0321 |
+| p13 shuffle once closes its menu before custom episode inventory completes | accepted192-original-baseline.jsonl | last-menu-plan:last-p0969, shuffle-window-final-plan:live-closure-p0973 |
+| p13 single-file tracks after handoff success=false event=dispose preserves lookup timing | accepted192-original-baseline.jsonl | single-closure-plan:single-p0587, single-closure-plan:single-p0582 |
+| p13 single-file tracks after handoff success=false event=none preserves lookup timing | accepted192-original-baseline.jsonl | remaining-sweep-plan:p0586, remaining-sweep-plan:p0587 |
+| p13 single-file tracks after handoff success=false event=repeated preserves lookup timing | accepted192-original-baseline.jsonl | single-closure-plan:single-p0587, single-closure-plan:single-p0581 |
+| p13 single-file tracks after handoff success=true event=dispose preserves lookup timing | accepted192-original-baseline.jsonl | single-closure-plan:single-p0587, single-closure-plan:single-p0582 |
+| p13 single-file tracks after handoff success=true event=none preserves lookup timing | accepted192-original-baseline.jsonl | remaining-sweep-plan:p0588, single-closure-plan:single-p0587 |
+| p13 single-file tracks after handoff success=true event=repeated preserves lookup timing | accepted192-original-baseline.jsonl | single-closure-plan:single-p0587, single-closure-plan:single-p0588 |
+| p13 subtitles off after an addon selection failure=false preserves its result and menu identity | accepted192-original-baseline.jsonl | final-inputs-closure-plan:final-inputs-p0827, final-inputs-closure-plan:final-inputs-p0829 |
+| p13 subtitles off after an addon selection failure=true preserves its result and menu identity | accepted192-original-baseline.jsonl | final-inputs-closure-plan:final-inputs-p0827, final-inputs-closure-plan:final-inputs-p0828 |
+| p13 thrown manual apply restores automatic policy before propagating its error | accepted192-original-baseline.jsonl | current-input-refresh-plan:refresh-p0810, manual-throw-closure-plan:manual-throw-p0810 |
+| p13 tracks and quick menu infer series from the actual playlist | accepted192-original-baseline.jsonl | collection-closure-plan:collection-p0725, collection-closure-plan:collection-p0726 |
+| p13 tracks and quick sections reject a cache from the previous widget identity | accepted192-original-baseline.jsonl | coordinate-closure-plan:coordinates-p0631, live-menu-closure-plan:live-closure-p0756 |
+| p13 tracks cache with coordinates 3/4 is reused by a quick section | accepted192-original-baseline.jsonl | coordinate-closure-plan:coordinates-p0621, coordinate-closure-plan:coordinates-p0623 |
+| p13 tracks cache with coordinates 3/null is reused by a quick section | accepted192-original-baseline.jsonl | coordinate-closure-plan:coordinates-p0621, coordinate-closure-plan:coordinates-p0622 |
+| p13 tracks cache with coordinates null/4 is reused by a quick section | accepted192-original-baseline.jsonl | coordinate-closure-plan:coordinates-p0621, coordinate-closure-plan:coordinates-p0622 |
+| p13 tracks movie collection uses launch identity while background metadata is held | accepted192-original-baseline.jsonl | fallback-closure-plan:fallback-p0569, fallback-closure-plan:fallback-p0578 |
+
+### Frozen reduced inventory and checks
+
+`dev/tool/dart_moves/vplayer_p13_suites.json` freezes **192 suite files**: all video-player suites, direct source readers, theme guard and affected menu/recording/profile/fixture contracts. `vplayer_gate_inventory.py` rejects omission, load failure, drift, duplicates and incomplete runs before identity comparison; seven positive/negative fixture checks pass. Gate use: `nice -n 19 python3 dev/tool/vplayer_gate_inventory.py --inventory dev/tool/dart_moves/vplayer_p13_suites.json --run RUN.jsonl --against BASELINE.jsonl`.
+
+The final original baseline has **1464 successes / 2 pre-existing failures**, every suite loaded, stable tested-tree metadata and inputs matching the final tests. Failure identities match the observed original and P12 gate: `playback_startup_view_test.dart::startup shield remains opaque and noninteractive in PiP`; `profiles/profile_source_guard_test.dart::direct SharedPreferences opens stay inside reviewed adapters/stores`. No previously passing test regresses or becomes skipped. Partial exploratory baseline runs interrupted while closing coverage are not credited.
+
+All Flutter suites use `nice -n 19`, the shared P13 suite lock, `--no-pub --concurrency=1 --dart-define=DEBRIFY_VP_TEST_HOOKS=true`. Manifest/source-reader invocations use fresh isolated packages under the executing worktree’s `.dart_tool/vplayer_parser/`, deleting copied kernels. Format, changed-Dart analyzer, size, architecture and negative guards, inventory validation and diff checks pass. Step-T app/tooling proofs and the legacy analyzer inventory are reused only for identical inputs; repository analyzer issues remain pre-existing. Full Flutter suite, release builds and devices are deferred by the speed-up decision. No app/dependency edit, production move, push, merge or branch switch. Stop for Claude’s independent mutation sample before production moves.
