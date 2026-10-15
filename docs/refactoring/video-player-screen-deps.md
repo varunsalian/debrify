@@ -9306,6 +9306,7 @@ subtitle presentation, and physical PiP remain device-pending. Manual identity
 changes subtitle/prefetch identity while tracker/skip launch identity is retained;
 original stale-result/early-guide defects and dormant references remain frozen.
 No later phase, application bug fix, push, merge or branch switch performed.
+
 ## Phase 13 S2d — desktop recording seam checkpoint (2026-10-15)
 
 Prepared application `e4a9ab581`; approved design `6631611a9`. Exactly two
@@ -9373,3 +9374,115 @@ each**, complete input trees, identical before/after input hashes and no changed
 application/checker/test file. Final receipts are `seams-staged-true/false.*`;
 subsequent changes are documentation only. The long universal self-test remains
 valid with identical inputs and was not repeated.
+
+## Phase 13 pipeline rebase (2026-10-15)
+
+Accepted Phase-12 merge: `1d7699d2e`. Final original, including reviewed
+S2d: `1099a0039dab6023aef8c95754e4595e862e9a67`. Independent S2d review
+`vp-rev13s2d`: no P1/P2/P3; native desktop support implies non-iOS, so the
+extra conjunct preserves native behavior. `p13/rebase/audit.json` records
+preparation/rebase blob identities for the facade, 25 earlier destinations,
+all fixtures/checker inputs, analyzer inventories and dependency files.
+Phase-12 gate and rebased S2d preparation differ only in appended documents;
+no application/test/tooling proof input changed. Historical P12 checks now
+use its accepted merge. No production moves before Step 0 plus Claude’s sample.
+
+## Phase 13 Step T — complete virtual menu and recording boundary
+
+Final original: rebased, independently reviewed S2d
+`1099a0039dab6023aef8c95754e4595e862e9a67`. The complete draft is
+`dev/tool/dart_moves/vplayer_p13.json`; its generator is
+`dev/tool/draft_vplayer_menu_recording_moves.py`. This is evidence-only:
+779 declarations are classified, 29 methods/getters plus one field move virtually, 746
+remain and three are patched (State constructor plus two whole adapters).
+There are no new production files and no application edit.
+
+| Destination | Responsibility | Formatted lines |
+|---|---|---:|
+| `vp_player_menu_ui.dart` | live tracks metadata action and panel factory | 377 |
+| `vp_player_menu.dart` | menu transitions and track-choice orchestration | 332 |
+| `vp_iptv_recording.dart` | TEE/desktop/Android actions and recording eligibility | 463 |
+| `vp_iptv_recording_resources.dart` | URL/resource lookup, filenames/paths and log tap | 209 |
+
+All four Hosts are frozen in the generator and manifest scaffolding.
+Sibling calls route through facade adapters; they do not expose collaborator
+objects or import sibling implementations. Menu UI keeps the lexical
+`BuildContext context` parameter and `context.mounted` check, with no State
+context/mounted Host getter. Seven menu snapshots, the visibility flag,
+controls notifier, menu key and correction notifier remain State-owned.
+Captured titles, selected tracks, channel/platform/generation, cache key and
+resource record retain their original lifetimes. The target-path extension
+and stop defaults and nullable named record are preserved exactly.
+
+Eight recording fields remain State-owned, with live typed access
+where retained initialization, teardown or UI uses them. Only the refresh
+ticket moves: its two uses are confined to the moved refresh action, so it
+belongs to `VpIptvRecording`. Its literal `0` initializer has an individual
+inertness proof in the manifest: no allocation, scheduling, Host read or
+interaction with another initializer; eager modifiers are preserved. Other
+initializers keep their original State order. The retained inline disposal
+protocol continues to use the same State-owned snapshot.
+Scanner reader/writer census (`p13/stepT/ownership.json`; `read-write` means
+one increment occurrence, not two reads):
+
+| Field (all State-owned except refresh ticket) | Read | Write | Read-write |
+|---|---:|---:|---:|
+| `_recordingSupported` | 3 | 2 | 0 |
+| `_isRecording` | 5 | 4 | 0 |
+| `_recordingTempPath` | 2 | 4 | 0 |
+| `_engineTaskId` | 5 | 5 | 0 |
+| `_engineFlagOn` | 5 | 1 | 0 |
+| `_engineRefreshTicket` | 1 | 0 | 1 |
+| `_recordLogSub` | 3 | 2 | 0 |
+| `_desktopRecordingRevisionListener` | 1 | 2 | 0 |
+| `_recordingStartGen` | 2 | 0 | 3 |
+
+Four eager, Host-only constructors are appended after `_identify` and
+`_identifyUi`; constructors do not read Hosts. Listener registration,
+removal and log cancellation remain at their original positions. The display
+and sleep adapters each have exactly one counted whole-class rewrite:
+`_s._openPlayerMenuQuick(section)` → `_s._menu.openPlayerMenuQuick(section)`.
+No other existing adapter changes. The retained disposal block keeps its
+own generation bump, clear, caught native clear and chained unawaited
+publication; its two publication references route to the recording owner.
+
+The scanner measures **27 actual retained references: 7 menu +20 recording**
+(25 retained-body substitutions +the two adapter patches). The design table
+names all actual sites but its prose counts five active-recording getter
+references while listing four. The measured getter sites are `_infoPanelSignature`,
+`_buildTvControls`, `_buildIptvInfoPanel` and `build`. The full measured ledger
+is in `ownership.json`. The Step-0 sweep uses the measured count, with the
+prose discrepancy reported to the plan owner. No named site is dropped.
+
+The separate S/S2/S2b/S2c/S2d ledgers are unchanged. The draft also records
+all checkpoint locations: init's S2d check stays in place, and the moved
+toggle retains native desktop support first, then the live Host `isIOS`
+projection, then the original support flag. The new adapter reads
+`VpS2Hooks.isIOS`; it adds no hook or installer. P13 real-manifest negatives
+cover branch order, live projection, context parameter, eager reads,
+Host setters, captured values, named/default arguments, inline disposal,
+imports and registered chains.
+
+Analyzer evidence is `p13/stepT/analyzer-proposal.json`: root **154**, strict
+original **198**, unformatted virtual **140**, formatted virtual **145**
+scoped diagnostics. No scoped analyzer errors and no warnings in new
+scaffolding/destinations. All P1–P12 identity maxima survive in the proposed
+P13 inventory. The four original `_toggleRecording` async-context infos stay
+as four original-symbol identities; the live Host probe additionally exposes
+seven unrelated-mounted infos in that method, without changing guards.
+Other Host context diagnostics, formatter brace lint changes and newly unused
+retained facade imports are recorded by identity/multiplicity. CI stays on
+S2d/P12 until production moves; P12 history is now registered at accepted
+merge `1d7699d2e`.
+
+
+Verification complete: the full four-file draft/current S2d comparison,
+25 earlier destinations, P1–P12 at the twelve prescribed accepted revisions,
+all seam proofs, the universal Dart self-test, all **26** other Dart manifest
+self-tests and the Kotlin self-test pass. Size, architecture/negative checks,
+normal format/idempotence and diff checks pass. The complete scoped analyzer
+proposal includes the four original toggle infos; repository-wide analyzer
+issues remain pre-existing. Exact commands, SDK/configuration, parser-isolation
+and copied-kernel deletion audit, hashes, prototypes and receipts are under
+`p13/stepT/`. Failed development probes are archived and receive no pass credit.
+No production application, pubspec or lockfile edit. Step 0 follows separately.

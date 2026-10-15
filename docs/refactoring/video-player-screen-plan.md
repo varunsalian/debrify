@@ -2074,7 +2074,10 @@ sample (≥ 75 %), step 0b, the independent post-gate review.
 
 Branch `refactor/vplayer-p13` (pipelined; prepared off phase-12 step-1
 `e4a9ab581`). Evidence `refactor-evidence/vplayer/p13/`. Line numbers at
-`e4a9ab581`. **Production moves are blocked until phase 12 merges.**
+`e4a9ab581`. Phase 12 merged as `1d7699d2e`; rebased S2d
+`1099a0039dab6023aef8c95754e4595e862e9a67` is the final Phase-13
+original. Production moves remain blocked until Step 0 and Claude’s
+independent mutation sample are accepted.
 
 ### Pipeline rebase rule (design review P2)
 
@@ -2152,7 +2155,12 @@ preserves `Future<({String id, int revision})?>` (resource lookup),
 `recordingTargetPath(String, {String extension = 'mkv'})`. Probe the four
 existing `_toggleRecording` async-context infos.
 
-**Retained references (7 menu + 21 recording):**
+**Retained references (Step-T scanner: 7 menu +20 recording =27):**
+
+The design prose counted five active-recording getter references but named
+four; Step T confirms all named sites, including the two adapter patches.
+No named site or production behavior changes. The complete measured ledger
+is `p13/stepT/retained-sites.json`.
 
 | Group | Facade lines |
 |---|---|
@@ -4582,6 +4590,7 @@ Claude sample 16/20 → 20/20 after closures. Merged; M2 follows.
   presentation/decoding and physical PiP remain device-pending. Manual subtitle
   identity vs tracker/skip launch identity, dormant paths and original defects
   preserved. No production bug fix or later phase/push/merge/switch. STOP.
+
 ### 2026-10-15 — Phase 13 S2d seam extension checkpoint (STOP)
 
 - Preparation `e4a9ab581`, approved design `6631611a9`; receipt in
@@ -4613,6 +4622,55 @@ Claude sample 16/20 → 20/20 after closures. Merged; M2 follows.
 - No Step T/0, production move, bug fix, dependency change, application build,
   device/run/install, push/merge/switch or work in the P12 worktree. STOP for
   independent S2d review; P13 moves remain blocked until P12 merges.
+
+### 2026-10-15 — Phase 13 rebase and S2d review accepted
+
+Independent review `vp-rev13s2d` found no P1/P2/P3. The added
+`!VpS2Hooks.isIOS` conjunct preserves native behavior: desktop support
+implies `!Platform.isIOS` on every supported target. Phase 12 is accepted
+and merged as `1d7699d2e`; Claude rebased this branch onto it. The final
+Phase-13 original is rebased S2d
+`1099a0039dab6023aef8c95754e4595e862e9a67`. Both appended documentation
+sections survive the conflict resolution; their heading separation is
+normalized. The preparation-to-rebase delta changes only the plan and
+dependency report. Blob identity confirms the facade, all 25 earlier
+destinations, 1,805 test/fixture files, 545 checker/CI inputs, all 12 analyzer
+inventories and both pubspec files are identical to the reviewed S2d
+preparation snapshot. Evidence: `p13/rebase/audit.json` under the common Git
+evidence root. Step T and Step 0 use this original; production moves wait
+for Step 0 and Claude’s independent mutation sample.
+
+### 2026-10-15 — Phase 13 Step T complete (application still reviewed S2d)
+
+- **Original/rebase.** `1099a0039dab6023aef8c95754e4595e862e9a67`,
+  accepted Phase-12 merge `1d7699d2e`. Rebase input audit and independent
+  S2d review recorded above; no application bytes changed.
+- **Complete draft.** 779 declarations: 29 methods/getters plus the exclusively
+  owned, individually inert refresh-ticket field move virtually; 746 retained,
+  three patched. Four frozen Hosts route siblings through the facade. All
+  seven menu snapshots and eight retained recording fields stay State-owned.
+  Exactly one whole-class rewrite in each display/sleep adapter; State's
+  constructor appends four Host-only collaborators after P12's collaborators.
+- **Measured boundary.** UI/menu/actions/resources format to **377/332/463/209**
+  physical lines, all ≤500. Scanner confirms **27 retained runtime references**
+  (7 menu +20 recording); every named design site is present. The prose's fifth
+  active getter reference was an overcount; no production scope is dropped.
+- **Checks.** Complete materialization/current S2d comparison and 25 earlier
+  destinations; P1–P12 at the twelve prescribed accepted revisions; universal
+  Dart self-test including the real P13 four-file negatives; all 26 other Dart
+  manifest self-tests; Kotlin self-test; S/S2/S2b/S2c/S2d proofs; size,
+  architecture/negatives, format/idempotence and diff checks pass. Fresh parser
+  packages live under this worktree's `.dart_tool/vplayer_parser/`, with copied
+  kernels deleted. Commands and exact inputs are in `p13/stepT/`.
+- **Analyzer.** Root/strict/unformatted/formatted scoped inventories are
+  **154/198/140/145**; no scoped errors or new-destination/scaffold warnings.
+  The four original toggle async-context infos and the Host/formatter effects
+  are preserved by symbol/multiplicity in the proposed P13 inventory. Existing
+  repository analyzer issues remain; this is not a repository-wide clean claim.
+- **Next.** Step 0 characterizes this original. CI current/analyzer selection
+  remains S2d/P12; only P12's accepted historical revision is registered.
+  No production extraction, app build/device action, dependency change, push,
+  merge or branch switch. Production moves wait for Step 0 and Claude's sample.
 
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
