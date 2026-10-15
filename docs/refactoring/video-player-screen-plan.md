@@ -5669,6 +5669,44 @@ for Step 0 and Claude’s independent mutation sample.
   explicit load/identity proofs, analyzer identities, structural results and
   commit receipt). No push, merge, branch change or production bug fix. STOP.
 
+### 2026-10-15 — Phase 15 provisional Step T (STOP before production)
+
+- Original application `1d7699d2e`, design/review `b605aed86`; application and
+  pubspec remain byte-identical to the original. Seven evidence-only prototypes
+  measure **347/283/408/433/245/207/162** normally formatted physical lines,
+  including imports, Hosts and receiver wraps. The switch owner's 433 lines
+  satisfies the 500-line prerequisite; no exception or production file created.
+- Frozen seven Hosts: [exact declarations](video-player-iptv-hosts.md) and
+  `dev/tool/dart_moves/vplayer_p15_hosts.json`. Distinct names/declarations:
+  **21/26, 18/18, 32/37, 54/61, 23/28, 8/8, 13/18** after all shared fields
+  remain State-owned. Switch ticket has a setter only on the switch Host;
+  the constant stays State-owned. Seventeen inert fields and 53 methods/getters
+  move in the virtual split; constructors only store their Host.
+- `vplayer_p15_provisional.json` is explicitly **PROVISIONAL**. All-retained
+  original and complete virtual body/ownership comparison PASS; 12 real-config
+  corruption negatives PASS. The unchanged history checker **rejects** missing
+  P13/P14 manifests. No dummy manifest, waiver, current CI switch or historical
+  success is claimed. Regenerate the complete partition and all four approved
+  P8/P11/P13 adapter classes on the accepted P14 merge before Step 1.
+- `p15/stepT/retained-sites.json` preserves all **68** scanned occurrences:
+  the design's 62 core sites (60 facade +two lazy-initializer references), four
+  pre-P13 menu call sites and two existing adapter forwarders. Recompute their
+  final projections after P13/P14; the P11 ticket forwarder stays unchanged.
+- Nice19 and local serialization throughout; explicit isolated parser packages.
+  Root/strict original diagnostics **124/198**; formatted provisional probe
+  **135**, zero errors, physical declaration identities/multiplicity archived.
+  Its P15 history-based analyzer inventory remains provisional too. One moved
+  async-context info, two formatting brace infos and two import infos recorded;
+  no application lint fix. Format, size/architecture, Python compile and diff
+  checks PASS. Initial import/static-access and diagnostic-collector pilots are
+  excluded, with completed corrected proofs under `p15/stepT/`.
+- Frozen original reduced baseline loads **143/143** expected suites:
+  **1259 pass /one pre-existing source-text failure**, the exact startup-shield
+  formatting identity also failing in P12's recorded gate. No missing/load-error
+  suite, allowance or app change. Step 0 continues on detached original app code;
+  production stays blocked on P13/P14 and later independent sampling/review.
+
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

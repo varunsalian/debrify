@@ -11477,3 +11477,56 @@ are under `p14/gate/`. Serial suites use concurrency 1 and test-hook define;
 all parser invocations are isolated, copied kernels deleted. No full suite or
 release builds in this reduced gate; M3 owns those checks. Existing device
 pending items are unchanged. Phase 14 STOP.
+
+## Phase 15 provisional Step T — IPTV workflow
+
+Original `1d7699d2e`; accepted design/review `b605aed86`. Evidence root:
+`<git-common-dir>/refactor-evidence/vplayer/p15/stepT/`. No application or
+pubspec change. Production is blocked until accepted P13 and P14 merges.
+
+The complete provisional partition, 70 moved declarations (17 fields and 53
+methods/getters), retained substitutions, scaffolding and exact import/order
+lists are in `dev/tool/dart_moves/vplayer_p15_provisional.json`. It is labelled
+PROVISIONAL and cannot satisfy history. All-retained and virtual comparisons
+pass; `test_dart_iptv_moves.py --parser-package <isolated>` rejects 12 independent
+corruptions. The unmodified historical checker rejects the absent phases.
+
+The seven normally formatted prototypes are 347/283/408/433/245/207/162 lines.
+[The frozen Host ledger](video-player-iptv-hosts.md) lists every exact name,
+access mode and signature. Watch memory has exactly the eight approved names;
+resolver type, typed headers, 12-second timeout, synchronous `beforeOpen`, live
+sleep projection and synchronous cross-action forwarders are preserved. The
+shared ticket, guide generation, page size, paging fields and input queue remain
+State-owned. No comparison/binding guard was extended or relaxed.
+
+Inert initializer proof: ring source id is implicit null, request ticket is 0,
+arming is false; ladder edge margin is static const 12, draining is false,
+cached origin/page are null and direction is 0; the guide's request gate has only
+literal ticket fields and an inert default constructor; memory timer/armed URL/
+language are null and settle is static const one second; banner hide/ticker
+are null, EPG ticket is 0, archive retry is null. No field initializer or
+collaborator constructor reads a Host or allocates an effectful resource.
+
+The authoritative `retained-sites.json` contains 68 occurrences. The named design
+table's 62 core sites exclude the four menu callers at 14027/14093/14180/14188
+and the two existing adapter actions at 14680/14914. All six are retained in the
+scan and declared in the provisional manifest. After P13/P14 regenerate P8 PiP,
+P11 track preferences (audio action only), P13 menu UI and P13 menu controller
+projections, complete facade partition/import/order, analyzer probes and mutation
+witnesses. P11's ticket getter and all P14 adapters stay State-owned/unchanged.
+
+Original root/strict analyzer counts are 124/198. Final formatted probe has 135
+physical diagnostic occurrences, zero errors. Exact identity/multiplicity and
+source hashes: `final-analyzer-provisional.json`; no P15 historical comparator
+success is claimed. A receiver-induced Start Over context info, two formatter
+brace infos and two scaffold import infos are recorded without fixes. Prototype
+formatting is normal; checks compare optional commas through the existing core.
+Initial missing-import/static-access and history-dependent collector pilots are
+uncredited. Final materialization, all-retained comparison, 12 negative checks,
+size/architecture, Python compilation and diff checks pass, nice19 and serialized.
+
+The original reduced baseline explicitly loads 143/143 suites: 1259 successes
+and the P12-observed startup-shield source-format assertion failure. All suites
+load, no suite is missing, no failure is allowlisted. Exact JSONL/environment,
+file hashes, expected inventory and comparison with P12 are in `p15/step0/`.
+Step-0 tests, coverage and original mutation proofs follow separately.
