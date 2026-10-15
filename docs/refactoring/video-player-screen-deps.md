@@ -11530,3 +11530,576 @@ and the P12-observed startup-shield source-format assertion failure. All suites
 load, no suite is missing, no failure is allowlisted. Exact JSONL/environment,
 file hashes, expected inventory and comparison with P12 are in `p15/step0/`.
 Step-0 tests, coverage and original mutation proofs follow separately.
+
+## Phase 15 Step 0 — original IPTV workflow characterization
+
+Original application **`1d7699d2e`**; provisional tooling checkpoint
+`2a21e8833`, following approved design/review `b605aed86`. No application,
+pubspec, dependency, seam, analyzer allowance, size ratchet or theme-path change.
+The seven destinations remain evidence-only prototypes. Production stays blocked
+until accepted P13/P14 merges, rebase/proof refresh and independent sampling.
+Evidence is exclusively `<git-common-dir>/refactor-evidence/vplayer/p15/step0/`.
+The original mutation checkout remains detached at that revision under `p15/original/`.
+
+### Controls, baseline and scope
+
+Twenty new behavior suites, two local support files and **219 cases** use the
+existing player/environment, native fake, HTTP transport, profile registry,
+preference transport, SQLite files, executed-await delivery and platform hooks.
+No private State injection or new application seam. Fixture addons are installed
+with `stream`/`tv` resources; their returned canonical IDs and unique URLs prevent
+candidate/catch-up caches from bypassing barriers. Probe open acknowledgement is
+separate from later width, position and error events. Teardown first retires the
+route/recovery owner, then drains already issued probes before closing streams.
+
+The explicit frozen inventory is
+`dev/tool/dart_moves/vplayer_p15_step0_suites.txt`: **163/163 suites load**, no
+missing/load-error suite. It contains all 149 current video-player suites,
+nine source readers/theme guard and five external IPTV boundaries. All 20 new
+suites are also registered in `ci_behavior_tests.txt`.
+
+The composite reduced baseline is **1478 successes / one existing failure**.
+The 143-suite base run is reused only after verifying all 173 pre-existing
+test/support hashes, unchanged application/dependencies/analysis inputs and the
+same SDK: Flutter **3.44.8**, Dart **3.12.2**. A fresh complete restored-original
+20-suite run passes all 219 cases. The later 93-case profile/read control adds an
+explicit physical inspection of intermediate B during A→B→A; all pass. A→B→A
+continues to inspect final A under its new session too. No alias of A is presented
+as evidence about B. `baseline-receipt.json` records every loaded suite and reuse
+prerequisite; `frozen-final-inputs.json` records the final inputs.
+
+The unchanged failing identity is
+`test/playback_startup_view_test.dart::startup shield remains opaque and noninteractive in PiP`.
+It expects a one-line source expression that the original formatter split. The
+same failure appears in P12's observed gate and reproduces in this phase's
+original-application control. It is reported, not allowlisted or fixed.
+
+| Boundary | Original observations / coverage |
+|---|---|
+| Ring and ladder | Both wraps, both 12-row edge thresholds, page size/source/offset, merge ordering and current identity, cache crossing/reversal, empty-category walk, uncategorized `fromEnd`, single request, cap 24, retry after rejected bootstrap, reset/guide/browse/disposal and queued inputs. |
+| Guide | Trim/null categories, fallback context, response categories, explicit user context and generation, invalid selection, adopted list/re-anchor, close/Back, stable callback equality. |
+| Catch-up / Start Over | Airing switch before Start Over; availability/loading/timeline, TV progress focus, toggle/live return, unavailable/open failure, synchronous `beforeOpen` rejection, archived history and single item; lookup and history held independently across close/zap/background/disposal. |
+| Switch owner | Separate recording-stop, pause, player-stop, resolver, native pre-open, issued-open and acknowledged-probe holds; newer index vs stale playback; header/order and 1500 ms cleanup; repeated same-turn inputs; recovery eligibility and quiet direct/Stremio retune. |
+| Probe / sources / errors | Pre-ack width/position/error ignored; post-ack width/position wins; error/throw/12 s timeout falls through; manual pick success/failure/supersession/highlight; initial fetch races; typed headers; auth word boundaries, fallback channel name, Start Over auth return, six-second real-time debounce. |
+| Audio memory | Session/stored/default/none, language filtering and series ownership; physical redundant-write count; real 20×100 ms wait, manual choice held inside that wait, new ticket/disposal; P11 initial adapter and overlapping appliers; captured tracks through live replacement player. |
+| Last channel / history | One-second settle and same-URL non-rearm, fresh timer after launch write completes, zap/pause/disposal, real storage-call admission plus physical values; live/VOD/series metadata and replay's two writes. |
+| Banner | Warm data and archive upgrade, old EPG ticket, floating 4500 ms timer, immediate dock/menu/source/guide handoffs, one-second ticker including dock hide, real programme expiry, cancellation on disposal. |
+| Profile reads | Browse/re-anchor, candidates, catch-up, banner EPG and audio preference across B/ABA/disposal, at the actual held read. Outgoing read results remain accepted across B/ABA as-is. |
+| Early / input | Idle, guide and zap before player construction; desktop classic/styled dock, virtual TV callbacks/guide/Back/focus, both transport directions, CH/page/arrows, arrows during a held transition, and held non-live scrub ownership. |
+
+| Persistence operation | Actual capture/admission boundaries and physical result |
+|---|---|
+| Audio | Pre-preference capture may write incoming B (or new-session A); a captured stale preferences object rejects B/ABA/deletion, even after disposal; a transport-admitted write finishes into outgoing A. Both physical profiles and intermediate B in ABA are inspected. |
+| Last channel | Settle and playlist lookup precede preference capture and can target incoming B/new-session A. Disposal cancels an unissued settle. Captured stale preferences reject; transport-admitted writes complete into A. Fingerprint lookup, physical sealed key and origin provider are preserved. |
+| Switch history | Tracking preference precedes scoped DB admission. A pre-admission continuation can write B even after disposal. Admitted/transaction work completes in outgoing A, including after authority deletion. Physical SQLite rows are read with independent read-only handles. |
+| Replay history | The first write follows the same admission rule. A successful mounted replay invokes the switch owner, which writes history again under the then-current profile. Admitted A plus incoming B can therefore both contain the replay; disposal prevents the second switch write. |
+
+Deletion tests perform authorized registry deletion and inspect actual storage;
+owned-resource cleanup remains pending. They do not claim that physical cleanup
+has completed or that the profile was recreated. ABA checks intermediate B's
+physical keys/rows independently from final A's new-session scope.
+
+### Systematic sweep and mutation evidence
+
+`inventory.json` enumerates all **70 moved declarations** (17 fields, 53
+methods/getters), **1521 nested AST points** and **68 retained references**,
+excluding documentation links. It matches Step T's retained scan exactly.
+`coverage-matrix.json` assigns every declaration and reference to its boundary,
+original line, destination, operational proof or explicit source audit. The
+1521 points are a source-review inventory, not a claim of 1521 independent runtime
+branch kills. No declaration/reference is silently dropped.
+
+The canonical ledger records **239 attempts: 221 completed assertion kills,
+11 initial survivors, five uncredited runtime/timeout results and two invalid
+candidates**. The 11 survivors include the three final source audits; the other
+eight have corrected selectors/assertions and separate completed witnesses.
+Superseded exploratory pilots are excluded from these counts.
+
+Every one of the 219 cases has an original assertion witness in
+`per-test-mutations.json`. Mutation totals and every attempt are tabulated below.
+Each assertion-proved run is complete; compile/load failures, runtime exceptions
+without assertions and timed-out runners receive no credit. Corrected selectors
+and candidates have distinct IDs. All mutations are applied only to the detached
+original, under the local suite lock, with restoration in `finally`.
+
+All 53 methods/getters have an assertion witness. Five significant owned
+initializers are independently mutated (edge margin, arming, drain guard,
+settle duration and session language). The other literal/null/relative-ticket
+initializers have individual inertness/source audits plus operational owner and
+retirement coverage. A nonzero affine starting ticket or a companion value behind
+a null cache/timer is not falsely labelled a kill. Step T separately rejects
+constructors/initializers reading a Host.
+
+Final retained coverage is **65 assertion-proved occurrences and three source
+audits**: disposal gate cancellation is dominated by mounted/open admission;
+the mounted sheet's `handleHostBack` always consumes Back, so its absent-State
+fallback is device-pending; the legacy tracks callback is behind the constant-true
+unified-menu return. All three statements remain retained and protected. Dock
+can-zap gate repairs use a paired visibility flag so the mutant preserves the
+widget's callback/visibility precondition; the exact compound patches are archived.
+
+The mutation ledger labels explicit observable faults separately from single
+branch deletions: unexpected launch open, native fallback at a rejected audio
+edge, a listener retained after disposal, extra cleanup/second commit, and the
+compound owner/openMedia disposal admission. These prove the specified observable
+contract; they are not claimed as standalone deletions of a redundant guard.
+
+The source sweep also preserves all three probe subscription cancellations.
+Late-event and drain tests do not claim per-listener cancellation counts: existing
+broadcast-stream consumers prevent that observation without another seam.
+
+### Follow-ups pinned without fixes
+
+- **Stale direct opens:** after pause, an older direct switch can open after a
+  newer switch finishes; an already-issued old open can finish late too. The
+  metadata/index stays newer. Recording-stop, stop/resolution, pre-open and probe
+  checks have distinct outcomes; no blanket stale-result guarantee is asserted.
+- **Probe stop has no ticket:** an older candidate can open after its recording
+  stop resumes; the caller rejects its winner afterward. A post-ACK probe can
+  still mark a winner after disposal because that winner check lacks `mounted`.
+- **Same-turn zaps:** tickets advance before recording stop; indices advance
+  afterward. Three immediate presses and a queued 24-input drain can share the
+  old index and produce only one accepted step.
+- **Implicit profile operations:** pending reads can publish outgoing results
+  after B/ABA; late capture writes B, stale captured preferences reject, admitted
+  writes finish A. Deletion does not cancel admitted writes. A mounted replay can
+  create history in both A and B through its two separate writes.
+- **Audio replacement:** tracks captured before storage are matched afterward,
+  while the setter resolves the live replacement player; an ordinal absent from
+  the replacement's tracks can be applied. Initial P11 restoration and owner
+  application can both run; the held original order is French→English→French.
+- **Manual source failure:** confirmed on the original: its unmuted error can
+  start a quiet recovery ladder and replace the user's pick. Source-pick omissions
+  of catch-up/start-over/resume-guard/debounce resets remain unchanged.
+
+### Checks, limitations and pipeline handoff
+
+All Flutter/Dart execution is nice19, locally serialized, with
+`--dart-define=DEBRIFY_VP_TEST_HOOKS=true` for tests and isolated parser packages.
+Commands/SDK/flags and hashes are in the run environment files and mutation
+receipts. New Dart is normally formatted. `flutter analyze --no-pub` preserves
+**124 scoped diagnostics**, no added/removed scoped identity or multiplicity;
+new test/support files have **zero diagnostics**. The full root log still reports
+its existing diagnostics. Size/import architecture and diff checks pass.
+
+The original controls exposed fixture issues, not application fixes: addon
+canonical identity, initial crypto warm-up, independent SQLite inspection handles,
+async physical-write completion, old launch save vs new settle timer, double-tap
+dispatch, and probe draining after route retirement. The manual-audio case now
+holds the actual track wait; the paused settle case observes actual writer
+admission before a playlist lookup can race an empty read. Superseded/pilot logs
+remain archived and receive no passing-control or mutation credit.
+
+The six-second debounce and programme-end wall clock have bounded real-time
+cases. The 60-second archive retry is device-pending. Active native TEE stop,
+physical phone/Android TV/tvOS remote/rendering/PiP, candidate subscriptions across
+native renderer replacement, and absent-sheet native host Back remain pending.
+Recording-stop await order uses the real original future, not a claim of an active
+TEE capture on the pre-S2d original. No run/install/emulator/device action.
+
+Full-suite and release-build gates are deferred to M3 after phase 16 under the
+P13 speed-up rules. The reduced baseline checks every expected suite before
+comparison; scoped comparison alone is not used to hide omissions. After P13/P14
+merge, compare all preparation inputs and regenerate the provisional manifest,
+seven prototypes/Hosts as affected, four approved adapters, analyzer probes,
+mutation witnesses and reduced baseline. Keep actual accepted historical merge
+revisions and every seam proof including S2d. No dummy manifest or history waiver.
+Step 0b/independent sample and production moves are not part of this checkpoint.
+
+### Complete declaration coverage matrix
+
+| Original declaration | Destination | AST sites | Assertion witnesses / initializer audit |
+|---|---|---:|---|
+| `_iptvZapHideTimer` | `vp_iptv_zap_banner.dart` | 0 | Inert initializer; owning actions + retained retirement (source audit). |
+| `_iptvZapTicker` | `vp_iptv_zap_banner.dart` | 0 | Inert initializer; owning actions + retained retirement (source audit). |
+| `_iptvZapEpgTicket` | `vp_iptv_zap_banner.dart` | 1 | Inert initializer; owning actions + retained retirement (source audit). |
+| `_iptvRecoveryEligible` | `vp_iptv_channel_switch.dart` | 26 | `d04`, `c15` |
+| `_performIptvLiveRetune` | `vp_iptv_channel_switch.dart` | 44 | `d05`, `c24` |
+| `_iptvCatchupRequests` | `vp_iptv_guide_catchup.dart` | 0 | Inert initializer; owning actions + retained retirement (source audit). |
+| `_iptvStartOverTimelineVisible` | `vp_iptv_guide_catchup.dart` | 3 | `d07` |
+| `_toggleIptvStartOverTimeline` | `vp_iptv_guide_catchup.dart` | 16 | `d08`, `c07` |
+| `_canStartOverCurrentIptv` | `vp_iptv_guide_catchup.dart` | 11 | `d09` |
+| `_iptvLiveEdgeAction` | `vp_iptv_guide_catchup.dart` | 3 | `d10` |
+| `_toggleIptvStartOver` | `vp_iptv_guide_catchup.dart` | 22 | `d11` |
+| `_startIptvProgrammeFromBeginning` | `vp_iptv_guide_catchup.dart` | 75 | `d12`, `c04`, `c05`, `c06` |
+| `_persistIptvGuideContext` | `vp_iptv_guide_catchup.dart` | 5 | `d13` |
+| `_anchorIptvGuideCategory` | `vp_iptv_guide_catchup.dart` | 12 | `d14`, `c27`, `c47` |
+| `_applyIptvGuideCategory` | `vp_iptv_guide_catchup.dart` | 15 | `d15` |
+| `_cancelPendingIptvCatchup` | `vp_iptv_guide_catchup.dart` | 10 | `d16` |
+| `_beginIptvCatchupRequest` | `vp_iptv_guide_catchup.dart` | 2 | `d17` |
+| `_isCurrentIptvCatchupRequest` | `vp_iptv_guide_catchup.dart` | 1 | `d18`, `c39`, `c39a` |
+| `_showIptvChannelSheetOverlay` | `vp_iptv_guide_catchup.dart` | 12 | `d19` |
+| `_hideIptvChannelSheet` | `vp_iptv_guide_catchup.dart` | 4 | `d20` |
+| `_switchToIptvGuideChannel` | `vp_iptv_guide_catchup.dart` | 18 | `d21`, `c26` |
+| `_reanchorIptvRingToCategory` | `vp_iptv_zap_ring.dart` | 81 | `d22`, `b19`, `c19`, `c36`, `b19a`, `c36a` |
+| `_kIptvZapEdgeMargin` | `vp_iptv_zap_ladder.dart` | 1 | `f01` |
+| `_iptvZapSourceId` | `vp_iptv_zap_ring.dart` | 0 | Inert initializer; owning actions + retained retirement (source audit). |
+| `_iptvZapRequestTicket` | `vp_iptv_zap_ring.dart` | 1 | Inert initializer; owning actions + retained retirement (source audit). |
+| `_iptvZapDrainingInputs` | `vp_iptv_zap_ladder.dart` | 1 | `f03` |
+| `_iptvZapCachedOriginCategory` | `vp_iptv_zap_ladder.dart` | 0 | Inert initializer; owning actions + retained retirement (source audit). |
+| `_iptvZapCachedDirection` | `vp_iptv_zap_ladder.dart` | 1 | Inert initializer; owning actions + retained retirement (source audit). |
+| `_iptvZapCachedPage` | `vp_iptv_zap_ladder.dart` | 0 | Inert initializer; owning actions + retained retirement (source audit). |
+| `_canZapIptvChannel` | `vp_iptv_zap_ring.dart` | 7 | `d30b` |
+| `_clearIptvZapBoundaryCache` | `vp_iptv_zap_ladder.dart` | 6 | `d31` |
+| `_resetIptvZapPaging` | `vp_iptv_zap_ring.dart` | 16 | `d32` |
+| `_iptvZapArmingPaging` | `vp_iptv_zap_ring.dart` | 1 | `f02` |
+| `_ensureIptvZapPagingArmed` | `vp_iptv_zap_ring.dart` | 17 | `d34`, `c02` |
+| `_zapIptvChannel` | `vp_iptv_zap_ladder.dart` | 56 | `d35`, `c12` |
+| `_requestIptvZapPage` | `vp_iptv_zap_ring.dart` | 56 | `d36`, `c46` |
+| `_parseIptvZapPage` | `vp_iptv_zap_ring.dart` | 35 | `d37` |
+| `_installIptvZapWindow` | `vp_iptv_zap_ring.dart` | 32 | `d38` |
+| `_mergeIptvZapPage` | `vp_iptv_zap_ring.dart` | 44 | `d39` |
+| `_prefetchIptvZapPage` | `vp_iptv_zap_ladder.dart` | 45 | `d40b` |
+| `_adjacentIptvCategory` | `vp_iptv_zap_ladder.dart` | 0 | `d41` |
+| `_prefetchAdjacentIptvCategory` | `vp_iptv_zap_ladder.dart` | 64 | `d42` |
+| `_consumeCachedAdjacentIptvCategory` | `vp_iptv_zap_ladder.dart` | 16 | `d43` |
+| `_enterIptvZapCategory` | `vp_iptv_zap_ladder.dart` | 13 | `d44` |
+| `_requestAdjacentIptvCategory` | `vp_iptv_zap_ladder.dart` | 47 | `d45` |
+| `_queuePendingIptvZapInput` | `vp_iptv_zap_ladder.dart` | 10 | `d46` |
+| `_drainPendingIptvZapInputs` | `vp_iptv_zap_ladder.dart` | 12 | `d47` |
+| `_playIptvCatchup` | `vp_iptv_guide_catchup.dart` | 56 | `d48`, `b18`, `b21`, `c03`, `c08`, `c49`, `b18a`, `b21a` |
+| `_onIptvStreamError` | `vp_iptv_live_sources.dart` | 52 | `d49`, `b10`, `c09`, `c10`, `c11`, `c50` |
+| `_setIptvSources` | `vp_iptv_live_sources.dart` | 46 | `d50` |
+| `_initIptvStremioSources` | `vp_iptv_live_sources.dart` | 33 | `d51`, `c16` |
+| `_lastLiveChannelTimer` | `vp_iptv_watch_memory.dart` | 0 | Inert initializer; owning actions + retained retirement (source audit). |
+| `_lastLiveChannelArmedUrl` | `vp_iptv_watch_memory.dart` | 0 | Inert initializer; owning actions + retained retirement (source audit). |
+| `_lastLiveChannelSettle` | `vp_iptv_watch_memory.dart` | 1 | `f04` |
+| `_noteLiveChannelPlaying` | `vp_iptv_watch_memory.dart` | 28 | `d55`, `b14`, `b15`, `c42`, `c43`, `c45`, `c48b`, `c48c`, `c45b`, `b14a`, `b15a`, `c42a`, `c43a` |
+| `_preferredIptvAudioLanguage` | `vp_iptv_watch_memory.dart` | 0 | `f05` |
+| `_iptvSeriesAudioKey` | `vp_iptv_watch_memory.dart` | 20 | `d57` |
+| `_captureIptvAudioLanguage` | `vp_iptv_watch_memory.dart` | 26 | `d58`, `b12`, `b13`, `c14`, `c20`, `c22`, `c51`, `c52`, `b12a`, `b13a` |
+| `_applyIptvAudioPreference` | `vp_iptv_watch_memory.dart` | 47 | `d59`, `b11`, `b23`, `c13`, `c28`, `c30`, `c38`, `c23b`, `c34b`, `c30b`, `b23a`, `c38a` |
+| `_recordIptvWatchForChannel` | `vp_iptv_watch_memory.dart` | 29 | `d60`, `b16`, `b16a` |
+| `_switchToIptvChannel` | `vp_iptv_channel_switch.dart` | 147 | `d61`, `b01`, `b02`, `b04`, `b17`, `b20`, `c01`, `c17`, `b17a`, `b20a` |
+| `_tryOpenLiveStream` | `vp_iptv_live_sources.dart` | 39 | `d62`, `b03`, `b05`, `b06`, `b07`, `b08`, `c18`, `b09b` |
+| `_switchToIptvSource` | `vp_iptv_channel_switch.dart` | 46 | `d63`, `c32`, `c33` |
+| `_prepareIptvBannerData` | `vp_iptv_zap_banner.dart` | 15 | `d64`, `c21` |
+| `_raiseIptvZapBanner` | `vp_iptv_zap_banner.dart` | 19 | `d65` |
+| `_hideIptvZapBanner` | `vp_iptv_zap_banner.dart` | 16 | `d66` |
+| `_syncIptvBannerTicker` | `vp_iptv_zap_banner.dart` | 21 | `d67` |
+| `_iptvArchiveRetryAt` | `vp_iptv_zap_banner.dart` | 0 | Inert initializer; owning actions + retained retirement (source audit). |
+| `_refreshIptvBannerEpgIfEnded` | `vp_iptv_zap_banner.dart` | 24 | `d69` |
+| `_loadIptvZapBannerEpg` | `vp_iptv_zap_banner.dart` | 14 | `d70`, `b22`, `c31`, `c37`, `b22a`, `c37a` |
+
+### Complete retained-reference matrix
+
+| Original line / caller | Reference | Evidence |
+|---|---|---|
+| 589 `_tvNoTimeline` | `_iptvStartOverTimelineVisible` | `r01` |
+| 694 `_iptvLiveRecovery` | `_iptvRecoveryEligible` | `r02` |
+| 695 `_iptvLiveRecovery` | `_performIptvLiveRetune` | `r03` |
+| 1629 `initState` | `_initIptvStremioSources` | `r04` |
+| 2119 `_onPlayerInstanceReady` | `_prepareIptvBannerData` | `r05` |
+| 2120 `_onPlayerInstanceReady` | `_raiseIptvZapBanner` | `r06b` |
+| 2121 `_onPlayerInstanceReady` | `_anchorIptvGuideCategory` | `r07` |
+| 2122 `_onPlayerInstanceReady` | `_ensureIptvZapPagingArmed` | `r08` |
+| 2811 `_bindPlayerInstanceSubscriptions` | `_noteLiveChannelPlaying` | `r09` |
+| 2910 `_bindPlayerInstanceSubscriptions` | `_onIptvStreamError` | `r10` |
+| 3997 `_onPlaybackEnded` | `_switchToIptvChannel` | `r11` |
+| 5232 `_showChannelGuideOverlay` | `_hideIptvZapBanner` | `r12` |
+| 7803 `_showSourceSheetOverlay` | `_hideIptvZapBanner` | `r13` |
+| 7850 `_handleSourceSelected` | `_switchToIptvSource` | `r14` |
+| 10208 `dispose` | `_iptvCatchupRequests` | Gate cancellation is dominated by mounted rejection in isCurrent and openMedia after retirement; preserve the cancel and its dispose position. |
+| 10242 `dispose` | `_iptvZapHideTimer` | `r16` |
+| 10243 `dispose` | `_iptvZapTicker` | `r17` |
+| 10281 `dispose` | `_lastLiveChannelTimer` | `r18` |
+| 11422 `_buildTvControls` | `_switchToIptvChannel` | `r19` |
+| 11423 `_buildTvControls` | `_canZapIptvChannel` | `r20` |
+| 11424 `_buildTvControls` | `_zapIptvChannel` | `r21` |
+| 11427 `_buildTvControls` | `_switchToIptvChannel` | `r22` |
+| 11428 `_buildTvControls` | `_canZapIptvChannel` | `r23` |
+| 11429 `_buildTvControls` | `_zapIptvChannel` | `r24` |
+| 11453 `_buildTvControls` | `_showIptvChannelSheetOverlay` | `r25` |
+| 11458 `_buildTvControls` | `_iptvLiveEdgeAction` | `r26` |
+| 11462 `_buildTvControls` | `_toggleIptvStartOverTimeline` | `r27` |
+| 11464 `_buildTvControls` | `_iptvStartOverTimelineVisible` | `r28` |
+| 11516 `_closeTopPlayerOverlay` | `_hideIptvChannelSheet` | Mounted IptvChannelSheet.handleHostBack always returns true. This fallback requires an absent sheet State; native/absent-sheet host Back remains device-pending. |
+| 11544 `_openTvGuide` | `_showIptvChannelSheetOverlay` | `r30` |
+| 11590 `_handleTvKey` | `_canZapIptvChannel` | `r31` |
+| 11591 `_handleTvKey` | `_zapIptvChannel` | `r32` |
+| 11630 `_handleTvKey` | `_canZapIptvChannel` | `r33` |
+| 11632 `_handleTvKey` | `_canZapIptvChannel` | `r34b` |
+| 11735 `_onControlsVisibilityChanged` | `_hideIptvZapBanner` | `r35` |
+| 11755 `_onControlsVisibilityChanged` | `_syncIptvBannerTicker` | `r36b` |
+| 12812 `build` | `_showIptvChannelSheetOverlay` | `r37` |
+| 12820 `build` | `_showIptvChannelSheetOverlay` | `r38` |
+| 12923 `build` | `_canZapIptvChannel` | `r39` |
+| 12925 `build` | `_zapIptvChannel` | `r40` |
+| 12929 `build` | `_zapIptvChannel` | `r41` |
+| 13036 `build` | `_canZapIptvChannel` | `r42` |
+| 13037 `build` | `_zapIptvChannel` | `r43` |
+| 13047 `build` | `_canZapIptvChannel` | `r44` |
+| 13048 `build` | `_zapIptvChannel` | `r45` |
+| 13516 `build` | `_switchToIptvChannel` | `r46` |
+| 13519 `build` | `_canZapIptvChannel` | `r47b` |
+| 13520 `build` | `_zapIptvChannel` | `r48` |
+| 13527 `build` | `_switchToIptvChannel` | `r49` |
+| 13530 `build` | `_canZapIptvChannel` | `r50b` |
+| 13531 `build` | `_zapIptvChannel` | `r51` |
+| 13538 `build` | `_canZapIptvChannel` | `r52` |
+| 13555 `build` | `_canZapIptvChannel` | `r53` |
+| 13566 `build` | `_iptvStartOverTimelineVisible` | `r54b` |
+| 13582 `build` | `_showIptvChannelSheetOverlay` | `r55` |
+| 13607 `build` | `_iptvLiveEdgeAction` | `r56` |
+| 13612 `build` | `_toggleIptvStartOverTimeline` | `r57` |
+| 13615 `build` | `_iptvStartOverTimelineVisible` | `r58` |
+| 13776 `build` | `_switchToIptvGuideChannel` | `r59` |
+| 13777 `build` | `_playIptvCatchup` | `r60` |
+| 13778 `build` | `_hideIptvChannelSheet` | `r61` |
+| 13798 `build` | `_persistIptvGuideContext` | `r62` |
+| 14027 `_showTracksSheet` | `_captureIptvAudioLanguage` | TracksSheet.show callback is behind the constant-true unified menu early return (player_menu_panel.dart:19). Retain compatibility code. |
+| 14093 `_openPlayerMenuAt` | `_hideIptvZapBanner` | `r64b` |
+| 14180 `_menuApplyTrackChange` | `_captureIptvAudioLanguage` | `r65` |
+| 14188 `_audioTrackChoiceChanged` | `_captureIptvAudioLanguage` | `r66b` |
+| 14680 `_VpTrackPreferencesHostAdapter` | `_applyIptvAudioPreference` | `r67` |
+| 14914 `_VpPipLifecycleHostAdapter` | `_cancelPendingIptvCatchup` | `r68` |
+
+### Original mutation table
+
+Each ID resolves to its exact patch, selector, JSONL, completed-run result and
+input hashes in the named `p15/step0/<group>/` directory. Assertion credit
+requires a completed runner and an actual failing `Expected:` assertion.
+Runtime/load/compile failures and timeouts receive no credit. This table
+retains initial survivors and invalid attempts; corrected witnesses use new IDs.
+
+| Group / ID | Original declaration or retained line | Outcome | Failing cases |
+|---|---|---|---:|
+| `declaration-final/d04` | `_iptvRecoveryEligible` | assertion-killed | 1 |
+| `declaration-final/d05` | `_performIptvLiveRetune` | assertion-killed | 1 |
+| `declaration-final/d07` | `_iptvStartOverTimelineVisible` | assertion-killed | 1 |
+| `declaration-final/d08` | `_toggleIptvStartOverTimeline` | assertion-killed | 1 |
+| `declaration-final/d09` | `_canStartOverCurrentIptv` | assertion-killed | 1 |
+| `declaration-final/d10` | `_iptvLiveEdgeAction` | assertion-killed | 1 |
+| `declaration-final/d11` | `_toggleIptvStartOver` | assertion-killed | 1 |
+| `declaration-final/d12` | `_startIptvProgrammeFromBeginning` | assertion-killed | 1 |
+| `declaration-final/d13` | `_persistIptvGuideContext` | assertion-killed | 1 |
+| `declaration-final/d14` | `_anchorIptvGuideCategory` | assertion-killed | 1 |
+| `declaration-final/d15` | `_applyIptvGuideCategory` | assertion-killed | 1 |
+| `declaration-final/d16` | `_cancelPendingIptvCatchup` | assertion-killed | 1 |
+| `declaration-final/d17` | `_beginIptvCatchupRequest` | assertion-killed | 1 |
+| `declaration-final/d18` | `_isCurrentIptvCatchupRequest` | assertion-killed | 1 |
+| `declaration-final/d19` | `_showIptvChannelSheetOverlay` | assertion-killed | 1 |
+| `declaration-final/d20` | `_hideIptvChannelSheet` | assertion-killed | 1 |
+| `declaration-final/d21` | `_switchToIptvGuideChannel` | assertion-killed | 1 |
+| `declaration-final/d22` | `_reanchorIptvRingToCategory` | assertion-killed | 1 |
+| `declaration-final/d30` | `_canZapIptvChannel` | uncredited-runtime-or-timeout | 0 |
+| `declaration-final/d31` | `_clearIptvZapBoundaryCache` | assertion-killed | 1 |
+| `declaration-final/d32` | `_resetIptvZapPaging` | assertion-killed | 1 |
+| `declaration-final/d34` | `_ensureIptvZapPagingArmed` | assertion-killed | 1 |
+| `declaration-final/d35` | `_zapIptvChannel` | assertion-killed | 1 |
+| `declaration-final/d36` | `_requestIptvZapPage` | assertion-killed | 1 |
+| `declaration-final/d37` | `_parseIptvZapPage` | assertion-killed | 1 |
+| `declaration-final/d38` | `_installIptvZapWindow` | assertion-killed | 1 |
+| `declaration-final/d39` | `_mergeIptvZapPage` | assertion-killed | 1 |
+| `declaration-final/d40` | `_prefetchIptvZapPage` | uncredited-runtime-or-timeout | 0 |
+| `declaration-final/d41` | `_adjacentIptvCategory` | assertion-killed | 1 |
+| `declaration-final/d42` | `_prefetchAdjacentIptvCategory` | assertion-killed | 1 |
+| `declaration-final/d43` | `_consumeCachedAdjacentIptvCategory` | assertion-killed | 1 |
+| `declaration-final/d44` | `_enterIptvZapCategory` | assertion-killed | 1 |
+| `declaration-final/d45` | `_requestAdjacentIptvCategory` | assertion-killed | 1 |
+| `declaration-final/d46` | `_queuePendingIptvZapInput` | assertion-killed | 1 |
+| `declaration-final/d47` | `_drainPendingIptvZapInputs` | assertion-killed | 1 |
+| `declaration-final/d48` | `_playIptvCatchup` | assertion-killed | 1 |
+| `declaration-final/d49` | `_onIptvStreamError` | assertion-killed | 1 |
+| `declaration-final/d50` | `_setIptvSources` | assertion-killed | 2 |
+| `declaration-final/d51` | `_initIptvStremioSources` | assertion-killed | 2 |
+| `declaration-final/d55` | `_noteLiveChannelPlaying` | assertion-killed | 1 |
+| `declaration-final/d57` | `_iptvSeriesAudioKey` | assertion-killed | 1 |
+| `declaration-final/d58` | `_captureIptvAudioLanguage` | assertion-killed | 1 |
+| `declaration-final/d59` | `_applyIptvAudioPreference` | assertion-killed | 1 |
+| `declaration-final/d60` | `_recordIptvWatchForChannel` | assertion-killed | 1 |
+| `declaration-final/d61` | `_switchToIptvChannel` | assertion-killed | 1 |
+| `declaration-final/d62` | `_tryOpenLiveStream` | assertion-killed | 1 |
+| `declaration-final/d63` | `_switchToIptvSource` | assertion-killed | 1 |
+| `declaration-final/d64` | `_prepareIptvBannerData` | assertion-killed | 1 |
+| `declaration-final/d65` | `_raiseIptvZapBanner` | assertion-killed | 1 |
+| `declaration-final/d66` | `_hideIptvZapBanner` | assertion-killed | 1 |
+| `declaration-final/d67` | `_syncIptvBannerTicker` | assertion-killed | 1 |
+| `declaration-final/d69` | `_refreshIptvBannerEpgIfEnded` | assertion-killed | 1 |
+| `declaration-final/d70` | `_loadIptvZapBannerEpg` | assertion-killed | 1 |
+| `reference-mutations/r01` | `589 _iptvStartOverTimelineVisible` | assertion-killed | 1 |
+| `reference-mutations/r02` | `694 _iptvRecoveryEligible` | assertion-killed | 1 |
+| `reference-mutations/r03` | `695 _performIptvLiveRetune` | assertion-killed | 1 |
+| `reference-mutations/r04` | `1629 _initIptvStremioSources` | assertion-killed | 2 |
+| `reference-mutations/r05` | `2119 _prepareIptvBannerData` | assertion-killed | 1 |
+| `reference-mutations/r06` | `2120 _raiseIptvZapBanner` | survived | 0 |
+| `reference-mutations/r07` | `2121 _anchorIptvGuideCategory` | assertion-killed | 1 |
+| `reference-mutations/r08` | `2122 _ensureIptvZapPagingArmed` | assertion-killed | 1 |
+| `reference-mutations/r09` | `2811 _noteLiveChannelPlaying` | assertion-killed | 1 |
+| `reference-mutations/r10` | `2910 _onIptvStreamError` | assertion-killed | 1 |
+| `reference-mutations/r11` | `3997 _switchToIptvChannel` | assertion-killed | 1 |
+| `reference-mutations/r12` | `5232 _hideIptvZapBanner` | assertion-killed | 1 |
+| `reference-mutations/r13` | `7803 _hideIptvZapBanner` | assertion-killed | 2 |
+| `reference-mutations/r14` | `7850 _switchToIptvSource` | assertion-killed | 1 |
+| `reference-mutations/r15` | `10208 _iptvCatchupRequests` | survived | 0 |
+| `reference-mutations/r16` | `10242 _iptvZapHideTimer` | assertion-killed | 1 |
+| `reference-mutations/r17` | `10243 _iptvZapTicker` | assertion-killed | 1 |
+| `reference-mutations/r18` | `10281 _lastLiveChannelTimer` | assertion-killed | 1 |
+| `reference-mutations/r19` | `11422 _switchToIptvChannel` | assertion-killed | 1 |
+| `reference-mutations/r20` | `11423 _canZapIptvChannel` | assertion-killed | 1 |
+| `reference-mutations/r21` | `11424 _zapIptvChannel` | assertion-killed | 1 |
+| `reference-mutations/r22` | `11427 _switchToIptvChannel` | assertion-killed | 1 |
+| `reference-mutations/r23` | `11428 _canZapIptvChannel` | assertion-killed | 1 |
+| `reference-mutations/r24` | `11429 _zapIptvChannel` | assertion-killed | 1 |
+| `reference-mutations/r25` | `11453 _showIptvChannelSheetOverlay` | assertion-killed | 1 |
+| `reference-mutations/r26` | `11458 _iptvLiveEdgeAction` | assertion-killed | 1 |
+| `reference-mutations/r27` | `11462 _toggleIptvStartOverTimeline` | assertion-killed | 1 |
+| `reference-mutations/r28` | `11464 _iptvStartOverTimelineVisible` | assertion-killed | 1 |
+| `reference-mutations/r29` | `11516 _hideIptvChannelSheet` | survived | 0 |
+| `reference-mutations/r30` | `11544 _showIptvChannelSheetOverlay` | assertion-killed | 1 |
+| `reference-mutations/r31` | `11590 _canZapIptvChannel` | assertion-killed | 1 |
+| `reference-mutations/r32` | `11591 _zapIptvChannel` | assertion-killed | 1 |
+| `reference-mutations/r33` | `11630 _canZapIptvChannel` | assertion-killed | 1 |
+| `reference-mutations/r34` | `11632 _canZapIptvChannel` | survived | 0 |
+| `reference-mutations/r35` | `11735 _hideIptvZapBanner` | assertion-killed | 1 |
+| `reference-mutations/r36` | `11755 _syncIptvBannerTicker` | survived | 0 |
+| `reference-mutations/r37` | `12812 _showIptvChannelSheetOverlay` | assertion-killed | 1 |
+| `reference-mutations/r38` | `12820 _showIptvChannelSheetOverlay` | assertion-killed | 1 |
+| `reference-mutations/r39` | `12923 _canZapIptvChannel` | assertion-killed | 1 |
+| `reference-mutations/r40` | `12925 _zapIptvChannel` | assertion-killed | 1 |
+| `reference-mutations/r41` | `12929 _zapIptvChannel` | assertion-killed | 1 |
+| `reference-mutations/r42` | `13036 _canZapIptvChannel` | assertion-killed | 1 |
+| `reference-mutations/r43` | `13037 _zapIptvChannel` | assertion-killed | 1 |
+| `reference-mutations/r44` | `13047 _canZapIptvChannel` | assertion-killed | 1 |
+| `reference-mutations/r45` | `13048 _zapIptvChannel` | assertion-killed | 1 |
+| `reference-mutations/r46` | `13516 _switchToIptvChannel` | assertion-killed | 1 |
+| `reference-mutations/r47` | `13519 _canZapIptvChannel` | uncredited-runtime-or-timeout | 0 |
+| `reference-mutations/r48` | `13520 _zapIptvChannel` | assertion-killed | 1 |
+| `reference-mutations/r49` | `13527 _switchToIptvChannel` | assertion-killed | 1 |
+| `reference-mutations/r50` | `13530 _canZapIptvChannel` | uncredited-runtime-or-timeout | 0 |
+| `reference-mutations/r51` | `13531 _zapIptvChannel` | assertion-killed | 1 |
+| `reference-mutations/r52` | `13538 _canZapIptvChannel` | assertion-killed | 1 |
+| `reference-mutations/r53` | `13555 _canZapIptvChannel` | assertion-killed | 1 |
+| `reference-mutations/r54` | `13566 _iptvStartOverTimelineVisible` | survived | 0 |
+| `reference-mutations/r55` | `13582 _showIptvChannelSheetOverlay` | assertion-killed | 1 |
+| `reference-mutations/r56` | `13607 _iptvLiveEdgeAction` | assertion-killed | 1 |
+| `reference-mutations/r57` | `13612 _toggleIptvStartOverTimeline` | assertion-killed | 1 |
+| `reference-mutations/r58` | `13615 _iptvStartOverTimelineVisible` | assertion-killed | 1 |
+| `reference-mutations/r59` | `13776 _switchToIptvGuideChannel` | assertion-killed | 1 |
+| `reference-mutations/r60` | `13777 _playIptvCatchup` | assertion-killed | 1 |
+| `reference-mutations/r61` | `13778 _hideIptvChannelSheet` | assertion-killed | 1 |
+| `reference-mutations/r62` | `13798 _persistIptvGuideContext` | assertion-killed | 1 |
+| `reference-mutations/r63` | `14027 _captureIptvAudioLanguage` | survived | 0 |
+| `reference-mutations/r64` | `14093 _hideIptvZapBanner` | survived | 0 |
+| `reference-mutations/r65` | `14180 _captureIptvAudioLanguage` | assertion-killed | 1 |
+| `reference-mutations/r66` | `14188 _captureIptvAudioLanguage` | survived | 0 |
+| `reference-mutations/r67` | `14680 _applyIptvAudioPreference` | assertion-killed | 1 |
+| `reference-mutations/r68` | `14914 _cancelPendingIptvCatchup` | assertion-killed | 1 |
+| `repair-mutations/d30b` | `_canZapIptvChannel` | assertion-killed | 1 |
+| `repair-mutations/d40b` | `_prefetchIptvZapPage` | assertion-killed | 1 |
+| `boundary-mutations/b01` | `_switchToIptvChannel` | assertion-killed | 1 |
+| `boundary-mutations/b02` | `_switchToIptvChannel` | assertion-killed | 1 |
+| `boundary-mutations/b03` | `_tryOpenLiveStream` | assertion-killed | 1 |
+| `boundary-mutations/b04` | `_switchToIptvChannel` | assertion-killed | 1 |
+| `boundary-mutations/b05` | `_tryOpenLiveStream` | assertion-killed | 1 |
+| `boundary-mutations/b06` | `_tryOpenLiveStream` | assertion-killed | 1 |
+| `boundary-mutations/b07` | `_tryOpenLiveStream` | assertion-killed | 1 |
+| `boundary-mutations/b08` | `_tryOpenLiveStream` | assertion-killed | 1 |
+| `boundary-mutations/b09` | `_tryOpenLiveStream` | uncredited-runtime-or-timeout | 0 |
+| `boundary-mutations/b10` | `_onIptvStreamError` | assertion-killed | 1 |
+| `boundary-mutations/b11` | `_applyIptvAudioPreference` | assertion-killed | 1 |
+| `boundary-mutations/b12` | `_captureIptvAudioLanguage` | assertion-killed | 12 |
+| `boundary-mutations/b13` | `_captureIptvAudioLanguage` | assertion-killed | 6 |
+| `boundary-mutations/b14` | `_noteLiveChannelPlaying` | assertion-killed | 10 |
+| `boundary-mutations/b15` | `_noteLiveChannelPlaying` | assertion-killed | 6 |
+| `boundary-mutations/b16` | `_recordIptvWatchForChannel` | assertion-killed | 18 |
+| `boundary-mutations/b17` | `_switchToIptvChannel` | assertion-killed | 4 |
+| `boundary-mutations/b18` | `_playIptvCatchup` | assertion-killed | 18 |
+| `boundary-mutations/b19` | `_reanchorIptvRingToCategory` | assertion-killed | 2 |
+| `boundary-mutations/b20` | `_switchToIptvChannel` | assertion-killed | 2 |
+| `boundary-mutations/b21` | `_playIptvCatchup` | assertion-killed | 2 |
+| `boundary-mutations/b22` | `_loadIptvZapBannerEpg` | assertion-killed | 2 |
+| `boundary-mutations/b23` | `_applyIptvAudioPreference` | assertion-killed | 2 |
+| `boundary-mutations/f01` | `_kIptvZapEdgeMargin` | assertion-killed | 1 |
+| `boundary-mutations/f02` | `_iptvZapArmingPaging` | assertion-killed | 1 |
+| `boundary-mutations/f03` | `_iptvZapDrainingInputs` | assertion-killed | 1 |
+| `boundary-mutations/f04` | `_lastLiveChannelSettle` | assertion-killed | 1 |
+| `boundary-mutations/f05` | `_preferredIptvAudioLanguage` | assertion-killed | 1 |
+| `case-mutations/c01` | `_switchToIptvChannel` | assertion-killed | 8 |
+| `case-mutations/c02` | `_ensureIptvZapPagingArmed` | assertion-killed | 4 |
+| `case-mutations/c03` | `_playIptvCatchup` | assertion-killed | 4 |
+| `case-mutations/c04` | `_startIptvProgrammeFromBeginning` | assertion-killed | 1 |
+| `case-mutations/c05` | `_startIptvProgrammeFromBeginning` | assertion-killed | 1 |
+| `case-mutations/c06` | `_startIptvProgrammeFromBeginning` | assertion-killed | 1 |
+| `case-mutations/c07` | `_toggleIptvStartOverTimeline` | assertion-killed | 1 |
+| `case-mutations/c08` | `_playIptvCatchup` | assertion-killed | 1 |
+| `case-mutations/c09` | `_onIptvStreamError` | assertion-killed | 1 |
+| `case-mutations/c10` | `_onIptvStreamError` | assertion-killed | 1 |
+| `case-mutations/c11` | `_onIptvStreamError` | assertion-killed | 1 |
+| `case-mutations/c12` | `_zapIptvChannel` | assertion-killed | 20 |
+| `case-mutations/c13` | `_applyIptvAudioPreference` | assertion-killed | 6 |
+| `case-mutations/c14` | `_captureIptvAudioLanguage` | assertion-killed | 1 |
+| `case-mutations/c15` | `_iptvRecoveryEligible` | assertion-killed | 4 |
+| `case-mutations/c16` | `_initIptvStremioSources` | assertion-killed | 3 |
+| `case-mutations/c17` | `_switchToIptvChannel` | assertion-killed | 6 |
+| `case-mutations/c18` | `_tryOpenLiveStream` | assertion-killed | 9 |
+| `case-mutations/c19` | `_reanchorIptvRingToCategory` | assertion-killed | 4 |
+| `case-mutations/c20` | `_captureIptvAudioLanguage` | assertion-killed | 4 |
+| `case-mutations/c21` | `_prepareIptvBannerData` | assertion-killed | 3 |
+| `case-mutations/c22` | `_captureIptvAudioLanguage` | assertion-killed | 2 |
+| `case-mutations/c23` | `_applyIptvAudioPreference` | invalid-candidate | 0 |
+| `case-mutations/c24` | `_performIptvLiveRetune` | assertion-killed | 1 |
+| `case-mutations/c25` | `_noteLiveChannelPlaying` | survived | 0 |
+| `case-mutations/c26` | `_switchToIptvGuideChannel` | assertion-killed | 2 |
+| `case-mutations/c27` | `_anchorIptvGuideCategory` | assertion-killed | 1 |
+| `case-mutations/c28` | `_applyIptvAudioPreference` | assertion-killed | 1 |
+| `addendum-mutations/r06b` | `2120 _raiseIptvZapBanner` | assertion-killed | 1 |
+| `addendum-mutations/r34b` | `11632 _canZapIptvChannel` | assertion-killed | 1 |
+| `addendum-mutations/r36b` | `11755 _syncIptvBannerTicker` | assertion-killed | 1 |
+| `addendum-mutations/r54b` | `13566 _iptvStartOverTimelineVisible` | assertion-killed | 1 |
+| `addendum-mutations/r64b` | `14093 _hideIptvZapBanner` | assertion-killed | 1 |
+| `addendum-mutations/r66b` | `14188 _captureIptvAudioLanguage` | assertion-killed | 1 |
+| `addendum-mutations/r47b` | `13519 build` | assertion-killed | 1 |
+| `addendum-mutations/r50b` | `13530 build` | assertion-killed | 1 |
+| `addendum-mutations/b09b` | `_tryOpenLiveStream` | assertion-killed | 1 |
+| `addendum-mutations/c30` | `_applyIptvAudioPreference` | assertion-killed | 1 |
+| `addendum-mutations/c31` | `_loadIptvZapBannerEpg` | assertion-killed | 1 |
+| `addendum-mutations/c32` | `_switchToIptvSource` | assertion-killed | 1 |
+| `addendum-mutations/c33` | `_switchToIptvSource` | assertion-killed | 1 |
+| `addendum-mutations/c34` | `_applyIptvAudioPreference` | invalid-candidate | 0 |
+| `addendum-mutations/c35` | `10281 _lastLiveChannelTimer` | assertion-killed | 3 |
+| `addendum-mutations/c36` | `_reanchorIptvRingToCategory` | assertion-killed | 1 |
+| `addendum-mutations/c37` | `_loadIptvZapBannerEpg` | assertion-killed | 1 |
+| `addendum-mutations/c38` | `_applyIptvAudioPreference` | assertion-killed | 1 |
+| `addendum-mutations/c39` | `_isCurrentIptvCatchupRequest` | assertion-killed | 2 |
+| `addendum-mutations/c40` | `_switchToIptvChannel + _openMedia` | assertion-killed | 1 |
+| `addendum-mutations/c41` | `dispose` | assertion-killed | 1 |
+| `addendum-mutations/c42` | `_noteLiveChannelPlaying` | assertion-killed | 3 |
+| `addendum-mutations/c43` | `_noteLiveChannelPlaying` | assertion-killed | 2 |
+| `addendum-mutations/c44` | `_iptvRecoveryEligible + _onIptvStreamError` | assertion-killed | 1 |
+| `addendum-mutations/c45` | `_noteLiveChannelPlaying` | assertion-killed | 1 |
+| `last-mutations/c23b` | `_applyIptvAudioPreference` | assertion-killed | 1 |
+| `last-mutations/c34b` | `_applyIptvAudioPreference` | assertion-killed | 1 |
+| `last-mutations/c46` | `_requestIptvZapPage` | assertion-killed | 2 |
+| `last-mutations/c47` | `_anchorIptvGuideCategory` | assertion-killed | 1 |
+| `last-mutations/c48` | `_noteLiveChannelPlaying` | survived | 0 |
+| `last-mutations/c49` | `_playIptvCatchup` | assertion-killed | 1 |
+| `last-mutations/c50` | `_onIptvStreamError` | assertion-killed | 2 |
+| `last-mutations/c51` | `_captureIptvAudioLanguage` | assertion-killed | 1 |
+| `last-mutations/c52` | `_captureIptvAudioLanguage` | assertion-killed | 2 |
+| `last-mutations/c30b` | `_applyIptvAudioPreference` | assertion-killed | 2 |
+| `last-mutations/c35b` | `10281 _lastLiveChannelTimer` | assertion-killed | 1 |
+| `admission-mutation/c48b` | `_noteLiveChannelPlaying` | assertion-killed | 1 |
+| `final-proof-refresh/c48c` | `_noteLiveChannelPlaying` | assertion-killed | 1 |
+| `final-proof-refresh/c35c` | `10281 _lastLiveChannelTimer` | assertion-killed | 1 |
+| `final-proof-refresh/c45b` | `_noteLiveChannelPlaying` | assertion-killed | 1 |
+| `aba-proof-refresh/b12a` | `_captureIptvAudioLanguage` | assertion-killed | 12 |
+| `aba-proof-refresh/b13a` | `_captureIptvAudioLanguage` | assertion-killed | 6 |
+| `aba-proof-refresh/b14a` | `_noteLiveChannelPlaying` | assertion-killed | 10 |
+| `aba-proof-refresh/b15a` | `_noteLiveChannelPlaying` | assertion-killed | 6 |
+| `aba-proof-refresh/b16a` | `_recordIptvWatchForChannel` | assertion-killed | 18 |
+| `aba-proof-refresh/b17a` | `_switchToIptvChannel` | assertion-killed | 4 |
+| `aba-proof-refresh/b18a` | `_playIptvCatchup` | assertion-killed | 18 |
+| `aba-proof-refresh/b19a` | `_reanchorIptvRingToCategory` | assertion-killed | 2 |
+| `aba-proof-refresh/b20a` | `_switchToIptvChannel` | assertion-killed | 2 |
+| `aba-proof-refresh/b21a` | `_playIptvCatchup` | assertion-killed | 2 |
+| `aba-proof-refresh/b22a` | `_loadIptvZapBannerEpg` | assertion-killed | 2 |
+| `aba-proof-refresh/b23a` | `_applyIptvAudioPreference` | assertion-killed | 2 |
+| `aba-proof-refresh/c35a` | `10281 _lastLiveChannelTimer` | assertion-killed | 4 |
+| `aba-proof-refresh/c36a` | `_reanchorIptvRingToCategory` | assertion-killed | 1 |
+| `aba-proof-refresh/c37a` | `_loadIptvZapBannerEpg` | assertion-killed | 1 |
+| `aba-proof-refresh/c38a` | `_applyIptvAudioPreference` | assertion-killed | 1 |
+| `aba-proof-refresh/c39a` | `_isCurrentIptvCatchupRequest` | assertion-killed | 2 |
+| `aba-proof-refresh/c40a` | `_switchToIptvChannel + _openMedia` | assertion-killed | 1 |
+| `aba-proof-refresh/c42a` | `_noteLiveChannelPlaying` | assertion-killed | 3 |
+| `aba-proof-refresh/c43a` | `_noteLiveChannelPlaying` | assertion-killed | 2 |

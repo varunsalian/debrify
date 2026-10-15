@@ -2769,11 +2769,10 @@ fades, hands off to the dock and its countdown ticks while paused.
   replay row (5938) before the final request check (5946); a replay
   cancelled during the write leaves a Continue Watching row for an item
   that never played.
-- **Manual Stremio source pick is not error-muted (suspected):**
-  `_switchToIptvSource` probes with `_iptvErrorsMuted` false, so a dead
-  pick's error reaches `_onIptvStreamError` → `_iptvLiveRecovery.onError()`
-  → `_performIptvLiveRetune` → a full quiet ladder that can replace the
-  user's pick, contrary to its doc comment (7866–7870). Characterize.
+- **Manual Stremio source pick is not error-muted (confirmed at Step 0):**
+  `_switchToIptvSource` probes with `_iptvErrorsMuted` false. The original
+  public-source test observes its error start a quiet ladder and replace the
+  selected candidate, contrary to its doc comment (7866–7870). Preserve as-is.
 - **Source pick skips switch-boundary steps:** no catch-up cancel,
   start-over reset, `_resumeWriteGuard.clear()` or error-debounce reset
   (compare 6912–6940).
@@ -2791,6 +2790,32 @@ fades, hands off to the dock and its countdown ticks while paused.
   handler (6095); unawaited switch futures from the ladder (5511, 5520,
   5794) and the retune closure (764–782, only `_openMedia` is guarded)
   surface any throw from `resolveCandidates`/`stopRecording` to the zone.
+
+
+- **Distinct stale-switch outcomes (Step 0):** an old direct switch released
+  after pause can open late; an already-issued open can finish late too. Newer
+  metadata/index can therefore disagree with playback. Recording-stop, stop/
+  resolution, pre-open and probe holds have different outcomes; no uniform
+  stale-rejection claim. A candidate probe also has no switch ticket after its
+  own recording-stop await. Winner marking after an acknowledged probe checks
+  the ticket but can still succeed after disposal.
+- **Same-turn zap index (Step 0):** the switch ticket increments before its
+  recording-stop await, but the index advances afterward. Immediate repeated
+  presses and a queued 24-input drain can share the old index and advance once.
+- **Profile capture/admission (Step 0):** pre-capture audio, settle/playlist
+  last-channel and pre-admission history can write incoming B; stale captured
+  preferences reject, including A→B→A; admitted writes finish outgoing A even
+  after authorized deletion. Cleanup is still pending. Held reads can publish
+  outgoing data across B/ABA, while explicit disposal has separate guards.
+  Tests inspect physical A, incoming/final scope and intermediate B in ABA.
+- **Replay writes twice (Step 0):** the replay path records before switching,
+  then the switch owner records its non-live item again. Admitted A plus a
+  mounted continuation in B can leave history in both profiles. Disposal
+  prevents the second switch write; it does not undo an admitted first write.
+- **Audio captures vs live player (Step 0):** a track snapshot taken before
+  storage can be applied through the replacement player, even when that ordinal
+  is absent there. With P11's initial restore held, the observed two-applier
+  order is French→English→French. No deduplication or replacement fix here.
 
 ### Open questions for the design review
 
@@ -5705,6 +5730,53 @@ for Step 0 and Claude’s independent mutation sample.
   formatting identity also failing in P12's recorded gate. No missing/load-error
   suite, allowance or app change. Step 0 continues on detached original app code;
   production stays blocked on P13/P14 and later independent sampling/review.
+
+
+
+### 2026-10-15 — Phase 15 Step 0 (pipelined original characterization; STOP)
+
+- **Original/scope.** Application exactly `1d7699d2e`; follows provisional
+  Step T `2a21e8833`. Twenty new behavior suites/two support files; no production,
+  pubspec, seam, dependency, allowance, size-ratchet or theme-path change.
+  Production remains blocked until accepted P13/P14 merges and proof refresh.
+- **Behavior.** **219 original cases pass**: ring/ladder both directions and
+  queue cap/reversal/merge, guide/Start Over/replay, distinct stale-switch holds,
+  open-ack probe events, source/error classification, memory and physical profile
+  ownership, banner/clock/resource cancellation, early windows and desktop/TV
+  input/focus. Real six-second debounce and programme expiry are covered;
+  60-second archive retry and physical/native checklist remain pending.
+- **Profile capture.** Actual pre/post preference capture, playlist lookup,
+  scoped DB admission/transaction and transport completion are held separately.
+  B/ABA/deletion/disposal inspect physical keys/rows. The final **93-case**
+  profile/read run also independently inspects intermediate B during ABA;
+  final A's new-session storage is not mislabelled as B. Deletion cleanup is
+  pending. Reads, stale direct opens, disposed winner marks, replay's two writes
+  and captured audio ordinals remain as-is; new Follow-ups recorded.
+- **Sweep/proofs.** **70 moved declarations**, **1521 nested AST points** and
+  **68 retained occurrences** accounted for. All 53 methods/getters have
+  assertion witnesses; 17 initializers have explicit inertness/operational
+  coverage (five independently mutated). Retained sites: **65 assertion-proved,
+  three explicit source audits**. Every new case has an original assertion
+  witness. **239 canonical attempts /221 completed assertion kills**; initial
+  survivors, invalid candidates and runtime/timeout failures receive no credit.
+  Full matrices and mutation table are in the deps report and `p15/step0/`.
+- **Reduced baseline.** Explicit committed inventory loads **163/163 suites**,
+  no missing/load-error suite: **1478 success /one pre-existing failure**.
+  Reuse of the 143-suite base verifies all 173 old test/support hashes, unchanged
+  application/dependencies/analysis and SDK. Fresh restored-original 20-suite
+  run passes 219; refreshed profile/read run passes 93. The startup-shield
+  source-format failure reproduces on the original and matches P12's observed
+  gate; not allowlisted or fixed.
+- **Checks.** Nice19, local serialization and test hook define throughout;
+  isolated parser packages. Flutter 3.44.8 /Dart 3.12.2. New Dart formatted;
+  analyzer **124 scoped diagnostics, zero identity/multiplicity changes**, zero
+  new test/support diagnostics. Size/import architecture and diff checks pass.
+  Complete evidence only under `<git-common-dir>/refactor-evidence/vplayer/p15/`.
+- **Next, not executed.** Independent Step 0b/sample, accepted P13/P14 rebase,
+  regeneration of the provisional partition, four adapters/prototypes/analyzer
+  probes and changed witnesses. History still rejects absent P13/P14; no dummy
+  manifest or waiver. Full suite/builds deferred to M3 under pipeline rules.
+  STOP before production moves; no push, merge, branch switch or device action.
 
 
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
