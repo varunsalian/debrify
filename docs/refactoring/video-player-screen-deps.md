@@ -9547,7 +9547,7 @@ The systematic ledger has **976 nested AST points in 30 moved declarations** and
 
 | Classification | Points |
 | --- | --- |
-| assertion-killed | 466 |
+| assertion-killed | 467 |
 | device-pending: native pending-file registration | 3 |
 | device-pending: raw Android engine dispatch | 57 |
 | device-pending: raw Android notification/publication arm | 2 |
@@ -9556,12 +9556,12 @@ The systematic ledger has **976 nested AST points in 30 moved declarations** and
 | diagnostic-only (manifest frozen) | 24 |
 | dormant: constant-true unified-menu flag excludes TracksSheet callback | 35 |
 | dormant: constant-true unified-menu flag excludes legacy sheet | 36 |
-| equivalent-original-callers | 15 |
+| equivalent-original-callers | 14 |
 | inert/device-pending | 1 |
 | invalid-candidate | 152 |
 | typed-null-operand | 75 |
 
-Assertion kills require exit 1, a complete runner outcome, an actual `Expected:` assertion failure, the original app hash and current selected test/transitive-import hashes. Compiler failures and runtime-only failures receive no kill credit. Compiler/flow exclusions may reuse explicit app-library diagnostics when app source, dependencies, SDK and compile flags are identical; changed test expectation tables cannot repair an app-library type error. No behavioral proof uses that relaxation. Null operands link to their enclosing guard/write/return; they are not counted as standalone literal kills. Diagnostic-only points are frozen by the manifest and receive neither behavioral equivalence nor kill credit. Source equivalences state their original-reader/caller invariants; the Stremio pseudo-URL result explicitly retains Android query timing as pending.
+Assertion kills require exit 1, a complete runner outcome, an actual `Expected:` assertion failure, the original app hash and current selected test/transitive-import hashes. Compiler failures and runtime-only failures receive no kill credit. Compiler/flow exclusions may reuse explicit app-library diagnostics when app source, dependencies, SDK and compile flags are identical; changed test expectation tables cannot repair an app-library type error. No behavioral proof uses that relaxation. Null operands link to their enclosing guard/write/return; they are not counted as standalone literal kills. Diagnostic-only points are frozen by the manifest and receive neither behavioral equivalence nor kill credit. Source equivalences state their original-reader/caller invariants. Review P2 reclassifies p0177 from equivalence to assertion-killed (467 kills / 14 equivalences); Android query timing remains pending. Other point classifications are unchanged.
 
 ### Declaration coverage matrix
 
@@ -9571,7 +9571,7 @@ Assertion kills require exit 1, a complete runner outcome, an actual `Expected:`
 | `_canRecord` | 2 | assertion-killed: 2 | `arrow-plan:arrow-p0002`, `quick-sweep-plan:q-p0003` |
 | `_desktopCaptureForCurrent` | 24 | assertion-killed: 3; invalid-candidate: 14; typed-null-operand: 7 | `quick-sweep-plan:q-p0018`, `quick-sweep-plan:q-p0019`, `quick-sweep-plan:q-p0023` |
 | `_toggleRecording` | 141 | assertion-killed: 36; device-pending: raw Android engine dispatch: 57; device-pending: task ID can only be populated by native Android refresh/start: 16; equivalent-original-callers: 4; invalid-candidate: 24; typed-null-operand: 4 | `cleanup-closure-plan:cleanup-p0036`, `cleanup-closure-plan:cleanup-p0041`, `cleanup-closure-plan:cleanup-p0064` |
-| `_playingLiveUrl` | 12 | assertion-killed: 5; equivalent-original-callers: 1; invalid-candidate: 4; typed-null-operand: 2 | `remaining-sweep-plan:p0169`, `remaining-sweep-plan:p0170`, `remaining-sweep-plan:p0173` |
+| `_playingLiveUrl` | 12 | assertion-killed: 6; invalid-candidate: 4; typed-null-operand: 2 | `remaining-sweep-plan:p0169`, `remaining-sweep-plan:p0170`, `remaining-sweep-plan:p0173` |
 | `_engineRecordUrlForCurrent` | 38 | assertion-killed: 18; invalid-candidate: 15; typed-null-operand: 5 | `current-input-refresh-plan:refresh-p0186`, `current-input-refresh-plan:refresh-p0187`, `current-input-refresh-plan:refresh-p0197` |
 | `_refreshEngineRecordingState` | 52 | device-pending: raw Android service/publication protocol: 52 | explicit device/dormant/inert classification above |
 | `_recordingFileName` | 23 | device-pending: raw Android service/publication protocol: 23 | explicit device/dormant/inert classification above |
@@ -9638,7 +9638,6 @@ Assertion kills require exit 1, a complete runner outcome, an actual `Expected:`
 | `p0063` | _toggleRecording:6379 | The two original _toggleRecording tear-offs are passed as VoidCallbacks to TV/desktop controls; their production button/key handlers discard the returned Future. This await is followed solely by return. Removing await leaves the same _stopRecording child, synchronous State clearing, native operation, caught failure and notification chain, with no subsequent parent work; no production caller observes earlier completion of the discarded outer Future. |
 | `p0162` | _toggleRecording:6500 | DesktopRecordingService.start registers the capture and increments revision before returning it; the live initState listener already schedules the repaint. The later empty setState changes no fields. This audit concerns original native callers; test-only changing iOS override between init and dispatch is not a native platform handoff. |
 | `p0168` | _toggleRecording:6511 | The two production onRecord handlers consume _toggleRecording as a VoidCallback and discard its Future. This is its final await with no following operation. Removing await invokes the identical _startRecording child, whose own admission, generation checks, native operations and catches remain; only completion of the discarded outer Future changes. |
-| `p0177` | _playingLiveUrl:6523 | On the characterized desktop/TEE protocols, a still-unresolved Stremio URL is non-HTTP and cannot be a DesktopRecordingService capture identity. Returning that pseudo-URL instead of null still misses both capture map lookups, and _engineRecordUrlForCurrent rejects it before any probe. TEE does not use this helper. Android registry query timing after the changed null result remains DEVICE-PENDING; no all-target equivalence is claimed. |
 | `p0333` | _currentRecordingResource:6646 | The return type is Future<nullable-record>. Falling through the end of this async function returns null implicitly, exactly as the deleted final return null. No statement follows it; no caller distinguishes explicit and implicit null. |
 | `p0348` | _untapMpvLogs:6661 | _untapMpvLogs first cancels the subscription; every remaining read is another ?.cancel in tap/untap/dispose. No caller observes subscription identity/nullness. Keeping the already-canceled subscription changes only repeated idempotent cancellation; it cannot receive logs or replace the next assignment. |
 | `p0392` | _startRecording:6697 | The stale-start branch has already canceled its log tap and is followed solely by return. The same _disarmStrayRecording child still clears the captured platform and cleans the path, with both native and file errors caught inside that child. Only completion of the discarded outer start/toggle Future changes; both original production Record consumers are void handlers and perform no action after awaiting this helper. |
@@ -9860,7 +9859,7 @@ Exact original→mutant patches, commands, full JSONL/stderr, original hashes an
 | `p0174` | _playingLiveUrl:6523 / operator | \|\| → && | invalid-candidate | replay-candidate |
 | `p0175` | _playingLiveUrl:6523 / operator | == → != | invalid-candidate | replay-candidate |
 | `p0176` | _playingLiveUrl:6523 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
-| `p0177` | _playingLiveUrl:6523 / string | 'stremio-tv://' → "stremio-tv:// mutant" | equivalent-original-callers | On the characterized desktop/TEE protocols, a still-unresolved Stremio URL is non-HTTP and cannot be a DesktopRecordingService capture identity. Returning that pseudo-URL instead of null still misses both capture map lookups, and _engineRecordUrlForCurrent rejects it before any probe. TEE does not use this helper. Android registry query timing after the changed null result remains DEVICE-PENDING; no all-target equivalence is claimed. |
+| `p0177` | _playingLiveUrl:6523 / string | 'stremio-tv://' → "stremio-tv:// mutant" | assertion-killed | review-m7/p0177-plan: both original addon → IPTV Play opaque-key capture cases; exact string mutant replay. Android refresh/query still device-pending. |
 | `p0178` | _playingLiveUrl:6523 / return | return null; → ∅ | assertion-killed | remaining-sweep-plan:p0178 |
 | `p0179` | _playingLiveUrl:6523 / null | explicit exclusion / no standalone mutation | typed-null-operand | Explicit enclosing guard/write/return linkage in null-operand-audit.json; no standalone literal kill claimed. |
 | `p0180` | _playingLiveUrl:6524 / return | return resolved; → ∅ | assertion-killed | remaining-sweep-plan:p0180 |
@@ -10875,7 +10874,7 @@ Step-0b closures, not a replacement independent sample score:
 | Mutant | Original caller / observation | Original replay result |
 |---|---|---|
 | m2 — remove the engine-task clear before `LiveRecordingService.stop` | `_toggleRecording:6362–6365`; only non-null task writers are raw Android start/refresh. S2d overrides neither raw guard, and service start/query independently return unsupported/empty off Android. No private State injection. The native button-before-stop-resolves contract remains on the device checklist. | **Device-pending**; desktop replay survives, no kill credited. |
-| m7 — allow an unresolved `stremio-tv://` playing URL | `_playingLiveUrl:6520–6524` originally returns null. The real Record action with the same unresolved launch/playing URL has no active-button match, capture, target-directory request or native recording write. `_engineRecordUrlForCurrent` rejects non-HTTP before probing; normally-created desktop captures are HTTP-only (all three production start sites traced). Thus null and an unresolved pseudo URL have identical desktop/TEE outcomes through original callers. Android refresh could query/delay instead of clearing immediately. | **Desktop observable equivalence; Android refresh device-pending.** Original and exact m7 replay pass the new negative. The private null rejection remains frozen by the move manifest; no assertion kill or synthetic pseudo capture is credited. |
+| m7 — allow an unresolved `stremio-tv://` playing URL | The Step-0b directly seeded negative and normally-created HTTP capture admission trace did not establish the addon-to-player reachability or the active-capture lookup boundary. The `vp-rev13` P2 correction and exact original replay are recorded in the addendum below. | **Superseded by the review addendum:** assertion-killed through the original addon → IPTV Play → Record callers. Android refresh/query remains device-pending. |
 | m13 — replace actual file length with 1 | Real TEE Record/Stop; first create an **existing zero-length file**, assert exists/length, dismiss start notice, stop, require `Recording failed — mpv wrote no file (see logs)` and no saved notice. | **Assertion-killed** by `p13 TEE existing empty output reports mpv wrote no file`. |
 | m15 — reduce suffix loop bound from 100 to 3 | Real TEE Record; occupy base plus `_2`, `_3`, `_4` in the target directory, require the unused `_5.mkv`. | **Assertion-killed** by `p13 TEE occupied base and suffixes two through four choose suffix five`. |
 | m18 — drop manual episode from quick-menu precedence | Real Identify Title series selection and season/episode dialog on a filename with no episode; close and reopen Speed through the real control. Require manual S3E4 and its already-fetched subtitle cache, without another fetch. | **Assertion-killed** by `p13 quick menu keys plain filename by the manually identified episode`. |
@@ -10984,3 +10983,75 @@ fixture timeout, assertion, failure allowlist, baseline or production code was
 changed to obtain it. The initial timeout remains an investigation limitation;
 exact trace, commands and control outcomes are retained in
 `p13/gate/focus-failure-investigation.json` and its referenced logs.
+
+
+## Phase 13 independent review P2 — unresolved addon URL callers (2026-10-15)
+
+Fresh review `vp-rev13` found no P1s and one P2: the Step-0b m7 negative
+seeded the player directly. An addon can supply a nonempty `url` without an
+`infoHash`, so the model admits even `stremio-tv://p13-review/unresolved` as
+a direct stream. The live-TV resolver preserves it, IPTV Play chooses it,
+and player initialization assigns it before `open`. The previous broad
+original-caller equivalence claim was insufficient and is superseded here.
+
+`video_player_recording_review_test.dart` now registers an addon through
+`StremioService.addAddon`, serves the actual manifest/stream HTTP responses,
+taps a fixture Play control wired to production `IptvPlayback.playChannel`,
+and lets `VideoPlayerLauncher` push the real player. The fixture supplies the
+IPTV host dependencies; it never constructs the player widget or sets player
+State. It asserts the HTTP request, resolved candidate, routed widget arguments,
+and actual `mk.Media` handed to open. The channel key differs from the addon's
+returned unresolved key, pinning forwarding rather than a fallback identity.
+
+Three cases cover the boundary: no capture after open fails; an active capture
+while open is held; and an active capture after open throws. The latter two
+start a real profile-authorized `DesktopRecordingService` capture under the
+returned opaque key through its public API. Only the HTTP transport maps that
+key to the existing continuous, cancellable loopback fixture. This deliberately
+exercises the lookup boundary; it does **not** claim the desktop Record action
+admits a non-HTTP URL as a new capture. The service returns that exact capture,
+but the real player's Record button stays inactive, Record rejects the URL,
+and the competing capture stays active, without target-path or mpv writes.
+Captures, launch futures, addon cache/registration and loopback resources drain
+before profile teardown. A control with no capture still checks refusal after
+playback failure. Existing HTTP capture tests retain the successful-match control.
+
+| Mutation / application | Observation | Result |
+|---|---|---|
+| Exact m7 on detached ORIGINAL `1099a0039dab6023aef8c95754e4595e862e9a67`: remove `resolved.startsWith('stremio-tv://')` from `_playingLiveUrl`'s null guard | Both real-launch active-capture cases expect inactive Record; mutant reports active while open is pending and after it fails. | **Two assertion failures**, exit 1, complete run; not a compile failure or timeout. |
+| Systematic point p0177 on the same ORIGINAL: change the prefix literal to `"stremio-tv:// mutant"` | Same two real-launch active-capture cases | **Two assertion failures**, complete exit 1. The previous equivalence argument and coverage totals are corrected above. |
+| Unmodified ORIGINAL, same test/fixture hashes | All five cases in the revised review file, including prior m13/m15 cases | **5/5 pass** in a separate process. |
+| Current Step-1 application, same tests | Same five cases | **5/5 pass** in a separate process. |
+
+Evidence is exclusively `refactor-evidence/vplayer/p13/review-m7/` in the git
+common directory: `focused-original.jsonl`, `focused-current-2.jsonl`,
+`m7-plan.json`, `m7-plan-results.json` and each replay's exact patch/input hashes.
+The original application is restored after the mutant. No production source,
+seam, dependency, failure allowlist or behavior fix accompanies this correction.
+
+**Android refresh/query remains device-pending:** the same addon chain can
+leave an unresolved `_currentStreamUrl` after open fails. On Android with the
+engine enabled and an existing task id, refresh must clear the displayed task
+immediately and return before querying the engine registry. m7 instead permits
+the registry query/await and then compares its rows with the opaque key. Raw `Platform.isAndroid` and the service's
+independent Android checks remain outside S2d; this desktop proof earns no
+native engine-query or task-clear ordering credit. m2 remains device-pending.
+
+**Affected clean-tree gate:** checkpoint `a176c55a49046ce02521befcbaae56819854a49a`
+loaded **68/68 expected files**, including all 36 menu/recording suites, both
+seam source guards and all 30 frozen external readers/boundary suites. Both
+original and current runs finish **425 successes / the same two failures**:
+the PiP startup-shield check and direct-SharedPreferences profile source guard.
+Every loading test succeeds. Exact outcome maps match: zero added, missing,
+changed or newly skipped identities. All 422 identities outside the revised
+review file also match the accepted prior gate; the revised file replaces its
+old direct-seed case with three original-caller cases (net two additions),
+passing alone on original and current. Same SDK, hook define and stable trees.
+
+`affected-inventory.json`, both JSONL/environment files, `affected-identity.log`
+and `receipt.json` retain the gate and the loading/identity checks. All parser
+invocations use unique copied-kernel-free packages under the executing
+worktree's `.dart_tool/vplayer_parser/`, including nested readers; all Flutter
+suites are serialized. Changed Dart format and scoped Flutter analysis pass.
+Only documentation is finalized after that clean checkpoint; the final test
+and application inputs are identical. No full-suite or release/device action.

@@ -4835,6 +4835,32 @@ for Step 0 and Claude’s independent mutation sample.
   the speed-up decision. No production bug fix, dependency change, device action,
   push, merge, branch switch or Phase-14 work. STOP for independent review.
 
+### 2026-10-15 — Phase 13 independent review P2 characterization checkpoint
+
+- Review `vp-rev13`: no P1s; m7's directly seeded negative did not prove the
+  production-reachable addon → IPTV Play → unresolved player URL chain. The
+  previous broad desktop equivalence claim is superseded by this correction.
+- Tests/docs only: the real addon parser/resolver and IPTV Play/launcher now
+  reach the real Record control while open is held and after it fails. A real
+  public-service capture under the returned key, transported through cancellable
+  loopback, distinguishes the capture-lookup guard without private State access.
+  The fixture makes no claim that Record admits a non-HTTP capture start.
+- Exact m7 on detached ORIGINAL `1099a0039` is **assertion-killed twice**;
+  the revised file passes **5/5** on both original and moved code in isolated
+  processes. Evidence `p13/review-m7/`; details/caveats in the deps addendum.
+  Android refresh/query and m2 remain device-pending; no native credit claimed.
+- Clean checkpoint `a176c55a4`: **68/68 suites loaded**, original and current
+  both **425 passes / the same two accepted failures** (PiP startup shield and
+  SharedPreferences profile guard), zero identity additions, omissions, outcome
+  changes or new skips. All 422 unaffected identities also match the prior gate.
+  The revised file passes alone on both applications. Exact systematic p0177
+  also earns two assertion kills; its equivalence claim/totals are corrected.
+- Changed-test format and scoped analyzer pass; fresh isolated parser packages
+  and serialized suites audited. Finalization after the clean checkpoint changes
+  only docs. No production, pubspec, seam, allowlist, full suite, release/device,
+  push, merge, branch switch or Phase-14 work. Android refresh/query remains
+  device-pending. **STOP** for independent review.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

@@ -39,7 +39,7 @@ class RecordingPaths extends VideoPlayerPaths {
 
 /// The real Record callback, real filesystem and service, S2d only for TEE.
 class RecordingDriver extends SubtitleApplyDriver {
-  RecordingDriver(super.t, {super.committed});
+  RecordingDriver(super.t, {super.committed, super.configurePlayer});
   late RecordingPaths paths;
   final captures = <DesktopRecordingCapture>[];
   final recordActions = <VpFixtureActivity>[];
