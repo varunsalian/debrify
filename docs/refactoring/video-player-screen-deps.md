@@ -10945,3 +10945,42 @@ identified at Step T. The four original toggle infos remain in the inventory.
 197 focused tests in 38 suites pass, including every new P13 behaviour case
 and the retargeted platform/theme guards. The reduced gate follows on the clean
 production commit; these focused results do not replace its full frozen inventory.
+
+## Phase 13 reduced gate — clean production parity (2026-10-15)
+
+Clean Step-1 `6b872fdbb` passes the reduced gate against the Step-0b canonical
+original baseline. Every one of the 194 explicitly frozen suites loads before
+identity comparison: 1468 successes, the same two historical source-guard
+failures, no regressions/missing/fixed/newly skipped identities. SDK, defines,
+scope and tested tree remain stable. All new P13 cases pass. The original
+per-file evidence and mutation classifications remain under `p13/step0b/`.
+
+All 46 mechanical gate jobs pass: 26 other Dart manifest self-tests, universal
+P13 self-test/current check, all twelve historical `--at` checks (including
+accepted P12 merge `1d7699d2e`), full Kotlin self-test, S and S2/S2b/S2c/S2d
+proofs, size, architecture and negative fixtures. Each manifest invocation uses
+an isolated parser under the executing worktree's `.dart_tool/vplayer_parser/`,
+including subprocess readers; copied kernels are deleted. The live S2d proof
+retains all prior negatives and the four independent Host projection negatives.
+
+CI format, shared analyzer allowlist and P13 diagnostic comparator pass:
+145 scoped occurrences, no additions to the frozen inventory. All four files
+remain at 377/332/463/209 lines; the facade is 14630 lines and all 25 earlier
+destination hashes remain unchanged. Complete commands, results, parser audit, source hashes, stable-tree
+metadata and final receipt are in `p13/gate/`. Only documentation changes after
+the tested production commit. Android pending/dormant exclusions remain explicit;
+no full suite, release build or device action is claimed. M3 remains after P16.
+
+The first reduced-gate attempt had one unexpected deadline failure at
+`IdentifyTitleDriver.setupIdentity:58`, while awaiting real addon installation
+before that case's first player mount. It was stopped and is **uncredited**;
+its partial outcomes were never merged into the accepted run. The test/helpers
+and addon/profile service files have identical original/current hashes.
+Nevertheless, the failure was **not reproduced** in twenty original file replays,
+three original 42-suite sequence replays, or twenty moved-code file replays, and
+is not classified as a confirmed pre-existing flake. The credited result is the
+separate, complete 194-suite fresh run on the same unchanged clean commit. No
+fixture timeout, assertion, failure allowlist, baseline or production code was
+changed to obtain it. The initial timeout remains an investigation limitation;
+exact trace, commands and control outcomes are retained in
+`p13/gate/focus-failure-investigation.json` and its referenced logs.

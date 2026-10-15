@@ -4801,6 +4801,40 @@ for Step 0 and Claude’s independent mutation sample.
   builds and devices remain deferred to their revised milestones. No bug fix,
   dependency change, push, merge, branch switch or later-phase work.
 
+### 2026-10-15 — Phase 13 reduced gate complete; STOP
+
+- **Clean revision/evidence.** Tested Step-1 `6b872fdbb` with the frozen
+  Step-0b inventory/baseline; evidence `p13/gate/`, gate revision recorded in
+  `p13/gate/commit.json`. Every **194 expected suite loaded**. The credited fresh
+  run, by identity:
+  **1468 successes / the same two historical failures**, zero changed, missing,
+  fixed, new failure or newly skipped identities. All 178 new cases pass;
+  stable tree, same SDK and hook define. No test, harness timing bound, failure
+  allowlist or baseline changed during the gate.
+- **Mechanical gate.** All **46 jobs PASS**: every other Dart manifest self-test,
+  universal P13 self-test/current ownership, P1–P12 at the twelve named merges
+  (P12 `1d7699d2e`), Kotlin self-test, S/S2/S2b/S2c/S2d proofs, size,
+  architecture and negatives. Fresh isolated parser packages and copied-kernel
+  deletion/nested routing audited for every invocation. Earlier 25 destinations
+  protected; facade **14630**, new files **377/332/463/209** formatted lines.
+- **Analysis/format.** CI formatting (2518 files, zero changes), changed guard
+  formatting, shared analyzer allowlist and P13 identity/multiplicity comparator
+  PASS: **145 scoped occurrences, zero additions**. Current hashes and clean
+  tested commit retained; only this documentation changes after the gate.
+- **Initial attempt/limitation.** A pre-player addon-install setup deadline
+  failed in the first attempt; that partial run was stopped and receives no gate
+  credit. Twenty original file replays, three original 42-suite sequence replays
+  and twenty moved-code file replays all pass. The initial failure was **not
+  reproduced and is not classified as pre-existing**. The complete fresh gate
+  was repeated without code/test/harness/allowlist changes; its trace and the
+  remaining uncertainty are retained in `p13/gate/focus-failure-investigation.json`.
+- **Limits/stop.** m2 remains Android device-pending; m7 is desktop/TEE observable
+  equivalence with Android refresh pending, preserving the original null guard.
+  Other native Android recording/publication and the dormant legacy TracksSheet
+  tail remain unclaimed. Full suite/release builds await M3 after Phase 16 per
+  the speed-up decision. No production bug fix, dependency change, device action,
+  push, merge, branch switch or Phase-14 work. STOP for independent review.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
