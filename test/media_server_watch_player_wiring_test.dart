@@ -62,7 +62,8 @@ void main() {
       final observe = vpSourceDeclaration(
         '_VideoPlayerScreenState._observeServerWatch',
       );
-      final fields = observe.contains('_host.serverWatch') ? '_host.' : '_';
+      const fields = '_host.';
+      expect(observe, contains('void observeServerWatch('));
       expect(observe, contains('!${fields}serverWatch.isActive'));
       expect(observe, contains('${fields}validationGateActive'));
       expect(observe, contains('${fields}isTransitioning'));
@@ -86,11 +87,7 @@ void main() {
       );
       expect(
         eof,
-        contains(
-          RegExp(
-            r'(?:_observeServerWatch|_resumeSave\.observeServerWatch)\(completed: true\)',
-          ),
-        ),
+        contains(RegExp(r'_resumeSave\.observeServerWatch\(completed: true\)')),
       );
       expect(eof, isNot(contains('_serverWatch.commit(null)')));
     },

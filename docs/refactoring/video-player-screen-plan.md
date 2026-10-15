@@ -5186,6 +5186,32 @@ for Step 0 and Claude’s independent mutation sample.
   source hashes, complete JSON runs, mutation receipts, analyzer identities,
   parser routing and commit receipt). No application/dependency changes here.
 
+### 2026-10-15 — Phase 14 Step 1 (resume extraction)
+
+- Applied the FINAL `238df16f4` manifest: **13 methods, zero fields moved**
+  into `VpResumeKeys` (**137** lines), `VpResumeRestore` (**381**) and
+  `VpResumeSave` (**457**). Inert constructor assignments follow P13's four
+  collaborators. State retains lock/guard/epoch/timer/server-watch identities;
+  sibling routing and the static local-read forwarder go through exact Hosts.
+- All **28 retained references** remain at their original statement positions;
+  the three patched adapters preserve P13's display/sleep menu rewrites.
+  Current-tree checker: zero differences, all 29 earlier destinations protected.
+  No application edits beyond the declared moves/substitutions/scaffolding and
+  AST-proven optional formatter commas. No bug fixes or dependency changes.
+- CI current/self-test and both analyzer inputs now use P14; P1–P13 use their
+  exact accepted merge revisions, including P13 `238df16f4`; S through S2d stay
+  registered. Registered the 56 resume suites, extended theme manifests/rendered
+  set/all three source-guard lists, lowered facade cap **14,630 → 14,005**.
+- Retargeted all five structural source guards through the validating reader,
+  with mandatory new owners/receivers and exact static forwarding; **18**
+  independent live-owner removal/reorder negatives reject. Focused readers:
+  **44 successes / five suites**, no failures. Format,
+  size and architecture pass. Six probe-proven unused facade directives are
+  explicitly recorded in the analyzer allowlist; original directives stay frozen.
+- Evidence `refactor-evidence/vplayer/p14/step1/` includes application inventory,
+  commands, current comparison, retarget negatives, JSON guard run and receipt.
+  The clean-tree reduced gate follows; no full suite/build is claimed here.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

@@ -267,10 +267,9 @@ void main() {
     final resumeBlocked = vpSourceDeclaration(
       '_VideoPlayerScreenState._resumeSaveBlocked',
     );
-    final method = resume.contains('Future<void> _saveResume(') ? '_' : '';
-    final fields = resumeBlocked.contains('_host.validationGateActive')
-        ? '_host.'
-        : '_';
+    const method = '';
+    expect(resume, contains('Future<void> saveResume('));
+    const fields = '_host.';
     final locked = vpSourceDeclaration(
       '_VideoPlayerScreenState._saveResumeLocked',
     );

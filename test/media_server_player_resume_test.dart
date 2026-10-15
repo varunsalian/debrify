@@ -113,38 +113,22 @@ void main() {
     final end = source.indexOf('if (state != null)', start);
     expect(end, greaterThan(start));
     final selection = source.substring(start, end);
-    final routed = selection.contains('_host.readLocalResume(');
-    expect(
-      selection,
-      contains('${routed ? '_host.' : 'VideoPlayerScreen.'}readLocalResume('),
-    );
-    expect(
-      selection,
-      contains(
-        'contentId: ${routed ? '_host.effectiveContentImdbId' : '_effectiveContentImdbId'}',
-      ),
-    );
-    expect(
-      selection,
-      contains(
-        'enhanced: ${routed ? '_host.getEnhancedPlaybackState' : '_getEnhancedPlaybackState'}',
-      ),
-    );
-    if (routed) {
-      final facade = File(
-        'lib/screens/video_player_screen.dart',
-      ).readAsStringSync();
-      final from = facade.indexOf('class _VpResumeRestoreHostAdapter');
-      expect(from, isNonNegative);
-      final to = facade.indexOf('class ', from + 6);
-      expect(to, greaterThan(from));
-      final adapter = facade.substring(from, to);
-      expect(adapter, contains('=> VideoPlayerScreen.readLocalResume('));
-      expect(adapter, contains('contentId: contentId'));
-      expect(adapter, contains('resumeKey: resumeKey'));
-      expect(adapter, contains('enhanced: enhanced'));
-      expect(adapter, isNot(contains('enhanced()')));
-    }
+    expect(selection, contains('_host.readLocalResume('));
+    expect(selection, contains('contentId: _host.effectiveContentImdbId'));
+    expect(selection, contains('enhanced: _host.getEnhancedPlaybackState'));
+    final facade = File(
+      'lib/screens/video_player_screen.dart',
+    ).readAsStringSync();
+    final from = facade.indexOf('class _VpResumeRestoreHostAdapter');
+    expect(from, isNonNegative);
+    final to = facade.indexOf('class ', from + 6);
+    expect(to, greaterThan(from));
+    final adapter = facade.substring(from, to);
+    expect(adapter, contains('=> VideoPlayerScreen.readLocalResume('));
+    expect(adapter, contains('contentId: contentId'));
+    expect(adapter, contains('resumeKey: resumeKey'));
+    expect(adapter, contains('enhanced: enhanced'));
+    expect(adapter, isNot(contains('enhanced()')));
     expect(selection, isNot(contains('VideoResumeStorage.getVideoResume')));
   });
 }

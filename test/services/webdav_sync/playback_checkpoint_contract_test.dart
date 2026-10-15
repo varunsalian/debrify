@@ -32,9 +32,7 @@ void main() {
     expect(
       toggle,
       contains(
-        RegExp(
-          r'(?:_saveResume|_resumeSave\.saveResume)\(positionOverride: _position\)',
-        ),
+        RegExp(r'_resumeSave\.saveResume\(positionOverride: _position\)'),
       ),
     );
     expect(seek, contains('positionOverride: settledPosition'));
@@ -51,8 +49,9 @@ void main() {
       final blocked = vpSourceDeclaration(
         '_VideoPlayerScreenState._resumeSaveBlocked',
       );
-      final method = save.contains('Future<void> _saveResume(') ? '_' : '';
-      final fields = save.contains('_host.resumeSaveLock') ? '_host.' : '_';
+      const method = '';
+      expect(save, contains('Future<void> saveResume('));
+      const fields = '_host.';
       expect(player, contains('final Lock _resumeSaveLock = Lock();'));
       expect(save, contains('if (${method}resumeSaveBlocked(debounced))'));
       expect(

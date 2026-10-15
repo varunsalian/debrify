@@ -11430,3 +11430,21 @@ Dart transport preserves the adapter's complete output exactly (including
 binding/ownership, Unicode offsets, invalid then valid inputs and A→B→A), while
 isolating every parser package and deleting copied kernels. No production
 parser/comparison rule is changed. Evidence in `p14/low_churn/`.
+
+## Phase 14 Step 1 — applied resume ownership (2026-10-15)
+
+`vplayer_p14.json` is applied on accepted P13 `238df16f4`: 13 methods / no
+fields, 28 retained occurrences (25 substitutions + three patched adapters),
+exact static `readLocalResume` Host forwarding and facade sibling routing.
+All earlier 29 destinations and P13 menu rewrites remain protected. Destinations
+are **137/381/457 lines**; facade **14,005**, down from 14,630. The prototype's
+AST optional-comma proof still applies; no unregistered token change.
+
+All five source guards now require the moved public owners/Host receivers via
+the validating reader; **18 independent removal/reorder negatives reject**.
+These are structural proofs, excluded from behavioral mutation totals. Focused
+five-suite run passes; size/architecture/format/current checker pass. CI uses
+P14 current/self-test/analyzer inputs, P1–P13 history, all seams through S2d;
+behavior and theme/source-guard inventories include the new files. The six
+probe-proven newly unused original facade imports are explicitly allowlisted;
+no other diagnostic is added to that list. Evidence: `p14/step1/`.

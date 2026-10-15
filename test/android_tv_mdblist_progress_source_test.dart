@@ -209,6 +209,7 @@ void main() {
     final resume = vpSourceDeclaration(
       '_VideoPlayerScreenState._maybeRestoreResume',
     );
+    expect(resume, contains('Future<void> maybeRestoreResume('));
     expect(resume, contains('hasActiveTraktEpisodeRewatch'));
     expect(resume, contains('localMs = 0'));
   });

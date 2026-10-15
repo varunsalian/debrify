@@ -195,6 +195,9 @@ import '../features/video_player/presentation/legacy_video_player/vp_player_menu
 import '../features/video_player/presentation/legacy_video_player/vp_player_menu.dart';
 import '../features/video_player/presentation/legacy_video_player/vp_iptv_recording.dart';
 import '../features/video_player/presentation/legacy_video_player/vp_iptv_recording_resources.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_resume_keys.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_resume_restore.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_resume_save.dart';
 
 /// A full-featured video player screen with playlist support and navigation controls.
 ///
@@ -424,6 +427,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _recordingResources = VpIptvRecordingResources(
       _VpIptvRecordingResourcesHostAdapter(this),
     );
+    _resumeKeys = VpResumeKeys(_VpResumeKeysHostAdapter(this));
+    _resumeRestore = VpResumeRestore(_VpResumeRestoreHostAdapter(this));
+    _resumeSave = VpResumeSave(_VpResumeSaveHostAdapter(this));
   }
   void _vpSetState(VoidCallback fn) => setState(fn);
 
@@ -1354,6 +1360,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   late final VpPlayerMenu _menu;
   late final VpIptvRecording _recording;
   late final VpIptvRecordingResources _recordingResources;
+  late final VpResumeKeys _resumeKeys;
+  late final VpResumeRestore _resumeRestore;
+  late final VpResumeSave _resumeSave;
 
   // The quiet bottom-right auto-sync surface: a 5s announce line, then
   // nothing until a real event — statuses during passes, word-only results.
@@ -2218,7 +2227,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
             for (int i = 0; i < _activePlaylist!.length; i++) {
               final entry = _activePlaylist![i];
-              final resumeId = _resumeIdForEntry(entry);
+              final resumeId = _resumeKeys.resumeIdForEntry(entry);
               debugPrint(
                 'Resume: checking entry[$i] title="${entry.title}" resumeId=$resumeId',
               );
@@ -2430,15 +2439,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               // A random start has no bookmark to protect — plain seek.
               await _player.seek(offset);
             } else {
-              await _maybeRestoreResume(verifyLanding: true);
+              await _resumeRestore.maybeRestoreResume(verifyLanding: true);
             }
           } else if (widget.startAtPercent != null) {
             final offset = _percentStartOffset(_duration);
             if (offset != null) {
-              await _seekForResume(offset.inMilliseconds, verifyLanding: true);
+              await _resumeRestore.seekForResume(
+                offset.inMilliseconds,
+                verifyLanding: true,
+              );
             }
           } else {
-            await _maybeRestoreResume(verifyLanding: true);
+            await _resumeRestore.maybeRestoreResume(verifyLanding: true);
           }
           if (!pikpakStillCurrent()) return;
           // Restore audio and subtitle track preferences
@@ -2517,7 +2529,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               // position to verify against — plain seek, as before.
               await _player.seek(offset);
             } else {
-              await _maybeRestoreResume(verifyLanding: true);
+              await _resumeRestore.maybeRestoreResume(verifyLanding: true);
             }
           } else if (widget.startAtPercent != null) {
             final offset = deferStremioTvStart
@@ -2526,10 +2538,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             if (offset != null) {
               // An explicit promised start position, exposed to the same
               // startup seek failure as a stored resume.
-              await _seekForResume(offset.inMilliseconds, verifyLanding: true);
+              await _resumeRestore.seekForResume(
+                offset.inMilliseconds,
+                verifyLanding: true,
+              );
             }
           } else {
-            await _maybeRestoreResume(verifyLanding: true);
+            await _resumeRestore.maybeRestoreResume(verifyLanding: true);
           }
           _scheduleAutoHide();
           await _trackPreferences.restoreTrackPreferences();
@@ -2568,7 +2583,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
     _autosaveTimer = Timer.periodic(
       const Duration(seconds: 6),
-      (_) => _saveResume(debounced: true),
+      (_) => _resumeSave.saveResume(debounced: true),
     );
 
     // Preload episode information if this is a series
@@ -2749,7 +2764,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _iptvLiveRecovery.onProgress(d, wantsPlayback: _isPlaying);
       }
       _position = d;
-      _observeServerWatch();
+      _resumeSave.observeServerWatch();
       _prepareNextDirectEpisode();
       _mdblist.updateMdblistPosition();
       _playbackUiClock.updatePosition(d);
@@ -2782,12 +2797,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       );
       if (startupOffset != null) {
         unawaited(
-          _seekForResume(
-            startupOffset.inMilliseconds,
-            verifyLanding: true,
-          ).catchError((Object error) {
-            debugPrint('Player: Stremio TV startup seek failed: $error');
-          }),
+          _resumeRestore
+              .seekForResume(startupOffset.inMilliseconds, verifyLanding: true)
+              .catchError((Object error) {
+                debugPrint('Player: Stremio TV startup seek failed: $error');
+              }),
         );
       }
       _mdblist.updateMdblistPosition();
@@ -2813,7 +2827,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
       final wasPlaying = _isPlaying;
       _isPlaying = p;
-      _observeServerWatch();
+      _resumeSave.observeServerWatch();
       ProfileLockController.instance.setPlaybackActive(p);
       _pip.syncWakelock(p);
       _pip.pushPipState();
@@ -3349,7 +3363,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (!isLive && resumePosition > Duration.zero) {
         // Re-ARMS the guard at the carried position: the rebuilt player gets
         // its own protected landing instead of an unguarded raw seek.
-        await _seekForResume(resumePosition.inMilliseconds);
+        await _resumeRestore.seekForResume(resumePosition.inMilliseconds);
       }
       unawaited(_trackPreferences.restoreTrackPreferences());
       if (shouldResumePlayback && !_pausedByLifecycle && !playOnOpen) {
@@ -3706,7 +3720,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         ? candidate
         : null;
     if (!identical(watchSource, _openedWatchSource)) {
-      _observeServerWatch();
+      _resumeSave.observeServerWatch();
       _serverWatch.commit(null);
     }
     // EVERY content open invalidates the outgoing media's resume protection —
@@ -3959,7 +3973,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // gate commits it. In particular, a short provider error video can emit
     // `completed`; never let that become a watched/scrobble event.
     if (_validationGateActive) return;
-    _observeServerWatch(completed: true);
+    _resumeSave.observeServerWatch(completed: true);
     // LIVE IPTV: an ended live stream is a dropped connection, not a
     // finished item — the origin closed on us (mpv's keep-open parks on the
     // last frame, which is the "fake pause" from the Discord report). The
@@ -7403,7 +7417,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Checkpoint the OUTGOING episode now, while _activePlaylist/_currentIndex
     // still point at it — after the swap the index would resolve against the
     // new playlist. _loadPlaylistIndex below is told to skip its own save.
-    await _saveResume();
+    await _resumeSave.saveResume();
     if (!mounted || request?.isCurrent == false) return false;
     setState(() {
       _isTransitioning = true;
@@ -7567,7 +7581,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           if (restored && outgoingPosition > Duration.zero) {
             // Guarded: a failure-path restore must not leave the bookmark at
             // the mercy of a stream that answers this seek with a restart.
-            await _seekForResume(outgoingPosition.inMilliseconds);
+            await _resumeRestore.seekForResume(outgoingPosition.inMilliseconds);
           }
         } else if (!committed &&
             outgoingDirectUrl != null &&
@@ -7591,7 +7605,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             );
             await _waitForVideoReady();
             if (outgoingPosition > Duration.zero) {
-              await _seekForResume(outgoingPosition.inMilliseconds);
+              await _resumeRestore.seekForResume(
+                outgoingPosition.inMilliseconds,
+              );
             }
             _currentStreamUrl = outgoingDirectUrl;
             _serverWatch.commit(_openedWatchSource);
@@ -7744,7 +7760,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // have its first autosave file ~0 over the carried bookmark — the
       // identical failure the guard exists for, on the switch path.
       if (resumePosition > Duration.zero) {
-        await _seekForResume(resumePosition.inMilliseconds);
+        await _resumeRestore.seekForResume(resumePosition.inMilliseconds);
       }
       if (hasExternalAudio) {
         await _player.play();
@@ -7803,7 +7819,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             await _setExternalAudioTrack(widget.audioUrl!);
           }
           if (resumePosition > Duration.zero) {
-            await _seekForResume(resumePosition.inMilliseconds);
+            await _resumeRestore.seekForResume(resumePosition.inMilliseconds);
           }
           _currentStreamUrl = previousUrl;
           _serverWatch.commit(_openedWatchSource);
@@ -8599,7 +8615,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // switch, which saves BEFORE swapping the playlist) skip this save so it
     // can't write the current position against the newly-swapped playlist.
     if (!skipInitialSave) {
-      await _saveResume();
+      await _resumeSave.saveResume();
     }
     if (!mounted || request?.isCurrent == false) return false;
     // The outgoing item's guarded checkpoint has run; from here on the guard
@@ -8705,7 +8721,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _resumeWriteGuard.clear();
       _isAutoAdvancing = false;
     } else {
-      await _maybeRestoreResume(preferLocalResume: preferLocalResume);
+      await _resumeRestore.maybeRestoreResume(
+        preferLocalResume: preferLocalResume,
+      );
     }
     // Restore audio and subtitle track preferences
     await _trackPreferences.restoreTrackPreferences();
@@ -9564,7 +9582,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void dispose() {
     _stremioTvStartupWatch?.dispose();
     _stremioTvStartupSeek.cancel();
-    _observeServerWatch();
+    _resumeSave.observeServerWatch();
     unawaited(_serverWatch.close());
     _watchOpenEpoch++;
     final replacedPip =
@@ -9653,7 +9671,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     unawaited(_mdblist.mdblistSession?.close() ?? Future.value());
 
     // Save the current state before disposing
-    _saveResume();
+    _resumeSave.saveResume();
     // Every in-app player route converges here, including callers that push
     // VideoPlayerScreen directly. The sync trigger is debounced, so the async
     // resume write above settles before its hot-state snapshot is built.
@@ -9769,835 +9787,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Timer? _autosaveTimer;
-
-  String get _resumeKey {
-    final customKey = CustomSeriesIdentity.resumeBookmarkKey(
-      _effectiveContentImdbId,
-      _effectiveContentSeason,
-      _effectiveContentEpisode,
-    );
-    if (customKey != null) return customKey;
-    if (_activePlaylist != null &&
-        _activePlaylist!.isNotEmpty &&
-        _currentIndex >= 0 &&
-        _currentIndex < _activePlaylist!.length) {
-      final entry = _activePlaylist![_currentIndex];
-
-      // Check for Torbox-specific key
-      final torboxKey = _torboxResumeKeyForEntry(entry);
-      if (torboxKey != null) {
-        debugPrint(
-          'ResumeKey: using torbox key $torboxKey for index $_currentIndex',
-        );
-        return torboxKey;
-      }
-
-      // Check for PikPak-specific key
-      final pikpakKey = _pikpakResumeKeyForEntry(entry);
-      if (pikpakKey != null) {
-        debugPrint(
-          'ResumeKey: using pikpak key $pikpakKey for index $_currentIndex',
-        );
-        return pikpakKey;
-      }
-    }
-
-    // Use playlist-specific resume ID for other items
-    if (_activePlaylist != null &&
-        _activePlaylist!.isNotEmpty &&
-        _currentIndex >= 0 &&
-        _currentIndex < _activePlaylist!.length) {
-      final id = _resumeIdForEntry(_activePlaylist![_currentIndex]);
-      debugPrint(
-        'ResumeKey: using playlist entry id $id for index $_currentIndex',
-      );
-      return id;
-    }
-
-    // IPTV launches carry no playlist, so the fallback below would key every
-    // channel in the session to the URL the player was OPENED with — zap to
-    // another channel and its position would be filed under the first one's
-    // name. Key on the channel actually playing instead. (Identical to the
-    // fallback until the user zaps, so existing resume points still resolve.)
-    final iptvChannels = _effectiveIptvChannels;
-    if (iptvChannels != null &&
-        _currentIptvIndex >= 0 &&
-        _currentIptvIndex < iptvChannels.length) {
-      return iptvChannels[_currentIptvIndex].url;
-    }
-
-    // Fallback to videoUrl for single items
-    // Note: This is the expected path for Debrify TV mode
-    return widget.videoUrl;
-  }
-
-  String? _torboxResumeKeyForEntry(PlaylistEntry entry) {
-    final provider = entry.provider?.toLowerCase();
-    if (provider == 'torbox') {
-      final torrentId = entry.torboxTorrentId;
-      final webDownloadId = entry.torboxWebDownloadId;
-      final fileId = entry.torboxFileId;
-      if (webDownloadId != null && fileId != null) {
-        debugPrint(
-          'ResumeKey: torbox web download detected web=$webDownloadId file=$fileId',
-        );
-        return 'torbox_web_${webDownloadId}_$fileId';
-      }
-      if (torrentId != null && fileId != null) {
-        debugPrint(
-          'ResumeKey: torbox entry detected torrent=$torrentId file=$fileId',
-        );
-        return 'torbox_${torrentId}_$fileId';
-      }
-      debugPrint(
-        'ResumeKey: torbox entry missing IDs torrent=$torrentId web=$webDownloadId file=$fileId',
-      );
-    }
-    return null;
-  }
-
-  String? _pikpakResumeKeyForEntry(PlaylistEntry entry) {
-    final provider = entry.provider?.toLowerCase();
-    if (provider == 'pikpak') {
-      final fileId = entry.pikpakFileId;
-      if (fileId != null && fileId.isNotEmpty) {
-        debugPrint('ResumeKey: pikpak entry detected fileId=$fileId');
-        return 'pikpak_$fileId';
-      }
-      debugPrint('ResumeKey: pikpak entry missing fileId');
-    }
-    return null;
-  }
-
-  String _resumeIdForEntry(PlaylistEntry entry) {
-    // Check for Torbox-specific key
-    final torboxKey = _torboxResumeKeyForEntry(entry);
-    if (torboxKey != null) {
-      return torboxKey;
-    }
-    // Check for PikPak-specific key
-    final pikpakKey = _pikpakResumeKeyForEntry(entry);
-    if (pikpakKey != null) {
-      return pikpakKey;
-    }
-    // Fallback to filename hash
-    final name = entry.title.isNotEmpty ? entry.title : widget.title;
-    return vpFilenameHash(name);
-  }
-
-  /// [preferLocalResume]: a source switch landed on the SAME content and
-  /// checkpointed the live position — resume exactly there (any position, even
-  /// past the 90% cutoff, matching the native TV player) and skip Trakt.
-  /// Threaded as a parameter, not ambient state, so an early return or throw
-  /// anywhere in the load path can never leak it into a later load.
-  ///
-  /// [verifyLanding]: this is the initial open, where the startup gate commits
-  /// a candidate after ~40ms of decoded media and the seek can be answered with
-  /// a stream restart. Confirm the seek took and re-issue once. See
-  /// [_seekForResume].
-  Future<void> _maybeRestoreResume({
-    bool preferLocalResume = false,
-    bool verifyLanding = false,
-  }) async {
-    // Every item load lands here, so this is where a previous item's unlanded
-    // resume target stops applying — including on the paths below that return
-    // without arming a new one (auto-advance, manual episode pick).
-    _resumeWriteGuard.clear();
-    // If this is auto-advancing, don't restore position
-    if (_isAutoAdvancing) {
-      _isAutoAdvancing = false; // Reset the flag
-      return;
-    }
-
-    // If this is a manual episode selection, only restore if we have saved progress
-    if (_isManualEpisodeSelection && !_allowResumeForManualSelection) {
-      // Don't reset _isManualEpisodeSelection here - let it be reset after a delay
-      return;
-    }
-    final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(
-      _effectiveContentImdbId,
-    );
-    // The launched item's widget percent is a first-load-only signal; capture it
-    // before marking it spent so it can't apply to a later switched-to episode.
-    final firstLoad = !_trakt.launchTraktPercentSpent;
-    _trakt.launchTraktPercentSpent = true;
-    final simklFirstLoad = !_simkl.launchSimklPercentSpent;
-    _simkl.launchSimklPercentSpent = true;
-    final mdblistFirstLoad = !_mdblist.launchMdblistPercentSpent;
-    _mdblist.launchMdblistPercentSpent = true;
-
-    await _waitForDuration();
-    final dur = _duration;
-
-    // Trakt candidate (cross-device %), skipped for a source switch. Launched
-    // item uses the widget percent (first load); a switched item uses its own
-    // per-episode store percent. The widget percent is an EXPLICIT promise —
-    // the details-screen Resume button advertised this position — so when
-    // seekable it wins outright below (never silently overridden by local).
-    double? traktPct;
-    double? traktProviderPct;
-    double? simklProviderPct;
-    double? mdblistProviderPct;
-    var explicitLaunch = false;
-    if (!preferLocalResume &&
-        trackingPolicy.progressFrom(TrackingSource.trakt)) {
-      final launchPct = firstLoad ? widget.traktProgressPercent : null;
-      if (launchPct != null) {
-        traktPct = launchPct;
-        traktProviderPct = launchPct;
-        explicitLaunch = true;
-      } else {
-        traktPct = await _trakt.currentEpisodeTraktPercent();
-        traktProviderPct = traktPct;
-      }
-    }
-    if (!preferLocalResume &&
-        trackingPolicy.progressFrom(TrackingSource.mdblist)) {
-      final explicitMdblistPct = mdblistFirstLoad
-          ? widget.mdblistProgressPercent
-          : null;
-      final mdblistPct =
-          explicitMdblistPct ?? await _mdblist.currentEpisodeMdblistPercent();
-      mdblistProviderPct = mdblistPct;
-      if (mdblistPct != null && (traktPct == null || mdblistPct > traktPct)) {
-        traktPct = mdblistPct;
-        explicitLaunch = explicitMdblistPct != null;
-      }
-    }
-    // Simkl candidate: the explicit launch promise on first load, otherwise
-    // this episode's launch-time snapshot. Folded into the same candidate as
-    // Trakt so the furthest remote progress wins.
-    if (!preferLocalResume &&
-        trackingPolicy.progressFrom(TrackingSource.simkl)) {
-      final explicitSimklPct = simklFirstLoad
-          ? widget.simklProgressPercent
-          : null;
-      final simklPct =
-          explicitSimklPct ?? await _simkl.currentEpisodeSimklPercent();
-      simklProviderPct = simklPct;
-      if (simklPct != null && (traktPct == null || simklPct > traktPct)) {
-        traktPct = simklPct;
-        explicitLaunch = explicitSimklPct != null;
-      }
-    }
-    final int traktMs =
-        (traktPct != null &&
-            traktPct > 0 &&
-            traktPct < 100 &&
-            dur > Duration.zero)
-        ? (dur.inMilliseconds * traktPct / 100).floor()
-        : 0;
-
-    // Local candidate + speed/aspect restore (enhanced state preferred, else the
-    // legacy resume store). Speed/aspect are restored regardless of the seek.
-    int localMs = 0;
-    final allowLocalResume =
-        preferLocalResume || trackingPolicy.progressFrom(TrackingSource.local);
-    final localMovieImdbId = _completion.currentLocalMovieImdbId;
-    final locallyFinishedMovie =
-        !preferLocalResume &&
-        localMovieImdbId != null &&
-        await MovieProgressStorage.isMovieFinished(localMovieImdbId);
-    // Speed/aspect are device prefs riding in the resume record — restore
-    // them in EVERY progress mode; only the POSITION is a policy-gated
-    // resume candidate.
-    final state = locallyFinishedMovie
-        ? null
-        : await VideoPlayerScreen.readLocalResume(
-            contentId: _effectiveContentImdbId,
-            resumeKey: _resumeKey,
-            enhanced: _getEnhancedPlaybackState,
-          );
-    if (state != null) {
-      if (allowLocalResume) {
-        localMs = (state['positionMs'] ?? 0) as int;
-      }
-      final speed = (state['speed'] ?? 1.0) as double;
-      final aspect = (state['aspect'] ?? 'contain') as String;
-      if (speed != 1.0) {
-        await _player.setRate(speed);
-        _display.playbackSpeed = speed;
-      }
-      _display.aspectMode = AspectModeUtils.stringToAspectMode(aspect);
-      await _display.applyAspectVideoZoom();
-    }
-
-    if (dur <= Duration.zero) return;
-
-    // Source switch on the same content: come back EXACTLY where you were —
-    // no resumable-window gating (you might be 93% in, mid-credits), matching
-    // the native TV player's source-switch semantics.
-    if (preferLocalResume) {
-      if (localMs > 0 && localMs < dur.inMilliseconds) {
-        await _seekForResume(localMs, verifyLanding: verifyLanding);
-      }
-      return;
-    }
-
-    final loMs =
-        VideoPlayerTimingConstants.minimumPlaybackPosition.inMilliseconds;
-    final hiMs = (dur.inMilliseconds * 0.9).floor();
-    // Legacy builds persisted Trakt watched history as if it were a local
-    // completion. A current partial Trakt session is a rewatch, so that stale
-    // completed position must not force a fresh start. Keep this migration
-    // in-memory; the old record has no provenance and may be genuine local
-    // history. Independent Simkl/MDBList completion still wins.
-    if (localMs >= hiMs) {
-      // The rewatch detector consumes the same policy-masked inputs as guide
-      // rendering (ticks AND partials both follow the Progress source since
-      // 2026-08-27) — a non-selected provider's session can't un-tick local
-      // completion.
-      traktProviderPct ??= await _trakt.currentEpisodeTraktPercent(
-        forGuide: true,
-      );
-      simklProviderPct ??= await _simkl.currentEpisodeSimklPercent(
-        forGuide: true,
-      );
-      mdblistProviderPct ??= await _mdblist.currentEpisodeMdblistPercent(
-        forGuide: true,
-      );
-      if (hasActiveTraktEpisodeRewatch(
-        traktPercent: traktProviderPct,
-        simklPercent: simklProviderPct,
-        mdblistPercent: mdblistProviderPct,
-      )) {
-        localMs = 0;
-      }
-    }
-    // The details-screen Resume promised THIS position — honour it outright when
-    // seekable (matching the pre-rework launched-item behaviour), even over a
-    // deeper/stale local. An unseekable promise falls through to furthest-wins.
-    if (explicitLaunch && traktMs > loMs && traktMs < hiMs) {
-      debugPrint('Resume: explicit tracker percent -> ${traktMs}ms');
-      await _seekForResume(traktMs, verifyLanding: verifyLanding);
-      return;
-    }
-    // FURTHEST-WATCHED WINS: seek the deeper of the local position and the Trakt
-    // percent, provided it's in the resumable window (past the first 2s, before
-    // the last 10%). If neither qualifies, start fresh.
-    // Locally FINISHED (past the 90% cutoff on this device): start fresh, and
-    // never let a shallower/stale Trakt percent yank a restarted episode into
-    // its middle — local IS the furthest position, it's just not seekable.
-    if (localMs >= hiMs && localMs > 0) return;
-    final traktCand = (traktMs > loMs && traktMs < hiMs) ? traktMs : 0;
-    final localCand = (localMs > loMs && localMs < hiMs) ? localMs : 0;
-    final target = traktCand > localCand ? traktCand : localCand;
-    if (target > 0) {
-      debugPrint(
-        'Resume: furthest of remote=${traktMs}ms local=${localMs}ms -> ${target}ms',
-      );
-      await _seekForResume(target, verifyLanding: verifyLanding);
-    }
-  }
-
-  /// Single exit for every resume seek: arms the write guard so a seek that
-  /// never lands cannot have its own bookmark overwritten, and — on the startup
-  /// path only — confirms the position actually moved.
-  ///
-  /// [verifyLanding] is opt-in because only the startup path seeks into a
-  /// stream the gate committed after ~40ms of decoded media. mpv can answer
-  /// that seek by restarting the remote stream at 0 (observed on a debrid link
-  /// via the pinned-source ladder), which leaves playback at the beginning with
-  /// no error to react to. Re-issuing once, after the stream has warmed up,
-  /// recovers it. Mid-session seeks (source switch, episode change) already run
-  /// against a settled stream and keep their existing single-shot behaviour.
-  Future<void> _seekForResume(
-    int targetMs, {
-    bool verifyLanding = false,
-  }) async {
-    // Never GUARD a near-finished target (≥80% of a known duration — the
-    // trackers' stop-scrobble threshold, below the 90% local finished cutoff):
-    // substituting one would scrobble a watched mark and store a finished-
-    // looking position for content that may be playing at 0:00. The seek
-    // itself still happens; such a start just plays unguarded.
-    final durMs = _duration.inMilliseconds;
-    final nearFinished = durMs > 0 && targetMs >= (durMs * 0.8).floor();
-    if (nearFinished) {
-      _resumeWriteGuard.clear();
-    } else {
-      _resumeWriteGuard.arm(targetMs);
-    }
-    final target = Duration(milliseconds: targetMs);
-    await _player.seek(target);
-    // Without an armed guard the verifier would abort on its first check.
-    if (!verifyLanding || nearFinished) return;
-    // Deliberately NOT awaited: the caller is the startup chain, and the
-    // "Checking stream…" gate does not come down until it returns. Blocking
-    // here would hold that overlay over the video for the whole verification
-    // window on exactly the runs that already went wrong.
-    unawaited(_verifyResumeLanding(targetMs, _resumeVerifyEpoch));
-  }
-
-  /// Confirms a startup resume seek took, re-issuing it once if it did not.
-  ///
-  /// Aborts the moment its media stops being current — [epoch] changed (item
-  /// change, source switch), the guard stopped pointing at [targetMs] (user
-  /// seek), or the position reached the target — so a late retry can never
-  /// yank playback away from where the user put it or seek a replacement
-  /// stream it was never watching.
-  Future<void> _verifyResumeLanding(int targetMs, int epoch) async {
-    // A viewer who sees playback start from 0 decides "broken" within a couple
-    // of seconds — a single retry after 5s (the first version of this) lost
-    // the race against the user's own quit on the observed phone repro. Check
-    // early and re-issue up to three times: the first retry catches the common
-    // case (mpv restarted a barely-warmed debrid stream at 0), the later ones
-    // land on a progressively warmer stream. Every cycle keeps the same abort
-    // conditions, so a user seek, item change, or dispose stops it instantly.
-    const waits = [
-      Duration(milliseconds: 1500),
-      Duration(milliseconds: 1500),
-      Duration(seconds: 3),
-    ];
-    for (var attempt = 0; attempt < waits.length; attempt++) {
-      if (await _resumeSeekLanded(targetMs, epoch, timeout: waits[attempt])) {
-        return;
-      }
-      if (!mounted || _screenDisposed) return;
-      if (epoch != _resumeVerifyEpoch) return;
-      if (_resumeWriteGuard.pendingTargetMs != targetMs) return;
-      debugPrint(
-        'Resume: seek did not land '
-        '(position=${_player.state.position.inMilliseconds}ms '
-        'target=${targetMs}ms) — re-issuing (${attempt + 1}/${waits.length})',
-      );
-      await _player.seek(Duration(milliseconds: targetMs));
-    }
-    if (await _resumeSeekLanded(targetMs, epoch)) return;
-    // Still adrift: leave playback where it is rather than fighting the stream.
-    // The write guard keeps the stored resume point intact either way.
-    debugPrint(
-      'Resume: seek still unlanded after retries — leaving playback in place',
-    );
-  }
-
-  /// Polls for the resume target within a bounded window. Landing is judged
-  /// with the same tolerance the write guard uses, since a seek resolves to the
-  /// nearest keyframe rather than the exact millisecond.
-  ///
-  /// Returns true for "stop verifying", which covers landing as well as the
-  /// cases where the target stopped being ours: the screen went away, the
-  /// epoch moved on, the user seeked, or another item loaded.
-  Future<bool> _resumeSeekLanded(
-    int targetMs,
-    int epoch, {
-    Duration timeout = const Duration(seconds: 5),
-  }) async {
-    const interval = Duration(milliseconds: 200);
-    // mpv can MASK a seek: it reports the target position for a moment, then
-    // a cold debrid stream answers the actual seek by restarting at 0 — the
-    // observed "seekbar at halfway for a few ms" phone repro. A single
-    // position reading is therefore worthless as landing proof: require the
-    // position to still be at the target after a beat, or keep watching.
-    const confirmDelay = Duration(milliseconds: 800);
-    bool atTarget() =>
-        _player.state.position.inMilliseconds >=
-        targetMs - _resumeWriteGuard.toleranceMs;
-    final deadline = DateTime.now().add(timeout);
-    while (DateTime.now().isBefore(deadline)) {
-      if (!mounted || _screenDisposed) return true;
-      if (epoch != _resumeVerifyEpoch) return true;
-      if (_resumeWriteGuard.pendingTargetMs != targetMs) return true;
-      if (atTarget()) {
-        await Future<void>.delayed(confirmDelay);
-        if (!mounted || _screenDisposed) return true;
-        if (epoch != _resumeVerifyEpoch) return true;
-        if (_resumeWriteGuard.pendingTargetMs != targetMs) return true;
-        if (atTarget()) return true;
-        debugPrint(
-          'Resume: landing was transient (masked seek unwound to '
-          '${_player.state.position.inMilliseconds}ms) — still watching',
-        );
-        continue;
-      }
-      await Future<void>.delayed(interval);
-    }
-    return false;
-  }
-
-  /// Get enhanced playback state for current content
-  Future<Map<String, dynamic>?> _getEnhancedPlaybackState() async {
-    try {
-      final seriesPlaylist = _seriesPlaylist;
-      if (seriesPlaylist != null && seriesPlaylist.isSeries) {
-        // For series, get the current episode info
-        if (_currentIndex >= 0 && _currentIndex < _activePlaylist!.length) {
-          final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
-            (episode) => episode.originalIndex == _currentIndex,
-            orElse: () => seriesPlaylist.allEpisodes.first,
-          );
-
-          if (currentEpisode.seriesInfo.season != null &&
-              currentEpisode.seriesInfo.episode != null) {
-            // Catalog series follow IMDb + S/E across release-title aliases;
-            // generic packs keep their exact title-keyed record.
-            return LocalPlaybackResumeResolver.episode(
-              seriesTitle: seriesPlaylist.seriesTitle ?? 'Unknown Series',
-              season: currentEpisode.seriesInfo.season!,
-              episode: currentEpisode.seriesInfo.episode!,
-              imdbId: seriesPlaylist.imdbId ?? _effectiveContentImdbId,
-              policy: widget.resumePolicy,
-            );
-          }
-        }
-      }
-
-      PlaylistEntry? currentEntry;
-      final activePlaylist = _activePlaylist;
-      if (activePlaylist != null &&
-          _currentIndex >= 0 &&
-          _currentIndex < activePlaylist.length) {
-        currentEntry = activePlaylist[_currentIndex];
-      }
-
-      // A lone series stream has no SeriesPlaylist, but its catalog S/E is
-      // authoritative. Prefer the canonical episode record for catalog play;
-      // generic playback retains its exact video/source lookup first.
-      if (_effectiveContentType == 'series') {
-        if (CustomSeriesIdentity.isCustom(_effectiveContentImdbId) ||
-            (_effectiveContentImdbId?.startsWith('medialibrary:') ?? false)) {
-          if (_effectiveContentSeason == null ||
-              _effectiveContentEpisode == null)
-            return null;
-          return LocalPlaybackResumeResolver.episode(
-            seriesTitle: _effectiveContentTitle ?? widget.title,
-            season: _effectiveContentSeason!,
-            episode: _effectiveContentEpisode!,
-            imdbId: _effectiveContentImdbId,
-            policy: widget.resumePolicy,
-          );
-        }
-        if (widget.resumePolicy == PlaybackResumePolicy.sourceSpecific &&
-            currentEntry != null) {
-          final exactVideo = await VideoProgressStorage.getVideoPlaybackState(
-            videoTitle: _resumeIdForEntry(currentEntry),
-          );
-          if (exactVideo != null) return exactVideo;
-        }
-
-        if (_effectiveContentSeason != null &&
-            _effectiveContentEpisode != null) {
-          final episodeState = await LocalPlaybackResumeResolver.episode(
-            seriesTitle: _effectiveContentTitle ?? widget.title,
-            season: _effectiveContentSeason!,
-            episode: _effectiveContentEpisode!,
-            imdbId: _effectiveContentImdbId,
-            policy: widget.resumePolicy,
-          );
-          if (episodeState != null) return episodeState;
-        }
-
-        // Legacy single-episode launches may only have the mirrored video row.
-        if (currentEntry != null) {
-          return VideoProgressStorage.getVideoPlaybackState(
-            videoTitle: _resumeIdForEntry(currentEntry),
-          );
-        }
-        final legacyTitle = widget.title.isNotEmpty
-            ? widget.title
-            : 'Unknown Video';
-        return VideoProgressStorage.getVideoPlaybackState(
-          videoTitle: legacyTitle,
-        );
-      }
-
-      final resumeId = currentEntry != null
-          ? _resumeIdForEntry(currentEntry)
-          : ((_currentStremioTvContentTitle ?? widget.title).isNotEmpty
-                ? (_currentStremioTvContentTitle ?? widget.title)
-                : 'Unknown Video');
-      // A multi-file movie/collection must keep an existing per-file bookmark
-      // ahead of the one catalog IMDb bookmark. ExoPlayer already restricts
-      // canonical movie resume to `_PlaybackContentType.single`; mirror that
-      // boundary here while retaining the legacy IMDb fallback for unseen files.
-      final isSingleLogicalMovie =
-          activePlaylist == null || activePlaylist.length <= 1;
-      final moviePolicy =
-          widget.resumePolicy == PlaybackResumePolicy.catalogCanonical &&
-              isSingleLogicalMovie
-          ? PlaybackResumePolicy.catalogCanonical
-          : PlaybackResumePolicy.sourceSpecific;
-      debugPrint(
-        'Resume Load: fetching state for resumeId=$resumeId '
-        'policy=${moviePolicy.name}',
-      );
-      final videoState = await LocalPlaybackResumeResolver.movie(
-        resumeId: resumeId,
-        imdbId: _effectiveContentImdbId,
-        policy: moviePolicy,
-      );
-      if (videoState != null) {
-        debugPrint(
-          'Resume Load: found state for resumeId=$resumeId '
-          'updatedAt=${videoState['updatedAt']}',
-        );
-      }
-      return videoState;
-    } catch (e) {}
-    return null;
-  }
-
-  bool _resumeSaveBlocked(bool debounced) {
-    if (_validationGateActive || !_isReady) return true;
-    // An IPTV zap flips _currentIptvIndex — and therefore _resumeKey — before
-    // the incoming stream opens, while _position/_duration still describe the
-    // OUTGOING one (_isReady is never cleared for the gap). A tick landing in
-    // that window would file the old movie's position under the new channel's
-    // key, which the Continue-watching shelf would then show as real progress.
-    // Nothing is lost by skipping: the next tick saves once the switch lands.
-    if (_effectiveIptvChannels != null && _isTransitioning) {
-      return true;
-    }
-
-    // If this is a manual episode selection and it's been less than 30 seconds, skip saving
-    // This gives the user time to seek to where they want
-    if (_isManualEpisodeSelection && debounced) {
-      return true;
-    }
-    return false;
-  }
-
-  void _observeServerWatch({bool completed = false}) {
-    if (!_serverWatch.isActive ||
-        _validationGateActive ||
-        !_isReady ||
-        _isTransitioning ||
-        _resumeWriteGuard.heldTargetIfBlocked(_position.inMilliseconds) !=
-            null) {
-      return;
-    }
-    // This resolver follows the current playlist entry after episode advance;
-    // launch metadata alone still describes the originally opened episode.
-    final currentEpisode = _traktSeasonEpisode();
-    _serverWatch.observe(
-      _openedWatchSource,
-      positionMs: _position.inMilliseconds,
-      durationMs: _duration.inMilliseconds,
-      playing: _isPlaying,
-      completed: completed,
-      season: currentEpisode.season,
-      episode: currentEpisode.episode,
-    );
-  }
-
-  Future<void> _saveResume({
-    bool debounced = false,
-    Duration? positionOverride,
-  }) {
-    // Check both when requested and after queueing. A save requested inside a
-    // transition/validation guard must not become valid merely because an
-    // older write kept it queued until the guard ended; conversely, a newly
-    // started transition must suppress work which was waiting on the lock.
-    if (_resumeSaveBlocked(debounced)) return Future<void>.value();
-    _observeServerWatch();
-    // A periodic tick carries no unique intent. If any newer/older save owns
-    // the lock, drop this tick instead of building an unbounded timer backlog.
-    if (debounced && _resumeSaveLock.locked) return Future<void>.value();
-    return _resumeSaveLock.synchronized(
-      () => _saveResumeLocked(
-        debounced: debounced,
-        positionOverride: positionOverride,
-      ),
-    );
-  }
-
-  Future<void> _saveResumeLocked({
-    required bool debounced,
-    Duration? positionOverride,
-  }) async {
-    if (_resumeSaveBlocked(debounced)) return;
-
-    var pos = positionOverride ?? _position;
-    final dur = _duration;
-    if (dur <= Duration.zero) {
-      return;
-    }
-
-    // A resume seek was requested and playback is still nowhere near it: the
-    // seek did not land, so the live position describes a stream that
-    // restarted at the beginning. Filing it would destroy the very bookmark we
-    // tried to resume from — persist the REQUESTED target instead, which keeps
-    // the bookmark where it was while still recording speed/aspect changes
-    // made in the window (this is their only persistence route). The guard
-    // self-releases once the seek lands, the user seeks, or they have watched
-    // from here long enough for it to be their real position.
-    if (!_resumeWriteGuard.allowsPersist(pos.inMilliseconds)) {
-      // allowsPersist(false) implies an armed target.
-      final heldTarget = _resumeWriteGuard.pendingTargetMs!;
-      if (heldTarget >= dur.inMilliseconds) {
-        // _duration mirrors mpv live and can briefly read short on a fresh
-        // remote stream. Writing the target against that duration would store
-        // a ≥100% (finished-looking) position, so skip this tick entirely —
-        // including speed/aspect, which the next tick (or exit save) persists
-        // once the duration settles. Deliberate trade: a rare few-second delay
-        // beats a bookmark that reads as watched.
-        return;
-      }
-      pos = Duration(milliseconds: heldTarget);
-    }
-
-    // Completion clears local movie resume/CW state. Do not let the autosave
-    // tick immediately recreate that state while end credits keep playing.
-    if (_completion.currentMovieMarkedAsFinished &&
-        _completion.currentLocalMovieImdbId != null) {
-      return;
-    }
-
-    final aspectStr = AspectModeUtils.aspectModeToString(_display.aspectMode);
-    // While the user is holding for temporary 2x boost, persist the prior speed
-    // so a kill/dispose mid-hold doesn't strand 2x as the resume value.
-    final persistedSpeed = _display.speedBeforeHold ?? _display.playbackSpeed;
-
-    // Save to enhanced playback state system
-    try {
-      final seriesPlaylist = _seriesPlaylist;
-      if (seriesPlaylist != null && seriesPlaylist.isSeries) {
-        // For series content
-        if (_currentIndex >= 0 && _currentIndex < _activePlaylist!.length) {
-          final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
-            (episode) => episode.originalIndex == _currentIndex,
-            orElse: () => seriesPlaylist.allEpisodes.first,
-          );
-
-          if (currentEpisode.seriesInfo.season != null &&
-              currentEpisode.seriesInfo.episode != null) {
-            await SeriesProgressStorage.saveSeriesPlaybackState(
-              seriesTitle: seriesPlaylist.seriesTitle ?? 'Unknown Series',
-              season: currentEpisode.seriesInfo.season!,
-              episode: currentEpisode.seriesInfo.episode!,
-              positionMs: pos.inMilliseconds,
-              durationMs: dur.inMilliseconds,
-              speed: persistedSpeed,
-              aspect: aspectStr,
-              imdbId: seriesPlaylist.imdbId ?? widget.contentImdbId,
-            );
-          }
-        }
-      } else {
-        // For non-series content
-        if (_activePlaylist != null && _activePlaylist!.isNotEmpty) {
-          PlaylistEntry? currentEntry;
-          if (_currentIndex >= 0 && _currentIndex < _activePlaylist!.length) {
-            currentEntry = _activePlaylist![_currentIndex];
-          }
-
-          if (currentEntry != null) {
-            final resumeId = _resumeIdForEntry(currentEntry);
-            debugPrint(
-              'Resume Save: storing state resumeId=$resumeId pos=${pos.inMilliseconds} dur=${dur.inMilliseconds}',
-            );
-            String currentVideoUrl = '';
-            if (_currentStreamUrl != null && _currentStreamUrl!.isNotEmpty) {
-              currentVideoUrl = _currentStreamUrl!;
-            } else if (currentEntry.url.isNotEmpty) {
-              currentVideoUrl = currentEntry.url;
-            } else if (widget.videoUrl.isNotEmpty) {
-              currentVideoUrl = widget.videoUrl;
-            }
-
-            await VideoProgressStorage.saveVideoPlaybackState(
-              videoTitle: resumeId,
-              videoUrl: currentVideoUrl,
-              positionMs: pos.inMilliseconds,
-              durationMs: dur.inMilliseconds,
-              speed: persistedSpeed,
-              aspect: aspectStr,
-              imdbId: widget.contentImdbId,
-            );
-
-            // ALSO save in collection format for playlist progress tracking
-            // This allows the playlist screen to display progress indicators
-            debugPrint(
-              '💾 Collection Save Check: seriesPlaylist=${seriesPlaylist != null}, seriesTitle="${seriesPlaylist?.seriesTitle}", isSeries=${seriesPlaylist?.isSeries}',
-            );
-            if (seriesPlaylist != null && seriesPlaylist.seriesTitle != null) {
-              // Parse season/episode from filename for consistent progress tracking across view modes
-              final seriesInfo = SeriesParser.parseFilename(currentEntry.title);
-              final season = seriesInfo.season ?? 0;
-              final episode = seriesInfo.episode ?? (_currentIndex + 1);
-
-              await SeriesProgressStorage.saveSeriesPlaybackState(
-                seriesTitle: seriesPlaylist.seriesTitle!,
-                season: season, // Parsed from filename, fallback to 0
-                episode: episode, // Parsed from filename, fallback to index
-                positionMs: pos.inMilliseconds,
-                durationMs: dur.inMilliseconds,
-                speed: persistedSpeed,
-                aspect: aspectStr,
-                imdbId: seriesPlaylist.imdbId ?? widget.contentImdbId,
-              );
-              debugPrint(
-                '✅ Collection Save: title="${seriesPlaylist.seriesTitle}" S${season.toString().padLeft(2, '0')}E${episode.toString().padLeft(2, '0')} (index=$_currentIndex) filename="${currentEntry.title}"',
-              );
-            } else {
-              debugPrint(
-                '❌ Collection Save SKIPPED: seriesPlaylist is null or has no title',
-              );
-            }
-          }
-        } else {
-          // Single video file (no playlist)
-          // If it's a series episode (from Quick Play next episode), save as series state
-          if (_effectiveContentType == 'series' &&
-              _effectiveContentSeason != null &&
-              _effectiveContentEpisode != null) {
-            await SeriesProgressStorage.saveSeriesPlaybackState(
-              seriesTitle: _effectiveContentTitle ?? widget.title,
-              season: _effectiveContentSeason!,
-              episode: _effectiveContentEpisode!,
-              positionMs: pos.inMilliseconds,
-              durationMs: dur.inMilliseconds,
-              speed: persistedSpeed,
-              aspect: aspectStr,
-              imdbId: _effectiveContentImdbId,
-            );
-          } else {
-            final currentUrl =
-                (_currentStreamUrl != null && _currentStreamUrl!.isNotEmpty)
-                ? _currentStreamUrl!
-                : widget.videoUrl;
-            final title = _currentStremioTvContentTitle ?? widget.title;
-            final videoTitle = title.isNotEmpty ? title : 'Unknown Video';
-
-            await VideoProgressStorage.saveVideoPlaybackState(
-              videoTitle: videoTitle,
-              videoUrl: currentUrl,
-              positionMs: pos.inMilliseconds,
-              durationMs: dur.inMilliseconds,
-              speed: persistedSpeed,
-              aspect: aspectStr,
-              imdbId: _effectiveContentImdbId,
-            );
-          }
-        }
-      }
-    } catch (e) {}
-
-    // Also save to legacy system for backward compatibility
-    if (!CustomSeriesIdentity.isCustom(_effectiveContentImdbId))
-      await VideoResumeStorage.upsertVideoResume(
-        _resumeKey,
-        {
-          'positionMs': pos.inMilliseconds,
-          'speed': persistedSpeed,
-          'aspect': aspectStr,
-          'durationMs': dur.inMilliseconds,
-          'updatedAt': DateTime.now().millisecondsSinceEpoch,
-        },
-        sourceId:
-            _currentIptvChannel?.attributes['series_playlist_id'] ??
-            _currentIptvChannel?.attributes['source_playlist_id'] ??
-            _iptvGuideContextOverride?.sourceId ??
-            widget.iptvSourceId,
-      );
-
-    // Explicit checkpoints (pause, settled seek, exit-adjacent saves) are the
-    // handoff moments another device would resume from — let sync flush now
-    // instead of waiting out the playback coalescing window. The 6s autosave
-    // tick stays on the throttled path.
-    if (!debounced) {
-      MainPageBridge.notifyPlaybackCheckpoint();
-    }
-  }
 
   /// True while the auto-hide poll is being held off by a scrub, a pause, a
   /// route or an overlay — so the tick that finds the blocker gone can grant a
@@ -11411,7 +10600,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _activeMediaUserPaused = true;
       _activeMediaShouldPlay = false;
       _player.pause();
-      unawaited(_saveResume(positionOverride: _position));
+      unawaited(_resumeSave.saveResume(positionOverride: _position));
     } else {
       // An explicit press is the one thing that clears a sleep stop.
       _sleepStopLatched = false;
@@ -12929,7 +12118,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                       // A settled seek is a handoff moment:
                                       // persist and let sync flush promptly.
                                       unawaited(
-                                        _saveResume(
+                                        _resumeSave.saveResume(
                                           positionOverride: settledPosition,
                                         ),
                                       );
@@ -13367,6 +12556,192 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
     return null;
   }
+}
+
+class _VpResumeSaveHostAdapter implements VpResumeSaveHost {
+  _VpResumeSaveHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  List<PlaylistEntry>? get activePlaylist => _s._activePlaylist;
+  @override
+  int get currentIndex => _s._currentIndex;
+  @override
+  IptvChannel? get currentIptvChannel => _s._currentIptvChannel;
+  @override
+  String? get currentStreamUrl => _s._currentStreamUrl;
+  @override
+  String? get currentStremioTvContentTitle => _s._currentStremioTvContentTitle;
+  @override
+  Duration get duration => _s._duration;
+  @override
+  int? get effectiveContentEpisode => _s._effectiveContentEpisode;
+  @override
+  String? get effectiveContentImdbId => _s._effectiveContentImdbId;
+  @override
+  int? get effectiveContentSeason => _s._effectiveContentSeason;
+  @override
+  String? get effectiveContentTitle => _s._effectiveContentTitle;
+  @override
+  String? get effectiveContentType => _s._effectiveContentType;
+  @override
+  List<IptvChannel>? get effectiveIptvChannels => _s._effectiveIptvChannels;
+  @override
+  IptvGuideContext? get iptvGuideContextOverride =>
+      _s._iptvGuideContextOverride;
+  @override
+  bool get isManualEpisodeSelection => _s._isManualEpisodeSelection;
+  @override
+  bool get isPlaying => _s._isPlaying;
+  @override
+  bool get isReady => _s._isReady;
+  @override
+  bool get isTransitioning => _s._isTransitioning;
+  @override
+  Torrent? get openedWatchSource => _s._openedWatchSource;
+  @override
+  Duration get position => _s._position;
+  @override
+  Lock get resumeSaveLock => _s._resumeSaveLock;
+  @override
+  ResumeWriteGuard get resumeWriteGuard => _s._resumeWriteGuard;
+  @override
+  SeriesPlaylist? get seriesPlaylist => _s._seriesPlaylist;
+  @override
+  MediaServerWatchController get serverWatch => _s._serverWatch;
+  @override
+  bool get validationGateActive => _s._validationGateActive;
+  @override
+  ({int? season, int? episode}) traktSeasonEpisode() =>
+      _s._traktSeasonEpisode();
+  @override
+  String resumeIdForEntry(PlaylistEntry entry) =>
+      _s._resumeKeys.resumeIdForEntry(entry);
+  @override
+  String get resumeKey => _s._resumeKeys.resumeKey;
+  @override
+  String get title => _s.widget.title;
+  @override
+  String get videoUrl => _s.widget.videoUrl;
+  @override
+  String? get contentImdbId => _s.widget.contentImdbId;
+  @override
+  String? get iptvSourceId => _s.widget.iptvSourceId;
+  @override
+  PlaybackResumePolicy get resumePolicy => _s.widget.resumePolicy;
+  @override
+  String? get currentLocalMovieImdbId => _s._completion.currentLocalMovieImdbId;
+  @override
+  bool get currentMovieMarkedAsFinished =>
+      _s._completion.currentMovieMarkedAsFinished;
+  @override
+  double get playbackSpeed => _s._display.playbackSpeed;
+  @override
+  AspectMode get aspectMode => _s._display.aspectMode;
+  @override
+  double? get speedBeforeHold => _s._display.speedBeforeHold;
+}
+
+class _VpResumeRestoreHostAdapter implements VpResumeRestoreHost {
+  _VpResumeRestoreHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  bool get allowResumeForManualSelection => _s._allowResumeForManualSelection;
+  @override
+  Duration get duration => _s._duration;
+  @override
+  String? get effectiveContentImdbId => _s._effectiveContentImdbId;
+  @override
+  bool get isAutoAdvancing => _s._isAutoAdvancing;
+  @override
+  set isAutoAdvancing(bool v) => _s._isAutoAdvancing = v;
+  @override
+  bool get isManualEpisodeSelection => _s._isManualEpisodeSelection;
+  @override
+  mk.Player get player => _s._player;
+  @override
+  int get resumeVerifyEpoch => _s._resumeVerifyEpoch;
+  @override
+  ResumeWriteGuard get resumeWriteGuard => _s._resumeWriteGuard;
+  @override
+  bool get screenDisposed => _s._screenDisposed;
+  @override
+  Future<void> waitForDuration() => _s._waitForDuration();
+  @override
+  Future<Map<String, dynamic>?> getEnhancedPlaybackState() =>
+      _s._resumeSave.getEnhancedPlaybackState();
+  @override
+  String get resumeKey => _s._resumeKeys.resumeKey;
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  double? get traktProgressPercent => _s.widget.traktProgressPercent;
+  @override
+  double? get mdblistProgressPercent => _s.widget.mdblistProgressPercent;
+  @override
+  double? get simklProgressPercent => _s.widget.simklProgressPercent;
+  @override
+  bool get launchTraktPercentSpent => _s._trakt.launchTraktPercentSpent;
+  @override
+  set launchTraktPercentSpent(bool v) => _s._trakt.launchTraktPercentSpent = v;
+  @override
+  bool get launchSimklPercentSpent => _s._simkl.launchSimklPercentSpent;
+  @override
+  set launchSimklPercentSpent(bool v) => _s._simkl.launchSimklPercentSpent = v;
+  @override
+  bool get launchMdblistPercentSpent => _s._mdblist.launchMdblistPercentSpent;
+  @override
+  set launchMdblistPercentSpent(bool v) =>
+      _s._mdblist.launchMdblistPercentSpent = v;
+  @override
+  String? get currentLocalMovieImdbId => _s._completion.currentLocalMovieImdbId;
+  @override
+  set playbackSpeed(double v) => _s._display.playbackSpeed = v;
+  @override
+  set aspectMode(AspectMode v) => _s._display.aspectMode = v;
+  @override
+  Future<double?> currentEpisodeTraktPercent({bool forGuide = false}) =>
+      _s._trakt.currentEpisodeTraktPercent(forGuide: forGuide);
+  @override
+  Future<double?> currentEpisodeSimklPercent({bool forGuide = false}) =>
+      _s._simkl.currentEpisodeSimklPercent(forGuide: forGuide);
+  @override
+  Future<double?> currentEpisodeMdblistPercent({bool forGuide = false}) =>
+      _s._mdblist.currentEpisodeMdblistPercent(forGuide: forGuide);
+  @override
+  Future<void> applyAspectVideoZoom() => _s._display.applyAspectVideoZoom();
+  @override
+  Future<Map<String, dynamic>?> readLocalResume({
+    required String? contentId,
+    required String resumeKey,
+    required Future<Map<String, dynamic>?> Function() enhanced,
+  }) => VideoPlayerScreen.readLocalResume(
+    contentId: contentId,
+    resumeKey: resumeKey,
+    enhanced: enhanced,
+  );
+}
+
+class _VpResumeKeysHostAdapter implements VpResumeKeysHost {
+  _VpResumeKeysHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  List<PlaylistEntry>? get activePlaylist => _s._activePlaylist;
+  @override
+  int get currentIndex => _s._currentIndex;
+  @override
+  int get currentIptvIndex => _s._currentIptvIndex;
+  @override
+  int? get effectiveContentEpisode => _s._effectiveContentEpisode;
+  @override
+  String? get effectiveContentImdbId => _s._effectiveContentImdbId;
+  @override
+  int? get effectiveContentSeason => _s._effectiveContentSeason;
+  @override
+  List<IptvChannel>? get effectiveIptvChannels => _s._effectiveIptvChannels;
+  @override
+  String get title => _s.widget.title;
+  @override
+  String get videoUrl => _s.widget.videoUrl;
 }
 
 class _VpIptvRecordingResourcesHostAdapter
@@ -14291,7 +13666,7 @@ class _VpLocalCompletionHostAdapter implements VpLocalCompletionHost {
   @override
   bool get validationGateActive => _s._validationGateActive;
   @override
-  String get resumeKey => _s._resumeKey;
+  String get resumeKey => _s._resumeKeys.resumeKey;
 }
 
 class _VpMdblistScrobblerHostAdapter implements VpMdblistScrobblerHost {
@@ -14439,7 +13814,7 @@ class _VpDisplayModeHostAdapter implements VpDisplayModeHost {
   @override
   void scheduleAutoHide() => _s._scheduleAutoHide();
   @override
-  Future<void> saveResume() => _s._saveResume();
+  Future<void> saveResume() => _s._resumeSave.saveResume();
   @override
   void openPlayerMenuQuick(PlayerMenuSection section) =>
       _s._menu.openPlayerMenuQuick(section);
@@ -14534,7 +13909,7 @@ class _VpSleepTimerHostAdapter implements VpSleepTimerHost {
   @override
   bool get playerCreated => _s._playerCreated;
   @override
-  Future<void> saveResume() => _s._saveResume();
+  Future<void> saveResume() => _s._resumeSave.saveResume();
   @override
   mk.Player get player => _s._player;
 }

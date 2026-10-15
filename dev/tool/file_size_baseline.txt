@@ -17,7 +17,8 @@
 # 2026-10-13 vplayer P8 Step 1: 14 frozen PiP/lifecycle moves; facade ratchet lowered 17004 -> 16829; exit: remaining declared video-player phases (D6).
 # 2026-10-14 vplayer P9 Step 1: 21 frozen subtitle auto-sync moves; facade ratchet lowered 16829 -> 16603; exit: remaining declared video-player phases (D6).
 # 2026-10-14 vplayer P10 Step 1: five frozen subtitle apply moves; facade ratchet lowered 16603 -> 16477; exit: remaining declared video-player phases (D6).
-14630 lib/screens/video_player_screen.dart
+# 2026-10-15: Phase 14 resume extraction; remaining player workflows exit in phases 15–21.
+14005 lib/screens/video_player_screen.dart
 6919 lib/services/profiles/profile_registry.dart
 6478 android/app/src/main/java/com/debrify/app/tv/TorboxTvPlayerActivity.java
 5475 lib/services/remote_control/remote_command_router.dart
