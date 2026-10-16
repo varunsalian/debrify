@@ -2401,8 +2401,9 @@ Branch `refactor/vplayer-p15` (pipelined; prepared off the phase-12 merge
 `1d7699d2e` while phases 13 and 14 run; rebased onto the phase-14 merge
 before step 1 under the pipeline rebase rule). Evidence
 `refactor-evidence/vplayer/p15/`. Line numbers at `1d7699d2e`;
-re-measured after phases 13 and 14 merge. Note: this branch's plan file
-lacks the phase-13/14 section edits; they reconcile at rebase.
+re-measured after phases 13 and 14 merge. Accepted originals are P13
+`238df16f4` and P14 `be4cd78aa`; both phases' design, resolution and
+Progress sections are retained after the documentation conflict resolution.
 
 ≈ 1,715 moved lines into seven files (sizes proved at step T, ≤ 500 each).
 **One switch/recovery owner:** `VpIptvChannelSwitch` is the only writer of
@@ -5789,7 +5790,6 @@ for Step 0 and Claude’s independent mutation sample.
   manifest or waiver. Full suite/builds deferred to M3 under pipeline rules.
   STOP before production moves; no push, merge, branch switch or device action.
 
-
 ### 2026-10-15 — Phase 15 Step 0 independent-sample survivor addendum (STOP)
 
 - **Acceptance remains pending.** Claude's original sample at `4f8222e03`
@@ -5917,6 +5917,39 @@ for Step 0 and Claude’s independent mutation sample.
   Production, P14 integration/rebase and regeneration remain unexecuted;
   full-suite/build/device checks remain deferred by the reduced-gate rules.
 
+
+### 2026-10-17 — Phase 15 accepted sample / rebase materialization checkpoint
+
+- Plan owner accepted the third fresh independent sample: **20/22 (91%)**,
+  `p15/claude-mut4/results.json`. Historical Step-0 unaccepted entries above
+  describe their own checkpoints; they do not supersede this acceptance.
+- Original application remains accepted P14 **be4cd78aa**, byte-identical in
+  this worktree; pubspec and lockfile unchanged. FINAL evidence-only split
+  passes exhaustive comparison: **757 fates (682 retained, 70 moved, five
+  patched)**; seven prototypes **347/283/408/433/245/207/162** lines, frozen
+  Host signatures retained. The 67-site scan comprises 62 core references
+  and five regenerated P8/P11/P13 adapter actions. P13's two menu audio call
+  sites now share one adapter forwarder. No reference is dropped.
+- `k4`/`k12` source-equivalence arguments: reanchor's entry ticket check runs
+  synchronously before calling the browse provider; all three operational
+  category writers clear the boundary cache before another consume can run,
+  and cache publication rechecks its captured origin without suspension.
+  The exact original mutants each passed 523 cases. Guards stay in production.
+  Rebased source hashes and exhaustive writer inventory are recorded with the
+  final audit; no kill credit is assigned to these equivalences.
+- The unchanged rebased original reproduces the three long clock timeouts:
+  retry-after-60s and both capability=true siblings. Both short capability=false
+  cases pass. Complete stable-tree run: `p15/rebase/clock-original.jsonl`.
+  Revised tests retain request/loading/result assertions, use a future programme
+  expiry and a larger scheduling budget, and remove the fragile 60-to-61s
+  admission window. **Exact 60-versus-61s discrimination is device-pending**;
+  the old tight-window mutation witness is historical, not a current guarantee.
+- Verification continues in short, serial checkpoints. The standalone original
+  replay, changed-input witnesses, analyzer probes, historical proofs and expanded
+  reduced baseline are pending. A mount-ready fixture miss was recorded on the
+  original in `initial-failed-alone-video_player_iptv_memory_test.jsonl`; its
+  unchanged file replay passes all 23 cases. No fixture or expectation was changed.
+  No application move, CI transition, full suite, build, push or device action.
 
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 

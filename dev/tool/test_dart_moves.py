@@ -168,6 +168,8 @@ def run(package):
     menu_recording_tests(package)
     from test_dart_resume_moves import run as resume_tests
     resume_tests(package)
+    from test_dart_iptv_moves import run as iptv_tests
+    iptv_tests(package)
     sleep_tests(package)
     skip_tests(package)
     display_tests(package)

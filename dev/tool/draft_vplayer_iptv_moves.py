@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PROVISIONAL P15 prototypes; never a history checkpoint before P13/P14."""
+"""FINAL P15 materialization on accepted P14; production writes are separate."""
 import argparse
 import json
 import re
@@ -14,7 +14,7 @@ from dart_move_fixture import edited_text, materialize
 SOURCE = 'lib/screens/video_player_screen.dart'
 FEATURE = 'lib/features/video_player'
 STATE = '_VideoPlayerScreenState'
-BASE = '1d7699d2e'
+BASE = 'be4cd78aa'
 GROUPS = [
  dict(name='VpIptvZapRing', receiver='_zapRing', file='vp_iptv_zap_ring.dart', fields=3, names=['_iptvZapSourceId','_iptvZapRequestTicket','_iptvZapArmingPaging','_reanchorIptvRingToCategory','_canZapIptvChannel','_resetIptvZapPaging','_ensureIptvZapPagingArmed','_requestIptvZapPage','_parseIptvZapPage','_installIptvZapWindow','_mergeIptvZapPage']),
  dict(name='VpIptvZapLadder', receiver='_zapLadder', file='vp_iptv_zap_ladder.dart', fields=5, names=['_kIptvZapEdgeMargin','_iptvZapDrainingInputs','_iptvZapCachedOriginCategory','_iptvZapCachedDirection','_iptvZapCachedPage','_clearIptvZapBoundaryCache','_zapIptvChannel','_prefetchIptvZapPage','_adjacentIptvCategory','_prefetchAdjacentIptvCategory','_consumeCachedAdjacentIptvCategory','_enterIptvZapCategory','_requestAdjacentIptvCategory','_queuePendingIptvZapInput','_drainPendingIptvZapInputs']),
@@ -86,6 +86,12 @@ IMPORTS = {
  'LanguageMapper':"import 'package:debrify/screens/video_player/utils/language_mapping.dart';",
 }
 
+EARLIER = [
+ ('_recording','stopRecording','Future<void> stopRecording({bool userInitiated = true})','(userInitiated: userInitiated)'),
+ ('_recording','refreshEngineRecordingState','Future<void> refreshEngineRecordingState()','()'),
+ ('_recording','engineFlagOn','bool get engineFlagOn',''),
+]
+
 def public(name):
  return 'iptvZapPageSize' if name == '_kIptvZapPageSize' else name.removeprefix('_')
 
@@ -124,7 +130,7 @@ def build(package):
     following=v[i+1] if i+1<len(v) else ''
     if following!='=':reads.add(x)
     if following in ['=','++','--','+=','-='] or i and v[i-1] in ['++','--']:writes.add(x)
-  needed.discard('_sleep')
+  needed.difference_update(['_sleep','_recording','_recordingResources'])
   g['needed']=sorted(needed);g['forwarders']=[]
   for n in sorted(needed):
    sig,prop=signature(members[n],n)
@@ -143,10 +149,20 @@ def build(package):
    if any(values[i:i+3]==['widget','.',n] for i in range(len(values))):
     g['forwarders'].append(typ+' get '+n+' => _s.widget.'+n+';');selectors.add(n)
   if '_sleep' in values:g['forwarders'].append('SleepTimerMode get sleepTimerMode => _s._sleep.sleepTimerMode;')
- spec.update(phase=15,status='PROVISIONAL',provisional_notice='PROVISIONAL: P13/P14 are absent. This artifact cannot satisfy history. Regenerate on accepted P14 merge before Step 1.',required_prior_phases=[13,14],patched_class_projection=['_VpTrackPreferencesHostAdapter','_VpPipLifecycleHostAdapter'])
+  for receiver,member,sig,args in EARLIER:
+   if receiver in values and member in values:
+    g['forwarders'].append(sig+' => _s.'+receiver+'.'+member+args+';')
+  # Preserve the reviewed Host declaration order and spellings when a prior
+  # extraction changes a State method into a complete collaborator chain.
+  expected=json.loads((ROOT/'dev/tool/dart_moves/vplayer_p15_hosts.json').read_text())['hosts'][g['name']]
+  canonical=lambda sig:tuple(re.findall(r'[A-Za-z_]\w*|[0-9]+|\S',sig))
+  actual={canonical(f.split(' => ')[0]):f.split(' => ',1)[1] for f in g['forwarders']}
+  assert set(actual)=={canonical(sig) for sig in expected},(g['name'],set(actual)-{canonical(sig) for sig in expected},{canonical(sig) for sig in expected}-set(actual))
+  g['forwarders']=[sig+' => '+actual[canonical(sig)] for sig in expected]
+ spec.update(phase=15,status='FINAL',finalization=dict(accepted_p14_base=BASE,accepted_p13='238df16f4',preparation_base='1d7699d2e',history='All fourteen applied phases; every earlier destination derived without a whitelist.'),patched_class_projection=['_VpTrackPreferencesHostAdapter','_VpPipLifecycleHostAdapter','_VpPlayerMenuUiHostAdapter','_VpPlayerMenuHostAdapter'])
  fields={n:g['name'] for g in GROUPS for n in g['names'][:g['fields']]}
  chain=dict(before=['_sleep','.','sleepTimerMode'],after=['_host','.','sleepTimerMode'],binding='unbound',role_change='Live sleep state projection')
- spec['guards']=dict(occurrence_field_bindings=dict(owners=[STATE],state_classes=[STATE],mandatory_qualification=True,owner_scoped_bare_fields={STATE+'.'+n:owner for n,owner in fields.items()}),record_owners=[STATE],record_fields={STATE:list(fields)},receiver_owners={g['receiver']:g['name'] for g in GROUPS},receiver_paths={g['receiver']:g['name'] for g in GROUPS},receiver_members={g['name']:[public(n) for n in g['names']] for g in GROUPS},receivers=['_host',*[g['receiver'] for g in GROUPS]],live_state_receivers=['_host'],require_live_state_callbacks=True,host_property_bindings=bindings,registered_occurrence_substitutions=[chain]+[dict(before=['widget','.',n],after=['_host','.',n],binding='unbound',role_change='Live widget selector') for n in sorted(selectors)])
+ spec['guards']=dict(occurrence_field_bindings=dict(owners=[STATE],state_classes=[STATE],mandatory_qualification=True,owner_scoped_bare_fields={STATE+'.'+n:owner for n,owner in fields.items()}),record_owners=[STATE],record_fields={STATE:list(fields)},receiver_owners={g['receiver']:g['name'] for g in GROUPS},receiver_paths={g['receiver']:g['name'] for g in GROUPS},receiver_members={g['name']:[public(n) for n in g['names']] for g in GROUPS},receivers=['_host',*[g['receiver'] for g in GROUPS]],live_state_receivers=['_host'],require_live_state_callbacks=True,host_property_bindings=bindings,registered_occurrence_substitutions=[chain]+[dict(before=[receiver,'.',member],after=['_host','.',member],binding='unbound',role_change='Live accepted P13 recording projection') for receiver,member,_,_ in EARLIER]+[dict(before=['widget','.',n],after=['_host','.',n],binding='unbound',role_change='Live widget selector') for n in sorted(selectors)])
  for row in spec['declarations']:
   key=row['original'];g=owners.get(key[len(STATE)+1:]) if key.startswith(STATE+'.') else None
   v=tokens(spans[key]);edits=[]
@@ -162,11 +178,11 @@ def build(package):
     assert not any(v[i:i+2]==['$',n] for i in range(len(v))),(key,n,'interpolation')
     edits.append(dict(before=[n],after=after,count=count))
   if g:
-   for before,after in [(chain['before'],chain['after']), *[(['widget','.',n],['_host','.',n]) for n in sorted(selectors)]]:
+   for before,after in [(chain['before'],chain['after']), *[([receiver,'.',member],['_host','.',member]) for receiver,member,_,_ in EARLIER], *[(['widget','.',n],['_host','.',n]) for n in sorted(selectors)]]:
     count=sum(v[i:i+len(before)]==before for i in range(len(v)))
     if count:edits.append(dict(before=before,after=after,count=count))
   if key in spec['patched_class_projection'] and edits:
-   row.update(fate='patched',reason='Redirect only approved P8/P11 IPTV action forwarders; P11 ticket remains State-owned.',test='dev/tool/draft_vplayer_iptv_moves.py',patches=edits)
+   row.update(fate='patched',reason='Redirect approved P8/P11/P13 IPTV actions on accepted P14; preserve all earlier rewrites and the State-owned P11 ticket.',test='dev/tool/draft_vplayer_iptv_moves.py',patches=edits)
   elif edits:row['substitutions']=edits
   if edits and not g:
    for edit in edits:
@@ -176,10 +192,10 @@ def build(package):
       retained.append(dict(declaration=key,line=original[:t['offset']].count('\n')+1,offset=t['offset'],before=before,after=edit['after']))
   if key==STATE+'.'+STATE:
    append=[t for g2 in GROUPS for t in [g2['receiver'],'=',g2['name'],'(','_'+g2['name']+'HostAdapter','(','this',')',')',';']]
-   row.update(fate='patched',reason='PROVISIONAL eager inert assignments; regenerate after P14.',test='dev/tool/draft_vplayer_iptv_moves.py',patches=[dict(before=[';','}'],after=[';',*append,'}'],count=1)])
+   row.update(fate='patched',reason='Seven eager inert assignments after all accepted P14 collaborators.',test='dev/tool/draft_vplayer_iptv_moves.py',patches=[dict(before=[';','}'],after=[';',*append,'}'],count=1)])
   if 'substitutions' in row:row['substitutions'].sort(key=lambda e:json.dumps(e['before']))
  spec['span_order']=[k for k in spans if k not in {r['original'] for r in spec['declarations'] if r['fate']=='moved'}]
- scaffold={};previous=STATE+'._identifyUi'
+ scaffold={};previous=STATE+'._resumeSave'
  for i,g in enumerate(GROUPS):
   host=g['name']+'Host';adapter='_'+host+'Adapter';key=STATE+'.'+g['receiver']
   scaffold['@directive:'+str(len(unit['directives'])+i)]="import '../"+g['dest'][4:]+"';"
@@ -228,12 +244,12 @@ def main():
  errors=check(spec,original,formatted,args.parser_package)
  (args.probe/'comparison.json').write_text(json.dumps(errors,indent=2)+'\n')
  sizes={g['name']:len(formatted[g['dest']].splitlines()) for g in GROUPS}
- result=dict(status='PROVISIONAL',base=BASE,history_satisfied=False,missing_phases=[13,14],sizes=sizes,hosts={g['name']:[f.split(' => ')[0] for f in g['forwarders']] for g in GROUPS},adapters_to_regenerate=['_VpPipLifecycleHostAdapter','_VpPlayerMenuUiHostAdapter','_VpPlayerMenuHostAdapter','_VpTrackPreferencesHostAdapter'])
+ result=dict(status='FINAL',base=BASE,history_satisfied=True,protected_earlier_destinations=len(__import__('dart_move_history').earlier_sources(spec)),sizes=sizes,hosts={g['name']:[f.split(' => ')[0] for f in g['forwarders']] for g in GROUPS},adapters_to_regenerate=['_VpPipLifecycleHostAdapter','_VpPlayerMenuUiHostAdapter','_VpPlayerMenuHostAdapter','_VpTrackPreferencesHostAdapter'])
  (args.probe/'hosts-and-sizes.json').write_text(json.dumps(result,indent=2)+'\n')
  (args.probe/'retained-sites.json').write_text(json.dumps(retained,indent=2)+'\n')
- (ROOT/'dev/tool/dart_moves/vplayer_p15_provisional.json').write_text(json.dumps(spec,indent=2)+'\n')
+ (ROOT/'dev/tool/dart_moves/vplayer_p15.json').write_text(json.dumps(spec,indent=2)+'\n')
  assert not errors,'\n'.join(errors)
  assert all(v<=500 for v in sizes.values()),sizes
- print('PASS provisional body/ownership comparison (NOT history):',sizes,len(retained),'retained sites')
+ print('PASS FINAL body/ownership comparison:',sizes,len(retained),'retained sites')
 
 if __name__=='__main__': main()

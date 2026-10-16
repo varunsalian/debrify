@@ -263,11 +263,15 @@ and every theme/source-guard destination list are registered. The validating
 reader discovers P9 automatically; no moved source-text anchor needs a retarget.
 
 
-P14 is a **PROVISIONAL** preparation manifest based on the P12 merge
-`1d7699d2e`. `draft_vplayer_resume_moves.py` materializes only beneath
-`refactor-evidence/vplayer/p14/`; `test_dart_resume_moves.py` exercises that
-real configuration with an isolated `--parser-package`. The three-file
-comparison is exhaustive but deliberately does not invoke history: P13
-has not merged. It is neither an applied manifest nor a CI transition.
-Regenerate all affected proofs after P13 merges; do not add a placeholder
-phase or weaken history to make this draft pass a production check.
+P14 is applied on accepted P13 `238df16f4`. Its final generator and three
+adapter projections preserve P13 menu rewrites; `--at be4cd78aa` checks the
+accepted P14 merge. The historical provisional evidence remains in Progress.
+
+P15's FINAL evidence-only materialization uses accepted P14 `be4cd78aa`.
+`draft_vplayer_iptv_moves.py` writes seven formatted prototypes only beneath
+`refactor-evidence/vplayer/p15/`, freezes the reviewed Hosts, and regenerates
+P8 PiP, P11 audio and both P13 menu adapters on that base. Its current manifest
+is `vplayer_p15.json`; the old provisional manifest is historical preparation
+only. `test_dart_iptv_moves.py` checks its real partition and forwarding negatives
+with all 32 earlier destinations derived from fourteen applied manifests.
+CI switches to P15 only when the seven production files are created.

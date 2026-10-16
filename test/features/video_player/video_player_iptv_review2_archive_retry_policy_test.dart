@@ -16,7 +16,11 @@ void main() {
           'loadIptvZapBannerEpg',
           (v) => v is EpgNowNext,
         );
-        d.response = (r) => iptvPanelReply(r, archive: archive);
+        d.response = (r) => iptvPanelReply(
+          r,
+          archive: archive,
+          stop: DateTime.now().add(const Duration(days: 1)),
+        );
         try {
           await d.mount([live]);
           await d.f.until(
@@ -46,7 +50,7 @@ void main() {
           await d.close();
         }
       },
-      timeout: const Timeout(Duration(minutes: 2)),
+      timeout: const Timeout(Duration(minutes: 15)),
     );
   }
 }

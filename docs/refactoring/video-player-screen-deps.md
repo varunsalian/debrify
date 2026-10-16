@@ -12626,3 +12626,37 @@ only after accepted P14 integration. Production remains blocked.
 | `_iptvArchiveRetryAt` | 1 | 1 | 0 | 0 | 0 | 0 | 0 |
 | `_refreshIptvBannerEpgIfEnded` | 21 | 15 | 0 | 6 | 0 | 0 | 0 |
 | `_loadIptvZapBannerEpg` | 13 | 12 | 1 | 0 | 0 | 0 | 0 |
+
+## Phase 15 accepted sample and P14 rebase checkpoint (2026-10-17)
+
+Third independent sample **20/22 = 91%**, accepted by the plan owner.
+The final original is **be4cd78aa**, following accepted P13 **238df16f4**.
+The preparation original remains **1d7699d2e** for outcome comparisons.
+No historical unaccepted checkpoint is relabelled.
+
+| Survivor | Equivalence on the original (guards retained) |
+| --- | --- |
+| k4, guide post-switch ticket check | `_reanchorIptvRingToCategory` executes its entry ticket guard synchronously before a provider call. The preceding provider/`isLive` reads are pure; there is no await, callback, write or event-loop turn before the same stale-ticket rejection. The new facade Host action is an ordinary expression forwarder, preserving this prefix. |
+| k12, cached origin predicate | A non-null cached page is published only after comparing captured origin with the current category, with no intervening suspension. The exhaustive operational category writers are reanchor (clear before `setState`), reset (clear before return), and install (clear when the category differs, before `setState`). Initial cache is null; String categories cannot mutate in place. A differing origin and a non-null cache cannot reach consume on this frozen call graph. |
+
+Exact mutants each completed **523 cases without failures** in
+`p15/claude-mut4/`; these are source equivalences, not assertion kills.
+The rebase audit pins the current declaration hashes and all category writers.
+
+The unchanged P14 original reproduces the three long-clock test timeouts;
+both capability=false controls pass. The stable-tree log and SDK receipt are
+`p15/rebase/clock-original.jsonl` / `.env.json`. The revised retry keeps the
+observed request, loading and result checks after a real deadline, with no upper
+one-second arrival window. Capability tests keep request and loading rejection
+checks. Programme expiry is placed a day ahead; test scheduling budgets permit
+slow hosts. **Exact 60-versus-61-second separation is device-pending**; no current
+credit is claimed for the prior tight-window constant mutation. Verification of
+the revised original cases, changed-input witnesses and final baseline follows.
+
+FINAL materialization has **757 declarations: 682 retained, 70 moved (17 fields,
+53 methods/getters), five patched**, seven frozen destinations at
+**347/283/408/433/245/207/162 lines**, and **67 retained occurrences**.
+The four regenerated adapter classes carry five action rewrites, alongside 62
+core sites. The former two P13 menu-controller audio sites now share one Host
+forwarder. Earlier ticket and resume/recording adapters retain their State-owned
+values and all earlier rewrites. No production file is created at this checkpoint.

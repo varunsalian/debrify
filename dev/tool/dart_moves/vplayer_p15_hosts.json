@@ -1,6 +1,6 @@
 {
-  "status": "PROVISIONAL",
-  "base": "1d7699d2e",
+  "status": "FINAL",
+  "base": "be4cd78aa",
   "hosts": {
     "VpIptvZapRing": [
       "void anchorIptvGuideCategory ( IptvChannel channel , { Object ? categories } )",
@@ -212,5 +212,6 @@
       "bool get mounted",
       "void setState(VoidCallback fn)"
     ]
-  }
+  },
+  "preparation_base": "1d7699d2e"
 }

@@ -1,5 +1,5 @@
-"""P15 virtual comparison only; the historical check must reject this base."""
-import re,json,sys
+"""FINAL P15 real-configuration ownership, forwarding and history negatives."""
+import copy,re,json,sys
 from pathlib import Path
 R=Path(__file__).resolve().parents[2];sys.path.insert(0,str(R/'dev/tool'))
 from check_dart_moves import check,retained_manifest
@@ -9,14 +9,13 @@ from check_verbatim_moves import parse
 from draft_vplayer_iptv_moves import GROUPS,STATE
 from dart_move_partition import partition
 def run(package):
-    package=Path(package);spec=json.loads((R/'dev/tool/dart_moves/vplayer_p15_provisional.json').read_text());original=git_text(spec['base'],spec['source']);sources=materialize(spec,original,package)
+    package=Path(package);spec=json.loads((R/'dev/tool/dart_moves/vplayer_p15.json').read_text());original=git_text(spec['base'],spec['source']);sources=materialize(spec,original,package)
     assert not check(spec,original,sources,package)
     retained=retained_manifest(spec['source'],spec['feature'],original,spec['base'],package)
     assert not check(retained,original,{spec['source']:original},package)
-    try:earlier_sources(spec)
-    except ValueError as e:assert str(e)=='missing historical phase manifests'
-    else:raise AssertionError('PROVISIONAL history incorrectly passed')
-    print('PASS all-retained original and virtual comparison; historical rejection intact',flush=True)
+    earlier=earlier_sources(spec)
+    assert len(earlier)==32 and spec['base']=='be4cd78aa', (spec['base'],len(earlier))
+    print('PASS FINAL all-retained/virtual comparison; all 32 history-derived earlier destinations',flush=True)
     def mutate(path,before,after):
      ts=re.findall(r"'[^']*'|[A-Za-z_$][A-Za-z0-9_$]*|[0-9]+|=>|\+\+|--|\S",before)
      pattern=r'\s*'.join(re.escape(t) for t in ts);matches=list(re.finditer(pattern,sources[path]));assert matches,(path,before)
@@ -39,7 +38,30 @@ def run(package):
     for name,path,before,after in cases:
      assert check(spec,original,mutate(path,before,after),package),name
      print('PASS rejects '+name,flush=True)
-    print('PASS 12 prototype negatives; no history waiver',flush=True)
+    # Independently corrupt each regenerated adapter, preserving every other
+    # class, so one correct forwarder cannot mask a stale sibling.
+    adapters={
+     '_VpPipLifecycleHostAdapter':('_s._iptvGuide.cancelPendingIptvCatchup','_s._cancelPendingIptvCatchup'),
+     '_VpTrackPreferencesHostAdapter':('_s._iptvMemory.applyIptvAudioPreference','_s._applyIptvAudioPreference'),
+     '_VpPlayerMenuUiHostAdapter':('_s._iptvMemory.captureIptvAudioLanguage','_s._captureIptvAudioLanguage'),
+     '_VpPlayerMenuHostAdapter':('_s._iptvBanner.hideIptvZapBanner','_s._hideIptvZapBanner'),
+    }
+    for adapter,(before,after) in adapters.items():
+     facade=spec['source'];start=sources[facade].index('class '+adapter);end=sources[facade].index('\n}',start)+2
+     segment=sources[facade][start:end]
+     pattern=r'\s*'.join(map(re.escape,re.findall(r'[A-Za-z_]\w*|\S',before)))
+     changed,n=re.subn(pattern,after,segment);assert n==1,(adapter,n)
+     current=dict(sources,**{facade:sources[facade][:start]+changed+sources[facade][end:]})
+     assert check(spec,original,current,package),adapter
+     print('PASS rejects stale '+adapter,flush=True)
+    # The context parameter is a guide model, not Flutter's live context.
+    altered=copy.deepcopy(spec)
+    row=next(r for r in altered['declarations'] if r['original']==STATE+'._persistIptvGuideContext')
+    row.setdefault('substitutions',[]).append(dict(before=['=','context',';'],after=['=','_host','.','context',';'],count=1))
+    current=mutate(D['VpIptvGuideCatchup'],'iptvGuideContextOverride = context','iptvGuideContextOverride = _host.context')
+    assert check(altered,original,current,package), 'lexical context falsely authorized as live State context'
+    print('PASS rejects declared lexical guide-context substitution',flush=True)
+    print('PASS 17 FINAL negatives; no history waiver',flush=True)
 
 if __name__ == '__main__':
     import argparse
