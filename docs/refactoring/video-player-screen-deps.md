@@ -12416,3 +12416,46 @@ Flutter `058e0af2c2b57e369d905a03ac9748b0ebf543c6`; application, packages,
 pubspec/lock and analyzer configuration remain byte-identical to `1d7699d2e`.
 The completed mutation batches are resumable; the final per-declaration point
 table and surviving-point audit are **not yet complete** at this checkpoint.
+
+### Original boundary controls / runner integrity follow-on checkpoint
+
+Nine additional original-only files pass alone, and the 16 combined profiles
+in `p15/review2/adaptive5-controls/results.json` pass with zero skips and every
+selected widget body executed. The frozen inventory loads **219/219 suites**:
+**1667 successes / the same one startup-shield failure**. The fresh original
+case catalog contains **419** cases. Reuse still requires unchanged dependency
+inputs and exact suite/case identities; no failure allowance changes.
+
+The runner now sets `AutomatedTestWidgetsFlutterBinding.defaultTestTimeout`
+(the CLI timeout alone did not override Flutter's widget default). Explicit
+long wall-clock cases retain their declared deadline and bounded batch budget.
+A delegating test registration adapter preserves the original test signature
+and metadata. Controls execute every body; after a mutation's first failed
+body, later registered cases are loaded but explicitly skipped, never counted
+as passes or kills. The adapter records actual body entry. Assertion credit
+requires the first failure signal from that executed body to be an assertion;
+a runtime error followed by a framework cleanup assertion is uncredited.
+`first-failure-audit.json` withdraws one such old witness, `full-sweep/s0789`;
+a later independent queue-boundary assertion kills that exact point.
+
+An interrupted batch can contain independently completed candidate isolates.
+Recovery requires all exact expected names to start and finish, complete
+assertion evidence without fixture-initialization errors, original/variant and
+input hashes, and the immutable raw mapping/JSONL. `completed-isolates/`
+contains thirteen recovered candidates; the old interrupted statuses and logs
+are retained. An incomplete candidate never receives kill credit. This
+qualification supersedes the earlier blanket interrupted-batch wording.
+
+Further original observations (Follow-ups; no fixes): a last-live write borrows
+a nonempty channel-header map across its preference await, while an empty map
+has already become null; a retained ScaffoldMessenger Retry action survives
+route replacement, but original recovery admission rejects its disposed player;
+and a late reanchor can run after an early presentation bootstrap and an
+intervening parsed cache delivery, so its own cache clear remains necessary.
+The source-clear test also observes an original pre-open frame boundary after
+programme expiry; reassigning already-null source fields in an extra setState
+can publish time-sensitive UI before the next media event.
+
+The 80-point adaptive follow-up and final unfinished guard batches continue.
+No new kill total, completed systematic audit or Step 0 acceptance is claimed
+by this checkpoint. Application/dependencies remain the original.

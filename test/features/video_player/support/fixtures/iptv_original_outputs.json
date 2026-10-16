@@ -14392,6 +14392,293 @@
     "sources": [],
     "tv": []
   },
+  "P15 review2 a messenger retry after route replacement cannot resurrect recovery": {
+    "banners": [],
+    "browse": [],
+    "controls": [],
+    "guides": [],
+    "identity": [],
+    "lost": false,
+    "players": [
+      {
+        "audio": [],
+        "opens": [
+          {
+            "play": true,
+            "uri": "https://probe.test/first.ts"
+          },
+          {
+            "headers": {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              "X-P15": "channel-header"
+            },
+            "play": true,
+            "uri": "https://probe.test/first.ts"
+          }
+        ],
+        "subtitles": [
+          "1"
+        ]
+      }
+    ],
+    "reconnecting": false,
+    "sources": [],
+    "tv": []
+  },
+  "P15 review2 a missing page source latches reanchor origin across later browsing Chosen source": {
+    "banners": [
+      {
+        "archive": null,
+        "flush": true,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 1",
+        "next": null,
+        "now": null,
+        "number": 1,
+        "url": "https://p15.test/1.ts"
+      },
+      {
+        "archive": null,
+        "flush": false,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 1",
+        "next": null,
+        "now": null,
+        "number": 1,
+        "url": "https://p15.test/1.ts"
+      }
+    ],
+    "browse": [
+      {
+        "action": "zapPage",
+        "anchorName": "P15 channel 0",
+        "anchorUrl": "https://p15.test/0.ts",
+        "category": "News",
+        "contentType": "live",
+        "limit": 1500,
+        "offset": 0,
+        "query": "",
+        "sourceId": "launch-source"
+      },
+      {
+        "action": "zapPage",
+        "anchorName": "P15 channel 0",
+        "anchorUrl": "https://p15.test/0.ts",
+        "category": "News",
+        "contentType": "live",
+        "limit": 1500,
+        "offset": 0,
+        "query": "",
+        "sourceId": "Chosen source"
+      },
+      {
+        "action": "zapPage",
+        "category": "News",
+        "contentType": "live",
+        "fromEnd": false,
+        "limit": 1500,
+        "offset": 1,
+        "query": "",
+        "sourceId": "Chosen source"
+      },
+      {
+        "action": "zapPage",
+        "category": "News",
+        "contentType": "live",
+        "fromEnd": false,
+        "limit": 1500,
+        "offset": 0,
+        "query": "",
+        "sourceId": "Chosen source"
+      }
+    ],
+    "controls": [
+      {
+        "guide": true,
+        "hasGuide": true,
+        "hasNext": true,
+        "hasNextChannel": false,
+        "hasPrevious": true,
+        "hasRecord": false,
+        "hasSources": false,
+        "hideSeekbar": true,
+        "hideSpeed": true,
+        "liveEdge": false,
+        "liveEdgeActive": false,
+        "liveEdgeLoading": false,
+        "next": true,
+        "nextChannel": false,
+        "previous": true,
+        "record": false,
+        "sources": false,
+        "timeline": false,
+        "timelineVisible": false
+      }
+    ],
+    "guides": [],
+    "identity": [],
+    "lost": false,
+    "players": [
+      {
+        "audio": [],
+        "opens": [
+          {
+            "play": true,
+            "uri": "https://p15.test/0.ts"
+          },
+          {
+            "headers": {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+            "play": true,
+            "uri": "https://p15.test/0.ts"
+          },
+          {
+            "headers": {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+            "play": true,
+            "uri": "https://p15.test/1.ts"
+          }
+        ],
+        "subtitles": [
+          "1"
+        ]
+      }
+    ],
+    "reconnecting": false,
+    "sources": [],
+    "tv": []
+  },
+  "P15 review2 a missing page source latches reanchor origin across later browsing null": {
+    "banners": [
+      {
+        "archive": null,
+        "flush": true,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 1",
+        "next": null,
+        "now": null,
+        "number": 1,
+        "url": "https://p15.test/1.ts"
+      },
+      {
+        "archive": null,
+        "flush": false,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 1",
+        "next": null,
+        "now": null,
+        "number": 1,
+        "url": "https://p15.test/1.ts"
+      }
+    ],
+    "browse": [
+      {
+        "action": "zapPage",
+        "anchorName": "P15 channel 0",
+        "anchorUrl": "https://p15.test/0.ts",
+        "category": "News",
+        "contentType": "live",
+        "limit": 1500,
+        "offset": 0,
+        "query": "",
+        "sourceId": "launch-source"
+      },
+      {
+        "action": "zapPage",
+        "anchorName": "P15 channel 0",
+        "anchorUrl": "https://p15.test/0.ts",
+        "category": "News",
+        "contentType": "live",
+        "limit": 1500,
+        "offset": 0,
+        "query": "",
+        "sourceId": "launch-source"
+      },
+      {
+        "action": "zapPage",
+        "category": "News",
+        "contentType": "live",
+        "fromEnd": false,
+        "limit": 1500,
+        "offset": 1,
+        "query": "",
+        "sourceId": "launch-source"
+      },
+      {
+        "action": "zapPage",
+        "category": "News",
+        "contentType": "live",
+        "fromEnd": false,
+        "limit": 1500,
+        "offset": 0,
+        "query": "",
+        "sourceId": "launch-source"
+      }
+    ],
+    "controls": [
+      {
+        "guide": true,
+        "hasGuide": true,
+        "hasNext": true,
+        "hasNextChannel": false,
+        "hasPrevious": true,
+        "hasRecord": false,
+        "hasSources": false,
+        "hideSeekbar": true,
+        "hideSpeed": true,
+        "liveEdge": false,
+        "liveEdgeActive": false,
+        "liveEdgeLoading": false,
+        "next": true,
+        "nextChannel": false,
+        "previous": true,
+        "record": false,
+        "sources": false,
+        "timeline": false,
+        "timelineVisible": false
+      }
+    ],
+    "guides": [],
+    "identity": [],
+    "lost": false,
+    "players": [
+      {
+        "audio": [],
+        "opens": [
+          {
+            "play": true,
+            "uri": "https://p15.test/0.ts"
+          },
+          {
+            "headers": {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+            "play": true,
+            "uri": "https://p15.test/0.ts"
+          },
+          {
+            "headers": {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+            "play": true,
+            "uri": "https://p15.test/1.ts"
+          }
+        ],
+        "subtitles": [
+          "1"
+        ]
+      }
+    ],
+    "reconnecting": false,
+    "sources": [],
+    "tv": []
+  },
   "P15 review2 a newer replay replaces pending preparation feedback": {
     "banners": [],
     "browse": [],
@@ -14894,6 +15181,139 @@
     "sources": [],
     "tv": []
   },
+  "P15 review2 a reset category rejects an old cache before a same-category late landing": {
+    "banners": [
+      {
+        "archive": null,
+        "flush": true,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 7",
+        "next": null,
+        "now": null,
+        "number": 7,
+        "url": "https://p15.test/7.ts"
+      },
+      {
+        "archive": null,
+        "flush": false,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 7",
+        "next": null,
+        "now": null,
+        "number": 7,
+        "url": "https://p15.test/7.ts"
+      }
+    ],
+    "browse": [
+      {
+        "action": "zapPage",
+        "anchorName": "P15 channel 0",
+        "anchorUrl": "https://p15.test/0.ts",
+        "category": "News",
+        "contentType": "live",
+        "limit": 1500,
+        "offset": 0,
+        "query": "",
+        "sourceId": "launch-source"
+      },
+      {
+        "action": "zapPage",
+        "category": "Sports",
+        "contentType": "live",
+        "fromEnd": false,
+        "limit": 1500,
+        "offset": 0,
+        "query": "",
+        "sourceId": "ring-source"
+      },
+      {
+        "action": "zapPage",
+        "category": "Sports",
+        "contentType": "live",
+        "fromEnd": false,
+        "limit": 1500,
+        "offset": 0,
+        "query": "",
+        "sourceId": "ring-source"
+      },
+      {
+        "action": "zapPage",
+        "category": "Sports",
+        "contentType": "live",
+        "fromEnd": false,
+        "limit": 1500,
+        "offset": 0,
+        "query": "",
+        "sourceId": "ring-source"
+      }
+    ],
+    "controls": [
+      {
+        "guide": true,
+        "hasGuide": true,
+        "hasNext": true,
+        "hasNextChannel": false,
+        "hasPrevious": true,
+        "hasRecord": false,
+        "hasSources": false,
+        "hideSeekbar": true,
+        "hideSpeed": true,
+        "liveEdge": false,
+        "liveEdgeActive": false,
+        "liveEdgeLoading": false,
+        "next": true,
+        "nextChannel": false,
+        "previous": true,
+        "record": false,
+        "sources": false,
+        "timeline": false,
+        "timelineVisible": false
+      }
+    ],
+    "guides": [],
+    "identity": [],
+    "lost": false,
+    "players": [
+      {
+        "audio": [],
+        "opens": [
+          {
+            "play": true,
+            "uri": "https://p15.test/0.ts"
+          },
+          {
+            "headers": {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+            "play": true,
+            "uri": "https://p15.test/1.ts"
+          },
+          {
+            "headers": {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+            "play": true,
+            "uri": "https://p15.test/50.ts"
+          },
+          {
+            "headers": {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+            "play": true,
+            "uri": "https://p15.test/7.ts"
+          }
+        ],
+        "subtitles": [
+          "1"
+        ]
+      }
+    ],
+    "reconnecting": false,
+    "sources": [],
+    "tv": []
+  },
   "P15 review2 a retained guide action rejects an emptied public launch list": {
     "banners": [
       {
@@ -15023,6 +15443,39 @@
           {
             "play": true,
             "uri": "https://p15-capability-late.test/live/u/p/123.ts"
+          }
+        ],
+        "subtitles": [
+          "1"
+        ]
+      }
+    ],
+    "reconnecting": false,
+    "sources": [],
+    "tv": []
+  },
+  "P15 review2 a source probe completed after disposal cannot mark its winner": {
+    "banners": [],
+    "browse": [],
+    "controls": [],
+    "guides": [],
+    "identity": [],
+    "lost": false,
+    "players": [
+      {
+        "audio": [],
+        "opens": [
+          {
+            "play": true,
+            "uri": "https://probe.test/first.ts"
+          },
+          {
+            "headers": {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              "X-P15": "channel-header"
+            },
+            "play": true,
+            "uri": "https://probe.test/second.ts"
           }
         ],
         "subtitles": [
@@ -16279,6 +16732,83 @@
     "sources": [],
     "tv": []
   },
+  "P15 review2 another playing URL replaces the active last-live timer": {
+    "banners": [
+      {
+        "archive": null,
+        "flush": true,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 1",
+        "next": null,
+        "now": null,
+        "number": 1,
+        "url": "https://p15.test/1.ts"
+      },
+      {
+        "archive": null,
+        "flush": false,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 1",
+        "next": null,
+        "now": null,
+        "number": 1,
+        "url": "https://p15.test/1.ts"
+      }
+    ],
+    "browse": [],
+    "controls": [
+      {
+        "guide": true,
+        "hasGuide": true,
+        "hasNext": true,
+        "hasNextChannel": false,
+        "hasPrevious": true,
+        "hasRecord": false,
+        "hasSources": false,
+        "hideSeekbar": true,
+        "hideSpeed": true,
+        "liveEdge": false,
+        "liveEdgeActive": false,
+        "liveEdgeLoading": false,
+        "next": true,
+        "nextChannel": false,
+        "previous": true,
+        "record": false,
+        "sources": false,
+        "timeline": false,
+        "timelineVisible": false
+      }
+    ],
+    "guides": [],
+    "identity": [],
+    "lost": false,
+    "players": [
+      {
+        "audio": [],
+        "opens": [
+          {
+            "play": true,
+            "uri": "https://p15.test/0.ts"
+          },
+          {
+            "headers": {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+            "play": true,
+            "uri": "https://p15.test/1.ts"
+          }
+        ],
+        "subtitles": [
+          "1"
+        ]
+      }
+    ],
+    "reconnecting": false,
+    "sources": [],
+    "tv": []
+  },
   "P15 review2 archive metadata retries after sixty real seconds without programme expiry": {
     "banners": [
       {
@@ -17137,6 +17667,92 @@
     "sources": [],
     "tv": []
   },
+  "P15 review2 candidate ladder narrates each attempted row in order": {
+    "banners": [
+      {
+        "archive": null,
+        "flush": true,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 100",
+        "next": null,
+        "now": null,
+        "number": 100,
+        "url": "stremio-tv://fixture-addon-1-candidate-narration/candidate-narration"
+      },
+      {
+        "archive": null,
+        "flush": false,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 100",
+        "next": null,
+        "now": null,
+        "number": 100,
+        "url": "stremio-tv://fixture-addon-1-candidate-narration/candidate-narration"
+      }
+    ],
+    "browse": [],
+    "controls": [
+      {
+        "guide": true,
+        "hasGuide": true,
+        "hasNext": true,
+        "hasNextChannel": false,
+        "hasPrevious": true,
+        "hasRecord": false,
+        "hasSources": true,
+        "hideSeekbar": true,
+        "hideSpeed": true,
+        "liveEdge": false,
+        "liveEdgeActive": false,
+        "liveEdgeLoading": false,
+        "next": true,
+        "nextChannel": false,
+        "previous": true,
+        "record": false,
+        "sources": true,
+        "timeline": false,
+        "timelineVisible": false
+      }
+    ],
+    "guides": [],
+    "identity": [],
+    "lost": false,
+    "players": [
+      {
+        "audio": [],
+        "opens": [
+          {
+            "play": true,
+            "uri": "https://p15.test/0.ts"
+          },
+          {
+            "headers": {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              "X-P15": "channel-header"
+            },
+            "play": true,
+            "uri": "https://probe.test/first.ts"
+          },
+          {
+            "headers": {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              "X-P15": "channel-header"
+            },
+            "play": true,
+            "uri": "https://probe.test/second.ts"
+          }
+        ],
+        "subtitles": [
+          "1"
+        ]
+      }
+    ],
+    "reconnecting": false,
+    "sources": [],
+    "tv": []
+  },
   "P15 review2 candidate position releases each probe subscription": {
     "banners": [
       {
@@ -17160,6 +17776,474 @@
         "now": null,
         "number": 100,
         "url": "stremio-tv://fixture-addon-1-resource-position/resource-position"
+      }
+    ],
+    "browse": [],
+    "controls": [
+      {
+        "guide": true,
+        "hasGuide": true,
+        "hasNext": true,
+        "hasNextChannel": false,
+        "hasPrevious": true,
+        "hasRecord": false,
+        "hasSources": true,
+        "hideSeekbar": true,
+        "hideSpeed": true,
+        "liveEdge": false,
+        "liveEdgeActive": false,
+        "liveEdgeLoading": false,
+        "next": true,
+        "nextChannel": false,
+        "previous": true,
+        "record": false,
+        "sources": true,
+        "timeline": false,
+        "timelineVisible": false
+      }
+    ],
+    "guides": [],
+    "identity": [],
+    "lost": false,
+    "players": [
+      {
+        "audio": [],
+        "opens": [
+          {
+            "play": true,
+            "uri": "https://p15.test/0.ts"
+          },
+          {
+            "headers": {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              "X-P15": "channel-header"
+            },
+            "play": true,
+            "uri": "https://probe.test/first.ts"
+          }
+        ],
+        "subtitles": [
+          "1"
+        ]
+      }
+    ],
+    "reconnecting": false,
+    "sources": [],
+    "tv": []
+  },
+  "P15 review2 candidate probe accepts only positive negative position": {
+    "banners": [
+      {
+        "archive": null,
+        "flush": true,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 100",
+        "next": null,
+        "now": null,
+        "number": 100,
+        "url": "stremio-tv://fixture-addon-1-probe-edge-negative-position/probe-edge-negative-position"
+      },
+      {
+        "archive": null,
+        "flush": false,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 100",
+        "next": null,
+        "now": null,
+        "number": 100,
+        "url": "stremio-tv://fixture-addon-1-probe-edge-negative-position/probe-edge-negative-position"
+      }
+    ],
+    "browse": [],
+    "controls": [
+      {
+        "guide": true,
+        "hasGuide": true,
+        "hasNext": true,
+        "hasNextChannel": false,
+        "hasPrevious": true,
+        "hasRecord": false,
+        "hasSources": true,
+        "hideSeekbar": true,
+        "hideSpeed": true,
+        "liveEdge": false,
+        "liveEdgeActive": false,
+        "liveEdgeLoading": false,
+        "next": true,
+        "nextChannel": false,
+        "previous": true,
+        "record": false,
+        "sources": true,
+        "timeline": false,
+        "timelineVisible": false
+      }
+    ],
+    "guides": [],
+    "identity": [],
+    "lost": false,
+    "players": [
+      {
+        "audio": [],
+        "opens": [
+          {
+            "play": true,
+            "uri": "https://p15.test/0.ts"
+          },
+          {
+            "headers": {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              "X-P15": "channel-header"
+            },
+            "play": true,
+            "uri": "https://probe.test/first.ts"
+          }
+        ],
+        "subtitles": [
+          "1"
+        ]
+      }
+    ],
+    "reconnecting": false,
+    "sources": [],
+    "tv": []
+  },
+  "P15 review2 candidate probe accepts only positive null width": {
+    "banners": [
+      {
+        "archive": null,
+        "flush": true,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 100",
+        "next": null,
+        "now": null,
+        "number": 100,
+        "url": "stremio-tv://fixture-addon-1-probe-edge-null-width/probe-edge-null-width"
+      },
+      {
+        "archive": null,
+        "flush": false,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 100",
+        "next": null,
+        "now": null,
+        "number": 100,
+        "url": "stremio-tv://fixture-addon-1-probe-edge-null-width/probe-edge-null-width"
+      }
+    ],
+    "browse": [],
+    "controls": [
+      {
+        "guide": true,
+        "hasGuide": true,
+        "hasNext": true,
+        "hasNextChannel": false,
+        "hasPrevious": true,
+        "hasRecord": false,
+        "hasSources": true,
+        "hideSeekbar": true,
+        "hideSpeed": true,
+        "liveEdge": false,
+        "liveEdgeActive": false,
+        "liveEdgeLoading": false,
+        "next": true,
+        "nextChannel": false,
+        "previous": true,
+        "record": false,
+        "sources": true,
+        "timeline": false,
+        "timelineVisible": false
+      }
+    ],
+    "guides": [],
+    "identity": [],
+    "lost": false,
+    "players": [
+      {
+        "audio": [],
+        "opens": [
+          {
+            "play": true,
+            "uri": "https://p15.test/0.ts"
+          },
+          {
+            "headers": {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              "X-P15": "channel-header"
+            },
+            "play": true,
+            "uri": "https://probe.test/first.ts"
+          }
+        ],
+        "subtitles": [
+          "1"
+        ]
+      }
+    ],
+    "reconnecting": false,
+    "sources": [],
+    "tv": []
+  },
+  "P15 review2 candidate probe accepts only positive one pixel width": {
+    "banners": [
+      {
+        "archive": null,
+        "flush": true,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 100",
+        "next": null,
+        "now": null,
+        "number": 100,
+        "url": "stremio-tv://fixture-addon-1-probe-edge-one-pixel-width/probe-edge-one-pixel-width"
+      },
+      {
+        "archive": null,
+        "flush": false,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 100",
+        "next": null,
+        "now": null,
+        "number": 100,
+        "url": "stremio-tv://fixture-addon-1-probe-edge-one-pixel-width/probe-edge-one-pixel-width"
+      }
+    ],
+    "browse": [],
+    "controls": [
+      {
+        "guide": true,
+        "hasGuide": true,
+        "hasNext": true,
+        "hasNextChannel": false,
+        "hasPrevious": true,
+        "hasRecord": false,
+        "hasSources": true,
+        "hideSeekbar": true,
+        "hideSpeed": true,
+        "liveEdge": false,
+        "liveEdgeActive": false,
+        "liveEdgeLoading": false,
+        "next": true,
+        "nextChannel": false,
+        "previous": true,
+        "record": false,
+        "sources": true,
+        "timeline": false,
+        "timelineVisible": false
+      }
+    ],
+    "guides": [],
+    "identity": [],
+    "lost": false,
+    "players": [
+      {
+        "audio": [],
+        "opens": [
+          {
+            "play": true,
+            "uri": "https://p15.test/0.ts"
+          },
+          {
+            "headers": {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              "X-P15": "channel-header"
+            },
+            "play": true,
+            "uri": "https://probe.test/first.ts"
+          }
+        ],
+        "subtitles": [
+          "1"
+        ]
+      }
+    ],
+    "reconnecting": false,
+    "sources": [],
+    "tv": []
+  },
+  "P15 review2 candidate probe accepts only positive positive position": {
+    "banners": [
+      {
+        "archive": null,
+        "flush": true,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 100",
+        "next": null,
+        "now": null,
+        "number": 100,
+        "url": "stremio-tv://fixture-addon-1-probe-edge-positive-position/probe-edge-positive-position"
+      },
+      {
+        "archive": null,
+        "flush": false,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 100",
+        "next": null,
+        "now": null,
+        "number": 100,
+        "url": "stremio-tv://fixture-addon-1-probe-edge-positive-position/probe-edge-positive-position"
+      }
+    ],
+    "browse": [],
+    "controls": [
+      {
+        "guide": true,
+        "hasGuide": true,
+        "hasNext": true,
+        "hasNextChannel": false,
+        "hasPrevious": true,
+        "hasRecord": false,
+        "hasSources": true,
+        "hideSeekbar": true,
+        "hideSpeed": true,
+        "liveEdge": false,
+        "liveEdgeActive": false,
+        "liveEdgeLoading": false,
+        "next": true,
+        "nextChannel": false,
+        "previous": true,
+        "record": false,
+        "sources": true,
+        "timeline": false,
+        "timelineVisible": false
+      }
+    ],
+    "guides": [],
+    "identity": [],
+    "lost": false,
+    "players": [
+      {
+        "audio": [],
+        "opens": [
+          {
+            "play": true,
+            "uri": "https://p15.test/0.ts"
+          },
+          {
+            "headers": {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              "X-P15": "channel-header"
+            },
+            "play": true,
+            "uri": "https://probe.test/first.ts"
+          }
+        ],
+        "subtitles": [
+          "1"
+        ]
+      }
+    ],
+    "reconnecting": false,
+    "sources": [],
+    "tv": []
+  },
+  "P15 review2 candidate probe accepts only positive zero position": {
+    "banners": [
+      {
+        "archive": null,
+        "flush": true,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 100",
+        "next": null,
+        "now": null,
+        "number": 100,
+        "url": "stremio-tv://fixture-addon-1-probe-edge-zero-position/probe-edge-zero-position"
+      },
+      {
+        "archive": null,
+        "flush": false,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 100",
+        "next": null,
+        "now": null,
+        "number": 100,
+        "url": "stremio-tv://fixture-addon-1-probe-edge-zero-position/probe-edge-zero-position"
+      }
+    ],
+    "browse": [],
+    "controls": [
+      {
+        "guide": true,
+        "hasGuide": true,
+        "hasNext": true,
+        "hasNextChannel": false,
+        "hasPrevious": true,
+        "hasRecord": false,
+        "hasSources": true,
+        "hideSeekbar": true,
+        "hideSpeed": true,
+        "liveEdge": false,
+        "liveEdgeActive": false,
+        "liveEdgeLoading": false,
+        "next": true,
+        "nextChannel": false,
+        "previous": true,
+        "record": false,
+        "sources": true,
+        "timeline": false,
+        "timelineVisible": false
+      }
+    ],
+    "guides": [],
+    "identity": [],
+    "lost": false,
+    "players": [
+      {
+        "audio": [],
+        "opens": [
+          {
+            "play": true,
+            "uri": "https://p15.test/0.ts"
+          },
+          {
+            "headers": {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              "X-P15": "channel-header"
+            },
+            "play": true,
+            "uri": "https://probe.test/first.ts"
+          }
+        ],
+        "subtitles": [
+          "1"
+        ]
+      }
+    ],
+    "reconnecting": false,
+    "sources": [],
+    "tv": []
+  },
+  "P15 review2 candidate probe accepts only positive zero width": {
+    "banners": [
+      {
+        "archive": null,
+        "flush": true,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 100",
+        "next": null,
+        "now": null,
+        "number": 100,
+        "url": "stremio-tv://fixture-addon-1-probe-edge-zero-width/probe-edge-zero-width"
+      },
+      {
+        "archive": null,
+        "flush": false,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 100",
+        "next": null,
+        "now": null,
+        "number": 100,
+        "url": "stremio-tv://fixture-addon-1-probe-edge-zero-width/probe-edge-zero-width"
       }
     ],
     "browse": [],
@@ -17768,6 +18852,469 @@
     "sources": [],
     "tv": []
   },
+  "P15 review2 category threshold backward before margin": {
+    "banners": [
+      {
+        "archive": null,
+        "flush": true,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 11",
+        "next": null,
+        "now": null,
+        "number": 11,
+        "url": "https://p15.test/11.ts"
+      },
+      {
+        "archive": null,
+        "flush": false,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 11",
+        "next": null,
+        "now": null,
+        "number": 11,
+        "url": "https://p15.test/11.ts"
+      }
+    ],
+    "browse": [
+      {
+        "action": "zapPage",
+        "anchorName": "P15 channel 12",
+        "anchorUrl": "https://p15.test/12.ts",
+        "category": "News",
+        "contentType": "live",
+        "limit": 1500,
+        "offset": 0,
+        "query": "",
+        "sourceId": "launch-source"
+      }
+    ],
+    "controls": [
+      {
+        "guide": true,
+        "hasGuide": true,
+        "hasNext": true,
+        "hasNextChannel": false,
+        "hasPrevious": true,
+        "hasRecord": false,
+        "hasSources": false,
+        "hideSeekbar": true,
+        "hideSpeed": true,
+        "liveEdge": false,
+        "liveEdgeActive": false,
+        "liveEdgeLoading": false,
+        "next": true,
+        "nextChannel": false,
+        "previous": true,
+        "record": false,
+        "sources": false,
+        "timeline": false,
+        "timelineVisible": false
+      }
+    ],
+    "guides": [],
+    "identity": [],
+    "lost": false,
+    "players": [
+      {
+        "audio": [],
+        "opens": [
+          {
+            "play": true,
+            "uri": "https://p15.test/12.ts"
+          },
+          {
+            "headers": {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+            "play": true,
+            "uri": "https://p15.test/11.ts"
+          }
+        ],
+        "subtitles": [
+          "1"
+        ]
+      }
+    ],
+    "reconnecting": false,
+    "sources": [],
+    "tv": []
+  },
+  "P15 review2 category threshold backward start margin": {
+    "banners": [
+      {
+        "archive": null,
+        "flush": true,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 0",
+        "next": null,
+        "now": null,
+        "number": 0,
+        "url": "https://p15.test/0.ts"
+      },
+      {
+        "archive": null,
+        "flush": false,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 0",
+        "next": null,
+        "now": null,
+        "number": 0,
+        "url": "https://p15.test/0.ts"
+      }
+    ],
+    "browse": [
+      {
+        "action": "zapPage",
+        "anchorName": "P15 channel 2",
+        "anchorUrl": "https://p15.test/2.ts",
+        "category": "News",
+        "contentType": "live",
+        "limit": 1500,
+        "offset": 0,
+        "query": "",
+        "sourceId": "launch-source"
+      },
+      {
+        "action": "zapPage",
+        "category": "Sports",
+        "contentType": "live",
+        "fromEnd": true,
+        "limit": 1500,
+        "offset": 0,
+        "query": "",
+        "sourceId": "ring-source"
+      }
+    ],
+    "controls": [
+      {
+        "guide": true,
+        "hasGuide": true,
+        "hasNext": true,
+        "hasNextChannel": false,
+        "hasPrevious": true,
+        "hasRecord": false,
+        "hasSources": false,
+        "hideSeekbar": true,
+        "hideSpeed": true,
+        "liveEdge": false,
+        "liveEdgeActive": false,
+        "liveEdgeLoading": false,
+        "next": true,
+        "nextChannel": false,
+        "previous": true,
+        "record": false,
+        "sources": false,
+        "timeline": false,
+        "timelineVisible": false
+      }
+    ],
+    "guides": [],
+    "identity": [],
+    "lost": false,
+    "players": [
+      {
+        "audio": [],
+        "opens": [
+          {
+            "play": true,
+            "uri": "https://p15.test/2.ts"
+          },
+          {
+            "headers": {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+            "play": true,
+            "uri": "https://p15.test/1.ts"
+          },
+          {
+            "headers": {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+            "play": true,
+            "uri": "https://p15.test/0.ts"
+          }
+        ],
+        "subtitles": [
+          "1"
+        ]
+      }
+    ],
+    "reconnecting": false,
+    "sources": [],
+    "tv": []
+  },
+  "P15 review2 category threshold forward before margin": {
+    "banners": [
+      {
+        "archive": null,
+        "flush": true,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 18",
+        "next": null,
+        "now": null,
+        "number": 18,
+        "url": "https://p15.test/18.ts"
+      },
+      {
+        "archive": null,
+        "flush": false,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 18",
+        "next": null,
+        "now": null,
+        "number": 18,
+        "url": "https://p15.test/18.ts"
+      }
+    ],
+    "browse": [
+      {
+        "action": "zapPage",
+        "anchorName": "P15 channel 17",
+        "anchorUrl": "https://p15.test/17.ts",
+        "category": "News",
+        "contentType": "live",
+        "limit": 1500,
+        "offset": 0,
+        "query": "",
+        "sourceId": "launch-source"
+      }
+    ],
+    "controls": [
+      {
+        "guide": true,
+        "hasGuide": true,
+        "hasNext": true,
+        "hasNextChannel": false,
+        "hasPrevious": true,
+        "hasRecord": false,
+        "hasSources": false,
+        "hideSeekbar": true,
+        "hideSpeed": true,
+        "liveEdge": false,
+        "liveEdgeActive": false,
+        "liveEdgeLoading": false,
+        "next": true,
+        "nextChannel": false,
+        "previous": true,
+        "record": false,
+        "sources": false,
+        "timeline": false,
+        "timelineVisible": false
+      }
+    ],
+    "guides": [],
+    "identity": [],
+    "lost": false,
+    "players": [
+      {
+        "audio": [],
+        "opens": [
+          {
+            "play": true,
+            "uri": "https://p15.test/17.ts"
+          },
+          {
+            "headers": {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+            "play": true,
+            "uri": "https://p15.test/18.ts"
+          }
+        ],
+        "subtitles": [
+          "1"
+        ]
+      }
+    ],
+    "reconnecting": false,
+    "sources": [],
+    "tv": []
+  },
+  "P15 review2 category threshold forward positive-offset margin": {
+    "banners": [
+      {
+        "archive": null,
+        "flush": true,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 120",
+        "next": null,
+        "now": null,
+        "number": 120,
+        "url": "https://p15.test/120.ts"
+      },
+      {
+        "archive": null,
+        "flush": false,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 120",
+        "next": null,
+        "now": null,
+        "number": 120,
+        "url": "https://p15.test/120.ts"
+      }
+    ],
+    "browse": [
+      {
+        "action": "zapPage",
+        "anchorName": "P15 channel 118",
+        "anchorUrl": "https://p15.test/118.ts",
+        "category": "News",
+        "contentType": "live",
+        "limit": 1500,
+        "offset": 0,
+        "query": "",
+        "sourceId": "launch-source"
+      },
+      {
+        "action": "zapPage",
+        "category": "Sports",
+        "contentType": "live",
+        "fromEnd": false,
+        "limit": 1500,
+        "offset": 0,
+        "query": "",
+        "sourceId": "ring-source"
+      }
+    ],
+    "controls": [
+      {
+        "guide": true,
+        "hasGuide": true,
+        "hasNext": true,
+        "hasNextChannel": false,
+        "hasPrevious": true,
+        "hasRecord": false,
+        "hasSources": false,
+        "hideSeekbar": true,
+        "hideSpeed": true,
+        "liveEdge": false,
+        "liveEdgeActive": false,
+        "liveEdgeLoading": false,
+        "next": true,
+        "nextChannel": false,
+        "previous": true,
+        "record": false,
+        "sources": false,
+        "timeline": false,
+        "timelineVisible": false
+      }
+    ],
+    "guides": [],
+    "identity": [],
+    "lost": false,
+    "players": [
+      {
+        "audio": [],
+        "opens": [
+          {
+            "play": true,
+            "uri": "https://p15.test/118.ts"
+          },
+          {
+            "headers": {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+            "play": true,
+            "uri": "https://p15.test/119.ts"
+          },
+          {
+            "headers": {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+            "play": true,
+            "uri": "https://p15.test/120.ts"
+          }
+        ],
+        "subtitles": [
+          "1"
+        ]
+      }
+    ],
+    "reconnecting": false,
+    "sources": [],
+    "tv": []
+  },
+  "P15 review2 clearing absent sources does not publish an extra pre-open frame": {
+    "banners": [
+      {
+        "archive": true,
+        "flush": true,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 2",
+        "next": null,
+        "now": "P15 current programme",
+        "number": 2,
+        "url": "https://p15-clear-panel.test/live/u/p/123.ts"
+      }
+    ],
+    "browse": [],
+    "controls": [
+      {
+        "guide": true,
+        "hasGuide": true,
+        "hasNext": true,
+        "hasNextChannel": false,
+        "hasPrevious": true,
+        "hasRecord": true,
+        "hasSources": false,
+        "hideSeekbar": true,
+        "hideSpeed": true,
+        "liveEdge": false,
+        "liveEdgeActive": false,
+        "liveEdgeLoading": false,
+        "next": true,
+        "nextChannel": false,
+        "previous": true,
+        "record": true,
+        "sources": false,
+        "timeline": false,
+        "timelineVisible": false
+      }
+    ],
+    "guides": [],
+    "identity": [],
+    "lost": false,
+    "players": [
+      {
+        "audio": [],
+        "opens": [
+          {
+            "play": true,
+            "uri": "https://probe.test/first.ts"
+          },
+          {
+            "headers": {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+            "play": true,
+            "uri": "https://p15.test/1.ts"
+          },
+          {
+            "headers": {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+            "play": true,
+            "uri": "https://p15-clear-panel.test/live/u/p/123.ts"
+          }
+        ],
+        "subtitles": [
+          "1"
+        ]
+      }
+    ],
+    "reconnecting": false,
+    "sources": [],
+    "tv": []
+  },
   "P15 review2 complete page protocol direction=-1": {
     "banners": [
       {
@@ -18187,6 +19734,76 @@
         "sourceId": "ring-source"
       }
     ],
+    "controls": [
+      {
+        "guide": true,
+        "hasGuide": true,
+        "hasNext": true,
+        "hasNextChannel": false,
+        "hasPrevious": true,
+        "hasRecord": false,
+        "hasSources": false,
+        "hideSeekbar": true,
+        "hideSpeed": true,
+        "liveEdge": false,
+        "liveEdgeActive": false,
+        "liveEdgeLoading": false,
+        "next": true,
+        "nextChannel": false,
+        "previous": true,
+        "record": false,
+        "sources": false,
+        "timeline": false,
+        "timelineVisible": false
+      }
+    ],
+    "guides": [],
+    "identity": [],
+    "lost": false,
+    "players": [
+      {
+        "audio": [],
+        "opens": [
+          {
+            "play": true,
+            "uri": "https://p15.test/0.ts"
+          }
+        ],
+        "subtitles": [
+          "1"
+        ]
+      }
+    ],
+    "reconnecting": false,
+    "sources": [],
+    "tv": []
+  },
+  "P15 review2 empty explicit zap candidates retire the old source browser": {
+    "banners": [
+      {
+        "archive": null,
+        "flush": true,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 100",
+        "next": null,
+        "now": null,
+        "number": 100,
+        "url": "stremio-tv://fixture-addon-1-empty-explicit/empty-explicit"
+      },
+      {
+        "archive": null,
+        "flush": false,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 100",
+        "next": null,
+        "now": null,
+        "number": 100,
+        "url": "stremio-tv://fixture-addon-1-empty-explicit/empty-explicit"
+      }
+    ],
+    "browse": [],
     "controls": [
       {
         "guide": true,
@@ -19368,6 +20985,334 @@
     "sources": [],
     "tv": []
   },
+  "P15 review2 last-live header capture before storage await populated=false": {
+    "banners": [
+      {
+        "archive": null,
+        "flush": true,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 0",
+        "next": null,
+        "now": null,
+        "number": 0,
+        "url": "https://p15.test/0.ts"
+      },
+      {
+        "archive": null,
+        "flush": false,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 0",
+        "next": null,
+        "now": null,
+        "number": 0,
+        "url": "https://p15.test/0.ts"
+      }
+    ],
+    "browse": [],
+    "controls": [
+      {
+        "guide": true,
+        "hasGuide": true,
+        "hasNext": false,
+        "hasNextChannel": false,
+        "hasPrevious": false,
+        "hasRecord": false,
+        "hasSources": false,
+        "hideSeekbar": true,
+        "hideSpeed": true,
+        "liveEdge": false,
+        "liveEdgeActive": false,
+        "liveEdgeLoading": false,
+        "next": false,
+        "nextChannel": false,
+        "previous": false,
+        "record": false,
+        "sources": false,
+        "timeline": false,
+        "timelineVisible": false
+      }
+    ],
+    "guides": [],
+    "identity": [],
+    "lost": false,
+    "players": [
+      {
+        "audio": [],
+        "opens": [
+          {
+            "play": true,
+            "uri": "https://p15.test/0.ts"
+          }
+        ],
+        "subtitles": [
+          "1"
+        ]
+      }
+    ],
+    "reconnecting": false,
+    "sources": [],
+    "tv": []
+  },
+  "P15 review2 last-live header capture before storage await populated=true": {
+    "banners": [
+      {
+        "archive": null,
+        "flush": true,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 0",
+        "next": null,
+        "now": null,
+        "number": 0,
+        "url": "https://p15.test/0.ts"
+      },
+      {
+        "archive": null,
+        "flush": false,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 0",
+        "next": null,
+        "now": null,
+        "number": 0,
+        "url": "https://p15.test/0.ts"
+      }
+    ],
+    "browse": [],
+    "controls": [
+      {
+        "guide": true,
+        "hasGuide": true,
+        "hasNext": false,
+        "hasNextChannel": false,
+        "hasPrevious": false,
+        "hasRecord": false,
+        "hasSources": false,
+        "hideSeekbar": true,
+        "hideSpeed": true,
+        "liveEdge": false,
+        "liveEdgeActive": false,
+        "liveEdgeLoading": false,
+        "next": false,
+        "nextChannel": false,
+        "previous": false,
+        "record": false,
+        "sources": false,
+        "timeline": false,
+        "timelineVisible": false
+      }
+    ],
+    "guides": [],
+    "identity": [],
+    "lost": false,
+    "players": [
+      {
+        "audio": [],
+        "opens": [
+          {
+            "play": true,
+            "uri": "https://p15.test/0.ts"
+          }
+        ],
+        "subtitles": [
+          "1"
+        ]
+      }
+    ],
+    "reconnecting": false,
+    "sources": [],
+    "tv": []
+  },
+  "P15 review2 last-live storage captures channel source and headers": {
+    "banners": [
+      {
+        "archive": null,
+        "flush": true,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 0",
+        "next": null,
+        "now": null,
+        "number": 0,
+        "url": "https://p15.test/0.ts"
+      }
+    ],
+    "browse": [],
+    "controls": [
+      {
+        "guide": true,
+        "hasGuide": true,
+        "hasNext": false,
+        "hasNextChannel": false,
+        "hasPrevious": false,
+        "hasRecord": false,
+        "hasSources": false,
+        "hideSeekbar": true,
+        "hideSpeed": true,
+        "liveEdge": false,
+        "liveEdgeActive": false,
+        "liveEdgeLoading": false,
+        "next": false,
+        "nextChannel": false,
+        "previous": false,
+        "record": false,
+        "sources": false,
+        "timeline": false,
+        "timelineVisible": false
+      }
+    ],
+    "guides": [],
+    "identity": [],
+    "lost": false,
+    "players": [
+      {
+        "audio": [],
+        "opens": [
+          {
+            "play": true,
+            "uri": "https://p15.test/0.ts"
+          }
+        ],
+        "subtitles": [
+          "1"
+        ]
+      }
+    ],
+    "reconnecting": false,
+    "sources": [],
+    "tv": []
+  },
+  "P15 review2 last-live storage captures guide source and headers": {
+    "banners": [
+      {
+        "archive": null,
+        "flush": true,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 0",
+        "next": null,
+        "now": null,
+        "number": 0,
+        "url": "https://p15.test/0.ts"
+      }
+    ],
+    "browse": [],
+    "controls": [
+      {
+        "guide": true,
+        "hasGuide": true,
+        "hasNext": false,
+        "hasNextChannel": false,
+        "hasPrevious": false,
+        "hasRecord": false,
+        "hasSources": false,
+        "hideSeekbar": true,
+        "hideSpeed": true,
+        "liveEdge": false,
+        "liveEdgeActive": false,
+        "liveEdgeLoading": false,
+        "next": false,
+        "nextChannel": false,
+        "previous": false,
+        "record": false,
+        "sources": false,
+        "timeline": false,
+        "timelineVisible": false
+      }
+    ],
+    "guides": [],
+    "identity": [],
+    "lost": false,
+    "players": [
+      {
+        "audio": [],
+        "opens": [
+          {
+            "play": true,
+            "uri": "https://p15.test/0.ts"
+          }
+        ],
+        "subtitles": [
+          "1"
+        ]
+      }
+    ],
+    "reconnecting": false,
+    "sources": [],
+    "tv": []
+  },
+  "P15 review2 last-live storage captures widget source and headers": {
+    "banners": [
+      {
+        "archive": null,
+        "flush": true,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 0",
+        "next": null,
+        "now": null,
+        "number": 0,
+        "url": "https://p15.test/0.ts"
+      },
+      {
+        "archive": null,
+        "flush": false,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 0",
+        "next": null,
+        "now": null,
+        "number": 0,
+        "url": "https://p15.test/0.ts"
+      }
+    ],
+    "browse": [],
+    "controls": [
+      {
+        "guide": true,
+        "hasGuide": true,
+        "hasNext": false,
+        "hasNextChannel": false,
+        "hasPrevious": false,
+        "hasRecord": false,
+        "hasSources": false,
+        "hideSeekbar": true,
+        "hideSpeed": true,
+        "liveEdge": false,
+        "liveEdgeActive": false,
+        "liveEdgeLoading": false,
+        "next": false,
+        "nextChannel": false,
+        "previous": false,
+        "record": false,
+        "sources": false,
+        "timeline": false,
+        "timelineVisible": false
+      }
+    ],
+    "guides": [],
+    "identity": [],
+    "lost": false,
+    "players": [
+      {
+        "audio": [],
+        "opens": [
+          {
+            "play": true,
+            "uri": "https://p15.test/0.ts"
+          }
+        ],
+        "subtitles": [
+          "1"
+        ]
+      }
+    ],
+    "reconnecting": false,
+    "sources": [],
+    "tv": []
+  },
   "P15 review2 late category install clears a cache from a newer ring": {
     "banners": [
       {
@@ -19510,6 +21455,100 @@
     ],
     "reconnecting": false,
     "sources": [],
+    "tv": []
+  },
+  "P15 review2 late initial sources cannot replace a same-channel manual selection": {
+    "banners": [
+      {
+        "archive": null,
+        "flush": true,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 100",
+        "next": null,
+        "now": null,
+        "number": 100,
+        "url": "stremio-tv://fixture-addon-1-initial-vs-manual/initial-vs-manual"
+      },
+      {
+        "archive": null,
+        "flush": false,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 100",
+        "next": null,
+        "now": null,
+        "number": 100,
+        "url": "stremio-tv://fixture-addon-1-initial-vs-manual/initial-vs-manual"
+      }
+    ],
+    "browse": [],
+    "controls": [
+      {
+        "guide": true,
+        "hasGuide": true,
+        "hasNext": false,
+        "hasNextChannel": false,
+        "hasPrevious": false,
+        "hasRecord": false,
+        "hasSources": true,
+        "hideSeekbar": true,
+        "hideSpeed": true,
+        "liveEdge": false,
+        "liveEdgeActive": false,
+        "liveEdgeLoading": false,
+        "next": false,
+        "nextChannel": false,
+        "previous": false,
+        "record": false,
+        "sources": true,
+        "timeline": false,
+        "timelineVisible": false
+      }
+    ],
+    "guides": [],
+    "identity": [],
+    "lost": false,
+    "players": [
+      {
+        "audio": [],
+        "opens": [
+          {
+            "play": true,
+            "uri": "https://probe.test/first.ts"
+          },
+          {
+            "headers": {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              "X-P15": "channel-header"
+            },
+            "play": true,
+            "uri": "https://probe.test/first.ts"
+          },
+          {
+            "headers": {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              "X-P15": "channel-header"
+            },
+            "play": true,
+            "uri": "https://probe.test/second.ts"
+          }
+        ],
+        "subtitles": [
+          "1"
+        ]
+      }
+    ],
+    "reconnecting": false,
+    "sources": [
+      {
+        "index": 1,
+        "names": [
+          "Candidate 0",
+          "Candidate 1"
+        ]
+      }
+    ],
     "tv": []
   },
   "P15 review2 late recovery recording stop respects dispose ownership": {
@@ -21086,6 +23125,53 @@
     "sources": [],
     "tv": []
   },
+  "P15 review2 on-demand playing never owns a last-live settle timer": {
+    "banners": [],
+    "browse": [],
+    "controls": [
+      {
+        "guide": true,
+        "hasGuide": true,
+        "hasNext": false,
+        "hasNextChannel": false,
+        "hasPrevious": false,
+        "hasRecord": false,
+        "hasSources": false,
+        "hideSeekbar": false,
+        "hideSpeed": false,
+        "liveEdge": false,
+        "liveEdgeActive": false,
+        "liveEdgeLoading": false,
+        "next": false,
+        "nextChannel": false,
+        "previous": false,
+        "record": false,
+        "sources": false,
+        "timeline": false,
+        "timelineVisible": false
+      }
+    ],
+    "guides": [],
+    "identity": [],
+    "lost": false,
+    "players": [
+      {
+        "audio": [],
+        "opens": [
+          {
+            "play": true,
+            "uri": "https://p15.test/0.ts"
+          }
+        ],
+        "subtitles": [
+          "1"
+        ]
+      }
+    ],
+    "reconnecting": false,
+    "sources": [],
+    "tv": []
+  },
   "P15 review2 opening an early guide allocates no identity clock": {
     "banners": [
       {
@@ -21699,6 +23785,422 @@
             },
             "play": true,
             "uri": "https://p15.test/10.ts"
+          }
+        ],
+        "subtitles": [
+          "1"
+        ]
+      }
+    ],
+    "reconnecting": false,
+    "sources": [],
+    "tv": []
+  },
+  "P15 review2 paging threshold backward boundary at offset one": {
+    "banners": [
+      {
+        "archive": null,
+        "flush": true,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 0",
+        "next": null,
+        "now": null,
+        "number": 0,
+        "url": "https://p15.test/0.ts"
+      },
+      {
+        "archive": null,
+        "flush": false,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 0",
+        "next": null,
+        "now": null,
+        "number": 0,
+        "url": "https://p15.test/0.ts"
+      }
+    ],
+    "browse": [
+      {
+        "action": "zapPage",
+        "anchorName": "P15 channel 1",
+        "anchorUrl": "https://p15.test/1.ts",
+        "category": "News",
+        "contentType": "live",
+        "limit": 1500,
+        "offset": 0,
+        "query": "",
+        "sourceId": "launch-source"
+      },
+      {
+        "action": "zapPage",
+        "category": "News",
+        "contentType": "live",
+        "fromEnd": false,
+        "limit": 1500,
+        "offset": 0,
+        "query": "",
+        "sourceId": "ring-source"
+      },
+      {
+        "action": "zapPage",
+        "category": "Sports",
+        "contentType": "live",
+        "fromEnd": true,
+        "limit": 1500,
+        "offset": 0,
+        "query": "",
+        "sourceId": "ring-source"
+      }
+    ],
+    "controls": [
+      {
+        "guide": true,
+        "hasGuide": true,
+        "hasNext": true,
+        "hasNextChannel": false,
+        "hasPrevious": true,
+        "hasRecord": false,
+        "hasSources": false,
+        "hideSeekbar": true,
+        "hideSpeed": true,
+        "liveEdge": false,
+        "liveEdgeActive": false,
+        "liveEdgeLoading": false,
+        "next": true,
+        "nextChannel": false,
+        "previous": true,
+        "record": false,
+        "sources": false,
+        "timeline": false,
+        "timelineVisible": false
+      }
+    ],
+    "guides": [],
+    "identity": [],
+    "lost": false,
+    "players": [
+      {
+        "audio": [],
+        "opens": [
+          {
+            "play": true,
+            "uri": "https://p15.test/1.ts"
+          },
+          {
+            "headers": {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+            "play": true,
+            "uri": "https://p15.test/0.ts"
+          }
+        ],
+        "subtitles": [
+          "1"
+        ]
+      }
+    ],
+    "reconnecting": false,
+    "sources": [],
+    "tv": []
+  },
+  "P15 review2 paging threshold backward prefetch at offset one": {
+    "banners": [
+      {
+        "archive": null,
+        "flush": true,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 1",
+        "next": null,
+        "now": null,
+        "number": 1,
+        "url": "https://p15.test/1.ts"
+      },
+      {
+        "archive": null,
+        "flush": false,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 1",
+        "next": null,
+        "now": null,
+        "number": 1,
+        "url": "https://p15.test/1.ts"
+      }
+    ],
+    "browse": [
+      {
+        "action": "zapPage",
+        "anchorName": "P15 channel 2",
+        "anchorUrl": "https://p15.test/2.ts",
+        "category": "News",
+        "contentType": "live",
+        "limit": 1500,
+        "offset": 0,
+        "query": "",
+        "sourceId": "launch-source"
+      },
+      {
+        "action": "zapPage",
+        "category": "News",
+        "contentType": "live",
+        "fromEnd": false,
+        "limit": 1500,
+        "offset": 0,
+        "query": "",
+        "sourceId": "ring-source"
+      }
+    ],
+    "controls": [
+      {
+        "guide": true,
+        "hasGuide": true,
+        "hasNext": true,
+        "hasNextChannel": false,
+        "hasPrevious": true,
+        "hasRecord": false,
+        "hasSources": false,
+        "hideSeekbar": true,
+        "hideSpeed": true,
+        "liveEdge": false,
+        "liveEdgeActive": false,
+        "liveEdgeLoading": false,
+        "next": true,
+        "nextChannel": false,
+        "previous": true,
+        "record": false,
+        "sources": false,
+        "timeline": false,
+        "timelineVisible": false
+      }
+    ],
+    "guides": [],
+    "identity": [],
+    "lost": false,
+    "players": [
+      {
+        "audio": [],
+        "opens": [
+          {
+            "play": true,
+            "uri": "https://p15.test/2.ts"
+          },
+          {
+            "headers": {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+            "play": true,
+            "uri": "https://p15.test/1.ts"
+          }
+        ],
+        "subtitles": [
+          "1"
+        ]
+      }
+    ],
+    "reconnecting": false,
+    "sources": [],
+    "tv": []
+  },
+  "P15 review2 paging threshold backward prefetch beyond page size": {
+    "banners": [
+      {
+        "archive": null,
+        "flush": true,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 1501",
+        "next": null,
+        "now": null,
+        "number": 1501,
+        "url": "https://p15.test/1501.ts"
+      },
+      {
+        "archive": null,
+        "flush": false,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 1501",
+        "next": null,
+        "now": null,
+        "number": 1501,
+        "url": "https://p15.test/1501.ts"
+      }
+    ],
+    "browse": [
+      {
+        "action": "zapPage",
+        "anchorName": "P15 channel 1502",
+        "anchorUrl": "https://p15.test/1502.ts",
+        "category": "News",
+        "contentType": "live",
+        "limit": 1500,
+        "offset": 0,
+        "query": "",
+        "sourceId": "launch-source"
+      },
+      {
+        "action": "zapPage",
+        "category": "News",
+        "contentType": "live",
+        "fromEnd": false,
+        "limit": 1500,
+        "offset": 1,
+        "query": "",
+        "sourceId": "ring-source"
+      }
+    ],
+    "controls": [
+      {
+        "guide": true,
+        "hasGuide": true,
+        "hasNext": true,
+        "hasNextChannel": false,
+        "hasPrevious": true,
+        "hasRecord": false,
+        "hasSources": false,
+        "hideSeekbar": true,
+        "hideSpeed": true,
+        "liveEdge": false,
+        "liveEdgeActive": false,
+        "liveEdgeLoading": false,
+        "next": true,
+        "nextChannel": false,
+        "previous": true,
+        "record": false,
+        "sources": false,
+        "timeline": false,
+        "timelineVisible": false
+      }
+    ],
+    "guides": [],
+    "identity": [],
+    "lost": false,
+    "players": [
+      {
+        "audio": [],
+        "opens": [
+          {
+            "play": true,
+            "uri": "https://p15.test/1502.ts"
+          },
+          {
+            "headers": {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+            "play": true,
+            "uri": "https://p15.test/1501.ts"
+          }
+        ],
+        "subtitles": [
+          "1"
+        ]
+      }
+    ],
+    "reconnecting": false,
+    "sources": [],
+    "tv": []
+  },
+  "P15 review2 paging threshold forward final unloaded row": {
+    "banners": [
+      {
+        "archive": null,
+        "flush": true,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 2",
+        "next": null,
+        "now": null,
+        "number": 2,
+        "url": "https://p15.test/2.ts"
+      },
+      {
+        "archive": null,
+        "flush": false,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 2",
+        "next": null,
+        "now": null,
+        "number": 2,
+        "url": "https://p15.test/2.ts"
+      }
+    ],
+    "browse": [
+      {
+        "action": "zapPage",
+        "anchorName": "P15 channel 1",
+        "anchorUrl": "https://p15.test/1.ts",
+        "category": "News",
+        "contentType": "live",
+        "limit": 1500,
+        "offset": 0,
+        "query": "",
+        "sourceId": "launch-source"
+      },
+      {
+        "action": "zapPage",
+        "category": "News",
+        "contentType": "live",
+        "fromEnd": false,
+        "limit": 1500,
+        "offset": 2,
+        "query": "",
+        "sourceId": "ring-source"
+      },
+      {
+        "action": "zapPage",
+        "category": "Sports",
+        "contentType": "live",
+        "fromEnd": false,
+        "limit": 1500,
+        "offset": 0,
+        "query": "",
+        "sourceId": "ring-source"
+      }
+    ],
+    "controls": [
+      {
+        "guide": true,
+        "hasGuide": true,
+        "hasNext": true,
+        "hasNextChannel": false,
+        "hasPrevious": true,
+        "hasRecord": false,
+        "hasSources": false,
+        "hideSeekbar": true,
+        "hideSpeed": true,
+        "liveEdge": false,
+        "liveEdgeActive": false,
+        "liveEdgeLoading": false,
+        "next": true,
+        "nextChannel": false,
+        "previous": true,
+        "record": false,
+        "sources": false,
+        "timeline": false,
+        "timelineVisible": false
+      }
+    ],
+    "guides": [],
+    "identity": [],
+    "lost": false,
+    "players": [
+      {
+        "audio": [],
+        "opens": [
+          {
+            "play": true,
+            "uri": "https://p15.test/1.ts"
+          },
+          {
+            "headers": {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+            "play": true,
+            "uri": "https://p15.test/2.ts"
           }
         ],
         "subtitles": [
@@ -23167,6 +25669,137 @@
             },
             "play": true,
             "uri": "https://p15.test/1.ts"
+          }
+        ],
+        "subtitles": [
+          "1"
+        ]
+      }
+    ],
+    "reconnecting": false,
+    "sources": [],
+    "tv": []
+  },
+  "P15 review2 reanchor clears a cache published after a concurrent early bootstrap": {
+    "banners": [
+      {
+        "archive": null,
+        "flush": true,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 2",
+        "next": null,
+        "now": null,
+        "number": 2,
+        "url": "https://p15.test/2.ts"
+      },
+      {
+        "archive": null,
+        "flush": false,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 2",
+        "next": null,
+        "now": null,
+        "number": 2,
+        "url": "https://p15.test/2.ts"
+      }
+    ],
+    "browse": [
+      {
+        "action": "zapPage",
+        "anchorName": "P15 channel 0",
+        "anchorUrl": "https://p15.test/0.ts",
+        "category": "News",
+        "contentType": "live",
+        "limit": 1500,
+        "offset": 0,
+        "query": "",
+        "sourceId": "launch-source"
+      },
+      {
+        "action": "zapPage",
+        "category": "Sports",
+        "contentType": "live",
+        "fromEnd": false,
+        "limit": 1500,
+        "offset": 0,
+        "query": "",
+        "sourceId": "ring-source"
+      },
+      {
+        "action": "zapPage",
+        "anchorName": "P15 channel 0",
+        "anchorUrl": "https://p15.test/0.ts",
+        "category": "News",
+        "contentType": "live",
+        "limit": 1500,
+        "offset": 0,
+        "query": "",
+        "sourceId": "launch-source"
+      },
+      {
+        "action": "zapPage",
+        "anchorName": "P15 channel 0",
+        "anchorUrl": "https://p15.test/0.ts",
+        "category": "News",
+        "contentType": "live",
+        "limit": 1500,
+        "offset": 0,
+        "query": "",
+        "sourceId": "launch-source"
+      },
+      {
+        "action": "zapPage",
+        "category": "Sports",
+        "contentType": "live",
+        "fromEnd": false,
+        "limit": 1500,
+        "offset": 0,
+        "query": "",
+        "sourceId": "ring-source"
+      }
+    ],
+    "controls": [
+      {
+        "guide": true,
+        "hasGuide": true,
+        "hasNext": true,
+        "hasNextChannel": false,
+        "hasPrevious": true,
+        "hasRecord": false,
+        "hasSources": false,
+        "hideSeekbar": true,
+        "hideSpeed": true,
+        "liveEdge": false,
+        "liveEdgeActive": false,
+        "liveEdgeLoading": false,
+        "next": true,
+        "nextChannel": false,
+        "previous": true,
+        "record": false,
+        "sources": false,
+        "timeline": false,
+        "timelineVisible": false
+      }
+    ],
+    "guides": [],
+    "identity": [],
+    "lost": false,
+    "players": [
+      {
+        "audio": [],
+        "opens": [
+          {
+            "play": true,
+            "uri": "https://p15.test/0.ts"
+          },
+          {
+            "headers": {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+            "play": true,
+            "uri": "https://p15.test/2.ts"
           }
         ],
         "subtitles": [
@@ -24883,6 +27516,256 @@
           "Candidate 0",
           "Candidate 1",
           "Candidate 2"
+        ]
+      }
+    ],
+    "tv": []
+  },
+  "P15 review2 source initialization respects launch index -1": {
+    "banners": [],
+    "browse": [],
+    "controls": [
+      {
+        "guide": true,
+        "hasGuide": true,
+        "hasNext": false,
+        "hasNextChannel": false,
+        "hasPrevious": false,
+        "hasRecord": false,
+        "hasSources": false,
+        "hideSeekbar": false,
+        "hideSpeed": false,
+        "liveEdge": false,
+        "liveEdgeActive": false,
+        "liveEdgeLoading": false,
+        "next": false,
+        "nextChannel": false,
+        "previous": false,
+        "record": false,
+        "sources": false,
+        "timeline": false,
+        "timelineVisible": false
+      }
+    ],
+    "guides": [],
+    "identity": [],
+    "lost": false,
+    "players": [
+      {
+        "audio": [],
+        "opens": [
+          {
+            "play": true,
+            "uri": "https://probe.test/first.ts"
+          }
+        ],
+        "subtitles": [
+          "1"
+        ]
+      }
+    ],
+    "reconnecting": false,
+    "sources": [],
+    "tv": []
+  },
+  "P15 review2 source initialization respects launch index 1": {
+    "banners": [
+      {
+        "archive": null,
+        "flush": true,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 100",
+        "next": null,
+        "now": null,
+        "number": 100,
+        "url": "stremio-tv://fixture-addon-1-startup-index-1/startup-index-1"
+      },
+      {
+        "archive": null,
+        "flush": false,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 100",
+        "next": null,
+        "now": null,
+        "number": 100,
+        "url": "stremio-tv://fixture-addon-1-startup-index-1/startup-index-1"
+      }
+    ],
+    "browse": [],
+    "controls": [
+      {
+        "guide": true,
+        "hasGuide": true,
+        "hasNext": true,
+        "hasNextChannel": false,
+        "hasPrevious": true,
+        "hasRecord": false,
+        "hasSources": true,
+        "hideSeekbar": true,
+        "hideSpeed": true,
+        "liveEdge": false,
+        "liveEdgeActive": false,
+        "liveEdgeLoading": false,
+        "next": true,
+        "nextChannel": false,
+        "previous": true,
+        "record": false,
+        "sources": true,
+        "timeline": false,
+        "timelineVisible": false
+      }
+    ],
+    "guides": [],
+    "identity": [],
+    "lost": false,
+    "players": [
+      {
+        "audio": [],
+        "opens": [
+          {
+            "play": true,
+            "uri": "https://probe.test/first.ts"
+          }
+        ],
+        "subtitles": [
+          "1"
+        ]
+      }
+    ],
+    "reconnecting": false,
+    "sources": [
+      {
+        "index": 0,
+        "names": [
+          "Candidate 0",
+          "Candidate 1"
+        ]
+      }
+    ],
+    "tv": []
+  },
+  "P15 review2 source initialization respects launch index 2": {
+    "banners": [],
+    "browse": [],
+    "controls": [
+      {
+        "guide": true,
+        "hasGuide": true,
+        "hasNext": false,
+        "hasNextChannel": false,
+        "hasPrevious": false,
+        "hasRecord": false,
+        "hasSources": false,
+        "hideSeekbar": false,
+        "hideSpeed": false,
+        "liveEdge": false,
+        "liveEdgeActive": false,
+        "liveEdgeLoading": false,
+        "next": false,
+        "nextChannel": false,
+        "previous": false,
+        "record": false,
+        "sources": false,
+        "timeline": false,
+        "timelineVisible": false
+      }
+    ],
+    "guides": [],
+    "identity": [],
+    "lost": false,
+    "players": [
+      {
+        "audio": [],
+        "opens": [
+          {
+            "play": true,
+            "uri": "https://probe.test/first.ts"
+          }
+        ],
+        "subtitles": [
+          "1"
+        ]
+      }
+    ],
+    "reconnecting": false,
+    "sources": [],
+    "tv": []
+  },
+  "P15 review2 source initialization respects launch index null": {
+    "banners": [
+      {
+        "archive": null,
+        "flush": true,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 100",
+        "next": null,
+        "now": null,
+        "number": 100,
+        "url": "stremio-tv://fixture-addon-1-startup-index-null/startup-index-null"
+      },
+      {
+        "archive": null,
+        "flush": false,
+        "group": "News",
+        "loading": false,
+        "name": "P15 channel 100",
+        "next": null,
+        "now": null,
+        "number": 100,
+        "url": "stremio-tv://fixture-addon-1-startup-index-null/startup-index-null"
+      }
+    ],
+    "browse": [],
+    "controls": [
+      {
+        "guide": true,
+        "hasGuide": true,
+        "hasNext": true,
+        "hasNextChannel": false,
+        "hasPrevious": true,
+        "hasRecord": false,
+        "hasSources": true,
+        "hideSeekbar": true,
+        "hideSpeed": true,
+        "liveEdge": false,
+        "liveEdgeActive": false,
+        "liveEdgeLoading": false,
+        "next": true,
+        "nextChannel": false,
+        "previous": true,
+        "record": false,
+        "sources": true,
+        "timeline": false,
+        "timelineVisible": false
+      }
+    ],
+    "guides": [],
+    "identity": [],
+    "lost": false,
+    "players": [
+      {
+        "audio": [],
+        "opens": [
+          {
+            "play": true,
+            "uri": "https://probe.test/first.ts"
+          }
+        ],
+        "subtitles": [
+          "1"
+        ]
+      }
+    ],
+    "reconnecting": false,
+    "sources": [
+      {
+        "index": 0,
+        "names": [
+          "Candidate 0",
+          "Candidate 1"
         ]
       }
     ],

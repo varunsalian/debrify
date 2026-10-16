@@ -98,10 +98,13 @@ void main() {
         final sheet = await d.guide();
         final before = d.opened.length;
         for (final index in [-1, channels.length]) {
-          await expectLater(
-            d.observe(() => sheet.onChannelSelected(channels, index)),
-            completes,
-          );
+          Object? failure;
+          try {
+            await sheet.onChannelSelected(channels, index);
+          } catch (error) {
+            failure = error;
+          }
+          expect(failure, isNull, reason: 'An invalid guide row is ignored');
           expect(d.opened.length, before);
           expect(d.playingUrl, channels[1].url);
         }

@@ -2,8 +2,13 @@
 
 All generated source, test mirrors, patches and logs live in the P15 evidence
 checkout. Each library differs from the original by exactly its recorded fault.
-Only test import URIs and the snapshot's group-name prefix are adapted. Each mutant gets its own serial test isolate. No
-private State injection, production seam or fixture expectation is changed.
+Generated test imports, group-name normalization, the fixed common-dir lookup
+and test-runner metadata are adapted; application fault spans stay exact.
+Each mutant gets its own serial test isolate. No private State injection,
+production seam or fixture expectation is changed.
+Controls execute every selected case. Mutation isolates stop executing bodies
+after their first failure; later cases remain loaded and are explicitly skipped.
+Only an assertion failure earns kill credit, never a skip or timeout.
 """
 import argparse
 import fcntl
@@ -20,6 +25,31 @@ import time
 ROOT = Path(__file__).resolve().parents[2]
 SCREEN = 'lib/screens/video_player_screen.dart'
 SCREEN_URI = 'package:debrify/screens/video_player_screen.dart'
+TEST_API = """import 'package:flutter_test/flutter_test.dart' as ft;
+import 'package:test_api/src/backend/invoker.dart';
+import 'package:test_api/src/backend/state.dart' as test_state;
+export 'package:flutter_test/flutter_test.dart' hide testWidgets;
+dynamic previous;
+const stopAfterFailure = STOP_AFTER_FAILURE;
+void testWidgets(String description, ft.WidgetTesterCallback callback, {
+  bool? skip, ft.Timeout? timeout, bool semanticsEnabled = true,
+  ft.TestVariant<Object?> variant = const ft.DefaultTestVariant(),
+  dynamic tags, int? retry, dynamic experimentalLeakTesting,
+}) {
+  ft.testWidgets(description, (tester) async {
+    if (stopAfterFailure && previous != null &&
+        previous.state.result != test_state.Result.success) {
+      ft.markTestSkipped('An earlier case already failed in this mutant isolate');
+      return;
+    }
+    previous = Invoker.current!.liveTest;
+    print('P15_MUTANT_BODY_STARTED');
+    await callback(tester);
+  }, skip: skip, timeout: timeout, semanticsEnabled: semanticsEnabled,
+     variant: variant, tags: tags, retry: retry,
+     experimentalLeakTesting: experimentalLeakTesting);
+}
+"""
 
 
 def digest(data):
@@ -64,6 +94,10 @@ def main():
         'original': '1d7699d2e', 'original_sha256': digest(original),
         'plan_sha256': digest(args.plan.read_bytes()),
         'batch_size': args.batch_size, 'control': args.control,
+        'runner_sha256': digest(Path(__file__).read_bytes()),
+        'widget_timeout_seconds': 30,
+        'test_registration_adapter': TEST_API.replace(
+            'STOP_AFTER_FAILURE', 'false' if args.control else 'true'),
         'hashes': source_hashes, 'expected_case_hashes': {
             k: digest(json.dumps(v, sort_keys=True).encode())
             for k, v in expected.items()},
@@ -123,6 +157,10 @@ def main():
                     generated.append(target)
                     variant_uri = 'package:debrify/screens/' + target.name
                 base = mirror / identifier
+                test_api = base / 'mutation_test_api.dart'
+                test_api.parent.mkdir(parents=True, exist_ok=True)
+                test_api.write_text(TEST_API.replace(
+                    'STOP_AFTER_FAILURE', 'false' if args.control else 'true'))
                 mappings.append(dict(id=identifier, variant_sha256=digest(variant),
                                      source=str(target), fault=point))
                 # Mirror one coherent test library graph, preserving external
@@ -151,6 +189,8 @@ def main():
                     destination = base / relative
                     destination.parent.mkdir(parents=True, exist_ok=True)
                     text = path.read_text().replace(SCREEN_URI, variant_uri)
+                    text = text.replace('package:flutter_test/flutter_test.dart',
+                                        test_api.as_uri())
 
                     def rewrite(match):
                         directive, quote, uri = match.groups()
@@ -189,6 +229,9 @@ def main():
                 driver = mirror / f'candidate_{identifier}_test.dart'
                 driver.write_text("import 'package:flutter_test/flutter_test.dart';\n"
                     + '\n'.join(imports) + '\nvoid main() {\n'
+                    + 'final binding = TestWidgetsFlutterBinding.ensureInitialized();\n'
+                    + 'if (binding is AutomatedTestWidgetsFlutterBinding) {\n'
+                    + 'binding.defaultTestTimeout = const Timeout(Duration(seconds: 30));\n}\n'
                     + '\n'.join(registrations) + '\n}\n')
                 drivers.append(str(driver))
                 regex = point.get('regex')
@@ -196,7 +239,7 @@ def main():
                     '.*' if not regex else '.*(?:' + regex.removeprefix('^').removesuffix('$') + ').*') + '$')
             cmd = ['nice', '-n', '19', 'flutter', 'test', '--no-pub',
                    '--dart-define=DEBRIFY_VP_TEST_HOOKS=true', '--concurrency=1',
-                   '--timeout=40s', '--reporter=json', '--name',
+                   '--timeout=30s', '--reporter=json', '--name',
                    '|'.join(selectors), *drivers]
             (output / (label + '.mapping.json')).write_text(json.dumps(
                 mappings, indent=2) + '\n')
@@ -208,12 +251,14 @@ def main():
                     # A synchronous mutant can starve the test timeout. Bound
                     # the whole batch as well; minute-long clock cases opt in
                     # through their selected file rather than every candidate.
-                    clock_cases = sum(any('archive_retry' in f for f in p['files'])
+                    clock_cases = sum(any('archive_retry' in f or
+                                          'recovery_lifetime' in f
+                                          for f in p['files'])
                                       for p in points)
                     stall_cases = sum(any('archive_stall' in f for f in p['files'])
                                       for p in points)
                     code = process.wait(
-                        timeout=240 + 90 * clock_cases + 35 * stall_cases)
+                        timeout=45 * len(points) + 90 * clock_cases + 35 * stall_cases)
                 except subprocess.TimeoutExpired:
                     os.killpg(process.pid, signal.SIGTERM)
                     try:
@@ -251,6 +296,21 @@ def main():
                                   'IptvWorkflowDriver.initialize',
                                   'VideoPlayerEnvironment.initialize'])}
             assertions.difference_update(fixture_setup)
+            first_failure = {}
+            body_started = set()
+            for event in events:
+                test_id = event.get('testID')
+                message = event.get('message', event.get('error', ''))
+                if event.get('type') == 'print' and message == 'P15_MUTANT_BODY_STARTED':
+                    body_started.add(test_id)
+                if event.get('type') == 'error' or (
+                    event.get('type') == 'print' and (
+                        'Expected:' in message or 'EXCEPTION CAUGHT BY' in message)
+                ):
+                    first_failure.setdefault(test_id,
+                        'assertion' if 'Expected:' in message else 'runtime')
+            assertions = {i for i in assertions
+                          if i in body_started and first_failure.get(i) == 'assertion'}
             for point in points:
                 if point['id'] in invalid_ids:
                     record(point, 'invalid-candidate', log, **details)
@@ -265,11 +325,26 @@ def main():
                             and e['testID'] in observed]
                 failed = {e['testID'] for e in finished if e['result'] != 'success'}
                 kills = [observed[i] for i in sorted(assertions & failed)]
+                # After a runtime failure, framework cleanup/setup assertions
+                # in later cases must never turn that candidate into a kill.
+                if not args.control and failed:
+                    first_failed = next(e['testID'] for e in finished
+                                        if e['testID'] in failed)
+                    kills = [observed[first_failed]] if first_failed in assertions else []
+                point_complete = (expected_cases is not None and selected_all
+                    and len(finished) == len(observed)
+                    and {e['testID'] for e in finished} == set(observed))
                 status = ('invalid-selector' if not observed or not selected_all else
-                    'assertion-killed' if complete and kills else
-                    'survived' if complete and len(finished) == len(observed)
+                    'assertion-killed' if (complete or point_complete) and kills else
+                    'survived' if (complete or point_complete) and len(finished) == len(observed)
                     and not failed else 'uncredited-runtime-or-timeout')
                 record(point, status, log, assertion_tests=kills,
+                       point_complete=point_complete,
+                       skipped_tests=[observed[e['testID']] for e in finished
+                                      if e.get('skipped')],
+                       body_started_tests=[observed[i] for i in sorted(body_started & set(observed))],
+                       first_failure_types={observed[i]: first_failure[i]
+                                            for i in observed if i in first_failure},
                        uncredited_fixture_setup=[observed[i] for i in
                            sorted(fixture_setup & set(observed))],
                        tests=[observed[e['testID']] for e in finished], **details)

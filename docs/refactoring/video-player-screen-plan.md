@@ -5855,6 +5855,31 @@ for Step 0 and Claude’s independent mutation sample.
   The point audit and final per-declaration closure table are still in progress.
   This checkpoint does not claim Step 0 acceptance or completion of that audit.
 
+### 2026-10-16 — Phase 15 original boundary controls and runner integrity checkpoint
+
+- **No application change.** Original application remains `1d7699d2e`;
+  production and integration work remain blocked. Step 0 is still unaccepted.
+- Nine more files pass alone on the original: paging and category margins,
+  concurrent early caches, latched reanchor source, launch-index/source races,
+  no-op source-clear publication timing, last-live timer/storage capture,
+  escaped recovery Retry lifetime, and candidate narration. The guide bounds
+  case now captures an invalid-row error before its explicit assertion.
+- Frozen inventory: **219/219 loaded**, **1667 successes / the same one
+  startup-shield failure**; **419 fresh original cases**. Existing expectations
+  are unchanged. Exact input hashes and suite/case identities bind reused runs.
+- Sixteen combined original profiles pass with every selected widget body run
+  and zero skips. Their 80-point follow-up mutation run is in progress, followed
+  by unfinished original batches; saved completed IDs are not repeated.
+- Runner sets the widget binding's real 30-second default (explicit long clock
+  cases retain their timeout), stops later mutation bodies after the first
+  failed body, and reports those bodies as skips. Original controls execute
+  all bodies. A first runtime failure cannot acquire kill credit from a later
+  cleanup assertion. Only independently completed candidate isolates can be
+  recovered from an interrupted batch, with exact name/completion/hash receipts.
+- Evidence: `p15/review2/adaptive5-controls/`, standalone `*-controls.json`,
+  `baseline-receipt.json`, `completed-isolates/`, and `first-failure-audit.json`.
+  The final point-by-point and per-declaration audit remains unfinished.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
