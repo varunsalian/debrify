@@ -91,8 +91,9 @@ jobs:
       - run: python3 dev/tool/check_dart_moves.py --manifest dev/tool/dart_moves/vplayer_p12.json --at 1d7699d2e --parser-package .dart_tool/vplayer_parser/ci_moves_p12_history/.dart_tool/package_config.json
       - run: python3 dev/tool/check_dart_moves.py --manifest dev/tool/dart_moves/vplayer_p13.json --at 238df16f4 --parser-package .dart_tool/vplayer_parser/ci_moves_p13_history/.dart_tool/package_config.json
       - run: python3 dev/tool/check_dart_moves.py --manifest dev/tool/dart_moves/vplayer_p14.json --at be4cd78aa --parser-package .dart_tool/vplayer_parser/ci_moves_p14_history/.dart_tool/package_config.json
-      # S remains frozen; S2/S2b/S2c/S2d preserve all platform checkpoints.
+      # S remains frozen; S2 through S2e preserve all platform checkpoints.
       - run: python3 dev/tool/vplayer_seam_proof.py --self-test --parser-package .dart_tool/vplayer_parser/ci_seam/.dart_tool/package_config.json
+      # S2e: exactly two candidate reads; no P15 placeholder/history exemption.
       - run: python3 dev/tool/vplayer_platform_seam_proof.py --self-test --parser-package .dart_tool/vplayer_parser/ci_platform_seam/.dart_tool/package_config.json
       - run: python3 dev/tool/recordings_architecture_test.py
       - run: python3 dev/tool/alldebrid_files_architecture_test.py

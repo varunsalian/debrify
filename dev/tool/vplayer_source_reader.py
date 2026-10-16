@@ -6,6 +6,7 @@ from pathlib import Path
 
 from check_verbatim_moves import ROOT, parse, ensure_parser_package
 from check_dart_moves import run_manifest
+from vplayer_checkpoint_proof import run_current_manifest
 from dart_move_history import load_manifest
 from dart_move_partition import partition
 
@@ -64,7 +65,7 @@ def read(identity, package):
     # The latest phase compares its entire facade and destination set and
     # derives earlier destinations from history; S also stays frozen while
     # it is the latest checkpoint. Never use git-show text as the response.
-    errors = run_manifest(registered[-1][0], package)
+    errors = run_current_manifest(registered[-1][0], package)
     if errors:
         raise ValueError('\n'.join(errors))
     path, _, _ = chain(identity, manifests)

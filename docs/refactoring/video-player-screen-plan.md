@@ -431,6 +431,18 @@ and protects earlier destinations through history. Independent site negatives
 and actual-body native-default/order witnesses precede independent review;
 bitmap rejection/acceptance characterization follows at Step 0.
 
+**Phase-16 platform checkpoint S2e.** Reuse the unchanged
+`VpS2Hooks.isAndroid` getter at exactly the two renderer-failure candidate
+checks in `_openStartupDebridDirect` and `_tryOpenStartupVod`. The
+`isRendererFailure(error) && shouldArm(...)` short circuit and all argument
+reads stay in order; the native getter remains one lazy `Platform.isAndroid`
+read when no override is installed. No installer/hook-class change.
+`vplayer_p16_seam.json` exhaustively retains the accepted P14 facade except
+these two patches. Because P15 is still in flight, the seam proof separately
+checks this delta and the accepted P14 ownership (including all historical
+destinations); it does not invent P15 or claim P16 production history.
+S/S2/S2b/S2c/S2d remain frozen. Independent review precedes Step 0.
+
 **Per-phase profile/resource evidence** (AGENTS "Profiles, asynchronous
 work, and resources"): each stateful phase's step 0 pins, where its
 members participate, captured-scope writes, profile switch/deletion during
@@ -6633,6 +6645,31 @@ for Step 0 and Claude’s independent mutation sample.
   `p15/rebase/`. Global serial-lock waits are preserved in the execution record.
   Full suite and release builds remain deferred to M3 after P16. No push,
   merge, branch switch, app launch/install, adb or emulator action. **STOP**.
+### 2026-10-16 — Phase 16 S2e seam checkpoint (STOP for independent review)
+
+- From design `85d933d8a`, accepted P14 base `be4cd78aa`. Exactly two
+  application token substitutions: `Platform.isAndroid` →
+  `VpS2Hooks.isAndroid` in the two candidate error listeners. No other `lib/`
+  edit; hook, installer, short-circuit and argument order unchanged.
+- `vplayer_p16_seam.json` classifies all **757** facade spans: two patched,
+  755 retained, zero moves/scaffolds. S and S2/S2b/S2c/S2d/S2e proofs PASS;
+  **20** independent S2e negatives reject the exact affected site. Frozen
+  native-default getter/installer proofs and live partial-hook defaults PASS;
+  Flutter default/installation/handle tests **4/4**, disabled-flag test **1/1**.
+- The checkpoint validator proves the seam against P14 and overlays only
+  its two patches onto the complete applied P14 ownership proof. All earlier
+  destinations remain protected. CI keeps P14 current/self-test at its accepted
+  merge and runs S2e's live proof; no dummy P15 ledger/history exemption.
+  Full P16 history remains blocked pending P15 merge/rebase.
+- `flutter analyze --no-fatal-infos --no-fatal-warnings` on facade, feature
+  and changed test: no errors/new diagnostics; identity comparator **159**, zero
+  additions to P14. Dart format and diff checks PASS. All heavy runs nice 19,
+  serialized; isolated copied parser packages with kernels deleted. Exact
+  stock/persistent-parser equality proved before low-churn transport use.
+- Evidence: `refactor-evidence/vplayer/p16/seam/`, parser audit/command receipts
+  in its parent (including uncredited tooling pilots). No characterization,
+  production extraction, pubspec change, push, merge or branch switch. Step T
+  may prepare evidence only; Step 0 awaits S2e's independent review.
 
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 

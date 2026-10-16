@@ -29,6 +29,23 @@ void main() {
     expect(result.stdout, contains('"s2b_sites": 2'));
     expect(result.stdout, contains('"s2c_sites": 1'));
     expect(result.stdout, contains('"s2d_sites": 2'));
+    expect(result.stdout, contains('"s2e_sites": 2'));
+    for (final site in ['_openStartupDebridDirect', '_tryOpenStartupVod']) {
+      for (final negative in [
+        'wrong predicate',
+        'override bypassed',
+        'predicate twice',
+        'short-circuit removed',
+        'operand order',
+        'argument order',
+        'TV predicate changed',
+        'renderer mode changed',
+        'validation snapshot changed',
+        'fallback snapshot changed',
+      ]) {
+        expect(result.stdout, contains('S2e $site: $negative'));
+      }
+    }
     for (final site in ['_initializePlayer', '_canFallbackExplicitRenderer']) {
       for (final negative in [
         'wrong predicate',

@@ -5163,7 +5163,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _player.stream.error.listen((error) {
         if (AndroidRendererStartupFallback.isRendererFailure(error) &&
             AndroidRendererStartupFallback.shouldArm(
-              isAndroid: Platform.isAndroid,
+              isAndroid: VpS2Hooks.isAndroid,
               isAndroidTv: PlatformUtil.isAndroidTvCached,
               mode: _androidVideoRendererMode,
               alreadyValidated: _rendererValidatedForSession,
@@ -5340,7 +5340,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         // the candidate and let the fallback finish its recovery.
         if (AndroidRendererStartupFallback.isRendererFailure(error) &&
             AndroidRendererStartupFallback.shouldArm(
-              isAndroid: Platform.isAndroid,
+              isAndroid: VpS2Hooks.isAndroid,
               isAndroidTv: PlatformUtil.isAndroidTvCached,
               mode: _androidVideoRendererMode,
               alreadyValidated: _rendererValidatedForSession,
