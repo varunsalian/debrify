@@ -445,6 +445,7 @@ def prove(package, self_test=False):
                 body[start:end] = condition
                 assert recording_site_errors(mutated), 'independent S2d site guard accepted ' + site + ': ' + name
                 negatives.append('S2d ' + site + ': ' + name)
+        valid_operand_swaps = {}
         for site in S2E_SITES:
             for name, before, after in [
                 ('wrong predicate', [HOOK, '.', 'isAndroid'], [HOOK, '.', 'isIOS']),
@@ -452,7 +453,9 @@ def prove(package, self_test=False):
                 ('predicate twice', [HOOK, '.', 'isAndroid'],
                  [HOOK, '.', 'isAndroid', '&&', HOOK, '.', 'isAndroid']),
                 ('short-circuit removed', ['error', ')', '&&'], ['error', ')', '&']),
-                ('operand order', S2E_CONDITION[2:9], ['true']),
+                # Swap complete boolean operands, preserving both calls and &&.
+                ('operand order', S2E_CONDITION[2:-1],
+                 [*S2E_CONDITION[9:-1], '&&', *S2E_CONDITION[2:8]]),
                 ('argument order', ['isAndroid', ':', HOOK, '.', 'isAndroid', ',',
                                     'isAndroidTv', ':', 'PlatformUtil', '.', 'isAndroidTvCached'],
                  ['isAndroidTv', ':', 'PlatformUtil', '.', 'isAndroidTvCached', ',',
@@ -470,7 +473,15 @@ def prove(package, self_test=False):
                 body[at:at + len(before)] = after
                 assert candidate_site_errors(mutated) == [
                     'S2e candidate predicate default/count/order changed: ' + site], name
+                if name == 'operand order':
+                    from collections import Counter
+                    assert Counter(before) == Counter(after), site
+                    valid_operand_swaps[site] = 'bool validSwap() => ' + ' '.join(after) + ';'
                 negatives.append('S2e ' + site + ': ' + name)
+        # The actual two swapped expressions must parse: rejection above is
+        # for changed evaluation order, never parser recovery/missing operands.
+        assert set(valid_operand_swaps) == set(S2E_SITES)
+        parse(valid_operand_swaps, package, ownership=True)
     return errors, dict(patched_declarations=len(patched), counted_patches=sum(len(r['patches']) for r in patched), predicate_occurrences=sum(sum(c.values()) for c in SITES.values()),
                         classified_spans=len(checkpoint['declarations']), active_phase=active['phase'], independent_negatives=negatives,
                         s2_declarations_preserved=len(accepted_patches), s2b_sites=len(S2B_SITES),
@@ -479,7 +490,8 @@ def prove(package, self_test=False):
                         s2d_sites=len(S2D_PATCHES), s2d_classified_spans=len(recording['declarations']),
                         s2d_patched_declarations=len(recording_patches), s2d_predicate_occurrences=2,
                         s2e_sites=2, s2e_classified_spans=len(candidates['declarations']),
-                        s2e_patched_declarations=2, s2e_predicate_occurrences=2)
+                        s2e_patched_declarations=2, s2e_predicate_occurrences=2,
+                        s2e_valid_operand_order_negatives=2 if self_test else 0)
 
 
 def main():

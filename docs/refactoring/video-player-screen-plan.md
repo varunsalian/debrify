@@ -6719,6 +6719,22 @@ for Step 0 and Claude’s independent mutation sample.
   STOP: S2e review first, then separately authorized characterization;
   production awaits accepted P15 rebase and final Step T.
 
+### 2026-10-16 — S2e independent review / valid operand-order negatives
+
+- Fresh `vp-rev16s2e`: **No P1s**, no P2s; one P3 adopted. Both operand-order
+  negatives now swap the complete `isRendererFailure(error)` and
+  `shouldArm(...)` boolean operands, retaining both calls and `&&`.
+- The self-test independently parses the actual two swapped expressions,
+  verifies their token multisets are unchanged and requires exactly the
+  affected site's order diagnostic. All S2-through-S2e proofs/negatives PASS;
+  `s2e_valid_operand_order_negatives: 2`. The former invalid-Dart witnesses
+  receive no credit. Tooling/docs only; S2e application code `574b2a85e`
+  remains the original for Step 0.
+- Command: serial `nice -n 19` platform proof `--self-test`, isolated copied
+  parser package with kernels deleted; evidence `p16/review/`. No production
+  change or history relaxation. Continue authorized Step 0; production remains
+  blocked until accepted P15 rebase/final Step T.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
