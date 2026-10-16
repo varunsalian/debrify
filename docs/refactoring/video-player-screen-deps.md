@@ -11448,3 +11448,32 @@ P14 current/self-test/analyzer inputs, P1–P13 history, all seams through S2d;
 behavior and theme/source-guard inventories include the new files. The six
 probe-proven newly unused original facade imports are explicitly allowlisted;
 no other diagnostic is added to that list. Evidence: `p14/step1/`.
+
+## Phase 14 reduced gate — clean production parity (2026-10-16)
+
+Clean Step-1 revision `a0d6357a64c6d93830cc3523206c4e7e83ca1932`.
+Frozen reduced inventory:
+**246 expected/loaded suites; 1,680
+successes / 1 pre-existing failure**. Exact identity/outcome
+parity with the complete accepted-P13 original baseline, including all 1,493
+accepted preparation Step-0b outcomes. The startup-shield PiP raw-source failure
+is independently reproduced on preparation original and already recorded at P13;
+no new failure is accepted or allowlisted. The initial complete run recorded
+one `Database scope cleanup must drain` error in the Trakt type-gate test.
+Three unchanged original replays (45 cases) and 24 original stress groups
+(360 cases, one Flutter invocation) did not reproduce it. No fixture,
+assertion or baseline was changed; the fresh complete reduced suite matches
+all original outcomes. This initial teardown error remains an unreproduced
+observation, not a claimed proven pre-existing failure. Full trace and runs
+are in `p14/gate/flake/` and `initial-failed-*` logs.
+
+All **47** mechanical checks pass serially: Dart manifest self-tests,
+Kotlin self-test, P14 current plus P1–P13 exact `--at`, every seam through S2d,
+size/architecture and negatives. CI format/analyze/shared allowlist and the P14
+identity comparator pass (**159 scoped diagnostics**, zero inventory additions).
+Retarget proofs remain structural and are excluded from behavioral kill counts.
+Every suite loads; all runners finish; clean-tree receipts and exact commands
+are under `p14/gate/`. Serial suites use concurrency 1 and test-hook define;
+all parser invocations are isolated, copied kernels deleted. No full suite or
+release builds in this reduced gate; M3 owns those checks. Existing device
+pending items are unchanged. Phase 14 STOP.

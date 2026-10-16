@@ -5212,6 +5212,42 @@ for Step 0 and Claude’s independent mutation sample.
   commands, current comparison, retarget negatives, JSON guard run and receipt.
   The clean-tree reduced gate follows; no full suite/build is claimed here.
 
+### 2026-10-16 — Phase 14 reduced gate (complete; STOP)
+
+- Clean production checkpoint
+  `a0d6357a64c6d93830cc3523206c4e7e83ca1932`; reduced scope per the
+  speed-up decision, no full suite or release builds (reserved for M3).
+- `suite_evidence.py`: **246/246
+  expected suites loaded, 1,680 successes and
+  1 pre-existing failure**; exact identity/outcome parity
+  with rebased original `238df16f4`. All **1,493** accepted preparation-Step-0b
+  identities remain unchanged. The sole raw-text PiP startup-shield failure
+  also reproduces on preparation original `1d7699d2e` and the accepted P13 gate;
+  no allowlist or assertion change. The initial complete run hit one
+  `Database scope cleanup must drain` error in the Trakt type-gate fixture.
+  It is unaccepted and archived. Three unchanged original whole-file replays
+  (45 cases) and a single-process 24-group original stress run (360 cases)
+  did not reproduce it. No fixture was changed. A fresh complete reduced run
+  matches every original outcome. The isolated teardown error remains
+  documented as unreproduced, rather than claimed proven pre-existing.
+- All **47** serial mechanical checks pass: every Dart manifest
+  self-test, Kotlin self-test, P14 current, P1–P13 historical comparisons,
+  S/S2/S2b/S2c/S2d, size/architecture and real architecture negatives. Format
+  and CI analyzer/allowlist pass; P14 identity comparator accepts **159 scoped
+  diagnostics**, zero additions to its frozen original/probe inventory.
+- Every Flutter suite runs with concurrency 1, test-hook define and shared lock;
+  heavy commands `nice -n 19`. Every parser invocation uses an isolated copied
+  package with kernels deleted; persistent evidence transport reduces process
+  spawning without changing adapter/comparison output. All gate runs complete
+  on a clean stable tree; interrupted work is uncredited.
+- Device checklist remains pending: real decoder/keyframe landing, complete
+  wall-time retry exhaustion/final five-second polling, 30-second guard settling,
+  and physical platform playback/PiP presentation. The first deadline/epoch
+  race, physical profile maps/DB rows and all 28 reference sites are covered.
+- Evidence `refactor-evidence/vplayer/p14/gate/` (commands, complete JSON logs,
+  explicit load/identity proofs, analyzer identities, structural results and
+  commit receipt). No push, merge, branch change or production bug fix. STOP.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
