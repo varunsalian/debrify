@@ -3184,17 +3184,22 @@ new infos where `_host.context` follows an await behind `_host.mounted`
 - **Wall clock.** Probe deadlines use `Stopwatch` (6632, 6758): under the
   test binding's fake time `remaining` stays ≈ the full timeout, so the 3 s
   extension steps and the 45 s cap are not reproducible by timer advancement.
-- **Profile.** The ladder reads profile-owned Quick Play rules
-  (`QuickPlayStorage.getQuickPlayRules` → `ProfilePreferences.instance()`,
-  `quick_play_storage.dart:162`) with no captured scope; resolver
-  `canContinue` checks only `mounted && !_screenDisposed` (7073, 7269–7273);
-  the commit callback (`onStremioSourceCommitted`) runs unawaited and may land
-  after handoff; the playlist switch's checkpoint save carries P14's matrix.
-- **Disposal.** The ladder keeps resolving/probing after disposal until the
-  next post-probe `!mounted` (7170); `_reportStartupFailure` polls every
-  50 ms while its route is active but covered (2669–2672); the playlist
-  switch's request rollback path awaits `switchMdblistTarget()` (7642) and
-  then calls `setState` (7662) without a renewed `mounted` check.
+- **Profile (review correction, confirmed at Step 0).** Quick Play rules
+  still resolve `ProfilePreferences.instance()` without a captured scope;
+  handoff before that capture can select the incoming profile's rules.
+  Synthetic facade callbacks have only the facade continuation check.
+  Production `SourcePlayerLaunch` / resolver / committer additionally enforce
+  their captured owner: retirement prevents unadmitted acquisition/commit,
+  while admitted writes finish under the outgoing owner. Step 0 inspects both
+  profiles' physical bindings/cache across A→B, A→B→A and deletion. The
+  checkpoint save retains P14's separately characterized capture semantics.
+- **Disposal (review correction, confirmed at Step 0).** The ladder can
+  continue until the post-probe `!mounted`; covered startup failure polls at
+  50 ms. The proposed P17 rollback-after-dispose defect is **withdrawn**:
+  after `switchMdblistTarget()` the real request's `isCurrent` includes
+  `mounted`, preventing transition cleanup. Disposal and supersession are
+  tested through that caller. Explicit source picks have different guards;
+  their late direct-restore/seek/attachment effects are retained below.
 
 ### Follow-up candidates (pre-existing; confirm at step 0, preserve, record)
 
@@ -3208,12 +3213,35 @@ new infos where `_host.context` follows an await behind `_host.mounted`
   streams until timeout; retained pre-arm width/position can commit a VOD
   candidate on a later event of another kind; the debrid-direct opener is
   unarmed.
-- **Phase-16 original profile/disposal windows:** Quick Play rules and
-  resolvers follow the active profile with no captured scope; the unawaited
-  binding commit can land after handoff; the ladder continues after disposal
-  until a probe returns; the playlist switch's request rollback can
-  `setState` after disposal (its snackbar sibling is unreachable: no caller
-  combines a request with `validateExplicitSelection`).
+- **Phase-16 confirmed original windows (Step 0; no fixes):** Quick Play
+  rules can capture the incoming profile after a delayed storage delivery;
+  production source resolver/committer ownership is stronger than synthetic
+  facade callbacks (see the corrected matrix above). The ladder continues
+  until its probe returns. No P17 rollback-after-dispose defect is claimed.
+- **Phase-16 renderer eligibility mismatch:** earlier error listeners may
+  begin fallback before a candidate receives the same event; a failed old
+  probe can subsequently stop the live replacement. Conversely a candidate
+  can accept a renderer-deferred error while transition state prevents actual
+  fallback. Native output remains device-pending; calls/order are pinned.
+- **Phase-16 late failure exit:** the initial reporter has no identity
+  predicate and can pop the same route after a different source commits.
+  A covering dialog postpones it; route replacement suppresses it. The
+  watch-epoch reporter rejects an obsolete result.
+- **Phase-16 early source input:** before defaults release/player creation,
+  direct selection can throw before its try/finally, leave manual validation
+  armed, then open URL A while committing source B. Playlist selection catches
+  that early error, retains B's playlist and later opens B. These are synthetic
+  facade-timing cases, separate from production source ownership coverage.
+- **Phase-16 late explicit-pick effects:** a direct restore, including a
+  rejected pack restoring a direct launch, can wait ten seconds after disposal
+  and seek the disposed fake. A direct successful seek or split-audio
+  attachment completing after disposal can still invoke its commit callback;
+  split audio also seeks/plays. The playlist loader's mounted guards have
+  different outcomes. Continuations are released and drained in the fixture.
+- **Phase-16 completion during pause:** position dispatch during a source
+  switch's held pause can mark the outgoing item complete: local completion
+  checks validation, which arms after pause, rather than transition state.
+  Server-watch suppression separately checks transition. Preserve both.
 
 ### Step 0 — characterization of the original
 
@@ -6734,6 +6762,26 @@ for Step 0 and Claude’s independent mutation sample.
   parser package with kernels deleted; evidence `p16/review/`. No production
   change or history relaxation. Continue authorized Step 0; production remains
   blocked until accepted P15 rebase/final Step T.
+
+### 2026-10-17 — Phase 16 Step 0 recovery checkpoint (in progress)
+
+- Recovered the interrupted test/tooling work on `0b087f632`; application and
+  pubspec remain identical to reviewed S2e. P15 worktree untouched; production
+  moves/history activation remain blocked on the accepted P15 rebase.
+- Preserved 20 characterization suites, two fixture helpers and passive fake
+  observers. Rechecked detached-original identity and complete mutation logs;
+  replayed the 52 unresolved broad candidates serially, including assertion
+  kills for both retained keyboard dispatches. Compiler/runtime failures and
+  survivors are not credited as kills. Final classification is still pending.
+- Refreshed the four changed standalone suites, then extended header rollback
+  and playlist tracking-release coverage. The updated gate suite passes alone
+  (10 cases). Retargeted the five external source guards to live declaration
+  reads, preserving the existing PiP assertion and using whitespace-tolerant
+  arming and non-negative ordering anchors.
+- Evidence: `p16/step0/executor-*`, `broad-survivors-results.json` and earlier
+  input-hashed receipts. This commit saves recoverable work, not completion:
+  remaining survivor audit, per-case witnesses, final standalone evidence,
+  reduced baseline, analyzer/reader checks and deps matrix still required.
 
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 

@@ -42,6 +42,8 @@ import 'package:debrify/utils/filter_ladder.dart';
 import 'package:debrify/utils/torrent_filter_matcher.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'features/video_player/support/vp_source_reader.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -1476,20 +1478,21 @@ void main() {
         open.indexOf('runIfAuthorized'),
         greaterThan(open.indexOf('await remedy.onNewMedia')),
       );
-      final probe = code.substring(
-        code.indexOf('Future<bool> _tryOpenStartupVod('),
-        code.indexOf('Future<bool> _openInitialVodWithFailover('),
+      final probe = vpSourceDeclaration(
+        '_VideoPlayerScreenState._tryOpenStartupVod',
       );
       expect(probe, contains('source: source,'));
-      expect(probe, contains('beforeOpen: () {\n          armed = true;'));
-      final failover = code.substring(
-        code.indexOf('Future<bool> _openInitialVodWithFailover('),
-        code.indexOf('Future<void> _commitValidatedStremioSource('),
-      );
       expect(
-        failover.substring(failover.indexOf(': await _tryOpenStartupVod(')),
-        contains('source: source,'),
+        probe,
+        contains(RegExp(r'beforeOpen:\s*\(\)\s*\{\s*armed\s*=\s*true;')),
       );
+      final failover = vpSourceDeclaration(
+        '_VideoPlayerScreenState._openInitialVodWithFailover',
+      );
+      final candidate = failover.indexOf(': await _tryOpenStartupVod(');
+      expect(candidate, isNonNegative);
+      final sourceArgument = failover.indexOf('source: source,', candidate);
+      expect(sourceArgument, greaterThan(candidate));
     },
   );
 

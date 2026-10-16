@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import '../lib/widgets/playback_startup_view.dart';
+import 'features/video_player/support/vp_source_reader.dart';
 
 void main() {
   test('startup shield remains opaque and noninteractive in PiP', () {
-    final source = File(
-      'lib/screens/video_player_screen.dart',
-    ).readAsStringSync();
+    final source = vpSourceDeclaration('_VideoPlayerScreenState.build');
     final overlay = source.substring(
       source.indexOf('// Above the gesture layer: startup'),
       source.indexOf('// Controls overlay (shown only when ready)'),
@@ -27,9 +25,7 @@ void main() {
   });
 
   test('non-startup transitions retain their overlay rendering site', () {
-    final source = File(
-      'lib/screens/video_player_screen.dart',
-    ).readAsStringSync();
+    final source = vpSourceDeclaration('_VideoPlayerScreenState.build');
     expect(source, contains('if (_rainbowActive) _buildTransitionOverlay(),'));
   });
 

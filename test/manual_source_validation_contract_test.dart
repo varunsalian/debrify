@@ -232,15 +232,11 @@ void main() {
   test(
     'Flutter explicit source picks validate only the selected candidate',
     () {
-      final selection = _between(
-        flutterPlayer,
-        'Future<void> _handleSourceSelected(',
-        'Future<bool> _switchToSourcePlaylist(',
+      final selection = vpSourceDeclaration(
+        '_VideoPlayerScreenState._handleSourceSelected',
       );
-      final directSwitch = _between(
-        flutterPlayer,
-        'Future<void> _switchToStremioSource(',
-        '// ─── Stremio TV Guide',
+      final directSwitch = vpSourceDeclaration(
+        '_VideoPlayerScreenState._switchToStremioSource',
       );
 
       expect(selection, contains('validateExplicitSelection: true'));
@@ -283,16 +279,16 @@ void main() {
       lessThan(resumeBlocked.indexOf('${fields}isReady')),
     );
     expect(
-      flutterPlayer,
+      vpSourceDeclaration(
+        '_VideoPlayerScreenState._resumeTrackingAfterValidationGate',
+      ),
       contains('void _resumeTrackingAfterValidationGate()'),
     );
   });
 
   test('Flutter failed playlist picks restore an outgoing direct stream', () {
-    final playlistSwitch = _between(
-      flutterPlayer,
-      'Future<bool> _switchToSourcePlaylist(',
-      'Future<void> _switchToStremioSource(',
+    final playlistSwitch = vpSourceDeclaration(
+      '_VideoPlayerScreenState._switchToSourcePlaylist',
     );
 
     expect(playlistSwitch, contains('final outgoingDirectUrl'));
@@ -381,17 +377,18 @@ void main() {
         '(requireExactStartupEpisode || host.manualSourceSwitchSnapshot != null)',
       ),
     );
-    expect(flutterPlayer, contains('containsRequestedEpisode = false'));
-    expect(flutterPlayer, contains('if (containsRequestedEpisode)'));
+    final playlistSwitch = vpSourceDeclaration(
+      '_VideoPlayerScreenState._switchToSourcePlaylist',
+    );
+    expect(playlistSwitch, contains('containsRequestedEpisode = false'));
+    expect(playlistSwitch, contains('if (containsRequestedEpisode)'));
   });
 
   test(
     'Flutter startup failures unpin the failed source and still recover',
     () {
-      final startup = _between(
-        flutterPlayer,
-        'Future<bool> _openInitialVodWithFailover(',
-        'Future<void> _commitValidatedStremioSource(',
+      final startup = vpSourceDeclaration(
+        '_VideoPlayerScreenState._openInitialVodWithFailover',
       );
       final directBinding = _between(
         boundPlaybackCode,
@@ -400,7 +397,10 @@ void main() {
       );
 
       expect(startup, isNot(contains('_reportRejectedStremioSource')));
-      expect(flutterPlayer, contains("'startupSourcesExhausted': true"));
+      expect(
+        vpSourceDeclaration('_VideoPlayerScreenState._reportStartupFailure'),
+        contains("'startupSourcesExhausted': true"),
+      );
       expect(
         boundPlaybackCode,
         isNot(contains('_rejectedDirectSourceHandler')),
@@ -533,17 +533,12 @@ void main() {
   });
 
   test('delayed startup recovery waits for the exact player route', () {
-    expect(
-      flutterPlayer,
-      contains('final playerRoute = ModalRoute.of(context)'),
+    final failure = vpSourceDeclaration(
+      '_VideoPlayerScreenState._reportStartupFailure',
     );
+    expect(failure, contains('final playerRoute = ModalRoute.of(context)'));
     // Mount/retirement checking moved into the local current() guard; follow
     // that indirection while still requiring this exact captured route.
-    final failure = _between(
-      flutterPlayer,
-      'Future<void> _reportStartupFailure(',
-      'void _bindPlayerInstanceSubscriptions(',
-    );
     expect(
       failure,
       matches(
@@ -555,7 +550,7 @@ void main() {
     );
     expect(failure, contains('current() && playerRoute?.isActive == true'));
     expect(
-      flutterPlayer,
+      failure,
       contains(
         'if (!mounted || !current() || playerRoute?.isCurrent != true) return;',
       ),

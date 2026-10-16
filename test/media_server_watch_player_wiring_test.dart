@@ -44,15 +44,13 @@ void main() {
         greaterThan(open.indexOf('DirectSourceAuthorization.authorize')),
       );
       expect(open, contains('watchEpoch != _watchOpenEpoch'));
-      final commit = between(
-        flutter,
-        'Future<void> _commitValidatedStremioSource',
-        'String _startupSourceFields',
+      final commit = vpSourceDeclaration(
+        '_VideoPlayerScreenState._commitValidatedStremioSource',
       );
-      expect(
-        commit.indexOf('_serverWatch.commit'),
-        lessThan(commit.indexOf('commit == null')),
-      );
+      final watchCommit = commit.indexOf('_serverWatch.commit');
+      final optionalCallback = commit.indexOf('commit == null');
+      expect(watchCommit, isNonNegative);
+      expect(optionalCallback, greaterThan(watchCommit));
     },
   );
 
