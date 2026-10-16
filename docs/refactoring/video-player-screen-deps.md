@@ -12786,3 +12786,60 @@ See `p15/gate/final-proof.json`, mechanical receipts and the reduced JSONL/env.
 Exact 60-versus-61-second discrimination, original target-only/device checklist
 items and independent post-gate review remain pending. Full suite/release builds
 are deferred to M3. No push, merge or device action; executor stops here.
+
+## Phase 16 S2e / provisional Step T (2026-10-16)
+
+Original preparation base `be4cd78aa`; S2e checkpoint `574b2a85e` changes
+only the two candidate Android predicate reads. S/S2/S2b/S2c/S2d/S2e proof
+results, default/installation tests and the zero-addition analyzer comparison
+are recorded in Progress and `refactor-evidence/vplayer/p16/seam/`. S2e awaits
+independent review; no behavior characterization or mutation credit here.
+
+`dev/tool/dart_moves/vplayer_p16.json` is **PROVISIONAL**, `status: draft`.
+The generator is `dev/tool/draft_vplayer_startup_moves.py`; all application
+materialization is under `refactor-evidence/vplayer/p16/stepT/prototype/`.
+
+| Destination | Formatted lines | Host names / declarations |
+| --- | ---: | ---: |
+| `vp_startup_candidates.dart` | 391 | 10 / 10 |
+| `vp_startup_failover.dart` | 336 | 26 / 29 |
+| `vp_startup_gate.dart` | 167 | 28 / 31 |
+| `vp_source_switch.dart` | 366 | 46 / 53 |
+| `vp_source_playlist_switch.dart` | 398 | 48 / 58 |
+
+All 18 moves (16 methods, two fields), retained ordering/imports, frozen
+scaffolding and exact substitutions compare; optional commas are the only
+formatter token changes. Exact Host contracts (including return types,
+parameter defaults and live adapter expressions) are frozen under
+`provisional.host_contracts`, plus the full token scaffolding. Candidate
+`isAndroid` forwards to `VpS2Hooks.isAndroid` at the original moment; no
+new destination imports a sibling or facade. Both moved field initializers
+are inert; no Host read at construction. State `_activeHttpHeaders` remains
+in place; `dispose` has no substitution.
+
+`stepT/retained-sites.json` enumerates every scanner occurrence outside
+moved spans: 22 on this base. One lies in retained `_switchToIptvSource`;
+P15 moves that caller, so final re-derivation must replace it with exactly
+one whole-class patched projection of
+`_VpIptvChannelSwitchHostAdapter.hideSourceSheet`:
+`_s._hideSourceSheet()` → `_s._sourceSwitch.hideSourceSheet()`.
+No stand-in adapter is materialized here. All other prior adapters remain
+retained; P15's seven destinations/constructor/Host routes must be protected
+and regenerated using the accepted merge, without a dummy P15 manifest or
+relaxed history. The normal current checker rejects the draft and the
+unaltered history checker rejects missing P15 explicitly.
+
+The provisional compile probe has zero errors/new-destination warnings or
+import-order infos. Five destination `use_build_context_synchronously`
+occurrences are recorded: gate two (Navigator branches), direct switch one
+(final snackbar), playlist switch two (preload snackbar + final rejection
+snackbar); the last preserves the original identity, the other four follow
+receiver/context qualification. These are probe observations, not a new
+allowlist/inventory or a fix. Refresh analyzer identities, facade partition,
+imports, adapter proofs, Host contracts and changed mutation inputs after P15.
+
+Evidence: `stepT/result.json`, `hosts.json`, `membership.json`,
+`retained-sites.json`, `field-inertness.json`, `format-comma-proof.json`,
+`negatives.json`, `history-block.json`, `probe-summary.json`; complete command
+and isolated-parser receipts in the P16 evidence root. No full gate, suite,
+release build, device claim or production extraction at this checkpoint.

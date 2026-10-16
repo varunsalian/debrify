@@ -2879,9 +2879,10 @@ fades, hands off to the dock and its countdown ticks while paused.
 > boundaries, withdrawn rollback-after-dispose and blanket resolver-profile
 > Follow-ups, delayed startup-failure case).
 
-Branch `refactor/vplayer-p16` (pipelined; prepared off phase-15 step 1
-once it exists, in `../debrify-wt/vplayer-next`; rebased onto the accepted
-phase-15 merge before step 1 under the pipeline rebase rule). Evidence
+Branch `refactor/vplayer-p16` (pipelined; prepared off the phase-14 merge
+`be4cd78aa` in `../debrify-wt/vplayer` while phase 15 runs in the separate
+`../debrify-wt/vplayer-p15` worktree; rebase onto the accepted phase-15 merge
+before final Step T and step 1 under the pipeline rebase rule). Evidence
 `refactor-evidence/vplayer/p16/`. Line numbers at `be4cd78aa` (phase-14
 merge); **re-measured after phase 15 merges**: phase 15 removes
 `_tryOpenLiveStream` 6555 (just before this phase's block) and
@@ -2992,7 +2993,7 @@ tear-offs of long-lived collaborators, so `==` across rebuilds holds.
 `_buildSourceSheetResolver()` is still *invoked* in build (12440), creating
 a fresh closure per build exactly as today.
 
-### Hosts (≈ 9 / 26 / 28 / 46 / 48 names; frozen at step T)
+### Hosts (10 / 26 / 28 / 46 / 48 names; provisionally frozen at Step T)
 
 Facade routing between siblings (no sibling imports); every cross-
 collaborator forwarder is a plain non-`async` expression so the callee's
@@ -3001,7 +3002,7 @@ are **live selectors** (computed, never cached): `_buildSourceSheetResolver`
 reads `widget.resolveSourceToPlaylist` once at build (7266) and again at
 closure invocation (7274); both moments are preserved.
 
-- **Candidates (9):** `player` (stream subscriptions captured at
+- **Candidates (10):** `player` (stream subscriptions captured at
   subscription time; `stop()` read live after awaits), `openMedia(mk.Media
   media, {required bool play, bool? desiredPlay, bool liveStream = false,
   EpisodePlaybackRequest? request, bool Function()? beforeOpen, Torrent?
@@ -3009,8 +3010,10 @@ closure invocation (7274); both moments are preserved.
   `androidVideoRendererMode`, `rendererValidatedForSession`,
   `rendererFallbackInProgress`; `serverWatch`, `openedWatchSource`,
   `currentSourceIndex`; widget `onStremioSourceCommitted`. No `mounted`, no
-  `context`, no `_vpSetState`. Raw `Platform.isAndroid` /
-  `PlatformUtil.isAndroidTvCached` reads (6660–6661, 6837–6838) stay verbatim.
+  `context`, no `_vpSetState`. The S2e `VpS2Hooks.isAndroid` reads become
+  live `bool get isAndroid` with adapter body `VpS2Hooks.isAndroid`; no
+  facade import in Candidates. `PlatformUtil.isAndroidTvCached` and the
+  short-circuit/argument order (6660–6661, 6837–6838) stay verbatim.
 - **Failover (26):** `mounted`, `_vpSetState` (7039), `screenDisposed`;
   `effectiveSources`, `effectiveResolver`, `effectiveContentType`,
   `effectiveContentSeason`, `effectiveContentEpisode`; widget
@@ -3082,6 +3085,17 @@ closure invocation (7274); both moments are preserved.
   **phase 11** `restoreTrackPreferences()`; **phase 6**
   `switchMdblistTarget()`; candidates `commitValidatedStremioSource`; gate
   `resumeTrackingAfterValidationGate()`.
+
+Step-T checkpoint (S2e `574b2a85e`): normally formatted evidence-only
+files measure **391/336/167/366/398** lines, including imports, Hosts and
+receiver wraps. Host declarations are **10/29/31/53/58** (distinct names
+**10/26/28/46/48**); every exact signature and live adapter expression is
+frozen in `dev/tool/dart_moves/vplayer_p16.json` →
+`provisional.host_contracts` and exhaustive scaffolding. This manifest has
+`status: draft`, label **PROVISIONAL**: no production/history acceptance.
+The retained scanner records 22 current occurrences, including the
+pre-P15 `_switchToIptvSource` call that becomes the single owner-adapter
+rewrite after P15. Final P15 re-derivation is mandatory.
 
 No Host exposes a collaborator object. No moved `this` identifies the State
 to a service (no owner-identity substitution). Builder-local contexts: none
@@ -6670,6 +6684,40 @@ for Step 0 and Claude’s independent mutation sample.
   in its parent (including uncredited tooling pilots). No characterization,
   production extraction, pubspec change, push, merge or branch switch. Step T
   may prepare evidence only; Step 0 awaits S2e's independent review.
+
+### 2026-10-16 — Phase 16 provisional Step T (STOP)
+
+- Follows S2e `574b2a85e` (awaiting independent review); application code
+  unchanged in this docs/tooling checkpoint. No Step 0 or production moves.
+- `draft_vplayer_startup_moves.py` materializes all **18 moves** (16 methods,
+  two fields) into five evidence-only destinations. Full facade partition,
+  retained member order/imports, exact counted substitutions, inert eager
+  constructor scaffolding and live Hosts compare with zero differences.
+  Formatted sizes **391/336/167/366/398**, all ≤500; Host names
+  **10/26/28/46/48**, declarations **10/29/31/53/58**. Candidates includes
+  the live S2e projection; no sibling or facade imports in destinations.
+- `vplayer_p16.json` is **PROVISIONAL / draft**. Current ownership and
+  P16 history validation explicitly reject it (missing P15); no dummy
+  manifest, history exemption or CI production transition. All proofs,
+  including `_VpIptvChannelSwitchHostAdapter.hideSourceSheet`'s one future
+  rewrite, must be regenerated on accepted P15. Its present predecessor is
+  the retained `_switchToIptvSource` call; scan records all **22** sites.
+- Zero field-initializer side effects/Host reads: implicit-null playlist and
+  literal-zero resolution. `_activeHttpHeaders` stays at its relative member
+  position; `dispose` unchanged. Format is idempotent; AST optional-comma
+  sites and complete comment/literal/token equality archived. Real-manifest
+  negative witnesses and explicit draft/missing-history rejection archived.
+- Evidence-only compile probe: zero errors, zero new-destination warnings or
+  import-order infos. Receiver async-context identities: gate ×2, direct
+  switch ×1, playlist switch ×2 (one existing, four receiver-induced); no
+  application fix or analyzer allowlist change. Refresh after P15.
+- Commands: serial `nice -n 19` generator/proof with isolated copied parser
+  packages (copied kernels deleted), batched `dart format`, one Dart analyzer
+  probe; `git diff --check`. Evidence `refactor-evidence/vplayer/p16/stepT/`
+  plus parser/command/commit receipts in its parent. P15 worktree untouched;
+  no push, merge, branch switch, pubspec edit, Flutter run/install or devices.
+  STOP: S2e review first, then separately authorized characterization;
+  production awaits accepted P15 rebase and final Step T.
 
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
