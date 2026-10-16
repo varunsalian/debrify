@@ -2862,6 +2862,11 @@ fades, hands off to the dock and its countdown ticks while paused.
 
 ## Phase 16 — startup (candidates, failover, gate) and source switching
 
+> **Read with the Phase 16 design review resolution at the end of this
+> file** — it supersedes this section where they differ (S2e seam, probe
+> boundaries, withdrawn rollback-after-dispose and blanket resolver-profile
+> Follow-ups, delayed startup-failure case).
+
 Branch `refactor/vplayer-p16` (pipelined; prepared off phase-15 step 1
 once it exists, in `../debrify-wt/vplayer-next`; rebased onto the accepted
 phase-15 merge before step 1 under the pipeline rebase rule). Evidence
