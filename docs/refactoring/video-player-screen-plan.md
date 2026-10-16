@@ -2860,6 +2860,477 @@ fades, hands off to the dock and its countdown ticks while paused.
 6. **`_isIptvSeriesContext` State-owned.** Kept State-owned to avoid
    splitting a predicate read by P11, P18 and the owner; confirm.
 
+## Phase 16 — startup (candidates, failover, gate) and source switching
+
+Branch `refactor/vplayer-p16` (pipelined; prepared off phase-15 step 1
+once it exists, in `../debrify-wt/vplayer-next`; rebased onto the accepted
+phase-15 merge before step 1 under the pipeline rebase rule). Evidence
+`refactor-evidence/vplayer/p16/`. Line numbers at `be4cd78aa` (phase-14
+merge); **re-measured after phase 15 merges**: phase 15 removes
+`_tryOpenLiveStream` 6555 (just before this phase's block) and
+`_switchToIptvSource` 7314–7369 (inside it, between `_handleSourceSelected`
+and `_switchToSourcePlaylist`), and installs the IPTV owner adapter this
+phase patches. **M3** (full suite + both release builds + the M3 scenario
+pass) runs after this phase merges.
+
+≈ 1,290 moved lines (16 methods, 2 fields) into five files (sizes proved
+at step T on formatted prototypes incl. imports, Host and receiver wraps;
+≤ 500 each, `check_search_architecture.py:104`):
+
+| Destination | Members (line, span incl. attached comments) | ≈ file |
+|---|---|---|
+| `vp_startup_candidates.dart` — one-candidate open + commit | `_openStartupDebridDirect` 6623 (138, doc from 6610), `_tryOpenStartupVod` 6749 (179), `_commitValidatedStremioSource` 7200 (21), `_startupSourceFields` 7222 (10) | ≈ 395 |
+| `vp_startup_failover.dart` — ranked startup ladder | `_openInitialVodWithFailover` 6933 (270, doc from 6929) | ≈ 340 |
+| `vp_startup_gate.dart` — logical gate, tracking release, Stremio TV startup watch, startup failure exit | `_setStartupGateActive` 7233 (6), `_setStartupGateMessage` 7240 (5), `_resumeTrackingAfterValidationGate` 1766 (14), `_watchStremioTvStartup` 2593 (57), `_reportStartupFailure` 2651 (31) | ≈ 185 |
+| `vp_source_switch.dart` — source sheet + explicit direct switch | section comment + `_showSourceSheetOverlay` 7246 (11), `_hideSourceSheet` 7258 (6), `_buildSourceSheetResolver` 7265 (21), `_handleSourceSelected` 7287 (26), `_switchToStremioSource` 7676 (192); fields `_pendingSourcePlaylist` 1249, `_sourcePlaylistResolution` 1250 | ≈ 355 |
+| `vp_source_playlist_switch.dart` — playlist (pack) source switch | `_switchToSourcePlaylist` 7371 (302) | ≈ 410 |
+
+Grouping rationale: `_tryOpenStartupVod` is a shared primitive (failover,
+direct switch, retained P18 `_loadPlaylistIndexAttempt` 8681) and the
+debrid-direct opener is its twin; `_commitValidatedStremioSource` is the
+commit side of the same candidate contract (four callers incl. retained
+P20 2427). The gate collaborator owns every gate-release/exit action read by
+retained P19/P20 code. `_switchToSourcePlaylist` alone fills a file and has a
+retained P17 caller (`_tryEpisodeCandidate` 11170), so it is separate from
+the sheet. The facade-routed siblings are: failover → candidates + gate;
+direct switch → candidates + gate + playlist switch; playlist switch → sheet
+(`hideSourceSheet`) + candidates + gate.
+
+**Not in this phase (with evidence):**
+- `_initializePlayer` 2145–2591 → phase 20. It owns startup orchestration
+  (`StartupStreamPolicy.openInitialMedia` 2473, PikPak branch 2400–2457,
+  resume/track restore after commit, autosave timer 2585). P16 only
+  rewrites its nine call sites (2427, 2489, 2504, 2511, 2555, 2556, 2565,
+  2570, 2574).
+- `_openMedia` 3697 → phase 20: `_serverWatch` prepare/authorize/commit-open,
+  `_watchOpenEpoch` (3708, 3828), `_openedWatchSource` (3722, 3842) — the
+  probes call it through an exact Host signature (below).
+- Renderer fallback `_fallbackExplicitRendererToAutomatic` 3233,
+  `_canFallbackExplicitRenderer` 3214, `_validateRendererStartup` 3169 and
+  `_rendererValidatedForSession`/`_rendererFallbackInProgress`/
+  `_androidVideoRendererMode` → phase 19 (the probes only *read* them; the
+  fallback calls `_watchStremioTvStartup` 3349 and `_reportStartupFailure`
+  3396 — call-site rewrites only). `_beginMediaGeneration` 3596 (disposes
+  the Stremio TV watch 3605–3606) → phase 20.
+- `_loadPlaylistIndex` 8451, `_loadPlaylistIndexAttempt` 8509 (manual
+  validation probe 8681), `_playPikPakVideoWithRetry`, `_setManualSelectionMode`
+  10615 → phase 18.
+- Episode fetch `_fetchAndPlayEpisode` 10893, `_tryEpisodeCandidate` 11098
+  (calls `_switchToSourcePlaylist` with a request), `_packCoversSeason`,
+  synthetic guide, and the `_augmentedSources` writers 10951–11197 →
+  phase 17; Stremio TV `_parseStremioTvSources` 7936,
+  `_switchToStremioTvChannel` 7947 and the guide → phase 17.
+- `_switchToIptvSource`, `_tryOpenLiveStream`, `_setIptvSources`,
+  `_initIptvStremioSources` → phase 15 (ticket ownership).
+  `_handleSourceSelected`'s live branch (7297–7300) routes to the phase-15
+  owner.
+- Build sites → phase 21: source-sheet overlay 12421–12452 incl. the
+  **"Load more"** `onSourcesMerged` lambda (12447–12449, writes
+  `_augmentedSources`), startup overlay 11900–11975, key handling
+  (11378–11384 Back/Escape, 11441–11449 `S`), `_closeTopPlayerOverlay`
+  10124, `_anyPlayerOverlayOpen` 10114, `_isAnyOverlayOpen` 12497,
+  `_buildTvControls` `onShowSources` 10068.
+- State-owned derived getters `_effectiveSources` 1285, `_effectiveResolver`
+  1289, `_validationGateActive` 1386 (read by subscriptions 2835–2864, EOF
+  3975, 11261 and five adapters 12612, 13667, 13678, 13715, 13760).
+- **No HEAD validation exists** at `be4cd78aa`: the doc at 6610–6622 records
+  that the Dart HEAD probe was replaced by real-player candidate opens.
+- Phase-13 recording is **not** borrowed: no moved member stops/starts a
+  recording (the live pick's stop-before-open is inside phase 15's
+  `_tryOpenLiveStream`).
+
+### Frozen field ownership
+
+Principle (P15 resolution 1): a field moves only to its **single writing
+collaborator** when no retained code, build, lifecycle, adapter or other
+collaborator reads it; everything else stays State-owned behind narrow
+live accessors.
+
+| Field | Fate | Reason / inertness |
+|---|---|---|
+| `_pendingSourcePlaylist` 1249 | **source switch** | writers resolver closure 7279 + `_handleSourceSelected` 7302, reader 7301 — all moved to the same collaborator; `null` initializer inert |
+| `_sourcePlaylistResolution` 1250 | **source switch** | writers `_hideSourceSheet` 7259 + resolver 7268, reader 7273 — same collaborator; literal `0` |
+| `_showSourceSheet` 1244 | State | build 11378, 12421; overlays 10118, 10146, 12501; P15 banner `_raiseIptvZapBanner` 10337 (P15 banner Host `showSourceSheet`) |
+| `_currentSourceIndex` 1245 | State | ≈ 36 references: init 1645, initializer 2415–2417, watch 2601, `_openMedia` 3712, P15 6105/6473/7323, episode fetch 10973–11272, build 12439 |
+| `_serverWatch`, `_openedWatchSource`, `_watchOpenEpoch` 1246–1248 | State | `_openMedia`, dispose 9586–9587, P14 adapters 12600/12610 |
+| `_stremioSourcesOverride`, `_resolveStremioSourceOverride` 1252–1253, `_augmentedSources` 1256 | State | P15 live sources, P17, build |
+| `_startupGateActive` 1376, `_startupGateMessage` 1390 | State | build 11900–11975; `_validationGateActive` |
+| `_startupGateOverlayHidden` 1381 | State | build; **two collaborators** write it (failover 7038, gate 7236) |
+| `_manualSourceGateActive` 1385 | State | read by the State getter `_validationGateActive` 1388; **two collaborators** write it (7542/7623, 7715/7840) |
+| `_stremioTvStartupWatch` 1404, `_stremioTvStartupSeek` 1403 | State | writers gate 2594/2620 and `_beginMediaGeneration` 3605–3606; readers 1389, 2518, 2561, 3248, 3391, dispose 9583; Trakt adapter 13788 |
+| `_activeHttpHeaders` 7674 | State, **retained in place** | 26 references (init 1552, open 4915, P17/P18 loaders …); its declaration sits *between* two moved methods — the checker keeps it at its relative member position |
+| `_resumeWriteGuard`, `_resumeVerifyEpoch` | State (P14 frozen) | `_handleSourceSelected` 7293 writes `_resumeVerifyEpoch++` through a Host get/set |
+
+No collaborator-owned timers: `durationGraceTimer` (6764) is a local; the
+1,500 ms transition stop timer is the State-owned `_transitionStopTimer`.
+**`dispose` is unchanged** (no rewrite).
+
+**Scaffolding:** five collaborators assigned eagerly in the State
+constructor after phase 15's seven: `_startupCandidates`,
+`_startupFailover`, `_startupGate`, `_sourceSwitch`, `_sourcePlaylistSwitch`.
+Inert constructors; no constructor or field initializer reads a Host.
+Tear-offs handed to widgets (`SourceSheet.onSourceSelected`/`onClose`
+12441–12442, `onShowSources` 10068, `onShowStremioSources` 12213) become
+tear-offs of long-lived collaborators, so `==` across rebuilds holds.
+`_buildSourceSheetResolver()` is still *invoked* in build (12440), creating
+a fresh closure per build exactly as today.
+
+### Hosts (≈ 9 / 26 / 28 / 46 / 48 names; frozen at step T)
+
+Facade routing between siblings (no sibling imports); every cross-
+collaborator forwarder is a plain non-`async` expression so the callee's
+synchronous prefix runs before the caller's next statement. All widget reads
+are **live selectors** (computed, never cached): `_buildSourceSheetResolver`
+reads `widget.resolveSourceToPlaylist` once at build (7266) and again at
+closure invocation (7274); both moments are preserved.
+
+- **Candidates (9):** `player` (stream subscriptions captured at
+  subscription time; `stop()` read live after awaits), `openMedia(mk.Media
+  media, {required bool play, bool? desiredPlay, bool liveStream = false,
+  EpisodePlaybackRequest? request, bool Function()? beforeOpen, Torrent?
+  source, int? preserveStartupEpoch})` (P15's frozen form), P19 values
+  `androidVideoRendererMode`, `rendererValidatedForSession`,
+  `rendererFallbackInProgress`; `serverWatch`, `openedWatchSource`,
+  `currentSourceIndex`; widget `onStremioSourceCommitted`. No `mounted`, no
+  `context`, no `_vpSetState`. Raw `Platform.isAndroid` /
+  `PlatformUtil.isAndroidTvCached` reads (6660–6661, 6837–6838) stay verbatim.
+- **Failover (26):** `mounted`, `_vpSetState` (7039), `screenDisposed`;
+  `effectiveSources`, `effectiveResolver`, `effectiveContentType`,
+  `effectiveContentSeason`, `effectiveContentEpisode`; widget
+  `startupFailoverEnabled`, `startupResolverProvider`,
+  `resolveSourceToPlaylist`, `title`; `currentSourceIndex` (get/set),
+  `startupGateOverlayHidden` (get/set), `activeHttpHeaders`/
+  `currentStreamUrl`/`activePlaylist`/`currentIndex`/`cachedSeriesPlaylist`
+  (set), `playlistIdentityToken` (`++`); gate `setStartupGateActive`,
+  `setStartupGateMessage`; candidates `tryOpenStartupVod(String url,
+  {Duration timeout = const Duration(seconds: 12), Map<String, String>?
+  httpHeaders, Torrent? source, int? sourceIndex, int attempt = 1, int
+  maxAttempts = 1})`, `openStartupDebridDirect(...)` (same defaults, its own
+  parameter order), `startupSourceFields(int?, Torrent?)`,
+  `commitValidatedStremioSource(Torrent?)`. Defaults are part of the frozen
+  signature: the bypass (6946) and single-candidate (6955) calls rely on them.
+- **Gate (28):** `mounted`, `_vpSetState`, `context`, `screenDisposed`;
+  `startupGateActive`/`startupGateMessage` (get/set),
+  `startupGateOverlayHidden` (set), `validationGateActive`, `isPlaying`,
+  `duration`; **phase 5/6 operations routed by the facade** (never
+  collaborator objects): `traktScrobble(String)`, `traktLastScrobbleAction`,
+  `startTraktHeartbeat()`, `simklScrobbleEnabled`, `simklLastScrobbleAction`
+  (set), `startSimklHeartbeat()`, `updateMdblistPosition()`, `mdblistPlay()`
+  (receiver chains `_trakt.x`/`_simkl.x`/`_mdblist.x` → `_host.x` declared
+  like P15's `_sleep.sleepTimerMode`); Stremio TV watch:
+  `stremioTvStartupWatch` (get/set), `stremioTvStartupSeek`, `player`,
+  `resumeVerifyEpoch`, `playerInstanceGeneration`, `decoderProbeGeneration`,
+  `effectiveSources`, `currentSourceIndex`,
+  `canFallbackExplicitRenderer({required int instanceGeneration, required
+  int mediaGeneration})` (P19 retained); widget `onStartupSourcesExhausted`.
+- **Source switch (≈ 46):** sheet — `mounted`, `_vpSetState`, `context`,
+  `screenDisposed`, `effectiveSources`, `effectiveResolver`, widget
+  `resolveSourceToPlaylist`, `showSourceSheet` (get/set), `controlsVisible`
+  (State ValueNotifier), `resumeVerifyEpoch` (get/set, `++`),
+  `iptvChannelKey`, **phase 15** `hideIptvZapBanner({bool immediate =
+  false})` (banner) and `switchToIptvSource(int, String)` (owner), sibling
+  `switchToSourcePlaylist(...)` (exact signature incl. defaults); direct
+  switch — `resumeWriteGuard`, `position`, `duration`, `currentStreamUrl`/
+  `activeHttpHeaders`/`currentSourceIndex` (get/set), `manualSourceGateActive`
+  (set), `isTransitioning` (set), `tvScrubGeneration` (`++`), `tvAbandonScrub()`
+  (called inside its `setState` closure), `startTransitionOverlay()`,
+  `clearBufferingIndicator()`, `player`, widget `audioUrl`,
+  `resetSubtitleState()`, `openMedia`, `waitForVideoReady()`,
+  `setExternalAudioTrack(String)`, `serverWatch`, `openedWatchSource`;
+  **phase 14** `seekForResume(int, {bool verifyLanding = false})`;
+  **phase 11** `restoreTrackPreferences()`; candidates `tryOpenStartupVod`,
+  `commitValidatedStremioSource`; gate `resumeTrackingAfterValidationGate()`;
+  the transition block (`transitionStopTimer` get/set, `transitionPhaseTimer`,
+  `transitionPhase`, `transitionPhase2Started`, `rainbowController`,
+  `transitionRunning`, `rainbowActive`) — the same block P15's owner Host
+  already forwards.
+- **Playlist switch (≈ 48):** `mounted`, `_vpSetState`, `context`;
+  `episodeNavigationGeneration` (`++`); `activePlaylist`, `currentIndex`,
+  `cachedSeriesPlaylist`, `currentSourceIndex`, `currentStreamUrl`,
+  `activeHttpHeaders` (get/set), `playlistIdentityToken` (`++`),
+  `resumeWriteGuard`, `position`, `effectiveSources`,
+  `traktSeasonEpisode()`, `seriesPlaylist` (lazy getter that fills the
+  series cache — forwarded live), `syntheticGuidePlaylist` (P17 field,
+  State-owned now), `currentSeriesImdbId`, `episodeMetadataReady` (set),
+  `preloadEpisodeInfo()`, `isManualEpisodeSelection`/
+  `allowResumeForManualSelection` (set), `manualSourceGateActive` (set),
+  `loadPlaylistIndex(int index, {bool autoplay = false,
+  EpisodePlaybackRequest? request, bool skipInitialSave = false, bool
+  preferLocalResume = false, bool suppressResume = false, Torrent?
+  manualValidationSource, int? manualValidationSourceIndex})` (P18
+  retained), `openMedia`, `waitForVideoReady()`, `serverWatch`,
+  `openedWatchSource`, `clearBufferingIndicator()`, transition/scrub names as
+  above; sibling `hideSourceSheet()`; **phase 14** `saveResume({bool
+  debounced = false, Duration? positionOverride})` (exact P14 signature) and `seekForResume`;
+  **phase 11** `restoreTrackPreferences()`; **phase 6**
+  `switchMdblistTarget()`; candidates `commitValidatedStremioSource`; gate
+  `resumeTrackingAfterValidationGate()`.
+
+No Host exposes a collaborator object. No moved `this` identifies the State
+to a service (no owner-identity substitution). Builder-local contexts: none
+in moved code; every `context` is the State's (`_host.context`, read at
+the original call moment): 7505, 7650, 7847, 2657, 2668 (captured route),
+2676/2678.
+
+### Patched facade adapters (exactly one, after phase 15)
+
+At `be4cd78aa` no adapter forwards to a moved member. After phase 15:
+`_VpIptvChannelSwitchHostAdapter.hideSourceSheet()` (P15 provisional
+manifest: `void hideSourceSheet() => _s._hideSourceSheet();`) →
+`_s._sourceSwitch.hideSourceSheet()` — whole-class
+`patched_class_projection`, one counted rewrite, regenerated on the accepted
+P15 base. Asserted unchanged: P15 banner `showSourceSheet`, P15 owner and
+live-sources `currentSourceIndex`, every `validationGateActive` forwarder
+(P14 save 12612, P7 13667, P6 13678/13715, P5 13760), P14
+`openedWatchSource`/`serverWatch`/`isManualEpisodeSelection`
+(12600/12610/12592), Trakt `stremioTvStartupSeek` 13788.
+
+### Retained references (22 entries: 21 facade sites + 1 adapter)
+
+Measured by scanning non-comment code outside the moved spans; Step T's
+scanner (`p16/stepT/retained-sites.json`) is authoritative after the P15
+rebase.
+
+| Member | Facade lines |
+|---|---|
+| `_commitValidatedStremioSource` | 2427 (PikPak winner, P20) |
+| `_watchStremioTvStartup` | 2489 (initial `beforeOpen`), 3349 (renderer fallback `beforeOpen`) |
+| `_openInitialVodWithFailover` | 2504 (`openValidated` closure) |
+| `_reportStartupFailure` | 2511, 2565 (initial open), 3396 (renderer fallback) |
+| `_setStartupGateActive` | 2555, 2570 |
+| `_resumeTrackingAfterValidationGate` | 2556, 2574 |
+| `_tryOpenStartupVod` | 8681 (`_loadPlaylistIndexAttempt`, P18) |
+| `_switchToSourcePlaylist` | 11170 (`_tryEpisodeCandidate`, P17) |
+| `_showSourceSheetOverlay` | 10068 (tear-off), 11447 (`S` key), 12213 (tear-off) |
+| `_hideSourceSheet` | 10147 (`_closeTopPlayerOverlay`), 11381 (Back/Escape), 12442 (tear-off); P15 owner adapter |
+| `_buildSourceSheetResolver` / `_handleSourceSelected` | 12440 / 12441 (tear-off) |
+
+Preserve: the gate release order at the end of the initial open
+(`_setStartupGateActive(false)` → `_resumeTrackingAfterValidationGate()`,
+2555–2556, and in the catch 2570–2574); `_openInitialVodWithFailover`
+returning before its gate release on `!mounted` (7170); the unawaited commit
+after State writes (7183, 7647, 7785); `_resumeVerifyEpoch++` before the live
+branch (7293); checkpoint `saveResume()` before the playlist swap (7420);
+`finally` gate clear → tracking resume (7622–7625, 7839–7842); the 1,500 ms
+transition stop timer.
+
+**History:** a pre-phase-15-merge step-T materialization is provisional;
+after phase 15 merges, rebase and regenerate facade partition/import/order/
+adapter proofs, refresh analyzer probes and mutation witnesses, and protect
+every earlier destination derived from the applied manifests (≈ 39: 32 + P15's
+seven), P1–P15 `--at` at accepted merges, S2d with the earlier seam proofs.
+No dummy manifests; no history relaxation. The theme frozen-path list
+(`theme_surface_manifest.txt:26`, `theme_rendered_set.py:57`,
+`source_guard_test.dart` exact list) gains the five files in the commit that
+creates them. **Analyzer:** the P14 inventory has exactly one diagnostic on
+these members — `use_build_context_synchronously` ×1 on
+`_switchToSourcePlaylist` (the 7650 snackbar after the 7642 await); it must
+reappear under the destination identity. The receiver probe must check for
+new infos where `_host.context` follows an await behind `_host.mounted`
+(7505, 7847, 2668, 2676–2678).
+
+### Async, profile and disposal hazards (characterize, never fix)
+
+- **No ticket on explicit picks.** Sheet picks use only `mounted`; the
+  playlist path additionally honours an optional `EpisodePlaybackRequest`
+  (P17 caller). `_manualSourceGateActive` is a bool shared by both switch
+  paths: an older pick's `finally` clears it and releases tracking while a
+  newer candidate is still validating; an older restore can reopen its
+  previous URL after a newer commit.
+- **Pick during startup.** A debrid-direct first open hides the overlay
+  (7037–7040), so controls and the sheet are usable while the ladder still
+  owns the startup gate: both write `_currentSourceIndex`/`_currentStreamUrl`
+  and both commit.
+- **Probes vs player replacement/disposal.** Subscriptions bind to the
+  player captured at subscription time; failure handling calls the **live**
+  `_player.stop()` after awaits (6743, 6923), which can hit a replacement or
+  a disposed player (caught). A decoder/renderer replacement mid-probe leaves
+  the probe listening to the dead instance until timeout.
+- **Arming.** `_tryOpenStartupVod` ignores pre-arm *errors* but keeps
+  pre-arm width/position samples; a post-arm event of another kind can commit
+  on them. `_openStartupDebridDirect` is unarmed (no `beforeOpen`): a positive
+  duration from anything after subscription accepts.
+- **Wall clock.** Probe deadlines use `Stopwatch` (6632, 6758): under the
+  test binding's fake time `remaining` stays ≈ the full timeout, so the 3 s
+  extension steps and the 45 s cap are not reproducible by timer advancement.
+- **Profile.** The ladder reads profile-owned Quick Play rules
+  (`QuickPlayStorage.getQuickPlayRules` → `ProfilePreferences.instance()`,
+  `quick_play_storage.dart:162`) with no captured scope; resolver
+  `canContinue` checks only `mounted && !_screenDisposed` (7073, 7269–7273);
+  the commit callback (`onStremioSourceCommitted`) runs unawaited and may land
+  after handoff; the playlist switch's checkpoint save carries P14's matrix.
+- **Disposal.** The ladder keeps resolving/probing after disposal until the
+  next post-probe `!mounted` (7170); `_reportStartupFailure` polls every
+  50 ms while its route is active but covered (2669–2672); the playlist
+  switch's request rollback path awaits `switchMdblistTarget()` (7642) and
+  then calls `setState` (7662) without a renewed `mounted` check.
+
+### Follow-up candidates (pre-existing; confirm at step 0, preserve, record)
+
+- **Phase-16 original explicit-pick windows:** no pick ticket; the shared
+  `_manualSourceGateActive` bool lets an older pick's `finally` release
+  tracking during a newer validation, and an older restore can reopen its URL
+  after a newer commit. A pick during a debrid-direct startup open races the
+  ladder's index/URL writes and commit.
+- **Phase-16 original probe windows:** live `_player.stop()` after awaits can
+  stop a replacement player; a replaced player leaves the probe on dead
+  streams until timeout; retained pre-arm width/position can commit a VOD
+  candidate on a later event of another kind; the debrid-direct opener is
+  unarmed.
+- **Phase-16 original profile/disposal windows:** Quick Play rules and
+  resolvers follow the active profile with no captured scope; the unawaited
+  binding commit can land after handoff; the ladder continues after disposal
+  until a probe returns; the playlist switch's request rollback can
+  `setState` after disposal (its snackbar sibling is unreachable: no caller
+  combines a request with `validateExplicitSelection`).
+
+### Step 0 — characterization of the original
+
+Existing coverage to keep/extend: `video_player_source_test.dart`,
+`video_player_resume_source_handoff_test.dart`,
+`video_player_resume_empty_switch_test.dart`,
+`video_player_secondary_switch_rollback_test.dart`,
+`video_player_secondary_gate_release_test.dart`,
+`video_player_secondary_source_pending_test.dart`,
+`video_player_completion_source_window_test.dart`,
+`video_player_mdblist_startup_test.dart`,
+`video_player_resume_disposed_startup_test.dart`,
+`video_player_resume_server_{gate,ready,transition,watch}_test.dart`;
+external `test/source_sheet_test.dart`, `test/quick_play_rules_test.dart`,
+`test/stremio_tv_mediakit_startup_test.dart`,
+`test/android_renderer_startup_fallback_test.dart`,
+`test/media_server_service_test.dart`.
+
+- **Ladder:** non-VOD bypass (single probe, gate untouched); VOD without
+  sources (gate on, single candidate, released only on failure);
+  `startupFailoverEnabled` off → one attempt; `tryNextOnFailure` with
+  `maxAttempts` clamp 1..10; `rankedFailoverStart` with
+  `initialAttemptAlreadyFailed`; external-URL skip except the resolved launch
+  URL; PikPak acquisition counted before resolving; routes `launch_url`/
+  `direct_url`/`playlist`/`single_url`; series packs missing the episode
+  rejected after the attempt is counted; resolver exception/empty → reject;
+  header choice per route; debrid-direct vs probe split; gate message
+  sequence (`Loading stream…` / `Checking stream 1 of N…` / `Stream
+  unavailable · Trying k of N…`) and the overlay-hidden `setState`; commit
+  writes (headers, index, URL, playlist adoption + identity token + cache
+  reset) then unawaited commit; exhaustion releases the gate; `!mounted`
+  after a probe returns false *without* releasing it.
+- **Probes** (reuse P15's open-acknowledgement driver): pre-arm errors
+  ignored; width **and** position required; AIOStreams slate rejection and
+  the 1 s duration grace timer; open exception logged by runtime type only
+  (no URL — assert redaction); 12 s timeout; stop on failure; subscriptions
+  cancelled; debrid accept on duration > 0 / decoded fallback; the arming and
+  unarmed windows above. Buffer-growth extension and the 45 s cap need a
+  bounded real-time driver, otherwise device-pending. The
+  `renderer_fallback_deferred` branch needs `Platform.isAndroid` and is
+  **device-pending** unless the reviewer approves a seam (Open question 5).
+- **Commit:** server watch committed only when `identical(source,
+  _openedWatchSource)`; `logSourceSelection('player_source_committed')`;
+  callback failures swallowed; null source / null callback.
+- **Gate:** idempotent activation; release clears overlay-hidden; message
+  `setState` only while active; `_validationGateActive` composition;
+  tracking release order (MDBList position always; then only when playing
+  with duration: Trakt start + heartbeat only if the last action is `start`,
+  Simkl local marker + heartbeat, MDBList play).
+- **Stremio TV startup watch:** current-ness (mounted, disposed, epoch,
+  instance); AIOStreams `onReady` releases tracking; deferrable renderer
+  errors; failure cancels the startup seek and reports; replacement by
+  `_beginMediaGeneration`; renderer-fallback restart (3349).
+- **Startup failure exit:** both snackbar texts; 250/900 ms delay; waits
+  while a dialog covers the route; pops `{'startupSourcesExhausted': true}`
+  vs `maybePop`; abandons when no longer current or the `isCurrent` closure
+  turns false.
+- **Sheet:** show needs sources, hides the zap banner and controls; hide
+  bumps the resolution generation; stale/closed/disposed resolutions return
+  null; pending playlist adoption and consumption; `_resumeVerifyEpoch++`
+  before branching; live branch → P15 owner without consuming the pending
+  playlist; TV Back/Escape, `S`, dock/TV buttons; tear-off identity; Load
+  more growth feeding `_effectiveSources`.
+- **Direct switch:** held-target carry; subtitle reset except external
+  audio; YouTube path (paused open, external audio, seek, play); rejection
+  log `player_switch_rejected`; previous-URL restore with server source only
+  when `isServerSource`; header restore; external-audio reattach; seek;
+  server-watch commit; track preferences; snackbar; transition end.
+- **Playlist switch:** navigation generation only without a request;
+  request staleness at every await; outgoing capture incl. held target;
+  checkpoint save before the swap; TVMaze guide carry; target index (match,
+  singleton, first real episode + snackbar unless validated); manual flags
+  cleared; validated path with a missing episode never opens; rollback to the
+  outgoing playlist and the direct-launch restore; request rollback +
+  MDBList target switch; commit; transition end.
+- **Async/profile/disposal matrix** at the real boundaries: hold the Quick
+  Play rules read, resolver, probe open acknowledgement and commit callback
+  across A→B, A→B→A and deletion (inspect binding writes in both profiles);
+  disposal at each; renderer replacement during a probe; concurrent explicit
+  picks; a pick during the ladder / debrid-direct first open; the P17
+  request caller. Outcomes pinned as Follow-ups.
+- **M3 scenarios (prepared here, run at M3):** live IPTV source pick during
+  a TEE recording (stop-before-open in P15's probe), VOD pick with an
+  unlanded resume (held target survives, guard re-armed by `seekForResume`),
+  failover winner → resume restore → gate release → first scrobble, failed
+  pick restoring the outgoing stream with server-watch commit, profile
+  handoff during startup.
+- **Source-text guards (retarget to the validating reader, equal-or-
+  stronger, removal/reorder negatives):**
+  `manual_source_validation_contract_test.dart` — 233–255 (`_between` on
+  `_handleSourceSelected`/`_switchToSourcePlaylist` and
+  `_switchToStremioSource`/`// ─── Stremio TV Guide`), 284–288
+  (`void _resumeTrackingAfterValidationGate()`), 291–302 (playlist switch
+  contents; `_activePlaylist = null`/`_currentStreamUrl = outgoingDirectUrl`
+  become `_host.` receivers), 384–385 (`containsRequestedEpisode` whole-file
+  reads), 388–404 (failover span ending at the commit;
+  `'startupSourcesExhausted': true`), 534–565 (`ModalRoute.of(context)`,
+  the `current()` regex and the final guard become `_host.` forms);
+  `android_tv_mdblist_progress_source_test.dart:151–160` (carried IMDb id);
+  `media_server_service_test.dart:1478–1492` (probe `source: source,` and the
+  **whitespace-sensitive** `'beforeOpen: () {\n          armed = true;'`;
+  failover candidate call); `media_server_watch_player_wiring_test.dart:47–55`
+  (commit → `_host.serverWatch.commit` before `commit == null`).
+  `playback_startup_view_test.dart:18` reads retained build fields and is
+  asserted unchanged. The reduced-gate inventory includes these five files
+  and every boundary test above; every expected suite must load.
+- Early windows; mutation proofs; coverage; Claude sample.
+
+### Device checklist (end of series)
+
+Quick Play with try-next: dead first source shows "Stream unavailable ·
+Trying 2 of N…" and plays the next; debrid-direct first open shows the
+player surface (no overlay); AIOStreams error slate is skipped; PikPak
+startup attempts one torrent acquisition; a series pack missing the episode
+is skipped; all failed → "Saved source failed…" and the launcher recovers,
+or "No playable source could be started." and the player closes. Source
+sheet on phone/TV/desktop (`S`, dock, DPAD, Back): direct, torrent and pack
+picks; a dead pick restores the previous stream at the same position with
+the message; YouTube quality switch stays in A/V sync; Load more. Android TV
+explicit renderer: a Direct Surface failure during a candidate falls back
+without advancing the ladder. Stremio TV slow channel start. Live IPTV
+source pick (P15 path).
+
+### Open questions for the design reviewer
+
+1. `_watchStremioTvStartup` and `_reportStartupFailure` go to phase 16's
+   gate (they feed `_validationGateActive` and the startup exit; their only
+   callers are P19/P20). Alternative: phase 17 (Stremio TV). Accept?
+2. `_commitValidatedStremioSource` in the candidates file (commit side of
+   the probe contract) rather than failover — acceptable?
+3. `_startupSourceFields` is parameter-only. Keep it a verbatim instance
+   method (the checker has no instance→top-level move) rather than a new
+   `application/` function?
+4. `_hideSourceSheet` moves (with `_sourcePlaylistResolution`) at the cost
+   of one P15 adapter patch; keeping both State-owned avoids the patch but
+   leaves the resolver generation split across State and collaborator.
+5. Candidate probes read raw `Platform.isAndroid`; the renderer-deferred
+   acceptance is unreachable on the test host. Device-pending (proposed), or
+   a one-predicate S2e seam like S2d?
+6. `Stopwatch` deadlines: bounded real-time driver for one extension step,
+   with the 45 s cap device-pending?
+7. Host sizes (≈ 46/48 names) are driven by verbatim bodies; the seven-name
+   transition block is now forwarded by three Hosts. Acceptable as
+   presentation-bridge debt, exit by the controls phase / D1?
+8. Pipelining: step T needs phase-15 step 1 (moved `_switchToIptvSource`,
+   owner adapter). Prepare from that commit and treat all proofs as
+   provisional until the P15 merge?
+
 ## Follow-ups
 
 - **Phase-13 original menu metadata windows (preserved):** a held tracks
