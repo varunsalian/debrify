@@ -2259,6 +2259,150 @@ close; **Android engine** and **desktop capture** intentionally survive
 zaps and player closure; each saves to the expected place and appears in
 Recordings.
 
+## Phase 14 — resume: keys, restore and save
+
+Branch `refactor/vplayer-p14` (pipelined; prepared off the phase-12 merge
+`1d7699d2e` while phase 13 ran in `../debrify-wt/vplayer-next`; Claude rebased
+onto accepted phase-13 merge `238df16f4` before step 1 under the pipeline
+rebase rule).
+Evidence `refactor-evidence/vplayer/p14/`. Line numbers at `1d7699d2e`.
+Both phase-13 and phase-14 design, resolution and Progress sections are
+retained after the documentation-only conflict resolution. Preparation line
+numbers below stay historical; final proofs use `238df16f4`.
+
+≈ 830 lines into three files (sizes proved at step T, ≤ 500 each):
+
+| Destination | Members | Lines |
+|---|---|---|
+| `vp_resume_keys.dart` | `_resumeKey` 10339, `_torboxResumeKeyForEntry` 10400, `_pikpakResumeKeyForEntry` 10425, `_resumeIdForEntry` 10438 (uses phase-1 `vpFilenameHash`) | ≈ 115 |
+| `vp_resume_restore.dart` | `_maybeRestoreResume` 10454 (204), `_seekForResume` 10659, `_verifyResumeLanding` 10697, `_resumeSeekLanded` 10739 | ≈ 330 |
+| `vp_resume_save.dart` | `_getEnhancedPlaybackState` 10783 (121), `_resumeSaveBlocked` 10905, `_observeServerWatch` 10925, `_saveResume` 10948, `_saveResumeLocked` 10969 (198) | ≈ 385 |
+
+**Zero field moves (frozen):** `_resumeWriteGuard`, `_resumeSaveLock`,
+`_resumeVerifyEpoch`, `_autosaveTimer`, `_isAutoAdvancing`,
+`_isManualEpisodeSelection`, `_allowResumeForManualSelection`,
+`_manualSelectionResetTimer`, `_serverWatch`, `_openedWatchSource`,
+`_watchOpenEpoch` stay State-owned (retained lifecycle/navigation/engine
+code uses them); guard, lock and server-watch object identities preserved.
+Completion identity/flags are borrowed live from the phase-7 collaborator
+and speed/aspect from phase 4 through facade adapters; restore's
+speed/aspect **setters write phase 4's fields directly** (10585–10588),
+never via display actions. `_activeExternalSubtitlePath` is not read.
+
+**Static call boundary:** restore's `VideoPlayerScreen.readLocalResume`
+call (10572) goes through an exact Host method — `Future<Map<String,
+dynamic>?> readLocalResume({required String? contentId, required String
+resumeKey, required Future<Map<String, dynamic>?> Function() enhanced})` —
+whose adapter forwards to the static method with no guards, copies or
+eager `enhanced` call (the checker forbids a destination importing the
+facade, `check_search_architecture.py:1037`); proved in the real manifest
+with negatives.
+
+**Hosts (9 / 27 / 37 names; restore 31 declarations):** facade routing
+between the three siblings; eight live widget selectors (`title`,
+`videoUrl`, `contentImdbId`, `iptvSourceId`, `resumePolicy`, three tracker
+percentages); `Future<double?> currentEpisode…Percent({bool forGuide =
+false})`, `Future<void> waitForDuration()`, `({int? season, int? episode})
+traktSeasonEpisode()`. No `context`/`_vpSetState`. Inert constructors after
+phase 13's.
+
+**Patched facade adapters (exactly three):** `_VpLocalCompletionHostAdapter`
+(`resumeKey`, 14993), `_VpDisplayModeHostAdapter` (`saveResume`, 15141) and
+`_VpSleepTimerHostAdapter` (`saveResume`, 15236) — whole-class
+`patched_class_projection`, one counted rewrite each, regenerated **on the
+accepted phase-13 base** preserving phase 13's `openPlayerMenuQuick`
+rewrites in the display and sleep adapters. PiP, Trakt's borrowed guard
+and tracker `persistablePosition` forwarders unchanged.
+
+**Retained references (28):** `_resumeKey` 14993; `_resumeIdForEntry`
+2213; `_maybeRestoreResume` 2424, 2432, 2511, 2523, 9274; `_seekForResume`
+2429, 2520, 2776, 3343, 8136, 8160, 8313, 8372; `_observeServerWatch` 2743,
+2807, 3700, 3953, 10133; `_saveResume` 2562, 7972, 9168, 10222, 11978,
+13504, 15141, 15236. Preserve the six-second autosave timer, disposal's
+observe → close → later save order, and the outgoing checkpoint before
+guard clear/index change (9168–9176). All three files under
+`presentation/legacy_video_player/`; preserve the four analyzer infos on
+enhanced read / locked save.
+
+**History:** a pre-phase-13 step-T materialization is **provisional**; after
+phase 13 merges, rebase and regenerate the complete facade
+partition/import/order/adapter proofs, refresh analyzer probes and mutation
+witnesses, protect every earlier destination derived from the applied
+manifests (≈ 29), P12 `--at 1d7699d2e`, P13 at its accepted merge, S2d with
+the earlier seam proofs. No dummy phase-13 manifest; no history relaxation.
+
+### Step 0 — characterization of the original
+
+- **Keys** per source (TorBox/PikPak/filename-hash fallback, series vs
+  movie, playlist entries, custom identity).
+- **Restore stale-result/arbitration matrix:** `_maybeRestoreResume` clears
+  the guard before early exits, loads policy, spends all three launch flags,
+  waits for duration, then does storage/player work without an internal
+  mounted/profile/media-generation guard (10464). Hold policy, duration,
+  tracker snapshot, completion/local-state delivery, rate/zoom and seek
+  separately; cross newer restore, source/item change, profile handoff,
+  replacement and disposal; record late effects and errors. Arbitration:
+  **Trakt → MDBList → Simkl**, strict `>` replacement, equal-percent ties,
+  explicit-launch precedence, policy-masked rewatch inputs, source-specific
+  vs canonical lookup, `preferLocalResume` bypassing the window; speed
+  `1.0` skips `setRate`; locally finished movies skip local presentation
+  restoration; first-load flags spent even on the local-preferred path;
+  `_seekForResume` reads `_resumeVerifyEpoch` **after** its seek await
+  (10694) — keep that capture moment.
+- **Landing verification:** three retries polling 1.5 s, 1.5 s, 3 s, then a
+  final 5 s check; landing confirmation waits 800 ms; deadlines use real
+  `DateTime.now()` (10761–10778) and the guard settles after 30 s real time.
+  Deterministic landing, transient landing, epoch/user-seek/disposal aborts
+  use the fixture (model masked/unlanded seek acknowledgements; the fake's
+  seek normally lands, `fake_player.dart:171`); **timeout/retry claims need
+  a bounded real-time driver, otherwise device-pending** (no clock seam in
+  this phase). Track outstanding verifier futures before teardown.
+- **Save (corrected):** a held target is **substituted** (save continues
+  with speed/aspect), skipped only when outside the reported duration
+  (10989); near-finished targets get no guard; user-seek release;
+  completion suppression; generic transitions block saves only for IPTV;
+  manual selection blocks only debounced saves. Writes contain position,
+  duration, speed, aspect and timestamps (not audio/subtitle ids — those
+  are phase 11) but share `playback_state_v1` with track preferences
+  (`video_progress_storage.dart:27` replaces the row;
+  `track_preferences_storage.dart:72` edits nested preferences) — cover
+  phase-13 menu / phase-11 preference vs resume-write overlap (the resume
+  lock does not serialize them) and pin any loss/overwrite as-is.
+- **Save/profile matrix at real capture points:** position/duration/speed/
+  aspect sampled when the lock callback starts (10975–11014); legacy key,
+  effective identity and source id read after enhanced persistence awaits
+  (11142–11156); `positionOverride` survives queueing. Hold at lock queueing,
+  enhanced-map delivery, enhanced physical write and legacy DB
+  admission/transaction (`IptvMediaStore:218`); cross content changes,
+  A→B/A→B→A, deletion, disposal and renderer replacement; inspect both
+  profiles' physical maps and DB rows incl. unrelated entries. Request-time
+  vs queued blocking; dropped debounced ticks vs queued explicit
+  checkpoints; completion after admission; enhanced failure then legacy;
+  legacy failure propagation; lock recovery; `_observeServerWatch` runs
+  before the busy-lock drop while checkpoint notification happens only on
+  the final explicit-save branch.
+- **Server watch** (no seam): existing client factories and real
+  watch-target `Torrent`s via `MediaServerService.openLibrary(...).sources(...)`
+  — request-time observations, held-resume suppression, EOF, outgoing
+  observation before `commit(null)`, source identity, authorization
+  retirement, observation-before-close on disposal.
+- **Source-text guards (five, validating reader + removal/reorder
+  negatives):** `media_server_player_resume_test.dart:105` (+ exact static
+  forwarding in the adapter; add non-negative anchor checks),
+  `playback_checkpoint_contract_test.dart:18` (per moved declaration),
+  `android_tv_mdblist_progress_source_test.dart:209`,
+  `manual_source_validation_contract_test.dart:255`,
+  `media_server_watch_player_wiring_test.dart:58`. The reduced-gate
+  inventory includes these five and the resume/server/profile boundary
+  tests; every expected suite must load.
+- Early windows; mutation proofs; coverage; Claude sample.
+
+### Device checklist (end of series)
+
+Resume lands at the saved position for movies, series episodes, TorBox
+and PikPak entries; leaving during a slow resume never resets the saved
+point to 0; speed/aspect/subtitle choices restore with the position.
+
 ## Follow-ups
 
 - **Phase-13 original menu metadata windows (preserved):** a held tracks
@@ -2277,6 +2421,20 @@ Recordings.
   separate inline protocol. Android registry refresh increments its ticket only
   after the valid live-channel check; the older-query/newer-invalid-refresh race
   and native publication remain device-pending, without an S2d simulation claim.
+- **Phase-14 original resume windows (preserved):** restore has no internal
+  profile/media/mounted guard after its awaits; old work can apply presentation
+  or seek after handoff/disposal, and captures the verifier epoch after seeking.
+  Save samples the playback tuple at lock admission but reads legacy identity
+  and scope later. A delayed enhanced-map read can overwrite B with A's map;
+  an admitted physical write/DB handle stays with A while later work may use B.
+  The resume lock does not serialize track preferences, and an admitted save
+  can recreate a completed row. Tests inspect physical maps and DB rows.
+- **Phase-14 original early open (preserved):** source B can finish while initial
+  audio configuration is suspended. The late initial direct open can then
+  replace it; its outgoing server observation uses the current duration before
+  closing B. This window is characterized through the real keyboard/source
+  callers and native-property/storage barriers, without another seam or fix.
+  The late-startup autosave leak documented for phase 11 is also pinned here.
 
 - **Phase-12 original identity-sheet windows (preserved):** the deferred initial
   search's first setter precedes liveness guards and can run after sheet
@@ -4860,6 +5018,235 @@ for Step 0 and Claude’s independent mutation sample.
   only docs. No production, pubspec, seam, allowlist, full suite, release/device,
   push, merge, branch switch or Phase-14 work. Android refresh/query remains
   device-pending. **STOP** for independent review.
+### 2026-10-15 — Phase 14 provisional Step T (production blocked on P13)
+
+- Design `8f9cd1387`; preparation original `1d7699d2e`, lib tree
+  `338d6b0b279c3d4fac6897d667ea25600ccb37c2`. Evidence-only normally
+  formatted keys/restore/save prototypes **137/381/457** lines. Exact Hosts
+  **9/27/37 names** (restore 31 declarations) recorded in deps and the manifest.
+- `draft_vplayer_resume_moves.py --parser-package <isolated> --probe <p14/stepT>`:
+  **zero differences**, all 779 original declaration fates (13 moved,
+  four patched, 762 retained), exhaustive facade/destination orders/imports.
+  The three adapter projections have one counted rewrite each; 25 other
+  retained rewrites complete the frozen 28-occurrence ledger. Zero field moves.
+- `test_dart_resume_moves.py --parser-package <isolated>`: 14 independent
+  real-config negatives rejected, including eager/copy/guard/argument/await/
+  owner corruption of the exact static `readLocalResume` forwarder. Optional
+  trailing-comma AST anchor proof and idempotence PASS. Analyzer prototype
+  compiles with **138 diagnostic occurrences, zero errors**; the original four
+  enhanced-read/locked-save infos preserve their declaration identities.
+- Manifest explicitly **PROVISIONAL**: no P13 history claim, dummy manifest,
+  production file, CI transition or history relaxation. After P13 merges,
+  regenerate construction/facade/adapter proofs on that base, preserving P13's
+  overlapping display/sleep rewrites; refresh affected analyzer/mutation
+  evidence and check actual P12/P13 merges and S2d. This checkpoint does not
+  authorize production moves or rebase. `pubspec` unchanged.
+- Reused the P13 speed-up/reduced-gate rules from `git show` (archived under
+  `p14/pipeline-rules.md`), without touching `vplayer-next`. Frozen base inventory
+  has 153 suites; Step 0 must prove every expected suite loads. Commands,
+  prototypes, Hosts, parser packages, comma sites and analyzer identities:
+  `p14/stepT/`; commit receipt there records this checkpoint's revision.
+- Prototype-only corrections: direct static receiver and the actual legacy
+  `IptvGuideContext`/episode-rewatch imports fixed before freezing. Superseded
+  compiler pilots are uncredited. Application code remains original.
+
+### 2026-10-15 — Phase 14 Step 0 (pipelined original characterization; STOP)
+
+- Follows provisional T `14de3e067`; original application `1d7699d2e`, lib
+  tree `338d6b0b279c3d4fac6897d667ea25600ccb37c2`. No application/dependency,
+  production CI or size-baseline changes. P13 worktree untouched. P14 history
+  remains PROVISIONAL and production remains blocked on the accepted P13 base.
+- Added public-caller resume characterization with the step-H fixture, passive
+  await/timer observation, controllable seek acknowledgements and real
+  service-prepared server-watch targets. Physical preference maps and legacy
+  DB rows are checked for A→B/A→B→A/deletion/disposal/content/replacement races;
+  request-time vs lock-admission sampling and the preference/resume lock gap
+  are pinned as-is. Keys, arbitration/ties/rewatch, early windows, stable and
+  transient landing/ABA aborts, URL fallback, standalone/collection saves,
+  autosave and server protocol/order are covered. Defects are documented,
+  never corrected in application code.
+- Five source guards now use the validating declaration reader, retaining
+  ordering and non-negative anchor checks and preparing exact static Host
+  forwarding. All five pass; 18 independent removal/reorder ownership negatives
+  reject. These are structural proofs, excluded from behavior-kill totals.
+- `final-original-proof.json`: **194/194 current scenarios** pass unchanged on
+  the original and have assertion-failing witnesses at current file hashes.
+  Systematic inventory **661 AST points / 13 methods + 28 retained references**:
+  **411 unique AST points and all 28 references killed**, 19 equivalent,
+  34 explicitly device-pending, 136 invalid deletion candidates and 61 null
+  components (not credited as standalone mutants); zero open observable points.
+  Valid alternatives cover hash return, lock/tuple/target declarations and
+  episode/held-speed fallback. The deps tables and evidence matrix retain every
+  exclusion and equivalence reason.
+- `final_suite.py` using `suite_evidence.py`: **206/206 suites loaded,
+  1,489 successes / zero failures or skips**, versus the frozen 153-suite /
+  1,295-test base: **194 additions only**, no missing/changed baseline identities.
+  The same Flutter 3.44.8 / Dart 3.12.2 SDK and stable tested tree are recorded.
+  `final-parity.json` independently matches all 194 original scenario identities.
+- `dart analyze` changed tests/support PASS; `dart format` 61 files unchanged;
+  `check_vplayer_analyzer.py` existing P12 inputs: **124 scoped diagnostics,
+  zero additions**; size/architecture PASS (**3,009 / 1,677 files**). P12 current
+  move comparison PASS (zero differences); provisional P14 materialization and
+  14 negatives are recorded at T. No P14 history pass is claimed before P13.
+  Commands, manifests/parser packages and commit receipts are in the evidence.
+- Real wall-time retry exhaustion and the write guard's 30-second settling,
+  native decoder/keyframe accuracy and the end-of-series device checklist
+  remain device-pending. No timeout parity claim or clock seam. The late
+  startup autosave leak is asserted before cancelling only its exact observed
+  test-clock handle; no blanket teardown cancellation or production fix.
+- Evidence `refactor-evidence/vplayer/p14/step0/`: original/current suite logs
+  and hashes, load/identity proof, per-test assertion witnesses, systematic
+  mutation audit, coverage matrix and explicit equivalence/device-pending
+  reasons. Interrupted/mixed-input and failed-positive pilots are uncredited;
+  all suites/copies/mutations/restores serialize on the worktree evidence lock.
+  Tooling runs use isolated copied parser packages with kernels deleted.
+- After P13 merges, follow its pipeline rebase rule: compare facade,
+  destinations, fixtures and diagnostics, regenerate all three overlapping
+  adapter proofs and construction/partition/import/order/history, refresh
+  affected mutation/analyzer inputs and record the rebased reduced baseline.
+  This checkpoint does not authorize production moves or rebase. STOP.
+
+### 2026-10-15 — Phase 14 Step 0b (independent sample closure; STOP)
+
+- Follows accepted Step 0 `9d22e8223`; the detached original at `1d7699d2e`
+  has identical lib tree `338d6b0b279c3d4fac6897d667ea25600ccb37c2`.
+  No application/pubspec changes, P13 worktree untouched, Step 1 still blocked
+  until P13 merges and the authorized pipeline rebase/proof refresh occurs.
+- Claude's 22-mutant sample initially killed **18 by behavior (82%)**. q11,
+  q13, q18 and q22 were source-only survivors. The deps mutation table names
+  the three structural source guards and explicitly excludes them from
+  behavioral witness credit; all 22 classifications are archived.
+- Added four original-caller cases: deeper non-explicit stored remote wins;
+  real first-deadline expiry across an episode reset with the same target;
+  held 2x persists pre-hold speed in both physical stores; non-IPTV transition
+  suppresses stream/checkpoint server observations while native pause is held.
+  The final original focused run passes **23/23**; all four exact sample
+  mutants fail assertions at identical final test hashes. No source guards
+  run in these mutation proofs. Coverage now **412 killed / 33 device-pending**
+  (only p335 reclassified); all other Step-0 inventory categories retained.
+- `suite_evidence.py` vs accepted Step 0: **209/209 suites loaded, 1,493
+  successes, zero failures/skips; four additions only**, no missing/changed
+  identities (previously 206/1,489). All 56 resume suites are inventoried.
+  Changed-test `dart analyze` PASS; `dart format` four files unchanged;
+  `git diff --check` PASS. No flaky test or baseline regression observed.
+- A superseded original pilot exposed only fixture bookkeeping for the
+  intentionally held next action; it is now marked held, with assertions
+  preserved. Failed pilots are uncredited. Full retry exhaustion, final 5 s
+  polling, 30 s guard settlement and native decoder accuracy remain pending;
+  no DateTime seam or behavior fix was introduced.
+- Commands/results/hashes/patches and this commit's revision receipt:
+  `refactor-evidence/vplayer/p14/step0b/`. Original and reduced suites use the
+  shared serial lock, `nice -n 19`, test-hook define and isolated parser
+  packages. Production/history manifests remain PROVISIONAL. STOP.
+
+### 2026-10-15 — Phase 14 accepted-P13 rebase / final Step T
+
+- Follows rebased preparation `a91051cd2`; final original `238df16f4`, lib
+  tree `838731954da033b5f1aa6ee0200cc2fccdbf4b70`. Audited both
+  conflict-resolved documents: both phases,
+  resolutions and Progress retained in order; no duplicate paragraphs or
+  conflict markers. Tidied the stale rebase note and heading separation.
+- Regenerated FINAL materialization: **761 declarations (744 retained,
+  four patched, 13 moved), zero fields moved; 25 retained substitutions plus
+  three adapter rewrites = 28**. Hosts **9/27/37 names (9/31/37 declarations)**;
+  formatted destinations **137/381/457 lines**. All three adapter proofs use
+  P13 bodies, including display/sleep's `openPlayerMenuQuick`. Exact static
+  `readLocalResume` forwarding has independent eager/copy/guard/argument/
+  await/owner negatives; two independent stale-P13-menu negatives also reject.
+  Constructor assignments follow all four P13 collaborators. Full partition,
+  member order/import lists/frozen scaffolding and optional-comma/idempotence
+  proofs pass. All **29 history-derived earlier destinations** protected.
+- Input audit: all 13 moved bodies token-identical to preparation; five
+  retained callers changed. All **198** cases pass on the rebased original;
+  **56/56 files pass alone**. Refreshed **90 assertion-killed mutations**:
+  28 retained occurrences + four sample closures + 58 grouped witnesses for
+  every earlier case. Original 661-point matrix classifications remain valid;
+  no source-only guard is credited as a behavioral witness.
+- Reduced original baseline: **246 suites / 1,680 successes / one
+  pre-existing failure**; every expected suite loaded;
+  all **1,493 accepted Step-0b outcomes unchanged**. Expanded inventory adds
+  every current video-player suite and two previously omitted source readers.
+  Their separate preparation-original replay reproduces the existing raw-text
+  PiP startup-shield failure; this is recorded, not allowlisted or repaired.
+- All **43** manifest/history/seam checks pass: every Dart manifest
+  self-test, Kotlin self-test, P1–P13 `--at` (P13 `238df16f4`), S/S2/S2b/S2c/S2d.
+  Analyzer original root/strict/prototype **145/221/159** diagnostics: no errors
+  or new async-context identity; four moved infos retained; six preserved
+  facade directives become unused, and eight destination import infos arise.
+  P14 inventory preserves every P1–P13 mapping and original maximum.
+- Restart note: interrupted mechanical/suite logs are uncredited. Reused only
+  complete, input-matching evidence; reran the interrupted reduced baseline
+  from scratch. Flutter is serial with concurrency 1. Evidence-only persistent
+  parser transport has exact stock-adapter equality, invalid-input and repeated
+  request proofs; the complete Dart self-test used one VM for 372 requests
+  (3,184 cached source hits) and avoided 808 repeated immutable Git reads.
+  Each invocation retains an isolated copied parser package
+  with copied kernels deleted. Heavy jobs use `nice -n 19`.
+- Evidence: `refactor-evidence/vplayer/p14/rebase/` and `low_churn/` (commands,
+  source hashes, complete JSON runs, mutation receipts, analyzer identities,
+  parser routing and commit receipt). No application/dependency changes here.
+
+### 2026-10-15 — Phase 14 Step 1 (resume extraction)
+
+- Applied the FINAL `238df16f4` manifest: **13 methods, zero fields moved**
+  into `VpResumeKeys` (**137** lines), `VpResumeRestore` (**381**) and
+  `VpResumeSave` (**457**). Inert constructor assignments follow P13's four
+  collaborators. State retains lock/guard/epoch/timer/server-watch identities;
+  sibling routing and the static local-read forwarder go through exact Hosts.
+- All **28 retained references** remain at their original statement positions;
+  the three patched adapters preserve P13's display/sleep menu rewrites.
+  Current-tree checker: zero differences, all 29 earlier destinations protected.
+  No application edits beyond the declared moves/substitutions/scaffolding and
+  AST-proven optional formatter commas. No bug fixes or dependency changes.
+- CI current/self-test and both analyzer inputs now use P14; P1–P13 use their
+  exact accepted merge revisions, including P13 `238df16f4`; S through S2d stay
+  registered. Registered the 56 resume suites, extended theme manifests/rendered
+  set/all three source-guard lists, lowered facade cap **14,630 → 14,005**.
+- Retargeted all five structural source guards through the validating reader,
+  with mandatory new owners/receivers and exact static forwarding; **18**
+  independent live-owner removal/reorder negatives reject. Focused readers:
+  **44 successes / five suites**, no failures. Format,
+  size and architecture pass. Six probe-proven unused facade directives are
+  explicitly recorded in the analyzer allowlist; original directives stay frozen.
+- Evidence `refactor-evidence/vplayer/p14/step1/` includes application inventory,
+  commands, current comparison, retarget negatives, JSON guard run and receipt.
+  The clean-tree reduced gate follows; no full suite/build is claimed here.
+
+### 2026-10-16 — Phase 14 reduced gate (complete; STOP)
+
+- Clean production checkpoint
+  `a0d6357a64c6d93830cc3523206c4e7e83ca1932`; reduced scope per the
+  speed-up decision, no full suite or release builds (reserved for M3).
+- `suite_evidence.py`: **246/246
+  expected suites loaded, 1,680 successes and
+  1 pre-existing failure**; exact identity/outcome parity
+  with rebased original `238df16f4`. All **1,493** accepted preparation-Step-0b
+  identities remain unchanged. The sole raw-text PiP startup-shield failure
+  also reproduces on preparation original `1d7699d2e` and the accepted P13 gate;
+  no allowlist or assertion change. The initial complete run hit one
+  `Database scope cleanup must drain` error in the Trakt type-gate fixture.
+  It is unaccepted and archived. Three unchanged original whole-file replays
+  (45 cases) and a single-process 24-group original stress run (360 cases)
+  did not reproduce it. No fixture was changed. A fresh complete reduced run
+  matches every original outcome. The isolated teardown error remains
+  documented as unreproduced, rather than claimed proven pre-existing.
+- All **47** serial mechanical checks pass: every Dart manifest
+  self-test, Kotlin self-test, P14 current, P1–P13 historical comparisons,
+  S/S2/S2b/S2c/S2d, size/architecture and real architecture negatives. Format
+  and CI analyzer/allowlist pass; P14 identity comparator accepts **159 scoped
+  diagnostics**, zero additions to its frozen original/probe inventory.
+- Every Flutter suite runs with concurrency 1, test-hook define and shared lock;
+  heavy commands `nice -n 19`. Every parser invocation uses an isolated copied
+  package with kernels deleted; persistent evidence transport reduces process
+  spawning without changing adapter/comparison output. All gate runs complete
+  on a clean stable tree; interrupted work is uncredited.
+- Device checklist remains pending: real decoder/keyframe landing, complete
+  wall-time retry exhaustion/final five-second polling, 30-second guard settling,
+  and physical platform playback/PiP presentation. The first deadline/epoch
+  race, physical profile maps/DB rows and all 28 reference sites are covered.
+- Evidence `refactor-evidence/vplayer/p14/gate/` (commands, complete JSON logs,
+  explicit load/identity proofs, analyzer identities, structural results and
+  commit receipt). No push, merge, branch change or production bug fix. STOP.
 
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
@@ -5030,3 +5417,14 @@ exactly two patched adapters (display, sleep); `_showTracksSheet` live
 inline protocol and profile capture inside service start; watch-history
 write moved to phase 15; three recording contracts in the checklist;
 milestone scenarios named; old map/rule 7 marked superseded.
+
+## Phase 14 design review resolution (Codex `vp-design`, 2026-10-15) — "No P1s"
+
+P2s folded: zero field moves and the exact `readLocalResume` Host forwarder;
+exactly three patched adapters (two overlapping phase 13, regenerated on its
+merge); provisional history until phase 13 merges; corrected save semantics
+and the save/profile matrix at real capture points; restore arbitration and
+stale-result matrix; landing timeouts via a bounded real-time driver or
+device-pending; five source-text guards retargeted. P3: 28-reference ledger,
+CI transition. Final accepted-P13 proofs and measurements are recorded in
+Progress; the preparation line numbers and provisional checkpoint stay historical.

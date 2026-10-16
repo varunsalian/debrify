@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'features/video_player/support/vp_source_reader.dart';
+
 String between(String source, String start, String end) {
   final first = source.indexOf(start);
   expect(first, isNonNegative);
@@ -57,26 +59,36 @@ void main() {
   test(
     'Flutter watch reports respect validation, transitions and resume hold',
     () {
-      final observe = between(
-        flutter,
-        'void _observeServerWatch',
-        'Future<void> _saveResume(',
+      final observe = vpSourceDeclaration(
+        '_VideoPlayerScreenState._observeServerWatch',
       );
-      expect(observe, contains('!_serverWatch.isActive'));
-      expect(observe, contains('_validationGateActive'));
-      expect(observe, contains('_isTransitioning'));
+      const fields = '_host.';
+      expect(observe, contains('void observeServerWatch('));
+      expect(observe, contains('!${fields}serverWatch.isActive'));
+      expect(observe, contains('${fields}validationGateActive'));
+      expect(observe, contains('${fields}isTransitioning'));
       expect(observe, contains('heldTargetIfBlocked'));
-      expect(observe, contains('final currentEpisode = _traktSeasonEpisode()'));
+      expect(
+        observe,
+        contains('final currentEpisode = ${fields}traktSeasonEpisode()'),
+      );
       expect(observe, contains('season: currentEpisode.season'));
       expect(observe, contains('episode: currentEpisode.episode'));
       final dispose = between(flutter, 'void dispose()', 'final replacedPip');
       expect(dispose, contains('_serverWatch.close()'));
+      final observation = dispose.indexOf('observeServerWatch(');
+      final closing = dispose.indexOf('_serverWatch.close()');
+      expect(observation, isNonNegative);
+      expect(closing, greaterThan(observation));
       final eof = between(
         flutter,
         'Future<void> _onPlaybackEnded()',
         '// LIVE IPTV:',
       );
-      expect(eof, contains('_observeServerWatch(completed: true)'));
+      expect(
+        eof,
+        contains(RegExp(r'_resumeSave\.observeServerWatch\(completed: true\)')),
+      );
       expect(eof, isNot(contains('_serverWatch.commit(null)')));
     },
   );

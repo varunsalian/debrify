@@ -134,3 +134,10 @@ warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 
 warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../utils/app_storage.dart'. Try removing the import directive
 warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../widgets/recording_limit_dialogs.dart'. Try removing the import directive
 warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'video_player/services/subtitle_track_utils.dart'. Try removing the import directive
+# Phase 14 frozen move/probe: preserved facade directives, six now-unused imports.
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../features/video_player/application/vp_filename_hash.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/tracking_source_policy.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../utils/episode_progress_merge.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/movie_progress_storage.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/series_progress_storage.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'video_player/utils/aspect_mode_utils.dart'. Try removing the import directive

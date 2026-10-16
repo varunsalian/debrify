@@ -11055,3 +11055,425 @@ worktree's `.dart_tool/vplayer_parser/`, including nested readers; all Flutter
 suites are serialized. Changed Dart format and scoped Flutter analysis pass.
 Only documentation is finalized after that clean checkpoint; the final test
 and application inputs are identical. No full-suite or release/device action.
+
+## Phase 14 provisional Step T — resume (2026-10-15)
+
+Preparation original **1d7699d2e**, lib tree
+`338d6b0b279c3d4fac6897d667ea25600ccb37c2`. This checkpoint writes
+only docs/tools. The normally formatted evidence-only split is **137 /381 /457**
+lines (keys /restore /save); 13 moved declarations and zero field moves.
+`dev/tool/dart_moves/vplayer_p14.json` is explicitly **PROVISIONAL**. Complete
+comparison includes all retained declarations, member order, imports, adapters
+and frozen scaffolding; it makes **no history claim**. No dummy P13 manifest.
+
+The frozen Host signatures and live facade projections at this preparation
+base are below. Constructors are inert. Restore setters write the display
+fields directly; the exact static forwarder passes the `enhanced` tear-off
+without invoking it. No destination imports the facade or a sibling.
+
+VpResumeKeysHost (`9` declarations):
+
+```dart
+List<PlaylistEntry>? get activePlaylist => _s._activePlaylist;
+int get currentIndex => _s._currentIndex;
+int get currentIptvIndex => _s._currentIptvIndex;
+int? get effectiveContentEpisode => _s._effectiveContentEpisode;
+String? get effectiveContentImdbId => _s._effectiveContentImdbId;
+int? get effectiveContentSeason => _s._effectiveContentSeason;
+List<IptvChannel>? get effectiveIptvChannels => _s._effectiveIptvChannels;
+String get title => _s.widget.title;
+String get videoUrl => _s.widget.videoUrl;
+```
+
+VpResumeRestoreHost (`31` declarations):
+
+```dart
+bool get allowResumeForManualSelection => _s._allowResumeForManualSelection;
+Duration get duration => _s._duration;
+String? get effectiveContentImdbId => _s._effectiveContentImdbId;
+bool get isAutoAdvancing => _s._isAutoAdvancing;
+set isAutoAdvancing(bool v) => _s._isAutoAdvancing = v;
+bool get isManualEpisodeSelection => _s._isManualEpisodeSelection;
+mk.Player get player => _s._player;
+int get resumeVerifyEpoch => _s._resumeVerifyEpoch;
+ResumeWriteGuard get resumeWriteGuard => _s._resumeWriteGuard;
+bool get screenDisposed => _s._screenDisposed;
+Future<void> waitForDuration() => _s._waitForDuration();
+Future<Map<String, dynamic>?> getEnhancedPlaybackState() => _s._resumeSave.getEnhancedPlaybackState();
+String get resumeKey => _s._resumeKeys.resumeKey;
+bool get mounted => _s.mounted;
+double? get traktProgressPercent => _s.widget.traktProgressPercent;
+double? get mdblistProgressPercent => _s.widget.mdblistProgressPercent;
+double? get simklProgressPercent => _s.widget.simklProgressPercent;
+bool get launchTraktPercentSpent => _s._trakt.launchTraktPercentSpent;
+set launchTraktPercentSpent(bool v) => _s._trakt.launchTraktPercentSpent = v;
+bool get launchSimklPercentSpent => _s._simkl.launchSimklPercentSpent;
+set launchSimklPercentSpent(bool v) => _s._simkl.launchSimklPercentSpent = v;
+bool get launchMdblistPercentSpent => _s._mdblist.launchMdblistPercentSpent;
+set launchMdblistPercentSpent(bool v) => _s._mdblist.launchMdblistPercentSpent = v;
+String? get currentLocalMovieImdbId => _s._completion.currentLocalMovieImdbId;
+set playbackSpeed(double v) => _s._display.playbackSpeed = v;
+set aspectMode(AspectMode v) => _s._display.aspectMode = v;
+Future<double?> currentEpisodeTraktPercent({bool forGuide = false}) => _s._trakt.currentEpisodeTraktPercent(forGuide: forGuide);
+Future<double?> currentEpisodeSimklPercent({bool forGuide = false}) => _s._simkl.currentEpisodeSimklPercent(forGuide: forGuide);
+Future<double?> currentEpisodeMdblistPercent({bool forGuide = false}) => _s._mdblist.currentEpisodeMdblistPercent(forGuide: forGuide);
+Future<void> applyAspectVideoZoom() => _s._display.applyAspectVideoZoom();
+Future<Map<String, dynamic>?> readLocalResume({required String? contentId, required String resumeKey, required Future<Map<String, dynamic>?> Function() enhanced}) => VideoPlayerScreen.readLocalResume(contentId: contentId, resumeKey: resumeKey, enhanced: enhanced);
+```
+
+VpResumeSaveHost (`37` declarations):
+
+```dart
+List<PlaylistEntry>? get activePlaylist => _s._activePlaylist;
+int get currentIndex => _s._currentIndex;
+IptvChannel? get currentIptvChannel => _s._currentIptvChannel;
+String? get currentStreamUrl => _s._currentStreamUrl;
+String? get currentStremioTvContentTitle => _s._currentStremioTvContentTitle;
+Duration get duration => _s._duration;
+int? get effectiveContentEpisode => _s._effectiveContentEpisode;
+String? get effectiveContentImdbId => _s._effectiveContentImdbId;
+int? get effectiveContentSeason => _s._effectiveContentSeason;
+String? get effectiveContentTitle => _s._effectiveContentTitle;
+String? get effectiveContentType => _s._effectiveContentType;
+List<IptvChannel>? get effectiveIptvChannels => _s._effectiveIptvChannels;
+IptvGuideContext? get iptvGuideContextOverride => _s._iptvGuideContextOverride;
+bool get isManualEpisodeSelection => _s._isManualEpisodeSelection;
+bool get isPlaying => _s._isPlaying;
+bool get isReady => _s._isReady;
+bool get isTransitioning => _s._isTransitioning;
+Torrent? get openedWatchSource => _s._openedWatchSource;
+Duration get position => _s._position;
+Lock get resumeSaveLock => _s._resumeSaveLock;
+ResumeWriteGuard get resumeWriteGuard => _s._resumeWriteGuard;
+SeriesPlaylist? get seriesPlaylist => _s._seriesPlaylist;
+MediaServerWatchController get serverWatch => _s._serverWatch;
+bool get validationGateActive => _s._validationGateActive;
+({int? season, int? episode}) traktSeasonEpisode() => _s._traktSeasonEpisode();
+String resumeIdForEntry(PlaylistEntry entry) => _s._resumeKeys.resumeIdForEntry(entry);
+String get resumeKey => _s._resumeKeys.resumeKey;
+String get title => _s.widget.title;
+String get videoUrl => _s.widget.videoUrl;
+String? get contentImdbId => _s.widget.contentImdbId;
+String? get iptvSourceId => _s.widget.iptvSourceId;
+PlaybackResumePolicy get resumePolicy => _s.widget.resumePolicy;
+String? get currentLocalMovieImdbId => _s._completion.currentLocalMovieImdbId;
+bool get currentMovieMarkedAsFinished => _s._completion.currentMovieMarkedAsFinished;
+double get playbackSpeed => _s._display.playbackSpeed;
+AspectMode get aspectMode => _s._display.aspectMode;
+double? get speedBeforeHold => _s._display.speedBeforeHold;
+```
+
+The three whole-class patched facade declarations are
+`_VpLocalCompletionHostAdapter`, `_VpDisplayModeHostAdapter` and
+`_VpSleepTimerHostAdapter`, exactly one counted receiver rewrite each.
+They must be regenerated on the accepted P13 base, preserving its
+`openPlayerMenuQuick` rewrites. Likewise regenerate construction, facade
+partition/import/order proofs, analyzer inputs, mutation inputs and full
+history (P12 at its accepted merge, P13 at its accepted merge, S2d).
+Production moves remain blocked until P13 merges and the pipelined proofs
+are refreshed. Evidence: `p14/stepT/`.
+
+## Phase 14 Step 0 — original resume characterization (2026-10-15)
+
+Application original `1d7699d2e`, lib tree
+`338d6b0b279c3d4fac6897d667ea25600ccb37c2`; preparation checkpoint
+`14de3e067`. All application and dependency files are unchanged. This is the
+pipelined preparation baseline, not the accepted P13 base. Production remains
+blocked; after P13 merges, reconcile the pipeline inputs, regenerate the three
+adapter proofs on that base and rerun the affected original proofs and baseline.
+
+Evidence: `refactor-evidence/vplayer/p14/step0/` in the git common directory.
+The detached `p14/original` stays at the named application original. Suites
+and mutations share one lock across test-input copying, application mutation,
+execution, hash recording and restoration. No interrupted/mixed-input pilot is
+credited. Every comparison/parser invocation uses an isolated copied package
+under `.dart_tool/vplayer_parser/`, with copied kernels deleted.
+
+The coverage matrix enumerates 661 original statement/branch/operator/literal
+points and all 28 retained occurrences, grouped under the 13 moved methods.
+`coverage-matrix.json` contains every source offset, contract and caller test.
+This enumeration is not a claim that every syntactic null token has a separate
+valid mutant. Compile-invalid deletions and unresolved runtime/timeouts are
+excluded from assertion-kill totals. All device-pending paths stay visible.
+
+### Coverage matrix
+
+| Original declaration | Observable boundary and tests (`video_player_resume_…_test.dart`) |
+|---|---|
+| `_resumeKey` | `keys`, `custom_key`, `iptv_window`, `live_key`, `playlist_bounds`, `initial_index`: custom bookmark; TorBox/PikPak/filename hash; live channel URL; empty list and standalone URL. Physical enhanced/legacy state and completion cleanup. |
+| `_torboxResumeKeyForEntry` | `keys`: case, web-before-torrent, required file id, missing ids, foreign provider; exact diagnostic and selected row. |
+| `_pikpakResumeKeyForEntry` | `keys`, `start_paths`: case, nonempty/missing id, fallback; initial open and stored presentation. |
+| `_resumeIdForEntry` | `keys`, `collection_save`: provider precedence, empty filename fallback, hash, source identity in both storage systems. |
+| `_maybeRestoreResume` | `arbitration`, `tracker_arbitration`, `rewatch_boundary`, `restore_races`, `overlap`, `late_entry`, `auto_advance`, `manual_window`, `finished_movie`, `no_duration`, `lookup`, `series_lookup`: exact 2s/90% windows; explicit launch vs deeper local; strict remote ties; all three spent flags even on local-preferred restore; rewatch masks; native/custom/source-specific/canonical selection; presentation restoration independently of position; guard clear before policy and late reads across held boundaries. |
+| `_seekForResume` | `landing`, `save_guards`, `overlap`, `renderer_capture`, `renderer_guard`, `unknown_duration_seek`, `start_paths`: 80% guard exemption, held target, opt-in verifier, post-seek epoch capture and renderer replacement. |
+| `_verifyResumeLanding` | `landing`, `overlap`, `guard_aba`, `confirm_epoch`: stable/transient 800ms confirmation, user/epoch/dispose abort, outstanding verifier futures drained. Wall-time retry exhaustion is device-pending. |
+| `_resumeSeekLanded` | `landing`, `overlap`, `guard_aba`, `confirm_epoch`: 200ms polling, target tolerance, confirmation rechecks; real deadline and guard's 30s settle remain device-pending. |
+| `_getEnhancedPlaybackState` | `lookup`, `series_lookup`, `custom_key`, `native_series`, `restore_bounds`, `sample_fallback`, `single_series_legacy`: parsed/raw/single episode, exact/canonical movie with single/multiple sources, native/custom identities and missing canonical fallback. Diagnostics pinned. |
+| `_resumeSaveBlocked` | `ready_window`, `manual_window`, `iptv_window`: readiness, IPTV-only transition and manual/debounced guards at request and lock admission. |
+| `_observeServerWatch` | `server_watch`, `server_ready`, `server_gate`, `retained_edges`, `open_observation`: real service-prepared targets, save with no new tick, held target suppression, EOF only on completion, quiet disposal, source handoff, retirement and client close order. |
+| `_saveResume` | `save_queue`, `autosave`, `iptv_window`: same lock, dropped busy periodic ticks, queued explicit checkpoints/override, six-second persistence without notification and ordered disposal. |
+| `_saveResumeLocked` | `save_queue`, `save_guards`, `profiles`, `database_races`, `renderer_capture`, `widget_capture`, `collection_save`, `single_save`, `url_fallback`, `iptv_window`: early position/duration/speed/aspect tuple vs late key/identity/source; short-duration rejection/equality, completion after admission, A→B/A→B→A/deletion/dispose, both physical maps and DB rows/unrelated entries, preference overlap, partial errors and lock recovery. |
+
+### Preserved original behavior and device-pending work
+
+- Position/duration/speed/aspect are sampled on lock admission. Legacy identity
+  and source id are live reads after enhanced persistence. A held map read can
+  carry A's unrelated data into B; a physical write already admitted in A stays
+  in A, while the later legacy DB admission may resolve B. An admitted DB handle
+  stays in A across profile/dispose; checkpoint notification sees current B.
+- The resume lock does not serialize phase-11 preference writes. The two public
+  audio-menu overlap directions preserve the original lost preference/resume
+  write, checking cache separately from physical preferences.
+- Completion after admission can be followed by the admitted save recreating
+  the completed movie's row. The following tick sees completion and stops.
+- Restore has no internal mounted/profile/media guard. It can apply saved
+  settings or seek after disposal; overlapping old seeks capture the *new*
+  verification epoch after their await. No guard or cancellation was added.
+- A direct/ranked startup disposed while initial restore is held can later
+  register its six-second autosave timer after disposal. The `disposed_startup` test
+  asserts the leaked six-second timer and then cancels only its observed
+  test-clock handle; the late three-second hide callback drains naturally.
+  Ordinary disposal/verifier cases drain outstanding work without blanket timer
+  cancellation. Superseded failing pilots remain uncredited.
+- A leading NaN/infinite/100% tracker input can mask a lower valid provider.
+  The tests pin the original fold rather than sanitize inputs.
+- A source handoff while the old held target is released can first report the
+  previously sampled five-second position, then the settled six-minute seek;
+  the server protocol test pins both request-time observations. A filtered
+  sample index uses the first real episode for storage ownership. Both are
+  preserved, not repaired.
+- Real `DateTime.now()` deadline exhaustion (1.5s/1.5s/3s retries, final 5s),
+  the guard's 30s settle and native decoder/keyframe accuracy are device-pending.
+  No fake-clock seam or claim of retry/device parity was introduced.
+
+### Mutation table
+
+**194 current scenarios in 53 resume files pass on the named original, and all
+194 have an assertion-failing mutation witness at their current test-file hash.**
+`final-original-proof.json` checks complete original invocations and excludes
+stale file versions. The 661-point sweep covers every statement/branch/operator/
+literal inventory entry under all 13 methods; all 28 retained references have
+independent assertion kills. No source-text assertion is behavior-kill credit.
+
+| Declaration | AST points | Assertion kills | Equivalent | Device-pending | Invalid deletion | Null components |
+|---|---:|---:|---:|---:|---:|---:|
+| `_resumeKey` | 53 | 30 | 0 | 0 | 17 | 6 |
+| `_torboxResumeKeyForEntry` | 31 | 21 | 1 | 0 | 4 | 5 |
+| `_pikpakResumeKeyForEntry` | 17 | 10 | 1 | 0 | 4 | 2 |
+| `_resumeIdForEntry` | 13 | 4 | 0 | 0 | 7 | 2 |
+| `_maybeRestoreResume` | 191 | 124 | 9 | 0 | 44 | 14 |
+| `_seekForResume` | 18 | 16 | 0 | 0 | 2 | 0 |
+| `_verifyResumeLanding` | 29 | 2 | 0 | 27 | 0 | 0 |
+| `_resumeSeekLanded` | 43 | 31 | 2 | 7 | 3 | 0 |
+| `_getEnhancedPlaybackState` | 106 | 56 | 3 | 0 | 30 | 17 |
+| `_resumeSaveBlocked` | 16 | 14 | 0 | 0 | 1 | 1 |
+| `_observeServerWatch` | 11 | 9 | 0 | 0 | 1 | 1 |
+| `_saveResume` | 8 | 7 | 0 | 0 | 1 | 0 |
+| `_saveResumeLocked` | 125 | 87 | 3 | 0 | 22 | 13 |
+
+Totals: **411 unique AST points killed, 19 equivalent, 34 device-pending,
+136 compile-invalid deletion candidates, 61 enumerated null components**. Invalid
+candidates are excluded from kill totals; null components remain attached to
+their owning statement/condition and caller matrix. Valid alternatives cover
+hash return, lock bypass, owned tuple/target declarations, first-episode fallback
+and held speed rather than counting invalid deletions. `mutation-audit.json`
+links every point to exact patches, results and tests; `coverage-matrix.json`
+adds caller contracts and lexical ownership. **Zero open observable points.**
+
+| Retained ledger | Caller behavior and witnesses |
+|---|---|
+| r0–r7, initialization | Latest provider-key selection; ordinary, random-fallback and percent startup on PikPak/ranked paths; the real six-second callback's physical write. |
+| r8–r10, subscriptions | Position observations; first Stremio TV duration consumes exactly one verified seek; playing-only pause/resume reports without position/save events. |
+| r11, renderer | Same-State Android fallback re-arms the carried guarded target. |
+| r12, open | Initial audio configuration held while source B opens; duration-only change then late initial open observes B before closing it. Stop position reflects the clamped duration. |
+| r13–r14, EOF/source | EOF-only watched/stop ordering and outgoing checkpoint before playlist replacement. |
+| r15–r18, rollback/direct source | Exact duplicate restoration seeks, resolved playlist over an outgoing direct launch, direct carry and rejected direct restore. |
+| r19–r20, item load | Outgoing manual checkpoint and exact local-preferred incoming restore. |
+| r21–r24, disposal/UI | Observe then close then local exit save; pause's captured override; settled seek checkpoint. |
+| r25–r27, adapters | Completion key; display and sleep save callers. |
+
+**All 28 retained occurrences killed.** The first broad sample and every later
+survivor replay remain archived. Superseded failed-positive pilots (including
+snackbar ordering, copied Widget playlist versus borrowed provider list, and
+close-at-open versus close-at-disposal fixture assumptions), compile failures,
+interrupted/mixed-input runs and two runtime-only outcomes are uncredited. No
+allowlist, app fix, seam extension or production change accepted a failure.
+The final valid witness runs use the passing, unchanged original.
+
+### Reduced baseline
+
+`suite_evidence.py` reduced baseline PASS: **206/206 expected suites loaded,
+1,489 successes, zero failures/skips**; versus the frozen 153-suite / 1,295-test
+base, **194 additions only**, no missing baseline identities or outcome changes.
+`final_suite.py` checks the complete explicit inventory before the helper's
+comparison (no absent-suite filtering loophole). `final-parity.json` also checks
+all 194 original scenario identities against the current run. The tree stayed
+unchanged throughout; SDK Flutter 3.44.8 / Dart 3.12.2 is the same as the base.
+
+Commands and receipts: `final-original*.jsonl` plus the focused complete original
+runs listed in `final-original-proof.json`; `reduced-baseline.jsonl`, `.env.json`,
+`reduced-baseline-load-proof.json`, `reduced-baseline-run.log`; all run through the
+serialized `p14/bin/run-suite` / `original-suite` launchers with
+`--no-pub --dart-define=DEBRIFY_VP_TEST_HOOKS=true` and `nice -n 19`. No
+interrupted run is passing evidence. Changed test/support analysis PASS, 61 Dart
+files formatter-clean; existing analyzer comparator **124 scoped diagnostics,
+zero additions**. Size/architecture PASS (3,009 files / 1,677 migrated files).
+Application and pubspec bytes remain identical to the named original. This is
+Step 0's reduced preparation baseline; full suite/builds remain for the named
+integration gates under the approved phase-13 speed-up rule.
+
+## Phase 14 Step 0b — independent sample addendum (2026-10-15)
+
+Named original `9d22e8223` has the same application tree as `1d7699d2e`:
+`338d6b0b279c3d4fac6897d667ea25600ccb37c2`. The existing detached
+`p14/original` at `1d7699d2e` therefore supplies the exact named-original
+application bytes. `step0b/original-identity.json` records the equality.
+No application or dependency file changed. Production remains blocked on P13.
+
+### Independent sample and source-guard classification
+
+Claude's `claude-mut/results.json` contains 22 valid mutants. Initially **18/22
+(82%) had behavior-test assertion kills**. q11, q13, q18 and q22 were behavior
+survivors: their only failures were these three structural source-text guards:
+
+- `Flutter player retains and consumes a TVMaze-discovered identity`
+- `Flutter load path uses the guarded final selection`
+- `Flutter watch reports respect validation, transitions and resume hold`
+
+Those guards reject edits to their matched text; **none is a behavioral mutation
+witness**. They remain structural checks. `independent-sample-classification.json`
+separates the original behavior failures from source-guard failures for all 22
+mutants. The four closure runs include only their respective behavior test files.
+The initial 18 witnesses plus the four new exact-mutant kills give 22 behavioral
+witnesses; this is a targeted closure, not a claimed fresh rerun of all 22.
+
+### Mutation table and coverage matrix addendum
+
+| Sample / original declaration | Behavior through original callers | Assertion-failing original witness |
+|---|---|---|
+| q11 `_maybeRestoreResume` | `tracker_arbitration`: no launch percentages; stored Trakt episode progress 40%, seekable local 20%; furthest stored remote wins at 480,000 ms. | Original seeks 480,000; exact mutant seeks local 240,000. |
+| q13 `_verifyResumeLanding` | `deadline_epoch`: a real 200 ms poll's delivery is held across the real first 1.5 s deadline, then the playlist caller opens episode B and re-arms the same 300,000 ms target. Real elapsed time is bounded; DateTime and production deadlines are unchanged. Both original verifier futures/timers and teardown drain. | Original has exactly two seeks (A and B); exact mutant issues a third stale seek into B. |
+| q18 `_saveResumeLocked` | `hold_save`: select 1.5x, enter temporary 2x through the gesture callback, checkpoint through the aspect menu while still held. Inspect the physical profile `playback_state_v1` row and legacy DB row before release; both contain speed 1.5 and aspect `cover`, while native/display speed remains 2.0. | Exact mutant writes physical speed 2.0 instead of 1.5. Release restores 1.5 on the original. |
+| q22 `_observeServerWatch` | `server_transition`: a real service-prepared non-IPTV target is active. Next sets transition state while native pause is held; a six-minute position edge and a public menu checkpoint must emit no server observations while the action is pending. After transition, play reports the six-minute position. | Exact mutant adds `/Sessions/Playing/Progress` during the held transition (two reports instead of one). |
+
+All four new cases pass unchanged on the original; the final focused run passes
+**23/23 cases**. `sample-closures-results.json` records four complete
+assertion-failing executions, exact patches and final test/support hashes.
+`final-original-proof.json` checks that each mutation's assertion identity also
+passes on the original at those exact hashes. A superseded transition pilot
+failed the fixture's pending-action bookkeeping on the original; marking that
+intentionally suspended action held corrected the fixture, with all assertions
+preserved. The failed pilot is archived and uncredited.
+
+`coverage-matrix.json` extends the original 661-point / 28-reference matrix and
+reclassifies only p335 (the post-wait epoch branch) from device-pending to an
+assertion kill: **412 killed, 19 equivalent, 33 device-pending, 136 invalid
+candidates, 61 null components**. The three other exact mutations strengthen
+already-covered declarations without inflating unique AST-point totals. Full
+retry exhaustion/final five-second wait, the guard's 30-second settling and
+native decoder/keyframe accuracy remain device-pending. The first-deadline
+stale-epoch race is now covered with a bounded real-time driver, without a seam.
+
+### Additions-only reduced baseline
+
+`suite_evidence.py` comparison against the accepted Step-0 baseline passes:
+**209/209 expected suites loaded, 1,493 successes, zero failures/skips; four
+added identities only**, with every previous identity and outcome retained
+(Step 0: 206 suites / 1,489 successes). All 56 resume suites are inventoried;
+the four additions bring resume scenarios from 194 to 198. The staged tested
+tree is stable throughout the run, with the same SDK/configuration. Changed
+Dart analysis passes without issues; formatter checks all four files unchanged;
+`git diff --check` passes. No flaky test or baseline outcome change observed.
+
+Evidence under `refactor-evidence/vplayer/p14/step0b/`: final original log and
+input-hash proof; the four exact patches and complete failing JSON logs;
+independent-sample classification; updated coverage matrix; reduced suite logs,
+environment and explicit load/identity proof; changed-test analysis/format.
+All Flutter runs use the shared serial lock, `nice -n 19`, `--no-pub` and
+`--dart-define=DEBRIFY_VP_TEST_HOOKS=true`; manifest readers use isolated parser
+packages. No source-only failure, runtime-only failure or interrupted run is
+credited. No production move, bug fix, allowlist or dependency change.
+
+## Phase 14 accepted-P13 rebase — FINAL boundary (2026-10-15)
+
+Final original **238df16f4**, lib tree
+`838731954da033b5f1aa6ee0200cc2fccdbf4b70`. Preparation's
+13 moved method bodies are token-identical; changed retained callers are
+`_initializePlayer`, `dispose`, `build`, display and sleep adapters. Existing
+shared support is unchanged (P13 adds four support files). The final manifest
+classifies all **761 declarations: 744 retained, four patched, 13 moved**;
+zero field moves. Constructor and three adapter patches preserve P13's menu
+rewrites. Every one of the **29 earlier destinations** is history-derived and
+protected; P1–P13 historical comparisons and all seams pass without relaxation.
+
+| Proof | Final outcome / evidence under `p14/rebase/` |
+|---|---|
+| Frozen destinations and Hosts | keys **137 lines / 9 names**, restore **381 / 27 names, 31 declarations**, save **457 / 37 names**; exact forwarders and scaffolding, no facade back-import. `prototype/hosts.json`, `frozen/`, `optional-commas.json`. |
+| Static boundary / P13 patches | Six independent exact-forwarder negatives; two independent stale menu-projection negatives; all 16 real-config negatives reject. |
+| Positive original parity | **198 cases / 56 files**, each file passes alone; exact final input hashes. `characterization-proof.json`. |
+| Retained occurrence mutation refresh | **28/28 assertion kills** at P13 input positions, plus q11/q13/q18/q22: **32/32**. `mutation-refresh-results.json`. |
+| Per-case witness refresh | **58/58 assertion kills**, covering all 194 prior cases; four sample cases covered above. `case-witness-refresh-results.json`, `refreshed-case-witnesses.json`. |
+| Systematic matrix | Original **661 AST points / 28 references** preserved; **412 killed, 19 equivalent, 33 device-pending, 136 invalid deletion candidates, 61 null components**. All 28 references re-killed; no source-only witness credit. |
+| Reduced baseline | **246 suites / 1,680 successes / 1 pre-existing failure**, every suite loaded, all previous **1,493 outcomes unchanged**. `rebased-baseline-proof.json`. |
+| Analyzer | original root **145**, strict **221**, final formatted probe **159**, no errors/new async-context identity; P1–P13 mappings preserved. Four original moved infos retained. |
+
+The expanded inventory includes two readers missing from the preparation gate.
+Their independent replay on **1d7699d2e application code** records seven passes
+and the already-existing `startup shield remains opaque and noninteractive in
+PiP` raw-text guard failure. No accepted outcome changed; no allowlist or fix.
+The three sample source-text guards remain structural evidence only.
+
+The OS restart interrupted the first expanded suite and some mechanical runs;
+those logs are retained as interrupted and uncredited. The fresh baseline and
+missing checks run serially, Flutter concurrency 1. An evidence-only persistent
+Dart transport preserves the adapter's complete output exactly (including
+binding/ownership, Unicode offsets, invalid then valid inputs and A→B→A), while
+isolating every parser package and deleting copied kernels. No production
+parser/comparison rule is changed. Evidence in `p14/low_churn/`.
+
+## Phase 14 Step 1 — applied resume ownership (2026-10-15)
+
+`vplayer_p14.json` is applied on accepted P13 `238df16f4`: 13 methods / no
+fields, 28 retained occurrences (25 substitutions + three patched adapters),
+exact static `readLocalResume` Host forwarding and facade sibling routing.
+All earlier 29 destinations and P13 menu rewrites remain protected. Destinations
+are **137/381/457 lines**; facade **14,005**, down from 14,630. The prototype's
+AST optional-comma proof still applies; no unregistered token change.
+
+All five source guards now require the moved public owners/Host receivers via
+the validating reader; **18 independent removal/reorder negatives reject**.
+These are structural proofs, excluded from behavioral mutation totals. Focused
+five-suite run passes; size/architecture/format/current checker pass. CI uses
+P14 current/self-test/analyzer inputs, P1–P13 history, all seams through S2d;
+behavior and theme/source-guard inventories include the new files. The six
+probe-proven newly unused original facade imports are explicitly allowlisted;
+no other diagnostic is added to that list. Evidence: `p14/step1/`.
+
+## Phase 14 reduced gate — clean production parity (2026-10-16)
+
+Clean Step-1 revision `a0d6357a64c6d93830cc3523206c4e7e83ca1932`.
+Frozen reduced inventory:
+**246 expected/loaded suites; 1,680
+successes / 1 pre-existing failure**. Exact identity/outcome
+parity with the complete accepted-P13 original baseline, including all 1,493
+accepted preparation Step-0b outcomes. The startup-shield PiP raw-source failure
+is independently reproduced on preparation original and already recorded at P13;
+no new failure is accepted or allowlisted. The initial complete run recorded
+one `Database scope cleanup must drain` error in the Trakt type-gate test.
+Three unchanged original replays (45 cases) and 24 original stress groups
+(360 cases, one Flutter invocation) did not reproduce it. No fixture,
+assertion or baseline was changed; the fresh complete reduced suite matches
+all original outcomes. This initial teardown error remains an unreproduced
+observation, not a claimed proven pre-existing failure. Full trace and runs
+are in `p14/gate/flake/` and `initial-failed-*` logs.
+
+All **47** mechanical checks pass serially: Dart manifest self-tests,
+Kotlin self-test, P14 current plus P1–P13 exact `--at`, every seam through S2d,
+size/architecture and negatives. CI format/analyze/shared allowlist and the P14
+identity comparator pass (**159 scoped diagnostics**, zero inventory additions).
+Retarget proofs remain structural and are excluded from behavioral kill counts.
+Every suite loads; all runners finish; clean-tree receipts and exact commands
+are under `p14/gate/`. Serial suites use concurrency 1 and test-hook define;
+all parser invocations are isolated, copied kernels deleted. No full suite or
+release builds in this reduced gate; M3 owns those checks. Existing device
+pending items are unchanged. Phase 14 STOP.
