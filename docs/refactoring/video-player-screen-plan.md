@@ -6896,3 +6896,71 @@ Patched adapters after finding 1: P8 PiP (`cancelPendingIptvCatchup`),
 P13 menu UI and menu controller (`captureIptvAudioLanguage`,
 `hideIptvZapBanner`), P11 track preferences only for
 `applyIptvAudioPreference` (→ memory). Regenerated on the accepted P14 base.
+
+## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
+
+Reviewed at `c5c8e3500` (facade byte-identical to `be4cd78aa`; split,
+16 methods, two fields, Host counts 9/26/28/46/48 and 22 inbound references
+confirmed). Five P2s and two P3s, all adopted:
+
+1. **Probe acceptance boundaries differ from P15's driver.** Startup VOD arms
+   in `beforeOpen` (before `_player.open` completes, 6867); debrid-direct has
+   no arming guard (6656); both await `_openMedia` before returning even after
+   their completer settled. Step 0 separates subscription, `beforeOpen`,
+   native-open entry, open acknowledgement and probe return; covers acceptance
+   while acknowledgement is held, pre-arm evidence retained until a later
+   event, and an open Future that never completes (the 12 s timeout does not
+   bound the open await). Probe continuations are tracked through teardown.
+   One bounded real-time extension case; cap exhaustion device-pending. The
+   45 s figure is the loop's elapsed-time eligibility check, not a whole-
+   operation deadline.
+2. **Seam S2e (separately reviewed before step 0):** replace the two candidate
+   `Platform.isAndroid` reads (6660, 6837) with the existing `VpS2Hooks`
+   predicate (default evaluation and short-circuit order preserved; installer
+   unchanged), projected after extraction through a narrow Candidates Host
+   member (Phase-10 precedent) — Candidates Host becomes 10. Characterize real
+   listener ordering (3214/3245 may set `_rendererFallbackInProgress` before
+   the probe sees the same error), transition-blocked fallback (explicit
+   switching sets `_isTransitioning`), already-validated mode, and replacement
+   while an old probe is pending; record any probe-vs-fallback eligibility
+   mismatch as an original defect. Native rendering stays device-pending.
+3. **Rollback-after-dispose Follow-up withdrawn:** the post-await
+   `request?.isCurrent == false` check (7642) and both production request
+   factories (10909, shuffle 4551) include `mounted`. Step 0 tests the existing
+   protection through the real P17 caller (hold `switchMdblistTarget`, dispose
+   or supersede, release, verify return before transition cleanup). "Request
+   staleness at every await" lists the actual checks and their predicates.
+   The unchecked-explicit-pick and late-restore observations stay.
+4. **Production profile ownership separated from facade callbacks.**
+   `SourcePlayerLaunch.resolverFor` supplies a captured owner;
+   `SourcePlaylistResolver` runs under its captured scope with the player's
+   continuation predicate; committers serialize via
+   `AutomaticSourceBindings.runOwned`. The blanket "resolvers follow the active
+   profile" Follow-up is replaced: synthetic callbacks remain for facade timing
+   tests, plus integration cases with the real resolver/committer holding
+   provider selection, acquisition, queued commit and physical persistence
+   across A→B, A→B→A, deletion and route closure (inspect binding/cache
+   contents; retirement vs admitted outgoing work). The Quick Play rules-read
+   concern is kept separately. Relevant sources ownership/profile tests join
+   the reduced-gate inventory.
+5. **Delayed startup failure after a source change:** `_reportStartupFailure`
+   checks identity only with its optional predicate; the initial-exhaustion
+   caller (2511) supplies none. Characterize default vs watch-epoch reporting;
+   hold the 250/900 ms delay, commit another source on the same route, release;
+   also a covering dialog and route replacement. Pin any late pop/recovery as a
+   Follow-up; no epoch guard added during extraction.
+6. **`_startupSourceFields`** stays an instance method in Candidates for
+   cohesion (the checker does support parameter-only → top-level; a top-level
+   form would need its own manifest proof).
+7. **Trakt gate release:** release always invokes `traktScrobble('start')`
+   after the mounted/gate/playing/duration checks; only heartbeat creation
+   depends on the resulting last action. Characterize attempted dispatch,
+   resulting action and heartbeat separately; reuse tracker coverage.
+
+Activation (step 1): current/self-test and analyzer inputs → P16; P14/P15
+histories at accepted merges; protect all prior destinations (≈ 39); S2e with
+the earlier seam proofs; whitespace-tolerant reader assertions with
+non-negative ordering anchors; M3 full suite + both release builds after the
+phase-16 gate. Step T measures all five formatted prototypes (member/comment
+contributions 348/270/113/258/302 before Hosts/imports). Sole future adapter
+patch: `_VpIptvChannelSwitchHostAdapter.hideSourceSheet` (after P15 merges).
