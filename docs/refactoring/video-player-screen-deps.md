@@ -11601,6 +11601,13 @@ physical keys/rows independently from final A's new-session scope.
 
 ### Systematic sweep and mutation evidence
 
+**Adequacy claim withdrawn after independent review.** The historical ledger
+below records actual attempts, but its 221 kills do not establish coverage of
+the 1521 nested AST points. Independent samples killed 16/26 (62%) and 11/23
+(48%); Step 0 remains unaccepted. The second-sample addendum supersedes the
+sweep's attribution and provides explicit point-level results. Whole-body
+bypasses and compound faults receive no descendant coverage credit.
+
 `inventory.json` enumerates all **70 moved declarations** (17 fields, 53
 methods/getters), **1521 nested AST points** and **68 retained references**,
 excluding documentation links. It matches Step T's retained scan exactly.
@@ -12108,8 +12115,8 @@ retains initial survivors and invalid attempts; corrected witnesses use new IDs.
 
 **Step 0 is not accepted.** Claude's sample at `4f8222e03` (application
 byte-identical to `1d7699d2e`) killed 16 of 26 mutants, **62%**, below the
-75% threshold. The earlier 221 assertion witnesses cover declarations and
-references, but missed the branches below. The original sample result stays
+75% threshold. The earlier 221 assertion witnesses concern their exact faults;
+they do not establish coverage of descendant branches or operands. The original sample result stays
 unchanged in `p15/claude-mut2/results.json`; these closures do not replace the
 fresh independent second sample requested by the reviewer. Production remains
 blocked on accepted P13/P14 merges, proof refresh and review.
@@ -12229,3 +12236,183 @@ No existing test/support file changed. A session language picked in series A
 carrying into series B is pinned as the original route-wide memory behavior,
 not reset or repaired. Pending native/device checks and the accepted-P14 tooling
 regeneration remain unchanged. Stop for the new independent sample.
+
+## Phase 15 Step 0 second-sample addendum — original `1d7699d2e`
+
+**Step 0 remains unaccepted.** The independent samples killed 16/26 (62%)
+and 11/23 (48%). The old claim that 221 killed attempts covered all 1,521
+inventoried AST points is withdrawn. An enclosing method/body kill does not
+establish coverage of its nested guards, operands or assignments. Production
+moves remain blocked on accepted P13/P14 integration and later regeneration;
+P13's merge does not change this checkpoint's original application revision.
+
+### Second-sample survivor closure
+
+Each behavioural proof below applies the exact independent fault to the actual
+screen in the detached original checkout. These nine completed runs fail manual
+assertions through the original public callers. The three equivalences preserve
+the original code and have explicit caller/consumer proofs, rather than being
+counted as kills. Evidence: `p15/review2/exact-j-final.json`,
+`exact-j-final-results.json`, `equivalent-j-final-results.json` and
+`j-equivalence-proofs.json` under the common-dir evidence root.
+
+| Fault | Original observation / proof | Outcome |
+| --- | --- | --- |
+| j1 | Unavailable Start Over clears `Controls.liveEdgeActionLoading` and permits another action. | Assertion kill |
+| j5 | Replay from an active paged ring retires paging and strands a touching pending page. | Assertion kill |
+| j6 | All four page-request call sites pass nonnegative offsets: forward end, clamped backward offset, or literal zero including `fromEnd`. All window-offset writers preserve nonnegativity. | Source-proved equivalent |
+| j8 | Browsing during a backward page discards its queued press; a later category landing cannot replay it. | Assertion kill |
+| j9 | For page end `e`, `max(T,e)` and `T` have identical `e < total` / `e >= total` outcomes. In-window zaps use list length; merge normalizes again against its own end. No UI, persistence or request exposes the scalar total. Loaded tail rows remain reachable. | Source-proved equivalent |
+| j10 | The published guide category list excludes empty strings from a page. | Assertion kill |
+| j11 | The only installer invocation passes `preservePlayingChannel:false`; its playing-channel lookup block is unreachable. Reachable merge/reanchor identity matching has separate duplicate/partial-match cases. A new true-mode caller invalidates this proof. | Source-proved equivalent |
+| j12 | A page without source identity retains the ring source in the next actual provider request. | Assertion kill |
+| j13 | A touching page of another category cannot change the ring. | Assertion kill |
+| j14 | A prepended overlap renames the playing identity, so lookup fails and the fallback index must shift by the prepended count. | Assertion kill |
+| j21 | Missing `has_next_episode` reaches the physical SQLite `has_next` column as NULL; false and true are independently checked too. | Assertion kill |
+| j23 | A visible non-live dock has no live identity ownership and retains no active one-second banner ticker. | Assertion kill |
+
+The original control and each of these three exact equivalent mutants also
+complete the thirteen page/protocol cases. No private State injection or new
+production seam makes an otherwise unreachable path callable.
+
+### Re-audit of the superseded sweep
+
+The old operator classes were whole-method/getter bypasses; retained-call
+omission/expression replacement; selected guard/statement/constant changes;
+compound rewrites/fault insertions; and selected initializers. Its 239 canonical
+attempts and 221 kills were evidence for those exact faults only. The old AST
+inventory was much larger and was incorrectly credited through enclosing
+spans. Exact-span attribution is intentionally conservative:
+
+| Original declaration | Old AST points | Attributed old kills | Exact nested spans killed |
+| --- | ---: | ---: | ---: |
+| `_requestIptvZapPage` | 56 | 2 | 0 |
+| `_parseIptvZapPage` | 35 | 1 | 0 |
+| `_installIptvZapWindow` | 32 | 1 | 0 |
+| `_mergeIptvZapPage` | 44 | 1 | 0 |
+| `_playIptvCatchup` | 56 | 8 | 2 |
+| `_startIptvProgrammeFromBeginning` | 75 | 4 | 3 |
+| `_recordIptvWatchForChannel` | 29 | 3 | 0 |
+| `_syncIptvBannerTicker` | 21 | 1 | 0 |
+
+The two replay spans were the airing-channel switch await and unavailable
+feedback text; the three Start Over spans were unavailable feedback text,
+`return false` in pre-open admission, and the quiet live fallback switch await.
+The complete AST offsets, replacement operators and old run identities are in
+`p15/review2/prior-sweep-audit.json`. There is no inferred descendant coverage.
+
+The missed observations had concrete causes. Unavailable Start Over asserted
+feedback without loading; replay fixtures had no active paged ring; browse
+retirement did not subsequently land/drain another page; category fixtures had
+no empty strings or missing page source; merge fixtures supplied matching
+categories and always found the playing identity; history fixtures did not
+compare NULL with false in the physical row; ticker cases used live ownership.
+Three other independent survivors are genuine caller/consumer equivalences
+(j6/j9/j11), with the scoped proofs above. Whole-method bypasses could fail all
+these existing tests while leaving those individual distinctions untested.
+
+### Explicit mutation policy and evidence integrity
+
+`dev/tool/vplayer_iptv_mutation_points.dart.txt` parses the original with the
+isolated analyzer package. The new inventory generates explicit faults at
+conditions, individual logical/nullable/arithmetic operands, comparison and
+arithmetic operators, conditional arms, integer/boolean/string values or keys,
+normalization bounds, collection filters, increment omissions (including loop
+indices as well as tickets) and executable
+statement omissions. Initial-state faults are recorded separately. Diagnostic
+text/statement omissions are outside this finite policy. This inventory does
+not claim to enumerate every possible edit to every AST node.
+
+`vplayer_iptv_mutation_batches.py` batches up to eight candidates per Flutter
+invocation, concurrency one, with a separate combined test-file isolate for
+each candidate. Every variant is the original library plus its single recorded
+fault; only test import URIs, evidence group-prefix removal and the identical
+common-dir lookup are adapted. Input hashes, per-case expectation hashes,
+commands, exact patches, original/variant source hashes and complete JSONL are
+archived. Completed IDs are resumable; result checkpoints use atomic replace.
+No per-input-file Flutter loop or per-case git/Dart/Python spawn is used.
+
+A same-VM pilot is explicitly excluded: repeated unmutated catch-up cases
+exposed shared per-server form-cache state. The accepted runner isolates each
+candidate, and every combined-case selection first passes on the unmutated
+original. Selectors with an expected-case inventory must load every selected
+case. Compiler errors, missing selectors, runtime-only failures, interrupted
+batches, clock-window precondition failures and timeouts receive no kill credit.
+The output observer compares public rendered inputs, requests and player
+operations only after a successful test body; a prior runtime/assertion failure
+cannot acquire snapshot credit during cleanup.
+
+The new observer's first-open header comparison is excluded because an
+unchanged-original, name-filtered replay reproduced null-versus-default-UA
+startup headers. Existing manual header assertions are retained, and later-open
+headers are compared. `startup-header-exclusion.json` links the raw original
+reproduction. Registered fixture addon IDs are normalized by their exact
+install identity; distinct sources and channel paths remain distinct. No
+existing manual assertion or checked-in failure allowance is weakened.
+
+### Additional original outcomes retained as Follow-ups
+
+- A direct adjacent-category result already parsed before a guide reset can
+  later install its old live ring and retune after the guide selected VOD.
+  The lower request-ticket check has already run at that delivery boundary.
+  The same-category merge path does reject a parsed page once paging retires.
+- Bootstrap during a held unpaged switch can install a one-row window, then
+  the older switch commits its captured index 1 while playing its captured
+  second channel. The next merge clamps the index to zero without replacing
+  that media. The guide exposes both intermediate and final indices.
+- A stale Start Over lookup/stop/setup rejection can leave loading true while
+  a newer zap is held at its recording-stop await. The newer owner clears it
+  later. The addendum pins the early window rather than repairing it.
+- A failed issued archive open must not clear a newer archive owner. For the
+  current owner, archive UI retires before the quiet fallback switch leaves
+  recording stop; waiting only for the eventual live open hid that boundary.
+- Replay records history twice. Its first physical row can use a different
+  playlist/series fallback from the later switch-owner write. Both stages are
+  checked; the final row alone concealed the first write's payload.
+- History captures immutable scalar attributes before its await, but a
+  nonempty headers map remains borrowed and can change before persistence.
+  An empty map has already been normalized to null. These distinct capture
+  points remain unchanged.
+- Recovery cancels pending replay preparation with `hideFeedback:false`, so
+  its current Preparing message remains. A stalled Start Over stream can also
+  trigger the live recovery owner after twelve real seconds of unchanged
+  position, retiring archive/timeline UI and rejoining the live URL.
+- A later `playing` event replaces the IPTV switch's 1.5-second reveal cleanup
+  with the retained listener's 3-second path. The no-event fallback and the
+  ordinary event path are characterized separately; neither timer is changed.
+- An older issued archive failure can cancel a newer same-channel lookup:
+  that lookup has not changed the channel-switch ticket. Its Preparing replay
+  feedback remains visible through the quiet fallback's recording-stop await.
+  A newer channel switch does strand the old failure. Both outcomes remain.
+- The early guide accepts an archive action before player construction. The
+  original catches that pre-open failure, retires the current lookup and takes
+  the quiet live fallback. An early guide pick can also install a ring before
+  player presentation initializes; presentation then does not fetch it again.
+- Guide list adoption occurs before recording stop, outside `setState`.
+  Until the first original rebuild, the rendered guide still has its old list.
+  A duration event publishes the adopted list while the stop is held. This
+  early publication boundary is characterized without moving or repairing it.
+
+### Original-control checkpoint; systematic closure still running
+
+The frozen inventory now contains **210** suites. The fresh restored-original
+run in `p15/review2/final-scoped-original.jsonl` passes **389 cases / 70 isolated
+files**, serially; the additional arming file passes both cases alone.
+`baseline-receipt.json` checks all expected suite and case identities and reuses
+only unchanged, dependency-independent suites. The composite is **1639
+successes / one unchanged startup-shield failure, 210/210 suites loaded**.
+All 44 new files have standalone original controls. No old snapshot expectation
+or failure allowance changes; `final-scope-expected-values.json` binds the
+existing output expectations before the final additional fixture entries.
+
+The driver's guide/zap checks explicitly assert callback availability before
+dispatch, replacing the earlier null-assertion failure with an assertion about
+the actual public control. Successful original dispatch is unchanged. This
+avoids treating a mutant's null-check exception as a behavioural kill. The
+fresh original run verifies the affected fixtures after this strengthening.
+
+Changed Dart formatting and focused test/helper analysis pass. The SDK remains
+Flutter `058e0af2c2b57e369d905a03ac9748b0ebf543c6`; application, packages,
+pubspec/lock and analyzer configuration remain byte-identical to `1d7699d2e`.
+The completed mutation batches are resumable; the final per-declaration point
+table and surviving-point audit are **not yet complete** at this checkpoint.

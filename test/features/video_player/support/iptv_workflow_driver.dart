@@ -16,6 +16,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:media_kit/media_kit.dart' as mk;
 
+import 'iptv_output_observation.dart';
 import 'fake_player.dart';
 import 'player_actions.dart';
 import 'trakt_transport.dart';
@@ -86,8 +87,18 @@ class IptvWorkflowDriver {
   }) : f = VideoPlayerEnvironment(
          native: native,
          configurePlayer: configurePlayer,
-       );
+       ) {
+    addTearDown(() {
+      expect(
+        _requestBudgetExceeded,
+        false,
+        reason:
+            'Finite fixture inputs must not issue an unbounded page sequence',
+      );
+    });
+  }
   final WidgetTester t;
+  final outputObservation = IptvOutputObservation();
   final VideoPlayerEnvironment f;
   final errors = <Object>[];
   final timed = <(Duration, Timer)>[];
@@ -95,10 +106,12 @@ class IptvWorkflowDriver {
   final timerCreatedAt = <Timer, DateTime>{};
   final timerOwners = <Timer, String>{};
   final browse = <Map<String, dynamic>>[];
+  final addonAliases = <String, String>{};
   final gates = <Completer<void>>[];
   FutureOr<Map<String, dynamic>?> Function(Map<String, dynamic>)? provider;
   FutureOr<http.Response> Function(http.Request)? response;
   bool disposed = false;
+  bool _requestBudgetExceeded = false;
   FakePlayer get player => f.player;
   List<(String, Object?)> calls(String name) =>
       player.calls.where((c) => c.$1 == name).toList();
@@ -154,6 +167,17 @@ class IptvWorkflowDriver {
         ? null
         : (request) async {
             browse.add(Map<String, dynamic>.from(request));
+            // The original fixtures issue at most five requests. A malformed
+            // paging loop must yield to the test clock instead of starving
+            // both Flutter's timeout and the teardown assertion. This is a
+            // fixture transport budget, never an application retry policy.
+            if (browse.length > 32) {
+              _requestBudgetExceeded = true;
+              final pause = Completer<void>();
+              gates.add(pause);
+              await pause.future;
+              return null;
+            }
             return await provider?.call(request);
           },
   );
@@ -193,7 +217,9 @@ class IptvWorkflowDriver {
   }
 
   Future<IptvChannelSheet> guide() async {
-    playerControls(t).onShowIptvChannels!();
+    final open = playerControls(t).onShowIptvChannels;
+    expect(open, isNotNull, reason: 'The player must expose its IPTV guide');
+    open!();
     await f.advance(t, const Duration(milliseconds: 350));
     expect(find.byType(IptvChannelSheet), findsOneWidget);
     return t.widget<IptvChannelSheet>(find.byType(IptvChannelSheet));
@@ -212,11 +238,14 @@ class IptvWorkflowDriver {
   }
 
   Future<void> zap(int direction) async {
-    observe(
-      () => direction > 0
-          ? playerControls(t).onNext!()
-          : playerControls(t).onPrevious!(),
+    final controls = playerControls(t);
+    final press = direction > 0 ? controls.onNext : controls.onPrevious;
+    expect(
+      press,
+      isNotNull,
+      reason: 'The player must expose the requested IPTV zap direction',
     );
+    observe(press!);
     await settle();
   }
 
@@ -292,9 +321,11 @@ class IptvWorkflowDriver {
             200,
           )
         : http.Response('{}', 404);
+    addonAliases[installed!.id] =
+        'fixture-addon-${addonAliases.length + 1}-$id';
     return iptvChannel(
       100,
-      url: StremioIptvService.buildChannelKey(installed!.id, id),
+      url: StremioIptvService.buildChannelKey(installed.id, id),
       headers: const {'X-P15': 'channel-header'},
     );
   }
@@ -306,20 +337,24 @@ class IptvWorkflowDriver {
   }
 
   Future<void> close() async {
-    for (final g in gates) {
-      if (!g.isCompleted) {
-        g.complete();
+    try {
+      outputObservation.capture(t, f.players, browse, banners, addonAliases);
+    } finally {
+      for (final g in gates) {
+        if (!g.isCompleted) {
+          g.complete();
+        }
       }
+      // Retire first so the recovery watchdog cannot start another probe while
+      // finite issued probes drain. Streams and transport stay open until then.
+      if (!disposed) {
+        await retire();
+      }
+      await advance(const Duration(seconds: 13));
+      await settle();
+      await f.close(t);
+      TraktTestTransport.instance.recorder = null;
     }
-    // Retire first so the recovery watchdog cannot start another probe while
-    // finite issued probes drain. Streams and transport stay open until then.
-    if (!disposed) {
-      await retire();
-    }
-    await advance(const Duration(seconds: 13));
-    await settle();
-    await f.close(t);
-    TraktTestTransport.instance.recorder = null;
   }
 
   List<IptvZapBanner> get banners =>

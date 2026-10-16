@@ -5761,8 +5761,10 @@ for Step 0 and Claude’s independent mutation sample.
   final A's new-session storage is not mislabelled as B. Deletion cleanup is
   pending. Reads, stale direct opens, disposed winner marks, replay's two writes
   and captured audio ordinals remain as-is; new Follow-ups recorded.
-- **Sweep/proofs.** **70 moved declarations**, **1521 nested AST points** and
-  **68 retained occurrences** accounted for. All 53 methods/getters have
+- **Sweep/proofs (nested-coverage claim withdrawn in the second-sample
+  addendum).** **70 moved declarations**, **1521 inventoried nested AST points** and
+  **68 retained occurrences** recorded. The inventory is not evidence that
+  those nested points were killed. All 53 methods/getters have
   assertion witnesses; 17 initializers have explicit inertness/operational
   coverage (five independently mutated). Retained sites: **65 assertion-proved,
   three explicit source audits**. Every new case has an original assertion
@@ -5826,6 +5828,32 @@ for Step 0 and Claude’s independent mutation sample.
   on accepted P13/P14 merges and regeneration of provisional tooling/proofs.
   No push, merge, branch switch, app launch/install or device action.
 
+
+### 2026-10-16 — Phase 15 second-sample closure checkpoint (Step 0 unaccepted)
+
+- **Original remains `1d7699d2e`.** P13 merged at `238df16f4`; this work does
+  not rebase or move production. P14 integration, proof regeneration and
+  independent Step 0 acceptance remain prerequisites for production work.
+- **Second sample.** Nine exact independent faults fail behavioural assertions
+  through the original callers. j6/j9/j11 have explicit caller/consumer
+  equivalence proofs, with all thirteen page/protocol cases also passing under
+  each exact fault. The deps report contains all twelve dispositions and the
+  eight-method audit of the old sweep. Its 221 kills never established coverage
+  of the 1,521 inventoried descendants; that claim is withdrawn.
+- **Fixtures and baseline.** Forty-four new files pass in independent file
+  isolates; their standalone controls are retained. A fresh serial original run
+  passes 389 cases in 70 files, and the additional arming file passes its two
+  cases alone. The frozen inventory now loads **210/210 expected suites**:
+  **1639 successes / one unchanged startup-shield failure**. Reused suites have
+  unchanged inputs and cannot import the modified IPTV driver. Existing
+  expectations and failure allowances are preserved. SDK, application,
+  dependencies and analyzer configuration remain unchanged.
+- **Audit continues.** The explicit single-fault inventory and serial batch
+  runner are checked in with their original-output fixtures. Completed mutation
+  batches are retained under `p15/review2/`; invalid candidates, missing
+  selections, runtime-only failures and timeouts receive no kill credit.
+  The point audit and final per-declaration closure table are still in progress.
+  This checkpoint does not claim Step 0 acceptance or completion of that audit.
 
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
@@ -6094,4 +6122,3 @@ Patched adapters after finding 1: P8 PiP (`cancelPendingIptvCatchup`),
 P13 menu UI and menu controller (`captureIptvAudioLanguage`,
 `hideIptvZapBanner`), P11 track preferences only for
 `applyIptvAudioPreference` (→ memory). Regenerated on the accepted P14 base.
-
