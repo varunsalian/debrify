@@ -38,13 +38,15 @@ void main() {
           final owner = sourcePick
               ? 'switchToIptvSource'
               : 'switchToIptvChannel';
-          final deadline = d.timed
-              .lastWhere(
-                (v) =>
-                    v.$1 == const Duration(milliseconds: 1500) &&
-                    d.timerOwners[v.$2]!.contains(owner),
-              )
-              .$2;
+          final deadlines = d.timed
+              .where((v) => d.timerOwners[v.$2]!.contains(owner))
+              .toList();
+          expect(
+            deadlines,
+            isNotEmpty,
+            reason: 'The switch owns a reveal deadline',
+          );
+          final deadline = deadlines.last.$2;
           final animation = t
               .widget<TransitionOverlay>(find.byType(TransitionOverlay))
               .rainbowController;

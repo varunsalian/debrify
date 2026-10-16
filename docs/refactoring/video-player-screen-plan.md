@@ -5880,6 +5880,44 @@ for Step 0 and Claude’s independent mutation sample.
   `baseline-receipt.json`, `completed-isolates/`, and `first-failure-audit.json`.
   The final point-by-point and per-declaration audit remains unfinished.
 
+### 2026-10-16 — Phase 15 second-sample point audit addendum (STOP; unaccepted)
+
+- **Original/scope.** Follows `b0b1c3116`; application, packages, pubspec/lock and
+  analyzer configuration remain `1d7699d2e`. P13 is merged at `238df16f4`; no
+  P15 production move, rebase, fix or manifest-history waiver occurs.
+- **Sample A.** All twelve j survivors are closed: nine exact canonical-screen
+  manual assertion kills; j6/j9/j11 have explicit original caller/consumer
+  equivalence proofs. Their original and exact-mutant receipts are retained.
+- **Audit B.** The old 221-to-nested-point claim stays withdrawn. The corrected
+  1,571-point finite sweep records 1,205 unique assertion kills, 157 scoped
+  equivalences and 201 invalid candidates across 70 audited declarations
+  (three null Timer initializers excluded). The deps report contains the full
+  per-declaration table; each disposition links its witness, source proof or
+  explicit pending limitation.
+  Seven native recording paths are proved unreachable on macOS but remain
+  target-pending; exact six-second equality (`s0871`) remains clock-pending per
+  design finding 4. Neither classification earns kill/equivalence credit.
+- **Integrity.** Existing completed batches reused; serial nice-19 batches of
+  at most eight mutants, one combined isolate each, hook define enabled.
+  Exact original profiles execute every selected body, zero skips. First-failure
+  audit rejects runtime-first/cleanup assertions and initialization failures;
+  the single withdrawn old s0789 witness has a later valid queue assertion.
+  Timer read observation now respects the callback's creation zone and the
+  initial enrichment/deadline capture boundary. No private State injection.
+- **Baseline/checks.** All 37 new files pass alone (104 cases). Frozen inventory
+  loads 256/256 suites: 1,771 successes / the unchanged startup-shield failure;
+  523 fresh original cases, 197 unchanged old inputs. All 414 committed output
+  expectations remain exact. All 39 changed Dart files pass formatting and
+  focused analysis; architecture/negative/size checks pass. SDK unchanged;
+  evidence only under `refactor-evidence/vplayer/p15/review2/`.
+- **Follow-ups.** New original borrowed-row/source-protocol/queued-input and
+  disposed-callback observations recorded; exact original directory-row
+  one-pixel overflow characterized without a production fix or allowlist edit.
+- **STOP.** Step 0 remains unaccepted pending the third independent sample.
+  Production, P14 integration/rebase and regeneration remain unexecuted;
+  full-suite/build/device checks remain deferred by the reduced-gate rules.
+
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

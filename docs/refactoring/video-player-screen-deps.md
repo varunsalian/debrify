@@ -12326,8 +12326,10 @@ not claim to enumerate every possible edit to every AST node.
 `vplayer_iptv_mutation_batches.py` batches up to eight candidates per Flutter
 invocation, concurrency one, with a separate combined test-file isolate for
 each candidate. Every variant is the original library plus its single recorded
-fault; only test import URIs, evidence group-prefix removal and the identical
-common-dir lookup are adapted. Input hashes, per-case expectation hashes,
+fault; test import URIs, evidence group-prefix removal, the identical
+common-dir lookup and test-registration metadata are adapted. The later runner
+integrity section specifies the executed-body markers and fail-fast skips.
+Input hashes, per-case expectation hashes,
 commands, exact patches, original/variant source hashes and complete JSONL are
 archived. Completed IDs are resumable; result checkpoints use atomic replace.
 No per-input-file Flutter loop or per-case git/Dart/Python spawn is used.
@@ -12336,8 +12338,10 @@ A same-VM pilot is explicitly excluded: repeated unmutated catch-up cases
 exposed shared per-server form-cache state. The accepted runner isolates each
 candidate, and every combined-case selection first passes on the unmutated
 original. Selectors with an expected-case inventory must load every selected
-case. Compiler errors, missing selectors, runtime-only failures, interrupted
-batches, clock-window precondition failures and timeouts receive no kill credit.
+case. Compiler errors, missing selectors, runtime-only failures, incomplete
+candidate isolates, clock-window precondition failures and timeouts receive no
+kill credit. Independently completed isolates from an interrupted batch require
+the recovery evidence specified below.
 The output observer compares public rendered inputs, requests and player
 operations only after a successful test body; a prior runtime/assertion failure
 cannot acquire snapshot credit during cleanup.
@@ -12459,3 +12463,166 @@ can publish time-sensitive UI before the next media event.
 The 80-point adaptive follow-up and final unfinished guard batches continue.
 No new kill total, completed systematic audit or Step 0 acceptance is claimed
 by this checkpoint. Application/dependencies remain the original.
+
+
+### Final original point audit and frozen reduced inventory (2026-10-16)
+
+**Step 0 remains unaccepted; the third independent sample is pending.** The
+second-sample j table above is closed by nine exact canonical-screen assertion
+kills and three caller/consumer equivalences. Application, packages, pubspec,
+lockfile and analyzer configuration still equal `1d7699d2e`. No production
+moves, fixes, pipeline rebase or history relaxation occurred. P13 is merged at
+`238df16f4`; P15 still characterizes the original and awaits accepted integration.
+
+The corrected finite sweep contains **1,571 explicit single-fault points** over
+**70 audited declarations** (67 fault owners and three null Timer initializer
+exclusions). Unique point dispositions are **1,205 assertion kills, 157 source
+equivalences, 201 invalid generated candidates, seven native-target pending and
+one exact-clock pending**. There are zero unclassified executable survivors.
+Invalid candidates do not count as kills. The pending eight do not count as
+kills or global equivalences. The old 221 kills establish only their exact
+faults; no enclosing-body credit returns.
+
+Evidence remains under `<git-common-dir>/refactor-evidence/vplayer/p15/review2/`:
+`final-point-dispositions.json` gives each point's original text, replacement,
+status and exact witness; `source-proofs.json` contains 81 scoped arguments for
+157 equivalents; `target-classifications.json` states the eight limitations.
+`prior-sweep-audit.json` retains the old operator classes and exact AST-span
+attribution for the eight reviewed methods. The original coverage matrix and
+retained-site inventory remain `p15/step0/coverage-matrix.json` and
+`p15/stepT/retained-sites.json`; unchanged application hashes preserve their
+source identities. The table below adds point evidence for every audited
+declaration instead of inferring descendants from a method-level kill.
+
+Completed batches and raw statuses were reused. Resumption skipped completed
+IDs; the resumed main plan and adaptive batches ran serially, at most eight
+mutants per Flutter invocation, one combined file isolate per mutant, concurrency
+one and nice 19. Each changed combined selection passed first on the original
+with exact expected names, every selected body executed and zero skips. Final
+follow-ups comprise 32, eight, two and one original profiles; later reruns target
+only surviving points with changed observations. Skips after a mutant's first
+failure receive no credit. `first-failure-audit.json` still withdraws the one
+old runtime-first/cleanup-assertion witness (`full-sweep/s0789`); its later
+independent queue assertion remains valid. No fixture-initialization assertion
+is credited, and no incomplete isolate earns credit.
+
+The final retry observations establish both a visible one-second ticker and
+completion of the initial metadata return/deadline write. Timer-driven reads
+are observed in the timer's creation zone; wrapping only clock advancement
+cannot observe that callback's awaits. Independent transport request counts
+also check blocked retries. The earlier surviving attempts remain archived;
+they are not relabeled as kills. The final queue cases carry presses through a
+subsequent landing, preserve the original same-turn index coalescing, and check
+prefetch admission independently of cache consumption. The final owner case
+releases an older direct open while a newer candidate probe is still pending.
+
+The native pending points are `s0044`, `s0127`, `s1110`, `s1224` (tee stop feedback)
+and `s1220`, `s1221`, `g0152` (Android recording refresh). Source proofs establish
+that these paths cannot distinguish the faults on the frozen macOS target:
+the desktop recording branch prevents tee activation, and the Android engine
+flag is false. Existing `VpS2Hooks` do not override `dart:io Platform` here.
+Mobile behavior is not claimed equivalent. `s0871` changes only equality at
+exactly six wall-clock seconds; bounded before/after cases pass, but no injected
+clock exists to force the microsecond equality. It remains pending under design
+resolution finding 4. No stochastic hit or fake-clock substitution is credited.
+
+| Final verification | Recorded result |
+| --- | --- |
+| New files alone on original | 37/37 files; 104/104 cases; exact current file hashes in `final-new-file-isolation.json` |
+| Frozen reduced baseline | 256/256 expected suites loaded; 1,771 successes, the same one startup-shield failure; zero missing suites/load errors; 523 fresh original cases |
+| Baseline reuse | 197 old inputs unchanged; only the previously changed workflow driver taints reused input sets; unchanged dependency-independent suites reused by exact suite/case identity |
+| Expectations | All 414 committed expectations unchanged; 97 appended cases; committed JSON order retained (`final-fixture-ordering.json`) |
+| Formatting / analysis | All 39 changed Dart files formatted and focused Flutter analysis has zero issues; unchanged application analyzer evidence reused (`final-sdk-checks.json`) |
+| Architecture / size | Existing architecture checker, negative probes and file-size checker pass; provisional manifest remains provisional |
+| SDK / execution | Flutter `058e0af2c2b57e369d905a03ac9748b0ebf543c6`, Dart 3.12.2; tests use no-pub, nice 19, concurrency one and `DEBRIFY_VP_TEST_HOOKS=true`; isolated parser package unchanged |
+
+Further original observations are retained as Follow-ups, without fixes:
+partial TV source overrides and fallback movie sources affect the source-key
+protocol; a borrowed channel row can change error classification while archive
+state remains active; queued live presses stop when their landing is on demand;
+and a rejected disposed replay callback can begin a ticket before its existing
+context rejection. The composite directory row also reproduces a **one-pixel
+RenderFlex overflow** on the original at default font metrics (800 and 1280
+layouts). Its dedicated test records exactly that rendering error/count and
+forwards every other framework error; no failure allowlist changes. Warm banner
+publication may precede enrichment and its retry-deadline write; the final
+boundary wait preserves that original ordering.
+
+Full-suite/build/device work remains deferred under the reduced-gate rules.
+The seven destinations, four patched adapters and history proof are regenerated
+only after accepted P14 integration. Production remains blocked.
+
+#### Per-declaration single-fault results
+
+| Original declaration | Points | Killed | Equivalent | Invalid | Target pending | Clock pending | Open |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `_iptvZapHideTimer` | 0 (null Timer initializer excluded) | 0 | 0 | 0 | 0 | 0 | 0 |
+| `_iptvZapTicker` | 0 (null Timer initializer excluded) | 0 | 0 | 0 | 0 | 0 | 0 |
+| `_iptvZapEpgTicket` | 1 | 0 | 1 | 0 | 0 | 0 | 0 |
+| `_iptvRecoveryEligible` | 25 | 21 | 2 | 2 | 0 | 0 | 0 |
+| `_performIptvLiveRetune` | 39 | 29 | 5 | 4 | 1 | 0 | 0 |
+| `_iptvCatchupRequests` | 1 | 1 | 0 | 0 | 0 | 0 | 0 |
+| `_iptvStartOverTimelineVisible` | 5 | 4 | 1 | 0 | 0 | 0 | 0 |
+| `_toggleIptvStartOverTimeline` | 19 | 17 | 2 | 0 | 0 | 0 | 0 |
+| `_canStartOverCurrentIptv` | 10 | 3 | 0 | 7 | 0 | 0 | 0 |
+| `_iptvLiveEdgeAction` | 4 | 4 | 0 | 0 | 0 | 0 | 0 |
+| `_toggleIptvStartOver` | 21 | 11 | 2 | 8 | 0 | 0 | 0 |
+| `_startIptvProgrammeFromBeginning` | 74 | 66 | 4 | 3 | 1 | 0 | 0 |
+| `_persistIptvGuideContext` | 5 | 4 | 1 | 0 | 0 | 0 | 0 |
+| `_anchorIptvGuideCategory` | 12 | 6 | 3 | 3 | 0 | 0 | 0 |
+| `_applyIptvGuideCategory` | 30 | 22 | 1 | 7 | 0 | 0 | 0 |
+| `_cancelPendingIptvCatchup` | 14 | 14 | 0 | 0 | 0 | 0 | 0 |
+| `_beginIptvCatchupRequest` | 1 | 1 | 0 | 0 | 0 | 0 | 0 |
+| `_isCurrentIptvCatchupRequest` | 2 | 1 | 1 | 0 | 0 | 0 | 0 |
+| `_showIptvChannelSheetOverlay` | 11 | 9 | 0 | 2 | 0 | 0 | 0 |
+| `_hideIptvChannelSheet` | 4 | 4 | 0 | 0 | 0 | 0 | 0 |
+| `_switchToIptvGuideChannel` | 17 | 16 | 1 | 0 | 0 | 0 | 0 |
+| `_reanchorIptvRingToCategory` | 79 | 62 | 1 | 16 | 0 | 0 | 0 |
+| `_kIptvZapEdgeMargin` | 1 | 1 | 0 | 0 | 0 | 0 | 0 |
+| `_iptvZapSourceId` | 1 | 0 | 1 | 0 | 0 | 0 | 0 |
+| `_iptvZapRequestTicket` | 1 | 0 | 1 | 0 | 0 | 0 | 0 |
+| `_iptvZapDrainingInputs` | 1 | 1 | 0 | 0 | 0 | 0 | 0 |
+| `_iptvZapCachedOriginCategory` | 1 | 0 | 1 | 0 | 0 | 0 | 0 |
+| `_iptvZapCachedDirection` | 1 | 0 | 1 | 0 | 0 | 0 | 0 |
+| `_iptvZapCachedPage` | 1 | 0 | 1 | 0 | 0 | 0 | 0 |
+| `_canZapIptvChannel` | 11 | 9 | 1 | 1 | 0 | 0 | 0 |
+| `_clearIptvZapBoundaryCache` | 4 | 1 | 3 | 0 | 0 | 0 | 0 |
+| `_resetIptvZapPaging` | 14 | 9 | 5 | 0 | 0 | 0 | 0 |
+| `_iptvZapArmingPaging` | 1 | 1 | 0 | 0 | 0 | 0 | 0 |
+| `_ensureIptvZapPagingArmed` | 16 | 10 | 3 | 3 | 0 | 0 | 0 |
+| `_zapIptvChannel` | 64 | 52 | 5 | 7 | 0 | 0 | 0 |
+| `_requestIptvZapPage` | 50 | 32 | 8 | 10 | 0 | 0 | 0 |
+| `_parseIptvZapPage` | 35 | 27 | 4 | 4 | 0 | 0 | 0 |
+| `_installIptvZapWindow` | 35 | 21 | 12 | 2 | 0 | 0 | 0 |
+| `_mergeIptvZapPage` | 51 | 36 | 6 | 9 | 0 | 0 | 0 |
+| `_prefetchIptvZapPage` | 59 | 44 | 7 | 8 | 0 | 0 | 0 |
+| `_adjacentIptvCategory` | 1 | 1 | 0 | 0 | 0 | 0 | 0 |
+| `_prefetchAdjacentIptvCategory` | 69 | 51 | 10 | 8 | 0 | 0 | 0 |
+| `_consumeCachedAdjacentIptvCategory` | 16 | 8 | 2 | 6 | 0 | 0 | 0 |
+| `_enterIptvZapCategory` | 16 | 15 | 1 | 0 | 0 | 0 | 0 |
+| `_requestAdjacentIptvCategory` | 44 | 31 | 4 | 9 | 0 | 0 | 0 |
+| `_queuePendingIptvZapInput` | 11 | 9 | 2 | 0 | 0 | 0 | 0 |
+| `_drainPendingIptvZapInputs` | 13 | 8 | 5 | 0 | 0 | 0 | 0 |
+| `_playIptvCatchup` | 52 | 39 | 0 | 13 | 0 | 0 | 0 |
+| `_onIptvStreamError` | 49 | 39 | 4 | 5 | 0 | 1 | 0 |
+| `_setIptvSources` | 44 | 36 | 3 | 5 | 0 | 0 | 0 |
+| `_initIptvStremioSources` | 34 | 22 | 6 | 6 | 0 | 0 | 0 |
+| `_lastLiveChannelTimer` | 0 (null Timer initializer excluded) | 0 | 0 | 0 | 0 | 0 | 0 |
+| `_lastLiveChannelArmedUrl` | 1 | 0 | 1 | 0 | 0 | 0 | 0 |
+| `_lastLiveChannelSettle` | 1 | 1 | 0 | 0 | 0 | 0 | 0 |
+| `_noteLiveChannelPlaying` | 34 | 23 | 1 | 10 | 0 | 0 | 0 |
+| `_preferredIptvAudioLanguage` | 1 | 1 | 0 | 0 | 0 | 0 | 0 |
+| `_iptvSeriesAudioKey` | 15 | 9 | 0 | 6 | 0 | 0 | 0 |
+| `_captureIptvAudioLanguage` | 27 | 19 | 0 | 8 | 0 | 0 | 0 |
+| `_applyIptvAudioPreference` | 49 | 40 | 0 | 9 | 0 | 0 | 0 |
+| `_recordIptvWatchForChannel` | 32 | 24 | 4 | 4 | 0 | 0 | 0 |
+| `_switchToIptvChannel` | 150 | 129 | 12 | 5 | 4 | 0 | 0 |
+| `_tryOpenLiveStream` | 38 | 34 | 0 | 3 | 1 | 0 | 0 |
+| `_switchToIptvSource` | 44 | 37 | 5 | 2 | 0 | 0 | 0 |
+| `_prepareIptvBannerData` | 13 | 10 | 3 | 0 | 0 | 0 | 0 |
+| `_raiseIptvZapBanner` | 22 | 19 | 3 | 0 | 0 | 0 | 0 |
+| `_hideIptvZapBanner` | 19 | 14 | 5 | 0 | 0 | 0 | 0 |
+| `_syncIptvBannerTicker` | 20 | 19 | 1 | 0 | 0 | 0 | 0 |
+| `_iptvArchiveRetryAt` | 1 | 1 | 0 | 0 | 0 | 0 | 0 |
+| `_refreshIptvBannerEpgIfEnded` | 21 | 15 | 0 | 6 | 0 | 0 | 0 |
+| `_loadIptvZapBannerEpg` | 13 | 12 | 1 | 0 | 0 | 0 | 0 |

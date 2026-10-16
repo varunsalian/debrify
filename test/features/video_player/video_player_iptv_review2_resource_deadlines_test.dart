@@ -29,13 +29,11 @@ void main() {
       // switch owns a shorter fallback reveal for that original path.
       playing.suppress = true;
       await d.zap(1);
-      final deadline = d.timed
-          .lastWhere(
-            (v) =>
-                v.$1 == const Duration(milliseconds: 1500) &&
-                d.timerOwners[v.$2]!.contains('switchToIptvChannel'),
-          )
-          .$2;
+      final deadlines = d.timed
+          .where((v) => d.timerOwners[v.$2]!.contains('switchToIptvChannel'))
+          .toList();
+      expect(deadlines, isNotEmpty, reason: 'The zap owns a reveal deadline');
+      final deadline = deadlines.last.$2;
       await d.timerAge(deadline, const Duration(milliseconds: 1499));
       expect(find.byType(TransitionOverlay), findsOneWidget);
       await d.timerAge(deadline, const Duration(milliseconds: 1500));
