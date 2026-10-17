@@ -148,6 +148,9 @@ void main() {
   });
 
   test('Flutter player retains and consumes a TVMaze-discovered identity', () {
+    final player = File(
+      'lib/screens/video_player_screen.dart',
+    ).readAsStringSync();
     final sourceSwitch = vpSourceDeclaration(
       '_VideoPlayerScreenState._switchToSourcePlaylist',
     );

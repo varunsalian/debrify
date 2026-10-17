@@ -64,6 +64,12 @@ void main() {
                   ? d.player.calls.where((c) => c.$1 == 'pause').length > pauses
                   : d.opens.length == 2,
             );
+            if (boundary == 'checkpoint') {
+              expect(
+                d.player.calls.where((c) => c.$1 == 'pause'),
+                hasLength(pauses),
+              );
+            }
             expect(action.isCompleted, isFalse);
             expect(d.commits, [a]);
             if (boundary == 'open acknowledgement') {

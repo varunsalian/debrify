@@ -187,6 +187,10 @@ void main() {
         captured();
         await d.tick();
         expect(find.byType(SourceSheet), findsNothing);
+        await d.update(
+          d.screen(sources: [a], resolve: (s) async => s.directUrl),
+        );
+        expect(find.byType(SourceSheet), findsNothing);
         expect(d.opens, [a.directUrl]);
       } finally {
         await d.close();

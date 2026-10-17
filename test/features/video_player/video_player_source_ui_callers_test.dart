@@ -102,7 +102,9 @@ void main() {
         final grown = t.widget<SourceSheet>(find.byType(SourceSheet));
         expect(grown.sources, [a, b, c]);
         expect(grown.currentSourceIndex, 0);
-        final url = (await d.f.finish(t, grown.resolveSource(c)))!;
+        final resolved = await d.f.finish(t, grown.resolveSource(c));
+        expect(resolved, c.directUrl);
+        final url = resolved!;
         final action = d.select(grown, 2, url);
         await d.f.finish(t, action.future);
         expect(d.commits, [a, c]);

@@ -12843,3 +12843,163 @@ Evidence: `stepT/result.json`, `hosts.json`, `membership.json`,
 `negatives.json`, `history-block.json`, `probe-summary.json`; complete command
 and isolated-parser receipts in the P16 evidence root. No full gate, suite,
 release build, device claim or production extraction at this checkpoint.
+
+## Phase 16 Step 0 — original startup and source characterization (2026-10-17)
+
+Original application: accepted P14 `be4cd78aa` plus reviewed S2e
+`574b2a85e`, lib tree `9ac2c883b8ae5c5c179332098eb0f97a79de41f3`.
+The recovered branch and every accepted mutant use that application. No
+production move, dependency change, bug fix or P15 modification is included.
+The P16 manifest remains **draft/provisional** until the accepted P15 rebase.
+
+Twenty new suites contain **199 scenarios** and each suite passes alone at
+its final hash. Every scenario has an assertion-failing mutation of the
+original, with current-input evidence in `executor-case-proof.json`.
+Where a test file grew, reuse requires the exact witnessed test body and
+parameter loop, identical imports/helpers/main setup, and unchanged imported
+fixture dependencies. Changed cases were replayed. Runtime errors, timeouts,
+compiler failures and source-only guard negatives receive no behavioral kill
+credit. Detached original patches, JSONL, commands, source archives and input
+hashes remain under `refactor-evidence/vplayer/p16/step0/`.
+
+### Mutation table and coverage
+
+The systematic AST inventory has **1,118 nested descriptors** across all
+18 moved declarations. These are not 1,118 independently scored mutants.
+The selected core campaign covers statement/branch/await/loop sites, the
+implicit-null field initializer, and all **22 retained occurrences**:
+**441 candidates = 381 assertion kills + 31 source-equivalent/dormant +
+29 compiler-invalid candidates**. All 22 retained occurrences are killed.
+Literal/return/operator alternatives and ownership/per-case witnesses add
+proof outside this denominator. Nested operands and declaration initializers
+remain linked to their enclosing contracts in the inventory; they are not
+counted as extra independent kills. This is not the independent Claude sample.
+
+`executor-final-sweep.json` is the per-site ledger; static reasons are in
+`executor-static-closure-proofs.json`. Invalid candidates lose null promotion
+or substitute a Future for its awaited value; those compiler diagnostics are
+exclusions, not evidence of behavior. Equivalences include redundant catch
+resets, dominated watch disposal, relative-only counters and abandoned scrub
+generations, masked direct-launch cache/index fields, the request loader's
+already-restored index/URL/headers, and write-only legacy transition fields.
+Incoming playlist adoption and the observable rollback/cache/dispatch guards
+have separate assertion witnesses. No equivalent/dormant code is removed.
+
+| Frozen declaration | Original-caller characterization | Core kills / equivalent or dormant / invalid | Example assertion witness |
+| --- | --- | --- | --- |
+| `_pendingSourcePlaylist` | Implicit null leaves direct picks direct; valid resolver result is consumed once; live IPTV selection preserves pending list until a later non-live selection. Empty/null/first-URL and stale results never adopt. | 1 / 0 / 0 | `field-pending` |
+| `_sourcePlaylistResolution` | Close and a newer resolution retire an old pending closure; callbacks survive rebuild but each resolver is fresh/live. Absolute initializer offset has a separate relative-equality proof. | 0 / 0 / 0 | absolute initializer is caller-equivalent; resolver/hide increments killed |
+| `_resumeTrackingAfterValidationGate` | Auth/restore gate; mounted/disposed/paused/zero-duration; attempted Trakt start vs converted stop vs heartbeat; paused-source Simkl/MDBList restart, exact protocols and delayed checkpoints. | 10 / 0 / 0 | `s0001` |
+| `_watchStremioTvStartup` | AIO ready release vs non-AIO; failure cancels slot seek; dispose rejects events; renderer restart replaces watch and carries pending seek. Production installation/disposal dominance proof retained separately. | 5 / 1 / 0 | `s0043` |
+| `_reportStartupFailure` | 250/900ms messages and route result, covering dialog 50ms poll, same-route winning source still popped by default, watch epoch rejects stale report, replacement route survives. | 12 / 0 / 0 | `s0053` |
+| `_openStartupDebridDirect` | Separate subscribe/pre-arm/native-entry/ack/result; unarmed duration and decoded width/position; never-completing open across disposal; open throw/error/timeout/stop throw; S2e ordering/eligibility and distinct replacement; real buffer growth then no-growth timeout; exact diagnostics. | 33 / 1 / 1 | `s0097` |
+| `_tryOpenStartupVod` | Five stream subscriptions; ignored pre-arm errors but retained width/position; final beforeOpen arm; null/negative/partial evidence; AIO exact slate boundary and 1s grace; ack-held acceptance; disposal and replacement; real buffer extension/no-growth, diagnostics, stop/cancel/redaction. | 42 / 1 / 1 | `s0205` |
+| `_openInitialVodWithFailover` | Non-VOD/no-source; policy enabled/try-next/budgets1,3,10; lazy failed acquisition; index clamps; external skip; PikPak acquisition cap; all four resolution routes and headers; missing exact episode; resolver null/empty/error; ranked rendered messages/overlay; captured state adoption vs held/unawaited commit; profile read capture moment. | 54 / 4 / 10 | `s0326` |
+| `_commitValidatedStremioSource` | Null/absent/throwing callback; source selection log; server watch identical opened source vs late startup winner; unawaited callbacks; REAL resolver/committer A/B/A, deletion, route closure, queued/unadmitted vs admitted physical cache write with both profiles read before cleanup. | 7 / 0 / 1 | `s0557` |
+| `_startupSourceFields` | Absent/empty/short/exact64/long whitespace metadata; both source normalization and addon text; index/type labels; exact bounded log protocol, redacted exceptions. | 0 / 0 / 1 | literal/return witnesses plus all five diagnostic inputs |
+| `_setStartupGateActive` | UI shield through ack, resume and restore; failed ladder exhaustion; hidden debrid first open and later direct switch; active composition blocks dispatch then releases. | 4 / 2 / 0 | `s0596` |
+| `_setStartupGateMessage` | Exact first/ranked retry messages rendered by PlaybackStartupView, retrying flag, failure messages; inactive/idempotent paths audited. | 4 / 0 / 0 | `s0605` |
+| `_showSourceSheetOverlay` | Empty-list recheck, TV/dock/S callers, hides controls/zap surface, callbacks stable across rebuild, append-only source growth feeds effective list. | 5 / 0 / 0 | `s0613` |
+| `_hideSourceSheet` | Back/Escape/onClose, closes overlay and invalidates pending resolver generation; direct/playlist/live selections preserve call order. | 3 / 0 / 0 | `s0624` |
+| `_buildSourceSheetResolver` | Direct supplied callback identity; live playlist selector at invocation; canContinue while mounted and after disposal/close/newer result; nullable/empty/first URL result; physical production resolver ownership matrix. | 2 / 0 / 2 | `s0629` |
+| `_handleSourceSelected` | Epoch increment aborts real expired verifier while pause is held before another open; live branch calls IPTV owner without consuming pending playlist; pending direct/playlist branch and one-shot consumption. | 9 / 0 / 1 | `s0654` |
+| `_switchToStremioSource` | Held resume carry/physical state; previous URL/header/position and server target rollback; split audio paused-open/attach/seek/play, addon file cleanup exemption; no explicit pick ticket (older rollback/late debrid initial overwrite), shared gate release; pause/open/disposal guards; 1500ms phase timers, borrowed controller and later play edge. | 73 / 3 / 3 | `s0972` |
+| `_switchToSourcePlaylist` | Outgoing checkpoint before replacement, matching/singleton/missing pack and no-first-real behavior, direct/playlist rollback; request guard via REAL P17/MDBList rollback; pause/checkpoint/open disposal; discovered TVMaze identity/show/artwork/full guide during held metadata; carried local resume and physical series row; source commit/transition timer order. | 95 / 19 / 9 | `s0676` |
+
+| Retained site | Original caller | Assertion witness |
+| --- | --- | --- |
+| `_initializePlayer` → `_commitValidatedStremioSource` (2427) | original S2e facade | `r00`; P16 a PikPak startup winner invokes the retained commit caller only after its real metadata gate |
+| `_initializePlayer` → `_watchStremioTvStartup` (2489) | original S2e facade | `r01`; P16 startup watch aio=false releases tracking at readiness only for the AIO guard before held restoration returns |
+| `_initializePlayer` → `_openInitialVodWithFailover` (2504) | original S2e facade | `r02`; P16 startup null without sources uses one probe and the original gate boundary |
+| `_initializePlayer` → `_reportStartupFailure` (2511) | original S2e facade | `r03`; P16 startup failure 900ms close still pops after a same-route source winner |
+| `_initializePlayer` → `_setStartupGateActive` (2555) | original S2e facade | `r04`; P16 final gate release distinguishes attempted start, resulting action and heartbeat: start |
+| `_initializePlayer` → `_resumeTrackingAfterValidationGate` (2556) | original S2e facade | `r05`; P16 final gate release distinguishes attempted start, resulting action and heartbeat: start |
+| `_initializePlayer` → `_reportStartupFailure` (2565) | original S2e facade | `r06`; P16 an authorization rejection before the initial Stremio watch installs uses the retained catch reporter |
+| `_initializePlayer` → `_setStartupGateActive` (2570) | original S2e facade | `r07`; P16 a startup seek rejection clears the gate then re-arms Trakt from the retained catch in that order |
+| `_initializePlayer` → `_resumeTrackingAfterValidationGate` (2574) | original S2e facade | `r08`; P16 a startup seek rejection clears the gate then re-arms Trakt from the retained catch in that order |
+| `_fallbackExplicitRendererToAutomatic` → `_watchStremioTvStartup` (3349) | original S2e facade | `r09`; P16 renderer restart installs a new Stremio watch and carries its pending slot seek to the new instance |
+| `_fallbackExplicitRendererToAutomatic` → `_reportStartupFailure` (3396) | original S2e facade | `r10`; P16 a failed replacement open reports the current pending Stremio startup watch failure |
+| `_switchToIptvSource` → `_hideSourceSheet` (7320) | original S2e facade | `r11`; P16 the live source callback remains pending until the IPTV owner acknowledges and validates its open |
+| `_loadPlaylistIndexAttempt` → `_tryOpenStartupVod` (8681) | original S2e facade | `r12`; P16 explicit playlist target matching preserves the exact episode contract and outgoing checkpoint |
+| `_buildTvControls` → `_showSourceSheetOverlay` (10068) | original S2e facade | `r13`; P16 TV source buttons and Back/Escape share the live source sheet callbacks |
+| `_closeTopPlayerOverlay` → `_hideSourceSheet` (10147) | original S2e facade | `r14`; P16 TV source buttons and Back/Escape share the live source sheet callbacks |
+| `_tryEpisodeCandidate` → `_switchToSourcePlaylist` (11170) | original S2e facade | `r15`; P16 real P17 request returns before transition cleanup after MDBList rollback delivery crosses dispose |
+| `build` → `_hideSourceSheet` (11381) | original S2e facade | `r16`; P16 player-root keyboard fallback closes an open source sheet after the sheet relinquishes focus |
+| `build` → `_showSourceSheetOverlay` (11447) | original S2e facade | `r17`; P16 TV source buttons and Back/Escape share the live source sheet callbacks |
+| `build` → `_showSourceSheetOverlay` (12213) | original S2e facade | `r18`; P16 desktop source buttons and Back/Escape share the live source sheet callbacks |
+| `build` → `_buildSourceSheetResolver` (12440) | original S2e facade | `r19`; P16 sheet resolver valid preserves the URL, pending adoption and caller boundary |
+| `build` → `_handleSourceSelected` (12441) | original S2e facade | `r20`; P16 sheet resolver valid preserves the URL, pending adoption and caller boundary |
+| `build` → `_hideSourceSheet` (12442) | original S2e facade | `r21`; P16 sheet pending resolution rejects close before pending playlist adoption |
+
+### Live source guard retargets
+
+All other assertions in these suites remain. The existing PiP raw-format
+failure is preserved. The validating reader returns current owned text;
+prepared prototype projection reverses only the manifest's exact counted
+substitutions. It never uses historical source to satisfy an assertion.
+The current and provisional prototype modes pass **22 contracts / 66
+independent deletion or reordering negatives**. These are structural proofs,
+excluded from behavioral mutation totals.
+
+| Suite / former facade anchor | Live declaration and preserved contract |
+| --- | --- |
+| `manual_source_validation_contract_test.dart`: selection/direct/playlist spans, gate release, startup ladder and failure-route span | `_handleSourceSelected`, `_switchToStremioSource`, `_switchToSourcePlaylist`, `_resumeTrackingAfterValidationGate`, `_openInitialVodWithFailover`, `_reportStartupFailure`; explicit validation, rollback, episode rejection and exact-route recovery remain asserted. |
+| `android_tv_mdblist_progress_source_test.dart`: carried TVMaze identity span | `_switchToSourcePlaylist`; both non-negative ordering anchors required. The retained facade adapter checks keep their source variable. |
+| `media_server_service_test.dart`: VOD arming and failover spans | `_tryOpenStartupVod`, `_openInitialVodWithFailover`; whitespace-tolerant `beforeOpen` regex and non-negative candidate/source-argument anchors. |
+| `media_server_watch_player_wiring_test.dart`: validated source commit span | `_commitValidatedStremioSource`; both anchors must exist and server-watch commit precedes the optional callback guard. |
+| `playback_startup_view_test.dart`: build/transition reads | Retained `build` through the validating reader; shield/PiP strings and transition rendering assertion are unchanged. |
+
+### Original behavior and limits
+
+Probe evidence separates subscription, setup/pre-arm, `beforeOpen`, native
+open entry, acknowledgement, logical result and returned continuation.
+Acceptance can precede acknowledgement; the open await survives twelve
+seconds and disposal. Held continuations are released and drained. Both
+watchdog copies have a bounded real-time buffer-extension witness; the
+45-second eligibility cap is not a whole-operation deadline. Cap exhaustion,
+actual native rendering and the raw-Android scheduler's
+`rendererValidatedForSession=true` state remain device-pending (the pure
+eligibility policy is covered by the existing boundary suite).
+
+Renderer listener ordering, transition-blocked fallback and old-probe/live-
+replacement stop behavior are pinned, not fixed. Trakt gate release separates
+attempted dispatch, resulting start/stop and heartbeat creation. Startup
+failure tests cover same-route winners, covering dialogs and route replacement.
+The real P17 caller verifies post-MDBList disposal/supersession protection and
+pre-open authorization retirement/rollback; the withdrawn blanket
+rollback-after-dispose defect is not reintroduced.
+
+Production `SourcePlayerLaunch`, resolver, acquisition, committer and owned
+serialization are exercised across A→B, A→B→A, deletion/retirement and route
+closure. Both profiles' physical binding/cache maps are inspected; admitted
+outgoing setters are distinguished from unadmitted retired writes. Synthetic
+callbacks characterize facade timing separately. Early source input, old
+pick restoration/shared-gate races, late explicit-pick effects, Quick Play
+capture timing and completion-before-validation are recorded in the Phase 16
+Follow-ups. M3 recording/resume/source scenarios run in the harness; the full
+M3 integration suite and release builds still follow the P16 merge.
+
+### Frozen reduced baseline and checks
+
+`dev/tool/vplayer_p16_test_inventory.txt` freezes **278 expected suites**,
+including all video-player suites, the five readers/theme checks and sources
+ownership/profile contracts. Every suite loads. `suite_evidence.py` comparison
+against the original **258-suite / 1,871-success / one-failure** run preserves
+all observed identities/outcomes and adds **199 successful cases**: final
+**2,070 successes / the same one pre-existing PiP raw-source failure**, no
+new failures, missing identities or new skips. Start/end input trees match.
+The transient source-guard edit receipt documents restoration before that
+suite entered; no changed-input run is silently accepted. `suite.jsonl`,
+`suite.env.json`, `suite-summary.json`, `suite-identity-comparison.json` and
+`executor-external-dependencies.json` retain the exact provenance.
+
+Changed-Dart format/analysis pass; the P14 analyzer inventory comparison has
+**159 scoped diagnostics, zero additions and no errors**. Size, architecture,
+current/prototype reader negatives and diff checks pass. S/S2-through-S2e,
+accepted history and provisional Step-T proofs are reused only at unchanged
+application/manifest/tool inputs. No P16 applied/history acceptance is claimed.
+All 20 new suites are in CI's behavior list. Flutter runs are serial, nice19,
+no-pub/concurrency1 with `DEBRIFY_VP_TEST_HOOKS=true`; parser packages are
+isolated and copied kernels removed. Independent review and accepted-P15
+rebase/final T remain prerequisites. Full-suite/build/device claims wait for
+M3 and the relevant device checklist. Phase 16 Step 0 STOP.

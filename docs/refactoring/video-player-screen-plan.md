@@ -3392,6 +3392,18 @@ source pick (P15 path).
 
 ## Follow-ups
 
+- **Phase 16 original startup/source windows (characterized; no fixes):**
+  renderer listener ordering can reject an old probe and stop the live
+  replacement, while transition-blocked fallback can still be accepted as
+  renderer-deferred. Initial failure reporting can pop the same route after a
+  newer source wins; watch-epoch reporting has stronger protection. Explicit
+  picks retain their shared-gate/old-restore, early-input and late-disposal
+  effects; local completion can run during a held pause before validation arms.
+  Quick Play read capture is separate from the real source owner's retirement
+  guards. See Phase 16's confirmed Follow-up list and Step-0 deps matrix; the
+  blanket resolver-profile and P17 rollback-after-dispose defects stay withdrawn.
+
+
 - **Phase-13 original menu metadata windows (preserved):** a held tracks
   lookup has no content/profile guard and can open its captured identity after
   a still-mounted handoff. A single-file lookup sets its fetch latch before
@@ -6782,6 +6794,58 @@ for Step 0 and Claude’s independent mutation sample.
   input-hashed receipts. This commit saves recoverable work, not completion:
   remaining survivor audit, per-case witnesses, final standalone evidence,
   reduced baseline, analyzer/reader checks and deps matrix still required.
+
+### 2026-10-17 — Phase 16 Step 0 complete (STOP before production moves)
+
+- Original remains accepted P14 `be4cd78aa` plus independently reviewed S2e
+  `574b2a85e` (lib tree `9ac2c883b8ae5c5c179332098eb0f97a79de41f3`).
+  Recovered work saved in `50f8f09ee`, `6eecd6004`, `ef359a7a5`; no
+  application/pubspec change, bug fix, P15 edit or production activation.
+- **199 scenarios / 20 new suites**, every file passes alone at its final hash.
+  Probe subscription/pre-arm/native entry/ack/result/return and teardown;
+  bounded real-time extension; S2e listener/fallback differences; ladder,
+  logical/overlay/Trakt gates, Stremio TV watch, delayed route failure,
+  sheet/direct/playlist/live paths, real P17 rollback guards, early windows
+  and M3 recording/resume/source scenarios are characterized. Real source
+  resolver/acquisition/committer ownership inspects both physical profile
+  stores across A→B, A→B→A, deletion/retirement and route closure; synthetic
+  facade timing is separate. Confirmed defects remain in Follow-ups.
+- All **199** cases have assertion-failing original mutations with current
+  test/dependency evidence. Systematic **1,118-descriptor** inventory;
+  **441 core candidates: 381 assertion kills, 31 source-equivalent/dormant,
+  29 compiler-invalid exclusions**. All **18 declarations / 22 retained
+  occurrences** accounted for; all 22 dispatches killed. Literal and per-case
+  supplements are separate; nested descriptors are not independent kills.
+  Runtime/compiler errors, interrupted runs and source-only negatives are
+  never scored as behavioral kills. Full tables are in the deps report.
+- Five source suites use the validating live declaration reader. Current and
+  provisional prototype checks pass **22 contracts / 66 removal or reorder
+  negatives**, with whitespace-tolerant arming and non-negative order anchors.
+  The retained PiP raw-format failure is preserved, not fixed or allowlisted.
+- Frozen reduced baseline: **278/278 suites loaded; 2,070 successes / one
+  observed pre-existing failure**, versus **258 suites / 1,871 successes /
+  the same failure** on the original. All prior identities/outcomes retained;
+  **199 successful additions only**, no missing tests/new skips. Inventory
+  includes the source ownership/profile boundary suites. The runner's start
+  and end input trees match; a transient redundant build-test anchor edit was
+  restored before that suite entered (`transient-edit-audit.json`).
+- Changed-Dart format and `flutter analyze` pass; **159 scoped analyzer
+  identities / zero additions**, no errors. Size, architecture, live-reader
+  proof and diff checks pass. Reuse of seam/Step-T/history evidence is limited
+  to unchanged application/manifests/tooling inputs; no draft history pass is
+  claimed. Jobs are serial, nice19, no-pub, concurrency1 with test hooks;
+  parser invocations use isolated packages and copied kernels are deleted.
+- Evidence: `refactor-evidence/vplayer/p16/step0/` (`executor-final-sweep.json`,
+  `executor-case-proof.json`, `final-isolated-results.json`, `suite*.json*`,
+  reader/analyzer/check receipts, exact patches and archived test inputs).
+  The deps tables distinguish observed kills, static equivalences and pending
+  native/clock behavior. No new flake was observed in the accepted baseline.
+- **Pending/STOP:** native rendering, the raw-Android already-validated
+  scheduler state and 45-second cap exhaustion remain device-pending.
+  Independent mutation review and the accepted P15 rebase/final Step T precede
+  production moves; rerun affected preparation inputs under the pipeline rule.
+  Full-suite/release builds remain at M3 after P16. No push, merge, branch
+  switch, run/install, emulator or device work. STOP.
 
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
