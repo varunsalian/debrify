@@ -12931,6 +12931,77 @@ have separate assertion witnesses. No equivalent/dormant code is removed.
 | `build` → `_handleSourceSelected` (12441) | original S2e facade | `r20`; P16 sheet resolver valid preserves the URL, pending adoption and caller boundary |
 | `build` → `_hideSourceSheet` (12442) | original S2e facade | `r21`; P16 sheet pending resolution rejects close before pending playlist adoption |
 
+### Phase 16 Step 0b — independent sample closure
+
+Claude's sample at accepted Step 0 `13c3f77ee` ran only the 20 new behavior
+suites: **199/199 control; 26 mutants, 22 assertion kills (85%)**. This
+addendum adds two original-caller cases in existing suites. The detached
+original is `13c3f77ee`, with unchanged lib tree
+`9ac2c883b8ae5c5c179332098eb0f97a79de41f3`. Exact sample substitutions,
+patches, input hashes, JSONL and commands are under
+`refactor-evidence/vplayer/p16/step0b/`; the initial independent receipt stays
+under `p16/claude-mut/`. No production changes or extra private test entry
+points are introduced.
+
+| Sample survivor | Original-caller evidence / proof | Step-0b outcome |
+| --- | --- | --- |
+| s1: remove `_validationGateActive` from `_resumeTrackingAfterValidationGate`'s return guard | `video_player_startup_gate_test.dart`: a hidden initial debrid gate still awaits native-open acknowledgement when a public source-sheet selection finishes. Its real `_switchToStremioSource` finally reaches the helper with the manual gate cleared but the initial gate active. Positive duration/playing evidence must not create a Simkl heartbeat or send a scrobble; actual initial release then creates one heartbeat. | Exact original mutant fails the no-heartbeat assertion. |
+| s8: remove positive live position from debrid width acceptance | `video_player_startup_probe_boundaries_test.dart`: duration stays zero; a positive width event with live position zero leaves the candidate pending, all five subscriptions alive and no commit. A later positive clock event accepts through the original position listener without needing duration. | Exact original mutant fails the pending-result assertion. |
+| s21: remove hidden-overlay reset on startup gate release | Complete activation/reader proof below; the proposed second startup gate on the same State has no original caller. | Current-caller equivalent; no behavioral kill credit. |
+| s22: rebuild for inactive startup gate messages | Complete setter/caller proof below; no original message update reaches an inactive startup gate. | Current-caller equivalent; no behavioral kill credit. |
+
+The expanded original control is **201/201 across 20 suites**. All four exact
+sample mutants have complete-cohort replays, with source readers excluded.
+s1 fails its behavior assertion; s21/s22 preserve all 201 outcomes. The first
+s8 run exposed a test teardown failure that masked its acceptance assertion:
+early acceptance left the initializer waiting for duration. That pilot is
+uncredited. Teardown now publishes a frame even after an assertion fails;
+the final boundary-file control and exact s8 replay establish the intended
+pending-result assertion failure with clean teardown. s21/s22 also pass the
+corrected file; its outcome identities are unchanged. The sample combines
+Claude's existing 22 kills with these two new witnesses: **24/26 assertion
+kills (92%) and two explicitly proved equivalences**. This is separate from
+the historical 441-candidate Step-0 core denominator; its totals are not
+silently rescored. Both changed suites also pass alone at their final hashes;
+the other 18 standalone receipts retain unchanged inputs. No new test file or
+inventory entry is added.
+
+**s21 caller/reader proof:** `_initializePlayer` has one invocation, in
+`initState` (1683), and gives `StartupStreamPolicy.openInitialMedia` one
+`openValidated` closure (2504). That policy invokes its chosen callback once.
+The only startup-gate activation is the VOD ladder entry (6949); its other
+four calls deactivate (2555, 2570, 6958, 7192). `didUpdateWidget`, renderer
+replacement and source switching do not restart initialization. Ladder
+retries stay inside this single activation, retaining their overlay writes
+(7038). Before activation, both versions initialize hidden to false; after
+release, active stays false for this State's lifetime. All three rendered
+hidden-flag reads are masked by active (11900, 11947, 11975); the sole other
+reader is the ladder's pre-release comparison (7037). A later manual gate
+uses `_manualSourceGateActive`; a new route has a fresh State. Retaining the
+old hidden value therefore cannot change the overlay, buffering, controls or
+tracking. Calling a private setter again would invent a caller contract.
+
+**s22 dominance proof:** the sole message-setter call (7041) is inside that
+ladder after its unconditional activation. Non-VOD and no-source branches
+return before the message loop. The no-source failure release returns in
+its own branch; exhaustion releases after the loop and then returns. The
+initializer's success/catch releases occur only after the awaited ladder
+has completed/thrown. Manual gates, TV readiness and disposal do not clear
+the startup flag. Thus every message update runs with active true, including
+any unmounted continuation (both versions suppress `setState` then). There
+is no inactive extra rebuild or paint to observe. Message storage/idempotence
+are identical, and both message render reads are inside the visible active
+overlay. `equivalence-proofs.json` archives every production occurrence,
+source excerpts/hashes and these premises; the live reader validates ownership.
+
+The frozen **278-suite** inventory is unchanged. Its accepted Step-0 broad
+baseline (2,070 successes and the same pre-existing PiP raw-source failure)
+is reused for unchanged inputs; this addendum reruns the affected behavior
+cohort and compares all 199 prior identities, adding only the two successful
+cases. It does not claim a new 278-suite run. Changed-test analysis/format,
+live-reader ownership and diff checks pass. Step 1 remains blocked on the
+accepted P15 merge, authorized rebase and refreshed final Step T. STOP.
+
 ### Live source guard retargets
 
 All other assertions in these suites remain. The existing PiP raw-format

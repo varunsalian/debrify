@@ -1,4 +1,8 @@
 import 'dart:async';
+import 'package:debrify/models/torrent.dart';
+import 'package:debrify/models/tracking_source.dart';
+import 'package:debrify/services/storage/simkl_storage.dart';
+import 'package:debrify/services/storage/tracking_source_storage.dart';
 import 'package:debrify/widgets/playback_startup_view.dart';
 import 'package:flutter/widgets.dart';
 import 'package:debrify/screens/video_player_screen.dart';
@@ -14,6 +18,78 @@ import 'support/trakt_transport.dart';
 
 void main() {
   TraktTestTransport.install();
+  testWidgets(
+    'P16 manual source completion cannot release tracking while the initial debrid gate still awaits acknowledgement',
+    (t) async {
+      final d = StartupDriver(t);
+      await d.initialize();
+      TraktTestTransport.instance.attach(d.f);
+      final cipher = (await t.runAsync(() => seedTrakt(target: false)))!;
+      await t.runAsync(() async {
+        await SimklStorage.setSimklAccessToken('vplayer-synthetic-simkl');
+        await TrackingSourceStorage.setTrackingScrobbleTargets({
+          TrackingSource.simkl,
+        });
+      });
+      cipher.hold = true;
+      d.f.network.handler = secondaryReply;
+      final a = startupSource('initial-held-gate', type: StreamType.torrent);
+      final b = startupSource('manual-before-initial-release');
+      final ack = d.openGates[a.directUrl!] = Completer<void>();
+      d.replies[b.directUrl!] = (p) => p.publishFrame();
+      try {
+        await d.begin(
+          d.screen(
+            sources: [a, b],
+            resolve: (s) async => s.directUrl,
+            id: 'tt5100000',
+            simkl: true,
+          ),
+        );
+        await d.openEntered();
+        cipher.releaseAll();
+        await d.settle();
+        expect(find.byType(PlaybackStartupView), findsNothing);
+        final sheet = await d.sheet();
+        await d.f.finish(t, d.select(sheet, 1, b.directUrl!).future);
+        expect(d.commits, [b]);
+        expect(ack.isCompleted, isFalse);
+        expect(d.player.state.playing, isTrue);
+        expect(d.player.state.duration, greaterThan(Duration.zero));
+        expect(
+          d.periodic.where((row) => row.$1 == const Duration(minutes: 2)),
+          isEmpty,
+          reason:
+              'The manual finally reaches the release helper, but the initial gate must still block its Simkl playing marker and heartbeat',
+        );
+        expect(
+          d.f.network.requests.where(
+            (r) => r.url.path.startsWith('/scrobble/'),
+          ),
+          isEmpty,
+        );
+
+        ack.complete();
+        await d.committed(2);
+        await d.initialized();
+        await d.settle();
+        expect(
+          d.periodic.where(
+            (row) => row.$1 == const Duration(minutes: 2) && row.$2.isActive,
+          ),
+          hasLength(1),
+          reason: 'Only the actual initial gate release starts the heartbeat',
+        );
+        expect(find.byType(PlaybackStartupView), findsNothing);
+      } finally {
+        cipher.releaseAll();
+        ack.completeIfPending();
+        await d.close();
+        TraktTestTransport.instance.recorder = null;
+      }
+    },
+  );
+
   for (final mode in [
     'start',
     'watched stop',

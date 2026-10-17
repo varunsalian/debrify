@@ -6847,6 +6847,47 @@ for Step 0 and Claude’s independent mutation sample.
   Full-suite/release builds remain at M3 after P16. No push, merge, branch
   switch, run/install, emulator or device work. STOP.
 
+### 2026-10-17 — Phase 16 Step 0b (independent sample closure; STOP)
+
+- Accepted Step 0 is `13c3f77ee`; the detached original uses that revision
+  and unchanged application lib tree
+  `9ac2c883b8ae5c5c179332098eb0f97a79de41f3`. Production/pubspec unchanged;
+  no P15 edits or production activation.
+- Claude's behavior-only sample: **199/199 control; 22/26 assertion kills**.
+  Added two cases through original callers in existing suites: manual source
+  completion while the initial debrid gate still awaits acknowledgement must
+  not start a Simkl heartbeat; durationless positive width at position zero
+  must not accept debrid playback until a later positive clock event.
+  Exact s1/s8 mutations on the detached original fail those assertions.
+- s21 and s22 are **current-caller equivalences**, not behavioral kills.
+  The startup gate activates at most once per State; every post-release hidden-flag
+  reader is masked by inactive state, and manual switching uses another flag.
+  The only message-setter call is dominated by active startup gating; all
+  releases occur after its loop/awaited ladder returns. No inactive extra
+  rebuild is reachable. Complete occurrence/caller/reader proofs and the
+  proposed reactivation scenario's unreachability are in the deps addendum.
+- **201/201 control across 20 suites**; all four exact sample mutants replay
+  that cohort without source readers. s1 fails its guard assertion; s21/s22
+  preserve all 201 outcomes. An s8 pilot is uncredited because test cleanup
+  masked the acceptance assertion; teardown now releases the duration wait
+  on failure. The corrected file passes alone, exact s8 fails only the
+  intended assertion, and s21/s22 pass that final file too. Final sample
+  combines Claude's 22 prior kills with two new witnesses: **24/26 (92%),
+  two proved equivalences**, separate from the unchanged Step-0 core totals.
+  Both changed files pass alone at final hashes; the other 18 standalone
+  receipts retain unchanged inputs. No new suite/inventory entry.
+- The frozen **278-suite** Step-0 baseline is reused for unchanged inputs;
+  this addendum's affected-cohort identity comparison preserves all 199
+  prior successes and adds two. No new full reduced-suite run is claimed.
+  Changed-test analysis/format, live-reader ownership and diff checks pass.
+  Runs remain serial, nice19/no-pub/concurrency1 with test hooks; isolated
+  parser package and discarded copied kernels, no production test seam.
+- Evidence: `refactor-evidence/vplayer/p16/step0b/` (`replay-results.json`,
+  exact patches/JSONL/test archives, `equivalence-proofs.json`, check and
+  identity receipts). No application defect or flake observed. **STOP:** Step 1
+  awaits the P15 merge, explicit rebase instruction and refreshed final T;
+  existing native/device and M3 integration/build obligations remain pending.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

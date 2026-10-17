@@ -8,6 +8,54 @@ import 'support/startup_driver.dart';
 
 void main() {
   testWidgets(
+    'P16 debrid width alone cannot accept a durationless candidate at position zero',
+    (t) async {
+      final d = StartupDriver(t);
+      await d.initialize();
+      final a = startupSource('width-without-clock', type: StreamType.torrent);
+      try {
+        await d.begin(d.screen(sources: [a]));
+        await d.openEntered();
+        await d.settle();
+        expect(d.player.state.duration, Duration.zero);
+        expect(d.player.state.position, Duration.zero);
+        d.player.state = d.player.state.copyWith(width: 1280);
+        d.player.emit<int?>('width', 1280);
+        await d.tick();
+        await d.settle();
+        expect(
+          d.event('candidate_result'),
+          isEmpty,
+          reason: 'Decoded width requires a positive live playback clock',
+        );
+        expect(d.commits, isEmpty);
+        expect(d.activeProbes, hasLength(5));
+
+        // A later clock event supplies the missing evidence through the other
+        // production listener; no duration is needed for candidate acceptance.
+        d.player.state = d.player.state.copyWith(
+          position: const Duration(milliseconds: 1),
+        );
+        d.player.emit('position', const Duration(milliseconds: 1));
+        await d.committed();
+        expect(d.commits, [a]);
+        expect(
+          d.event('candidate_result').single,
+          contains('ok=true reason=decoded_video'),
+        );
+        expect(d.activeProbes, isEmpty);
+        d.frame();
+        await d.initialized();
+      } finally {
+        // A failing acceptance assertion must still release the initializer's
+        // duration wait, so teardown cannot replace the behavior failure.
+        d.frame();
+        await d.close();
+      }
+    },
+  );
+
+  testWidgets(
     'P16 VOD subscribes before setup, ignores pre-arm errors, retains evidence and accepts before open acknowledgement',
     (t) async {
       final d = StartupDriver(t, native: true);
