@@ -6119,6 +6119,44 @@ for Step 0 and Claude’s independent mutation sample.
   checkpoint, then the complete reduced gate on that clean tree. No full
   suite, release build, push, merge or device action.
 
+### 2026-10-17 — Phase 15 clean-tree reduced gate complete (STOP)
+
+- Gate revision **177e532ff**, clean before and after the entire run. All
+  **365 expected suites load**: every video-player suite, readers/theme guard
+  and inherited boundary coverage. **2,279/2,279 outcomes match by identity**
+  against the unchanged 2,278-outcome original run plus the separately observed
+  new stale-ladder case: **2,278 successes, one unchanged failure**, zero new
+  failures, missing cases or newly skipped tests. All **524 P15 cases pass**.
+- The sole failure is the historical source-text assertion
+  `test/playback_startup_view_test.dart::startup shield remains opaque and
+  noninteractive in PiP`. It remains identical to both prior baselines; no
+  outcome, failure allowlist or original golden is re-recorded.
+- All **48 serial mechanical checks pass**: shared P1–P15 Dart manifest
+  self-test, all 26 TSV Dart manifest self-tests, Kotlin self-test, current
+  P15 and P1–P14 history (including P13 `238df16f4`, P14 `be4cd78aa`), all
+  S/S2/S2b/S2c/S2d proofs, size/architecture and architecture negatives.
+  Full CI format plus theme-guard format, analyzer allowlist and the P15
+  analyzer identity comparator/self-test also pass. Diagnostic identities and
+  earlier-phase maxima remain protected. Flutter **3.44.8**, Dart **3.12.2**,
+  matching the original configuration.
+- Final production files retain their reviewed prototype bytes. Facade
+  **12,876** lines; seven collaborators **347/283/408/433/245/207/162** lines.
+  Manifest is applied, Hosts remain frozen, all 32 earlier destinations remain
+  protected, and State shared-field/resource ownership and disposal order are
+  preserved. Pubspec and lockfile remain unchanged.
+- Caveats closed by evidence: k4/k12 source equivalences keep their guards;
+  revised long-clock tests pass original standalone, broad original, controls
+  and extracted gate; the exact k18 fault is killed by the new public stale-
+  ladder error-isolation case. **Exact 60-versus-61-second discrimination and
+  existing target-only/device checklist items remain pending**, without old
+  mutation credit. Independent post-gate review remains with the plan owner.
+- Evidence: `p15/gate/final-proof.json`, `clean-tree-start.json`,
+  `mechanical-results.json`, `commands.jsonl`, `reduced.jsonl` / `.env.json`
+  and analyzer logs; detailed rebase/characterization receipts remain under
+  `p15/rebase/`. Global serial-lock waits are preserved in the execution record.
+  Full suite and release builds remain deferred to M3 after P16. No push,
+  merge, branch switch, app launch/install, adb or emulator action. **STOP**.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

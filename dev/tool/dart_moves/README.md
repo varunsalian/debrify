@@ -286,5 +286,5 @@ CI current/self-test and both analyzer arguments now select P15; P1–P14 histor
 includes P13 `238df16f4` and P14 `be4cd78aa`. The final 365-suite gate inventory
 adds one separately observed original stale-ladder case to the unchanged original
 2,278 outcomes; no old outcome or fixture is re-recorded. All seven theme paths
-are registered and the facade ratchet is 12,876 lines. Full reduced-gate evidence
-belongs in Progress after the clean-tree run.
+are registered and the facade ratchet is 12,876 lines. The clean-tree reduced gate is complete; see Progress and
+`<git-common-dir>/refactor-evidence/vplayer/p15/gate/` for the final proof.

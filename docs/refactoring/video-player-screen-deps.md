@@ -12772,4 +12772,17 @@ seam proofs remain, and all seven theme/source-guard paths are registered.
 Current move, CI format, theme format, size/architecture and analyzer comparisons
 pass. All 127 cases in 14 selected behavior suites exactly match the original
 receipt union, including the new stale-ladder test. See `p15/rebase/step1-proof.json`.
-The clean-tree 365-suite reduced gate follows; full suite/builds stay deferred.
+The clean-tree 365-suite reduced gate passed; full suite/builds stay deferred.
+
+### P15 clean-tree gate complete
+
+Clean revision `177e532ff` passes all 48 mechanical checks, CI/theme formatting
+and analyzer allowlist/identity comparisons. All 365 suites load; all 2,279
+outcomes exactly match the observed original union (2,278 successes and the
+unchanged PiP startup-shield source-text failure). No new failures, missing tests,
+new skips or baseline re-recording. All 524 P15 cases pass. SDK remains Flutter
+3.44.8 / Dart 3.12.2; pubspec/lock and reviewed production bytes are unchanged.
+See `p15/gate/final-proof.json`, mechanical receipts and the reduced JSONL/env.
+Exact 60-versus-61-second discrimination, original target-only/device checklist
+items and independent post-gate review remain pending. Full suite/release builds
+are deferred to M3. No push, merge or device action; executor stops here.
