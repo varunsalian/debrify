@@ -13471,3 +13471,12 @@ The six latest detached standalone replays remain queued; the previous
 **257 +37 =294**. All 66 exact selected-boundary witnesses assertion-fail;
 complete systematic/retained/case accounting and the final gate are pending.
 No production move, dependency change or P17 checker activation.
+
+
+Sweep checkpoint: **296 cases /39 files**, all passing individually in both
+worktrees, with **296 frozen suites (257 baseline +39 additions)**. All 829
+canonical edits ran; all 36 retained references have clean assertion proofs.
+Completed survivors and runtime outcomes remain uncredited and are not
+asserted equivalent. The 16 completed-close/banner/stage-budget exact replays
+all assertion-fail. A timed-out publication control needs an unchanged
+isolated retry; final per-case proofs, tables and reduced gate are pending.

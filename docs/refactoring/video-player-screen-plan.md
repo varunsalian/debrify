@@ -7757,6 +7757,26 @@ remain byte-identical to `be4cd78aa`; no production moves or bug fixes.
   pending. Runtime errors, timeouts and structural reader rejections receive
   no behavioral kill credit. No production or dependency change.
 
+
+### 2026-10-17 — Phase 17 Step 0 sweep checkpoint (in progress)
+
+- **296 cases /39 new files** pass individually on both preparation and
+  detached `be4cd78aa` application code. The six publication additions now
+  have detached receipts. Two further suites prove completed-close cache
+  reuse, partial filename stamping, complete-series lower bounds, independent
+  fetch-stage budgets, exact existing-source eligibility and banner reentry.
+  Their 16 exact canonical replays all assertion-fail after complete controls.
+- All **829 canonical edits** have run; the raw outcomes retain survivors,
+  invalid edits and runtime failures without kill credit. All 36 retained
+  references are now assertion-killed, including exact guide-key/dispatch
+  replays. The frozen preparation inventory is **257 +39 =296 suites**.
+- Eight guard control graphs pass. The publication cohort's transition
+  control timed out; its unchanged isolated retry is pending. Failed control
+  output and the duplicate waiting-orchestrator incident are archived under
+  `step0/pilots/publication-filter-policy/`; no mutation is accepted from a
+  failed control. Exact publication replays, per-case closure, final tables
+  and the reduced gate remain pending. No production/dependency change.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

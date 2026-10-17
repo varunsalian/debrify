@@ -846,3 +846,5 @@ test/features/video_player/video_player_p17_channel_renderer_recovery_test.dart
 test/features/video_player/video_player_p17_next_metadata_fields_test.dart
 test/features/video_player/video_player_p17_guide_dispatch_test.dart
 test/features/video_player/video_player_p17_fetch_latch_curtain_test.dart
+test/features/video_player/video_player_p17_guide_completion_test.dart
+test/features/video_player/video_player_p17_banner_reentry_test.dart
