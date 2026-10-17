@@ -13297,9 +13297,10 @@ Flutter run; the raw baseline Flutter exit is **1**, as clarified in
 `p17/step0/baseline-exit-clarification.json`. The comparison must preserve the
 observed failing identity, independently of historical allowlists.
 
-The first characterization checkpoint has **167 cases /17 files**, all passing
+The first characterization checkpoint has **184 cases /17 files**, all passing
 on the detached original, and all **17 files pass alone**. Their combined run
-has 184 successful outcomes including suite loads (Flutter exit 0). Existing
+has 184 non-hidden successful case outcomes plus 17 hidden successful suite
+loads (Flutter exit 0). Existing
 feature-boundary suites remain in the frozen preparation baseline.
 
 | New suite suffix (`video_player_p17_…_test.dart`) | Cases | Observed boundary |
@@ -13361,7 +13362,7 @@ and `diagnostics` (9). They add first-flagged-directory ordering, explicit
 guide capability, newly published source lists, identity-before-key selection,
 source-key fallback after retention, owned-timer cancellation, controls-only
 clock visibility, IPTV-banner precedence and exact original failure/selection
-diagnostic context. Total so far: **184 cases /21 new files**, every file
+diagnostic context. Total so far: **201 cases /21 new files**, every file
 passing alone. The frozen preparation inventory is now **257 +21 =278**;
 the original baseline list is unchanged. Proofs for these additions are queued;
 the earlier controlled graphs retain identical test/support bytes.
@@ -13373,3 +13374,11 @@ the generic replay runner's narrower print-only assertion parser records them
 as uncredited. `sourceguard-classifications.json` preserves both classifications
 and the actual rejection messages. The reader, original source assertions and
 historical comparison policy are not relaxed.
+
+Count correction: the initial prose subtracted hidden loading events from the
+already non-hidden outcome count, reporting 167 instead of 184. Raw receipts
+are unchanged. All **19** closure mutation runs now assertion-fail: each of the
+17 added cases has its own selected-case witness, and two replays replace the
+initial directory runtime/survivor gaps with clean assertions. Four matching
+adapted control graphs pass with every selected body executed and zero skips.
+The broad sweep and remaining original-case witnesses are still pending.

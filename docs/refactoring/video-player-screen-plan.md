@@ -7573,8 +7573,8 @@ for Step 0 and Claude’s independent mutation sample.
 
 ### 2026-10-17 — Phase 17 Step 0 characterization checkpoint (in progress)
 
-- **167 cases / 17 suites pass** on the detached `be4cd78aa` application
-  (184 successful outcomes including loads; Flutter exit 0). New tests cover
+- **184 cases / 17 suites pass** on the detached `be4cd78aa` application
+  (184 visible case outcomes plus 17 hidden suite loads; Flutter exit 0). New tests cover
   channel payloads/callers, banner timing, guide-map identity, actual post-switch
   tracker traffic with and without launch identity, the episode ladder and
   synthetic guide, real fetch/resolver/profile boundaries, late seek tails and
@@ -7606,7 +7606,7 @@ for Step 0 and Claude’s independent mutation sample.
 - Four separate coverage additions also pass alone on the detached original:
   directory ordering/capability (2), candidate publication and identity/key
   fallback (3), banner cancellation/clock/IPTV precedence (3), and original
-  diagnostic context (9). Total **184 cases /21 files**. The reduced inventory
+  diagnostic context (9). Total **201 cases /21 files**. The reduced inventory
   is **257 unchanged baseline files +21 new files =278**; all additions are
   registered in the existing behavior inventory. Their mutation proofs remain
   in progress, with unchanged earlier test/support hashes.
@@ -7623,6 +7623,13 @@ for Step 0 and Claude’s independent mutation sample.
   `sourceguard-classifications.json`, and archived raw mutation batches. The
   systematic sweep, per-case witnesses, final mutation table and reduced
   comparison are **not complete**. No production moves or bug fixes.
+
+The earlier checkpoint count of 167 was a reporting error: raw `original.jsonl`
+contains 184 non-hidden successes plus 17 hidden loading successes. Those
+loads were incorrectly subtracted twice. Receipts, case names and outcomes
+are unchanged; the 17 separate additions bring the total to **201 cases**.
+Their 19 original mutation runs all assertion-fail (17 per-case proofs plus
+two replays closing the initial directory gaps).
 
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
