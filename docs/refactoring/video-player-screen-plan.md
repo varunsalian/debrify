@@ -3392,6 +3392,9 @@ source pick (P15 path).
 
 ## Phase 17 — Debrify TV / Stremio TV channels, Debrify TV banner, episode fetch and synthetic guide
 
+> **Read with the Phase 17 design review resolution at the end of this
+> file** — it supersedes this section where they differ.
+
 Branch `refactor/vplayer-p17` (pipelined; prepared off the phase-14 merge
 `be4cd78aa` while phase 15 (`refactor/vplayer-p15`, provisional step T at
 `83d89040b`) and phase 16 (`refactor/vplayer-p16`, step 0b at `9f76640b0`)
@@ -7944,3 +7947,40 @@ non-negative ordering anchors; M3 full suite + both release builds after the
 phase-16 gate. Step T measures all five formatted prototypes (member/comment
 contributions 348/270/113/258/302 before Hosts/imports). Sole future adapter
 patch: `_VpIptvChannelSwitchHostAdapter.hideSourceSheet` (after P15 merges).
+
+## Phase 17 design review resolution (Codex `vp-design`, 2026-10-17) — "No P1s"
+
+Reviewed at `3f6d2e95b` (facade byte-identical to `be4cd78aa`; 23 methods,
+two fields, 1,009 attached member lines, 36 retained references and Host
+counts 36/10/41/24/18 confirmed; no current adapter or P15/P16 Host contract
+forwards a moved member). Three P2s and two P3s, all adopted:
+
+1. **Tracker identity is characterized as-is, not assumed.** The original does
+   NOT re-target trackers on a channel switch: Trakt/Simkl scrobble with
+   `contentImdbId` (`vp_trakt_scrobbler.dart:83`, `vp_simkl_scrobbler.dart:91`;
+   adapters forward launch arguments), `_traktSeasonEpisode` (1727) reads
+   playlist/launch metadata rather than the Stremio overrides, and the channel
+   switch never calls `switchMdblistTarget`. Step 0 distinguishes effective
+   policy/progress/skip identity from actual scrobble payloads and session
+   targets; characterizes launch A → channel B including absent launch
+   identity; mismatches are recorded as Follow-ups, not corrected.
+2. **Guide-map identity:** `Map.from(entry)` is allocated for EVERY entry
+   before the id test (7922). Expect new outer maps for all entries, unchanged
+   values for non-matching entries, shallow sharing of their nested values,
+   copied supplied `nowPlaying`/`nextUp` maps for matching entries; preserve
+   the fixed-length list behaviour.
+3. **`retainForEpisode` is synchronous** (`series_source_fetcher.dart:331`) —
+   not an async hold point. Hold an existing resolver/player/storage boundary
+   in the P16 attempt, supersede or dispose before releasing it, assert
+   pruning/index selection after completion; test successful pruning
+   separately. No new seam.
+4. The fetch Host declares both getter and setter for
+   `episodeNavigationGeneration` (the `++` at 10908) with a live setter
+   forwarder (within the stated 28 declarations).
+5. The seven-member transition block is forwarded by FOUR Hosts (P15 owner,
+   both P16 switch Hosts, P17 Stremio), not five; P17 Debrify channels do not
+   use it. Duplication retained until phase 21.
+
+Activation: final proofs on the accepted P15/P16 parents (refresh affected
+evidence, preserve M3 acceptance), current checker/analyzer CI → P17, P1–P16
+historical, step-T formatted prototypes establish ≤ 500.
