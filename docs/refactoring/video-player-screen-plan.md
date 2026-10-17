@@ -2597,13 +2597,14 @@ context)` (1162–1165: the parameter shadows State `context`; context-guard
 negative required). `_playIptvCatchup` keeps capturing
 `ScaffoldMessenger.of(context)` before its first await (5902).
 
-### Patched facade adapters (exactly four, six counted rewrites)
+### Patched facade adapters (exactly four, five counted rewrites — corrected per design-review resolution finding 1)
 
 Whole-class `patched_class_projection`, regenerated on the accepted
 phase-14 base:
 - `_VpTrackPreferencesHostAdapter` (P11): `applyIptvAudioPreference`
-  14680 → `_s._iptvMemory.applyIptvAudioPreference(ticket)`;
-  `iptvSwitchTicket` 14689 → `_s._iptvSwitch.iptvSwitchTicket`.
+  14680 → `_s._iptvMemory.applyIptvAudioPreference(ticket)`.
+  `iptvSwitchTicket` 14689 is **unchanged** — the ticket stays State-owned
+  (resolution finding 1), so no redirect.
   (`isIptvSeriesContext` 14691 unchanged — State-owned.)
 - `_VpPipLifecycleHostAdapter` (P8): `cancelPendingIptvCatchup` 14914 →
   `_s._iptvGuide.cancelPendingIptvCatchup(hideFeedback: hideFeedback)`.
