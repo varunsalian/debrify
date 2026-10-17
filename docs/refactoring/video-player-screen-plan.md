@@ -7652,6 +7652,31 @@ for this file are pending. Current total **212 cases /24 new files** and
 reduced preparation inventory **257 +24 =281**. Application/packages/pubspec
 remain byte-identical to `be4cd78aa`; no production moves or bug fixes.
 
+
+### 2026-10-17 — Phase 17 Step 0 ownership/routing checkpoint (in progress)
+
+- The TV-provider matrix now includes Debrify **by ID**, adding ten cases
+  at the real pause/provider holds across unchanged, switched, ABA, deleted
+  and disposed profiles. All **30** cases pass alone on both preparation and
+  detached original code; physical resume rows and callback invocation scope
+  are asserted. Total accepted positives: **222 cases /24 new files**.
+- Eight detached standalone files now have explicit P17 evidence routing,
+  including the transition-timer file and all six closure/publication files.
+  Two earlier direct replay scripts omitted the environment override and
+  created exactly 24 fixture directories under the harness's old P8 default.
+  Event intervals prove ownership; only those directories were relocated
+  unchanged under P17, with recursive hashes preserved. Other P8 entries were
+  untouched. `p17/step0/routing-remediation.json` records every mapping.
+  Both SDK wrappers now enforce P17 routing. Correctly routed standalone
+  replays supersede those six earlier acceptance receipts; their original
+  raw logs remain archived. The baseline, initial seventeen standalone files,
+  combined positives and mutation runners already used explicit P17 routing.
+- Evidence: `p17/step0/alone-routed-receipts.json` and associated raw logs,
+  input hashes and environment receipts. The frozen reduced inventory remains
+  **257 +24 =281**. New guard drafts, the broad mutation sweep, remaining
+  per-case proofs and the final reduced comparison are still pending.
+  Application, packages and pubspec remain byte-identical to `be4cd78aa`.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

@@ -16,7 +16,7 @@ import 'support/vp_fixture_actions.dart';
 
 void main() {
   const initial = 'https://player.test/a.mp4';
-  for (final mode in ['Debrify', 'Stremio']) {
+  for (final mode in ['Debrify', 'Debrify by id', 'Stremio']) {
     for (final boundary in ['pause', 'provider']) {
       for (final crossing in [
         'none',
@@ -60,6 +60,12 @@ void main() {
                   videoUrl: initial,
                   title: 'A',
                   requestNextChannel: mode == 'Debrify' ? request : null,
+                  channelDirectory: mode == 'Debrify by id'
+                      ? tvDirectory
+                      : null,
+                  requestChannelById: mode == 'Debrify by id'
+                      ? (id) => request()
+                      : null,
                   stremioTvCurrentChannelId: mode == 'Stremio' ? 'a' : null,
                   stremioTvNextProvider: mode == 'Stremio'
                       ? (id) => request()
@@ -73,6 +79,9 @@ void main() {
                 }),
               );
               final store = (await t.runAsync(CompletionWrites.install))!;
+              final guide = mode == 'Debrify by id'
+                  ? await d.debrifyGuide()
+                  : null;
               d.player.beforeOperation = (name, value) async {
                 if (boundary == 'pause' && name == 'pause' && !pauseEntered) {
                   pauseEntered = true;
@@ -83,10 +92,16 @@ void main() {
                   boundary == 'pause' && name == 'pause' && !pause.isCompleted;
               final dynamic action = mode == 'Debrify'
                   ? playerControls(t).onNextChannel!
+                  : mode == 'Debrify by id'
+                  ? guide!.onChannelSelected
                   : playerControls(t).onNext!;
               task = d.f.actions.start<dynamic>(
                 'held TV profile action',
-                () => d.observe<dynamic>(() => action()),
+                () => d.observe<dynamic>(
+                  () => mode == 'Debrify by id'
+                      ? action(guide!.channels.last)
+                      : action(),
+                ),
                 held: true,
               );
               await d.f.until(

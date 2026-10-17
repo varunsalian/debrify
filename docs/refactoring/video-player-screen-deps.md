@@ -13425,3 +13425,14 @@ Current new characterization: **212 cases /24 files**; frozen preparation
 inventory **257 +24 =281**. Every new file passes alone against the unchanged
 original application bytes; 23 also have detached standalone receipts. These
 counts do not mark the still-running broad sweep or final comparison complete.
+
+
+The by-ID TV-provider matrix adds ten standalone positives at actual pause
+and provider boundaries, including physical resume rows for both profiles.
+The current accepted positive total is **222 cases /24 files**. Eight detached
+standalone files pass with explicit P17 routing (`alone-routed-receipts.json`),
+superseding six direct replay receipts whose 24 fixture directories used an
+old harness default. Exact event ownership, relocation and unchanged recursive
+hashes are recorded in `routing-remediation.json`; unrelated evidence was
+untouched. Both SDK wrappers now enforce P17 routing. Remaining guard drafts,
+systematic/retained closure, per-case proofs and final gate remain pending.
