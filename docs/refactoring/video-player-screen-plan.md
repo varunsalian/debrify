@@ -7767,15 +7767,30 @@ remain byte-identical to `be4cd78aa`; no production moves or bug fixes.
   fetch-stage budgets, exact existing-source eligibility and banner reentry.
   Their 16 exact canonical replays all assertion-fail after complete controls.
 - All **829 canonical edits** have run; the raw outcomes retain survivors,
-  invalid edits and runtime failures without kill credit. All 36 retained
-  references are now assertion-killed, including exact guide-key/dispatch
-  replays. The frozen preparation inventory is **257 +39 =296 suites**.
+  invalid edits and runtime failures without kill credit. The later strict audit corrects the retained count to **35/36**:
+  the guide-dispatch assertion was masked by a layout error from cleanup.
+  Exact guide-key replays are clean; dispatch cleanup/replay is pending. The frozen preparation inventory is **257 +39 =296 suites**.
 - Eight guard control graphs pass. The publication cohort's transition
   control timed out; its unchanged isolated retry is pending. Failed control
   output and the duplicate waiting-orchestrator incident are archived under
   `step0/pilots/publication-filter-policy/`; no mutation is accepted from a
   failed control. Exact publication replays, per-case closure, final tables
   and the reduced gate remain pending. No production/dependency change.
+
+
+### 2026-10-18 — Phase 17 Step 0 cleanup checkpoint (in progress)
+
+- Corrected the premature retained-reference count above: **35**, rather
+  than 36, had clean assertions. The final guide-dispatch test threw its
+  intended assertion, then its `finally` helper pumped an orphan guide and
+  replaced that failure with a RenderFlex error. Cleanup now directly awaits
+  its owned future before removing the route. Assertions and production
+  behavior are unchanged; both cases pass alone again on both worktrees.
+- The newer standalone receipt explicitly supersedes the old test hash;
+  both raw runs remain archived. Its positive control and the two affected
+  retained-reference proofs are rerunning. The publication transition
+  control passes unchanged in isolation; all 74 publication replays complete.
+  Remaining case proofs and the frozen 296-suite gate are still pending.
 
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 

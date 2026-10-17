@@ -13475,8 +13475,17 @@ No production move, dependency change or P17 checker activation.
 
 Sweep checkpoint: **296 cases /39 files**, all passing individually in both
 worktrees, with **296 frozen suites (257 baseline +39 additions)**. All 829
-canonical edits ran; all 36 retained references have clean assertion proofs.
+canonical edits ran; the strict audit corrects the clean retained count to
+**35/36** pending guide-dispatch cleanup/replay.
 Completed survivors and runtime outcomes remain uncredited and are not
 asserted equivalent. The 16 completed-close/banner/stage-budget exact replays
 all assertion-fail. A timed-out publication control needs an unchanged
 isolated retry; final per-case proofs, tables and reduced gate are pending.
+
+
+The guide-dispatch cleanup now awaits its owned future directly, preserving
+the original missing-provider assertion before any orphan-guide layout can
+replace it. Both cases pass alone again in both worktrees. The latest routed
+receipt supersedes the old hash explicitly; old logs remain archived. The
+publication transition control passes unchanged in isolation, and all 74
+publication replays complete. Remaining case proofs and the gate are pending.

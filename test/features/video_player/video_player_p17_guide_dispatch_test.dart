@@ -44,7 +44,7 @@ void main() {
         expect(d.errors, isEmpty);
       } finally {
         if (!result.isCompleted) result.complete(null);
-        if (task != null) await d.f.finish(t, task);
+        if (task != null) await task;
         await d.close();
       }
     },
