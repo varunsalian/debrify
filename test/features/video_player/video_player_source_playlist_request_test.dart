@@ -13,6 +13,8 @@ import 'package:debrify/screens/video_player/widgets/player_menu_panel.dart';
 import 'package:debrify/screens/video_player/widgets/transition_overlay.dart';
 import 'package:http/http.dart' as http;
 import 'support/startup_driver.dart';
+import 'support/resume_server_driver.dart';
+import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/local_completion_driver.dart';
@@ -656,6 +658,149 @@ void main() {
         ack.completeIfPending();
         if (!search.isCompleted) search.complete([]);
         await d.close();
+      }
+    },
+  );
+  testWidgets(
+    'P16 real P17 authorization retirement rolls back prepared cache, index, URL and headers before native open',
+    (t) async {
+      final d = StartupDriver(t, native: true, autoFrame: true);
+      await d.initialize();
+      final origin = ProfileRuntime.capture();
+      final incoming = await completionIncomingProfile(t, d.f);
+      await completionActivate(t, d.f, origin);
+      final server = ResumeServerDriver(t, d.f);
+      await server.prepare();
+      final a = startupSource(
+            'Rollback.Show.S01E01.mkv',
+            headers: {'X-Outgoing': 'original'},
+          ),
+          b = server.sources.last;
+      TraktTestTransport.instance.attach(d.f);
+      d.f.network.handler = (r) {
+        final show = {
+          'id': 1617,
+          'name': 'Rollback Show',
+          'externals': {'imdb': 'tt5100000'},
+          'genres': <String>[],
+        };
+        return http.Response(
+          jsonEncode(
+            r.url.path.endsWith('/episodes')
+                ? [
+                    for (var e = 1; e <= 2; e++)
+                      {
+                        'id': 16170 + e,
+                        'season': 1,
+                        'number': e,
+                        'name': 'Episode $e',
+                      },
+                  ]
+                : r.url.path == '/search/shows'
+                ? [
+                    {'score': 1.0, 'show': show},
+                  ]
+                : show,
+          ),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      };
+      final first = PlaylistEntry(
+        url: 'https://request.test/special',
+        title: 'Rollback.Show.S00E01.mkv',
+      );
+      final current = PlaylistEntry(
+        url: a.directUrl!,
+        title: 'Rollback.Show.S01E01.mkv',
+        httpHeaders: a.httpHeaders,
+      );
+      final fetcher = SeriesSourceFetcher(
+        season: 1,
+        episode: 1,
+        searchPacks: (s, e) async => [],
+        searchEpisodes: (s, e) async => [b],
+      );
+      try {
+        await d.begin(
+          VideoPlayerScreen(
+            videoUrl: a.directUrl!,
+            title: current.title,
+            contentImdbId: 'tt5100000',
+            playlist: [first, current],
+            startIndex: 1,
+            contentType: 'series',
+            contentSeason: 1,
+            contentEpisode: 1,
+            stremioSources: [a],
+            seriesSourceFetcher: fetcher,
+            resolveSourceToPlaylist: (s, {canContinue}) async => [
+              PlaylistEntry(
+                url: b.directUrl!,
+                title: 'Rollback.Show.S01E02.mkv',
+                httpHeaders: {'X-Incoming': 'prepared'},
+              ),
+            ],
+          ),
+        );
+        await d.initialized();
+        final browser = await traktBrowser(t, d.f);
+        final outgoingCache = browser.seriesPlaylist;
+        expect(browser.currentEpisodeIndex, 1);
+        Navigator.of(t.element(find.byType(SeriesBrowser))).pop();
+        await d.tick(const Duration(milliseconds: 300));
+        d.prearm = Completer<void>();
+        d.prearmEntered = false;
+        final selected = browser.onEpisodeSelected(1, 2);
+        await d.f.until(t, () => d.prearmEntered);
+        expect(d.opens, [a.directUrl]);
+        await completionActivate(t, d.f, incoming);
+        d.prearm!.complete();
+        await d.f.finish(t, selected);
+        await d.settle();
+        expect(d.opens, [a.directUrl]);
+        expect(
+          d.logs.where((v) => v.contains('Episode source load failed:')),
+          isNotEmpty,
+        );
+        final sheet = await d.sheet();
+        expect(sheet.currentSourceIndex, 0);
+        sheet.onClose();
+        await d.tick();
+        final restored = await traktBrowser(t, d.f);
+        expect(restored.seriesPlaylist, same(outgoingCache));
+        expect(restored.currentEpisodeIndex, 1);
+        expect(restored.seriesPlaylist.allEpisodes.map((e) => e.url), [
+          first.url,
+          a.directUrl,
+        ]);
+        Navigator.of(t.element(find.byType(SeriesBrowser))).pop();
+        await d.tick(const Duration(milliseconds: 300));
+        // A subsequent non-capability pick fails and reopens the captured
+        // direct URL. Its explicit non-null header prevents Media's URL cache
+        // from concealing a stale preparation header.
+        final failed = startupSource('post-rollback');
+        await d.update(
+          d.screen(
+            type: 'series',
+            sources: [a, b, failed],
+            resolve: (s) async => s.directUrl,
+          ),
+        );
+        final next = await d.sheet();
+        d.openFailures[failed.directUrl!] = StateError(
+          'fixture later rejection',
+        );
+        await d.f.finish(t, d.select(next, 2, failed.directUrl!).future);
+        expect(d.opens.last, a.directUrl);
+        expect(
+          d.player.state.playlist.medias.single.httpHeaders,
+          a.httpHeaders,
+        );
+      } finally {
+        d.prearm?.completeIfPending();
+        await d.close();
+        server.restoreFactories();
       }
     },
   );

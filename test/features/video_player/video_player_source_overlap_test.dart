@@ -185,14 +185,16 @@ void main() {
           final name = playlist
               ? 'switchToSourcePlaylist'
               : 'switchToStremioSource';
-          final finalTimer = d.timers
-              .singleWhere(
+          final finalTimers = d.timers
+              .where(
                 (r) =>
                     r.$1 == const Duration(milliseconds: 1500) &&
                     r.$2.isActive &&
                     (d.timerOrigins[r.$2]?.contains(name) ?? false),
               )
-              .$2;
+              .toList();
+          expect(finalTimers, hasLength(1));
+          final finalTimer = finalTimers.single.$2;
           expect(
             d.timers.where(
               (r) =>
