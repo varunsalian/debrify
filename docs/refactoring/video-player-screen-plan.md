@@ -7597,6 +7597,33 @@ for Step 0 and Claude’s independent mutation sample.
   final reduced comparison remain required; this is **not Step-0 acceptance**.
   Application, packages and `pubspec` remain byte-identical to `be4cd78aa`.
 
+### 2026-10-17 — Phase 17 Step 0 coverage/proof checkpoint (in progress)
+
+- All original **17** new files pass **alone** on detached `be4cd78aa`;
+  all **18 adapted original control graphs /462 selected bodies** pass with
+  zero skips. Renderer and two legacy tracker fixtures have separate positive
+  controls to preserve their existing singleton transport ownership.
+- Four separate coverage additions also pass alone on the detached original:
+  directory ordering/capability (2), candidate publication and identity/key
+  fallback (3), banner cancellation/clock/IPTV precedence (3), and original
+  diagnostic context (9). Total **184 cases /21 files**. The reduced inventory
+  is **257 unchanged baseline files +21 new files =278**; all additions are
+  registered in the existing behavior inventory. Their mutation proofs remain
+  in progress, with unchanged earlier test/support hashes.
+- All six direct source removal/reorder negatives fail the unmodified
+  validating reader's exit-code assertion on non-verbatim source. These are
+  structural rejections, with **zero behavioral kill credit**. No reader,
+  history, manifest-parent or source assertion relaxation.
+- The dependency report records completed positives and guard-checked as-is
+  observations, including actual post-B launch-identity tracker traffic,
+  overlapping channel requests, late seek tails, fetch latch/currentness and
+  real captured profile boundaries. Physical native effects remain pending;
+  synthetic TV providers do not establish a real feature-handoff defect.
+- Evidence: `p17/step0/alone-closure-*`, `controls-final.json`,
+  `sourceguard-classifications.json`, and archived raw mutation batches. The
+  systematic sweep, per-case witnesses, final mutation table and reduced
+  comparison are **not complete**. No production moves or bug fixes.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

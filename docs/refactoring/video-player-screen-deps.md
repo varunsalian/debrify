@@ -13280,3 +13280,96 @@ PlaylistViewMode? get viewMode => _s.widget.viewMode;
 The evidence scanner records **36** retained references in `p17/stepT/retained-sites.json`. The shared `// ─── Stremio TV Guide` comment attaches to `_findInitialStremioTvChannelId` and moves. P16 already prepares declaration-reader retargeting; P17 removes the same raw end-marker dependency and must re-scan its accepted parent.
 
 Original self-comparison and the complete normally formatted split pass; 12 independent real-manifest negatives reject. Root/strict/prototype diagnostic counts: 159/235/175; no compiler errors. The receiver probe is provisional evidence, not a current/history acceptance. Commands, prototypes, Hosts, scanner and diagnostic identities: `<git-common-dir>/refactor-evidence/vplayer/p17/stepT/`.
+
+## Phase 17 Step 0 — original behavior receipts (in progress)
+
+Application and dependency bytes remain **be4cd78aa**. This section records
+completed positives; the systematic mutation ledger and reduced comparison
+are still pending. It does not authorize the production extraction.
+
+The original reduced baseline loads all **257** frozen files: **1,818
+successful outcomes and one failure**. The failure is
+`playback_startup_view_test.dart::startup shield remains opaque and noninteractive in PiP`:
+the source test looks for a one-line `AbsorbPointer` spelling while the original
+application uses the formatted multiline spelling. Neither input nor outcome is
+changed. `suite_evidence.py` returns its own success after recording a failing
+Flutter run; the raw baseline Flutter exit is **1**, as clarified in
+`p17/step0/baseline-exit-clarification.json`. The comparison must preserve the
+observed failing identity, independently of historical allowlists.
+
+The first characterization checkpoint has **167 cases /17 files**, all passing
+on the detached original, and all **17 files pass alone**. Their combined run
+has 184 successful outcomes including suite loads (Flutter exit 0). Existing
+feature-boundary suites remain in the frozen preparation baseline.
+
+| New suite suffix (`video_player_p17_…_test.dart`) | Cases | Observed boundary |
+|---|---:|---|
+| `debrify_channels` | 31 | Directory/guide availability, payload precedence and type filtering, pause/open failures, headers/autoplay, next versus by-id offsets, overlapping providers and stale static state |
+| `stremio_channels` | 23 | Initial id, guide gates, every outer-map replacement and nested identity, fixed-length list, source parsing/coercion, live resolver, provider-window dedupe, overlaps and unawaited duration subscription |
+| `banner` | 6 | Ownership, 400 ms resolving polls, complete display window, controls/clock visibility and a newer transition during an armed full-window timer |
+| `episode_fetch` | 19 | Pinned/existing/episode/pack order and caps, external filtering, singleton/pack validation, latch boundaries, preferred-missing feedback and successful pruning |
+| `episode_guide` | 20 | Synthetic cache/entry identity and title stamping, no-op selection, unknown episode gate, pack-coverage table and real position-driven direct prefetch |
+| `async_boundaries` | 14 | Provider disposal, candidate validation/resolver/player holds, newer navigation/disposal, late live-player seek and held `request.attempt` completion before synchronous retention |
+| `profiles` | 15 | Real captured `SourcePlayerLaunch` resolver/committer and physical bindings/resume rows across candidate/fetch/resolver delivery and A→B/ABA/deletion/disposal |
+| `tv_provider_profiles` | 20 | Facade callback invocation scope before/after real pause/provider holds, physical resume rows in both profiles and route closure; feature-owned callback persistence is covered separately |
+| `tracker_identity` | 2 | Launch A→channel B, with/without launch identity; B must actually open and tracker traffic must grow after the switch before payload/target assertions |
+| `channel_metadata` | 3 | Next/by-id/Stremio pick clear discovered single-file IMDb and enable a new lookup through the existing metadata/menu transport |
+| `retry_cancellation` | 6 | Real outgoing PikPak metadata await, token advance before each channel open, including adjacent retry-token collision |
+| `renderer_duration` | 1 | A listener attached to the old instance seeks the live replacement player after a Stremio pick |
+| `fetch_callers` | 5 | Retained next/EOF/previous/shuffle dispatch, synthetic shuffle and discovered IMDb propagation |
+| `fetch_cancellation` | 4 | Sleep expiry during default automatic request; guide resume versus EOF/shuffle suppression of a physical saved point |
+| `fetch_failures` | 4 | Validator exception remains eligible, escaping pinned error releases the latch, episode/pack search exceptions preserve fallback order |
+| `tv_callers` | 10 | TV dock callbacks, stable tear-offs, Back, desktop G/Up/PageUp and hidden-TV-bar Up with feature precedence |
+| `early_windows` | 1 | Guide before first ready, launch banner/hidden controls and disposal cancellation of the owned timer |
+
+No private State access, asynchronous `retainForEpisode` seam or new production
+hook is used. The retention tests hold real validation/resolver/player awaits
+and the existing future-delivery fixture at `EpisodePlaybackRequest.attempt`;
+retention itself stays synchronous. Passive captured-error markers prevent
+runtime errors from being credited as assertion kills. The original adaptation
+controls execute all selected bodies: **18 graphs /462 body executions /zero
+skips**, including separate original controls for renderer and legacy tracker
+fixtures whose singleton transport ownership prevents mixing them into other
+cohorts. This separation changes neither assertion nor selected-case inventory.
+
+### Verified as-is observations and limits
+
+| Candidate / guard recheck | Original observation / disposition |
+|---|---|
+| Channel overlaps: Debrify checks `mounted` after its provider, Stremio next dedupes only until the provider returns, and neither uses a switch ticket | Older next payload opens last; an older Debrify failure paints failed static while a newer provider is held; a delayed Stremio guide pause can open its older URI with newer visible identity. Preserve. |
+| Debrify null/empty/failed open returns do not resume the paused player | Failure/static behavior and next/by-id identity differences are asserted. Preserve; no recovery policy is added. |
+| Next-channel offset follows `_waitForVideoReady` without a mounted/identity recheck; Stremio duration `.then` checks mounted, reads the live player and has no error handler | Older tails seek the newer channel; a held Debrify ready-wait can dispatch seek to a disposed fake. Closing the Stremio duration stream before a positive value reports `StateError` to its zone. Native disposal effects remain device-pending. |
+| By-id has no random/percent tail | Next-only start-offset asymmetry is observed, including random precedence. Preserve. |
+| Fetch latch remains true until `finally`; request currentness includes mounted and navigation identity | A newer guide fetch is refused during old validation/fetch/resolver awaits. Old results cannot publish or prune after supersession/disposal. The proposed stale-after-dispose fetch `setState` defect is **not asserted**. |
+| Tracker adapters read launch `contentImdbId` and launch/playlist coordinates; channel switch does not call `switchMdblistTarget` | After actual B traffic, Trakt/Simkl payloads still identify launch A; MDBList target stays at launch identity. Absent launch identity remains absent. Effective skip/progress policy identity is a separate contract. This confirms resolution finding 1; no tracker retargeting is introduced. |
+| `SourcePlayerLaunch` resolver/committer capture profile ownership; facade TV provider callbacks belong to other features | Captured binding writes reject invalidated sessions, including ABA/deleted profiles. Forced profile changes with synthetic TV callbacks characterize facade invocation/resume timing only; they do **not** prove a cross-profile defect in the real TV feature's handoff. |
+| Debrify open-failure catch calls `setState` before its final mounted guard; Stremio catch only logs before returning at its mounted guard | A held Debrify open failing after disposal reaches the existing Flutter error path; the Stremio counterpart does not. This is distinct from the guarded fetch-publication path. Preserve. |
+| `prepareFromProgress` catches its own errors | No unhandled-prefetch-future claim. |
+
+Raw receipts and exact input hashes: `p17/step0/base*`, `original*`,
+`alone-*`, `controls-final.json`, `control-fixture-note.json` and
+`control-transport-note.json`. Rejected exploratory pilots/controls are archived
+separately and earn no acceptance or mutation credit. Two original source-guard
+suites pass through the unmodified validating reader; their direct removal/reorder
+negatives remain pending. Provisional initializer negatives now number **14**,
+including non-inert timer/list probes. Current checker/history ownership stays
+P14, with no history relaxation.
+
+The separate closure additions also pass **alone on detached be4cd78aa**:
+`directory_order` (2), `candidate_publication` (3), `banner_lifecycle` (3)
+and `diagnostics` (9). They add first-flagged-directory ordering, explicit
+guide capability, newly published source lists, identity-before-key selection,
+source-key fallback after retention, owned-timer cancellation, controls-only
+clock visibility, IPTV-banner precedence and exact original failure/selection
+diagnostic context. Total so far: **184 cases /21 new files**, every file
+passing alone. The frozen preparation inventory is now **257 +21 =278**;
+the original baseline list is unchanged. Proofs for these additions are queued;
+the earlier controlled graphs retain identical test/support bytes.
+
+All **six** direct source removal/reorder negatives complete with Flutter exit
+1 and fail the validating reader's exit-code assertion on a non-verbatim
+declaration. These are **structural reader rejections**, not behavioral kills;
+the generic replay runner's narrower print-only assertion parser records them
+as uncredited. `sourceguard-classifications.json` preserves both classifications
+and the actual rejection messages. The reader, original source assertions and
+historical comparison policy are not relaxed.
