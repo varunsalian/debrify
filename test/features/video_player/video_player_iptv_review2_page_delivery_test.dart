@@ -26,10 +26,10 @@ void main() {
         final response = Completer<Map<String, dynamic>?>();
         final delivery = IptvAwaitDelivery(
           caller == 'same-page'
-              ? '_prefetchIptvZapPage'
+              ? 'prefetchIptvZapPage'
               : caller == 'prefetch-category'
-              ? '_prefetchAdjacentIptvCategory'
-              : '_requestAdjacentIptvCategory',
+              ? 'prefetchAdjacentIptvCategory'
+              : 'requestAdjacentIptvCategory',
           (v) => v is VpIptvZapPage,
         );
         d.provider = (r) => r.containsKey('anchorUrl')
@@ -126,7 +126,7 @@ void main() {
       final response = Completer<Map<String, dynamic>?>();
       final tail = Completer<Map<String, dynamic>?>();
       final delivery = IptvAwaitDelivery(
-        '_requestAdjacentIptvCategory',
+        'requestAdjacentIptvCategory',
         (v) => v is VpIptvZapPage,
       );
       var requests = 0;

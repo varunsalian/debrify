@@ -330,12 +330,12 @@ The four facade adapter classes to regenerate on the accepted P14 base are
 `_VpPlayerMenuHostAdapter`, and `_VpTrackPreferencesHostAdapter`. The latter
 changes only its audio action; its ticket getter remains State-owned.
 
-The preparation scan contains 68 occurrences: the plan’s 62 core retained
+The preparation scan contained 68 occurrences: the plan’s 62 core retained
 sites (60 facade sites plus two lazy-initializer references), four menu callers
-that P13 will replace with facade adapter routing, and two existing P8/P11
-adapter forwarders. The scanner retains all 68; no named reference is dropped.
-Recompute the ledger, all adapters, imports/orders, analyzer probes and witnesses
-after P13/P14; no provisional count substitutes for that check.
+that P13 replaced with facade adapter routing, and two existing P8/P11
+adapter forwarders. The preparation scanner retained all 68. The final rebase
+recomputes the ledger, adapters, imports/orders, analyzer probes and witnesses;
+the historical preparation count does not substitute for those checks.
 
 Final rebase materialization (accepted P14 `be4cd78aa`) preserves every Host
 signature and its declaration order. All seven formatted sizes remain unchanged.

@@ -286,7 +286,7 @@ void main() {
       );
       d.response = iptvPanelReply;
       final delivery = IptvAwaitDelivery(
-        '_playIptvCatchup',
+        'playIptvCatchup',
         (v) => v is String && v.contains('/timeshift/'),
       );
       Future<void>? work;

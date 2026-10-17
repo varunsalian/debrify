@@ -19,7 +19,7 @@ void main() {
       final response = Completer<Map<String, dynamic>?>();
       final tail = Completer<Map<String, dynamic>?>();
       final delivery = IptvAwaitDelivery(
-        '_prefetchAdjacentIptvCategory',
+        'prefetchAdjacentIptvCategory',
         (v) => v is VpIptvZapPage,
       );
       d.provider = (r) {

@@ -21,7 +21,7 @@ void main() {
       const categories = ['News', 'Sports'];
       final reanchor = Completer<Map<String, dynamic>?>();
       final cache = IptvAwaitDelivery(
-        '_prefetchAdjacentIptvCategory',
+        'prefetchAdjacentIptvCategory',
         (v) => v is VpIptvZapPage,
       );
       var anchors = 0;
@@ -112,11 +112,11 @@ void main() {
       final landing = iptvChannel(7);
       const categories = ['News', 'Sports'];
       final cache = IptvAwaitDelivery(
-        '_prefetchAdjacentIptvCategory',
+        'prefetchAdjacentIptvCategory',
         (v) => v is VpIptvZapPage,
       );
       final crossing = IptvAwaitDelivery(
-        '_requestAdjacentIptvCategory',
+        'requestAdjacentIptvCategory',
         (v) => v is VpIptvZapPage,
       );
       var sports = 0;

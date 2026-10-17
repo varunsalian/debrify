@@ -90,7 +90,7 @@ void main() {
       final movie = iptvChannel(80, live: false);
       final reply = Completer<Map<String, dynamic>?>();
       final delivery = IptvAwaitDelivery(
-        '_prefetchIptvZapPage',
+        'prefetchIptvZapPage',
         (v) => v is VpIptvZapPage,
       );
       d.provider = (r) => r.containsKey('anchorUrl')

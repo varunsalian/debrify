@@ -12677,8 +12677,8 @@ formatter proof records optional-comma sites and idempotence for all eight files
 All 32 earlier destinations remain protected. Hosts are unchanged from the frozen
 ledger. **66 moved declarations are token-identical** to preparation; four bodies
 have accepted P13 recording-action receiver changes. The refresh plan covers all
-258 prior assertion kills in those bodies and 66 current retained references;
-one explicit retained source audit remains. Controls and refreshed kills follow.
+258 prior assertion kills in those bodies and 64 current retained references;
+the three original retained source audits remain. Controls and refreshed kills follow.
 
 Analyzer **159 root / 235 strict / 170 final probe**; P1–P14 diagnostic mappings
 and maxima preserved. Five probe infos (two brace, two redundant-import and one
@@ -12686,3 +12686,16 @@ receiver-context) and six original-directive warnings are recorded without fixes
 The expanded frozen inventory contains **364 suites**; every suite must load
 before baseline/gate identity comparisons. Fresh baseline and historical proofs
 are pending; this checkpoint creates no production collaborator.
+
+### P15 final-input historical and standalone checkpoint
+
+All 44 serial mechanical checks pass, including every manifest self-test,
+Kotlin, P1–P14 at accepted merge revisions and all five seam proofs. Eight
+await-delivery frame selectors use a unique method-name stem across the original
+private and relocated public methods; assertions and intercepted values are
+unchanged. Their repeated standalone runs preserve all 117 suites / 523 outcomes.
+The final refresh plan is 398 faults (258 changed-body, 76 changed-test witnesses,
+64 retained-reference) with 140 original controls and three retained source audits.
+The 364-file original baseline and mutation runs remain pending. No production
+move is included. See `p15/rebase/frame-marker-equivalence.json`, standalone
+receipts and `mechanical-results.json`.

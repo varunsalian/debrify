@@ -5967,8 +5967,8 @@ for Step 0 and Claude’s independent mutation sample.
   protected. The source-bound `k4`/`k12` equivalences and hashes are complete.
 - Input audit: **66/70 moved declarations token-identical** to preparation;
   the four changed bodies contain only accepted P13 recording-action rewrites.
-  **324** targeted refreshes prepared: all 258 previously killed points in
-  these bodies, plus 66 retained occurrences; one retained source audit remains.
+  **322** targeted refreshes prepared: all 258 previously killed points in
+  these bodies, plus 64 retained occurrences; three retained source audits remain.
   Original combined controls and refreshed assertion outcomes are pending.
 - Analyzer root/strict/final probe **159/235/170**; zero errors, P1–P14
   identities/maxima retained. The 11 probe additions are the previously measured
@@ -5980,6 +5980,29 @@ for Step 0 and Claude’s independent mutation sample.
 - Evidence: `p15/rebase/` standalone receipts, `input-audit.json`,
   `survivor-equivalences.json`, `optional-commas.json`, `earlier-destinations.json`,
   `final-negatives.log` and analyzer probes. No application move or CI activation.
+
+### 2026-10-17 — Phase 15 historical proofs and final standalone checkpoint
+
+- All **44 serial mechanical checks pass**: every Dart manifest self-test,
+  Kotlin self-test, P1–P14 historical checks (P13 `238df16f4`, P14
+  `be4cd78aa`) and S/S2/S2b/S2c/S2d proofs. Completed receipts are reused
+  only for unchanged inputs; parser transport has stock-output equivalence
+  evidence, including direct and nested process serialization.
+- Eight local await-delivery selectors now use the unique method-name stem,
+  so they match the same original private frame and its declared public
+  relocation. Assertions, intercepted values and fixture behavior are unchanged.
+  All eight files pass alone again on P14. Final-input receipts retain exact
+  **117-file / 523-case** parity with the preparation baseline.
+- Refresh scope is now **398 exact faults**: 258 prior kills in the four
+  P13-rewritten bodies, 76 witnesses affected by selector/scheduling-budget
+  test edits, and 64 retained references. Three retained source audits remain.
+  **140** original control selections precede these runs. Two clock faults
+  separately check late retry and archive capability; the retained-Retry
+  lifetime fault is identical to refresh point `rb_g0001`.
+- The fresh **364-file / 2,278-outcome** original comparison is running;
+  mutation outcomes are pending. Evidence remains `p15/rebase/`. Application
+  source and dependencies still match accepted P14. No production creation,
+  CI transition, full suite, build, push or device action at this checkpoint.
 
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 

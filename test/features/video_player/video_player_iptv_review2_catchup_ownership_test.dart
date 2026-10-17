@@ -144,7 +144,7 @@ void main() {
         final lookup = IptvAwaitDelivery(
           kind == 'start-over'
               ? 'startIptvProgrammeFromBeginning'
-              : '_playIptvCatchup',
+              : 'playIptvCatchup',
           (v) => v is String,
         );
         Future<void>? work;

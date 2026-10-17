@@ -28,7 +28,7 @@ void main() {
             if (origin == 'empty-channel') 'source_playlist_id': '',
           },
         );
-        final hold = IptvAwaitDelivery('_playIptvCatchup', (v) => v == null);
+        final hold = IptvAwaitDelivery('playIptvCatchup', (v) => v == null);
         d.response = iptvPanelReply;
         Future<void>? work;
         try {

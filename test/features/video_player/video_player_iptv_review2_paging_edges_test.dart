@@ -145,7 +145,7 @@ void main() {
       ];
       final late = iptvChannel(20, group: 'Sports');
       final delivery = IptvAwaitDelivery(
-        '_requestAdjacentIptvCategory',
+        'requestAdjacentIptvCategory',
         (v) => v is VpIptvZapPage,
       );
       final tail = Completer<Map<String, dynamic>?>();
