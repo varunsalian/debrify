@@ -135,6 +135,7 @@ void main() {
       try {
         await d.begin(d.screen(sources: [a]));
         await d.f.until(t, () => d.event('exhausted').isNotEmpty);
+        expect(find.text('No playable source could be started.'), findsWidgets);
         d.f.navigator.currentState!.pushReplacement<void, Object?>(
           MaterialPageRoute(
             builder: (_) => const Scaffold(body: Text('P16 replacement route')),

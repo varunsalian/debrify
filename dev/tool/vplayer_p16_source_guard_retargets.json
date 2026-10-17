@@ -1,6 +1,6 @@
 {
   "phase": 16,
-  "status": "prepared; activation only in step 1 after the accepted P15 rebase",
+  "status": "live-reader retargets active at Step 0; production ownership projection awaits accepted P15 rebase",
   "files": [
     "test/manual_source_validation_contract_test.dart",
     "test/android_tv_mdblist_progress_source_test.dart",

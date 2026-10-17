@@ -157,6 +157,7 @@ void main() {
           ),
         );
         await d.openEntered();
+        expect(d.subscriptions.where((s) => s.owner == 'tv'), hasLength(5));
         // Finish the duration wait before disposal, while keeping width at zero
         // so the startup watch itself is still pending.
         d.player.emit('duration', const Duration(minutes: 20));
