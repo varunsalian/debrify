@@ -7677,6 +7677,35 @@ remain byte-identical to `be4cd78aa`; no production moves or bug fixes.
   per-case proofs and the final reduced comparison are still pending.
   Application, packages and pubspec remain byte-identical to `be4cd78aa`.
 
+
+### 2026-10-17 — Phase 17 Step 0 guard-boundary checkpoint (in progress)
+
+- Four additional files pass **alone on both preparation and detached
+  be4cd78aa application code**, with formatting and analysis clean:
+  `prefetch_guards` (9), `guide_sheet_contract` (4), `channel_prelude` (3),
+  and `channel_contracts` (8). Accepted positives now total **246 cases /
+  28 new files**, all with detached standalone receipts. Frozen reduced
+  preparation inventory: **257 baseline +28 new files =285**.
+- The new cases cover every progress-preparation guard through real position
+  events; startup validation waits for actual frame acceptance and completed
+  initialization. Public TV input creates a scrub preview and live buffering
+  before a held pause; every channel route clears both and starts its overlay.
+  Playlist sheets cover movie selection, ordinary series manual policy and
+  synthetic collection-title/IMDb inputs. Zero-percent seeks, directory-free
+  Stremio title publication, resolver capability, subtitle diagnostic source
+  and next-slot dedupe preventing episode-fetch fallback are asserted.
+- Evidence: `p17/step0/feedback-guards-*`, `alone-guards-*` and
+  `alone-guards-receipts.json`. Failed prefetch startup drafts are archived
+  under `pilots/` and earn no acceptance credit. Original adapted controls
+  caught a passive-error adapter narrowing an inferred `List<Object>` field;
+  the adapter now preserves that interface. Rejected control graphs are
+  archived under `pilots/passive-sink-interface` and earn no proof credit.
+  `passive-sink-type-correction.json` records the exact runner versions.
+- The fixed controls, broad sweep, single-case assertion witnesses and final
+  reduced comparison remain in progress. All original 829 fault patches and
+  36 retained sites stay frozen. Application, packages and pubspec remain
+  byte-identical to `be4cd78aa`; no production moves or bug fixes.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

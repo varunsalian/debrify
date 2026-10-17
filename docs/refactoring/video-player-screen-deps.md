@@ -13436,3 +13436,15 @@ old harness default. Exact event ownership, relocation and unchanged recursive
 hashes are recorded in `routing-remediation.json`; unrelated evidence was
 untouched. Both SDK wrappers now enforce P17 routing. Remaining guard drafts,
 systematic/retained closure, per-case proofs and final gate remain pending.
+
+
+Four further suites pass alone against the unchanged application on both
+preparation and detached original code: progress/startup preparation guards
+(9), movie/ordinary/synthetic sheet contracts (4), public TV scrub/buffering
+preludes (3), and channel offset/title/resolver/diagnostic/dedupe contracts (8).
+Current positives: **246 cases /28 files**, every file with a detached
+standalone receipt (`alone-guards-receipts.json` supplements the earlier
+receipts). Preparation inventory: **257 +28 =285**. The passive-error adapter's
+inferred-field narrowing was rejected by original controls and corrected to
+preserve `List<Object>`; those failed controls are archived and receive no
+proof credit. Fixed controls and remaining mutation/gate closure are pending.
