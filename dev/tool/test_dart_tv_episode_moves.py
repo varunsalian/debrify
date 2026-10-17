@@ -22,6 +22,8 @@ def main():
  retained=retained_manifest(SOURCE,FEATURE,original,BASE,a.parser_package)
  assert not check(retained,original,{SOURCE:original},a.parser_package)
  cases=[
+  ('timer-inert-field','vp_debrify_tv_banner.dart','Timer? debrifyBannerTimer;','Timer? debrifyBannerTimer = Timer(Duration.zero, () {});'),
+  ('entries-inert-field','vp_episode_guide.dart','List<PlaylistEntry>? syntheticGuideEntries;','List<PlaylistEntry>? syntheticGuideEntries = [];'),
   ('generation-setter','lib/screens/video_player_screen.dart','_s._episodeNavigationGeneration = v','_s._playlistIdentityToken = v'),
   ('increment','vp_episode_fetch.dart','_host.episodeNavigationGeneration++','_host.episodeNavigationGeneration--'),
   ('clock-capture','vp_debrify_tv_banner.dart','if (resolving || _host.isTransitioning)','if (_host.isTransitioning || _host.isTransitioning)'),
@@ -44,7 +46,7 @@ def main():
  changed['declarations'].append(copy.deepcopy(next(r for r in spec['declarations'] if r['fate']=='moved')))
  assert check(changed,original,sources,a.parser_package)
  a.evidence.parent.mkdir(parents=True,exist_ok=True);a.evidence.write_text(json.dumps(dict(label='PROVISIONAL',original_self_compare='PASS',positive='PASS',negatives=results,duplicate_move='rejected',retained_references=len(sites)),indent=2)+'\n')
- print('PASS P17 original self-comparison, materialization, 12 independent negatives')
+ print(f'PASS P17 original self-comparison, materialization, {len(results)+1} independent negatives')
 
 
 if __name__=='__main__':main()

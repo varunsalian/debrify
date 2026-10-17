@@ -7570,6 +7570,33 @@ for Step 0 and Claude’s independent mutation sample.
   reader, checker or historical ownership rules. All proof receipts remain in
   `refactor-evidence/vplayer/p17/`. No production changes or bug fixes.
 
+
+### 2026-10-17 — Phase 17 Step 0 characterization checkpoint (in progress)
+
+- **167 cases / 17 suites pass** on the detached `be4cd78aa` application
+  (184 successful outcomes including loads; Flutter exit 0). New tests cover
+  channel payloads/callers, banner timing, guide-map identity, actual post-switch
+  tracker traffic with and without launch identity, the episode ladder and
+  synthetic guide, real fetch/resolver/profile boundaries, late seek tails and
+  synchronous pruning after held attempt completion. Discovered single-file
+  IMDb reset and the next lookup are observed through the existing menu and
+  held metadata transport.
+- Changed-test formatting/analysis pass. Both retargeted source-guard suites
+  pass through the unmodified validating reader. The real provisional manifest
+  now has **14 independent negative checks**, including effectful timer/list
+  initializer rejection; original self-comparison/materialization still pass.
+  No history relaxation, placeholder parent manifest or new production seam.
+- The frozen reduced inventory is **257 preparation-baseline files + 17 new
+  files = 274 suites**. The original baseline list remains explicit; the new
+  files are registered with the existing behavior-test inventory. Current
+  production checker/analyzer/size ownership stays P14.
+- Evidence `p17/step0/original*`, `p17/guard-positives.log`,
+  `p17/stepT/negatives-step0.json`, and per-file `p17/step0/alone-*` under the
+  shared evidence root. Individual-file runs and adapted mutation controls are
+  still in flight. The systematic sweep, per-case witnesses, mutation table and
+  final reduced comparison remain required; this is **not Step-0 acceptance**.
+  Application, packages and `pubspec` remain byte-identical to `be4cd78aa`.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

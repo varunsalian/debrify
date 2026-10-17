@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'features/video_player/support/vp_source_reader.dart';
@@ -47,11 +50,18 @@ void main() {
       final fetch = vpSourceDeclaration(
         '_VideoPlayerScreenState._fetchAndPlayEpisode',
       );
-      expect(fetch, contains('(!autoAdvance || !_sleepStopLatched)'));
+      final applied =
+          (jsonDecode(
+                File('dev/tool/dart_moves/vplayer_p17.json').readAsStringSync(),
+              )
+              as Map)['status'] ==
+          'applied';
+      final owner = applied ? '_host.' : '_';
+      expect(fetch, contains('(!autoAdvance || !${owner}sleepStopLatched)'));
       final candidate = vpSourceDeclaration(
         '_VideoPlayerScreenState._tryEpisodeCandidate',
       );
-      expect(candidate, contains('_isAutoAdvancing = autoAdvance;'));
+      expect(candidate, contains('${owner}isAutoAdvancing = autoAdvance;'));
       expect(
         candidate,
         contains('suppressResume: autoAdvance || shuffleGeneration != null'),
