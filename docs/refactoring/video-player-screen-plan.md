@@ -6030,6 +6030,18 @@ for Step 0 and Claude’s independent mutation sample.
   assertion-witness refreshes and two additional clock faults. Production
   creation remains pending those results and first-assertion trace review.
 
+### 2026-10-17 — Phase 15 original control checkpoint
+
+- All **140 exact original control selections pass**, with every selected
+  body executed and zero skips. This includes all revised clock controls.
+  Exact plan/test hashes are pinned in `p15/rebase/refresh-control-results/`.
+  The long-running controller retained an obsolete compiled count assertion;
+  its receipts independently validate all 140. Controls are not repeated.
+- The 15 compile-invalid revalidations, two additional clock faults and 398
+  assertion-witness refreshes remain pending. Their serial driver waits on
+  the shared execution guard used by other executors. No guard is bypassed,
+  no application source is changed and no production move begins yet.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

@@ -12712,3 +12712,10 @@ The 140 original controls and changed-input fault refreshes are pending.
 The 21 changed-body source arguments are renewed without kill credit; 15
 compile-invalid candidates are queued, and seven target-pending entries stay
 pending. Application code is still the accepted P14 original.
+
+All **140 exact original controls pass**, with every body executed and no skips.
+Plan and test hashes are pinned in `p15/rebase/refresh-control-results/`.
+Changed-input fault refreshes remain queued on the shared serial execution
+guard; application code is still accepted P14 and the production move has not
+started. The controller's obsolete compiled count check does not invalidate the
+independently verified 140 control receipts.
