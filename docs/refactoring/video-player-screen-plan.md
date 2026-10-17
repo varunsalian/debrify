@@ -6004,6 +6004,32 @@ for Step 0 and Claude’s independent mutation sample.
   source and dependencies still match accepted P14. No production creation,
   CI transition, full suite, build, push or device action at this checkpoint.
 
+### 2026-10-17 — Phase 15 rebased reduced baseline identity checkpoint
+
+- Fresh accepted-P14 original run loads **all 364 expected suites** and
+  matches **all 2,278 identities** in the preparation/P14 union: **2,277
+  successes, one unchanged failure**. Both the 1,772 preparation outcomes
+  and 1,681 P14 outcomes match exactly; overlaps agree. No missing cases,
+  changed outcomes, new skips or baseline recording. Flutter SDK matches
+  preparation. Application/dependency inputs remain accepted `be4cd78aa`.
+- All **523 P15 cases pass** in the broader run as well as the final-input
+  standalone runs. This includes the revised three long-clock archive cases,
+  their capability=false siblings and the retained 75-second Retry case.
+  The sole failure is the existing source-text assertion
+  `test/playback_startup_view_test.dart::startup shield remains opaque and
+  noninteractive in PiP`, already present in both prior baselines. Its source
+  and expected outcome are unchanged; it is not added to a failure allowlist.
+- The four changed-body audit also renews **21 source-equivalence arguments**
+  by exact token projection of accepted P13 recording receivers. Their
+  predicates/order/callers remain protected by the historical proofs; none
+  earns kill credit. **15** changed-body compile-invalid candidates are
+  queued for revalidation; all seven target-pending entries remain pending.
+- Evidence: `p15/rebase/rebased-baseline-proof.json`,
+  `reduced-original.jsonl` / `.env.json`, `source-proof-rebase.json`.
+  The **140** original control selections are running before the 398
+  assertion-witness refreshes and two additional clock faults. Production
+  creation remains pending those results and first-assertion trace review.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

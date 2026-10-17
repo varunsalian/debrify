@@ -12699,3 +12699,16 @@ The final refresh plan is 398 faults (258 changed-body, 76 changed-test witnesse
 The 364-file original baseline and mutation runs remain pending. No production
 move is included. See `p15/rebase/frame-marker-equivalence.json`, standalone
 receipts and `mechanical-results.json`.
+
+### P15 rebased reduced baseline identities
+
+The fresh `be4cd78aa` original loads all 364 suites and exactly matches all
+2,278 preparation/P14 union outcomes: 2,277 successes and the one historical
+PiP startup-shield source-text failure. All 523 P15 cases pass in the broader
+run, including every revised long-clock case. No outcomes or allowlists are
+re-recorded. SDK and application/dependency identity checks pass. See
+`p15/rebase/rebased-baseline-proof.json` and the stable-tree `.env.json`.
+The 140 original controls and changed-input fault refreshes are pending.
+The 21 changed-body source arguments are renewed without kill credit; 15
+compile-invalid candidates are queued, and seven target-pending entries stay
+pending. Application code is still the accepted P14 original.
