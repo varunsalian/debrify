@@ -7631,6 +7631,27 @@ are unchanged; the 17 separate additions bring the total to **201 cases**.
 Their 19 original mutation runs all assertion-fail (17 per-case proofs plus
 two replays closing the initial directory gaps).
 
+Two further suites (`guide_guards`, `parser_publication`) pass alone on
+detached `be4cd78aa`, with **7 cases** and **10 assertion-failing mutations**
+after their two complete original controls. New characterization total:
+**208 cases /23 files**; frozen reduced preparation inventory **257 +23 =280**.
+Clock expectations now explicitly follow the original behavior: a Down key
+reveals controls, guides hide them, and guide close keeps them hidden. The
+rejected exploratory visibility assumption is archived, not accepted.
+Source-action capability is asserted before dispatch so absent publication
+fails cleanly. Earlier test/support graph hashes remain unchanged. The broad
+sweep, remaining per-case witnesses and reduced comparison are still pending.
+
+The separate `transition_timer` suite also passes alone on the preparation
+worktree's unchanged original application bytes: three real pause holds
+(next/by-id/Stremio) and the Stremio 1,500 ms stop/resource protocol, including
+texture restoration and duplicate-playing behavior. A rejected exploratory
+assertion ran before queued `setState` rendered; the corrected case pumps a
+frame while the same pause stays held. Detached replay and mutation proofs
+for this file are pending. Current total **212 cases /24 new files** and
+reduced preparation inventory **257 +24 =281**. Application/packages/pubspec
+remain byte-identical to `be4cd78aa`; no production moves or bug fixes.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

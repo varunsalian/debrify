@@ -13382,3 +13382,46 @@ are unchanged. All **19** closure mutation runs now assertion-fail: each of the
 initial directory runtime/survivor gaps with clean assertions. Four matching
 adapted control graphs pass with every selected body executed and zero skips.
 The broad sweep and remaining original-case witnesses are still pending.
+
+Two further separate suites pass alone on detached original application code:
+`guide_guards` (3) and `parser_publication` (4). The former observes the clock
+at explicit controls/guide transitions: the public Down key reveals controls,
+opening either guide hides them, and closing the guide keeps them hidden. An
+emptied published directory refuses reopening without hiding already visible
+controls. The first exploratory draft incorrectly assumed initial/close
+visibility; its failed run is archived under `pilots/guide-clock-assumption`
+and receives no acceptance credit. The corrected test follows the original
+callbacks and does not change application behavior.
+
+Source-publication cases assert capability before dispatch, for non-list,
+mixed, maps-only and empty payloads. Their original parsing behavior is the
+same as the first checkpoint; the additional assertions avoid fixture
+null-dereferences hiding a missing publication. All **10** targeted original
+mutation runs assertion-fail, after two complete positive adapted controls.
+The preparation inventory is **257 baseline +23 new files =280** with
+**208 new cases**, every new file passing alone. Receipts:
+`alone-more-*`, `controls-more/`, `mutations-more/`.
+
+Mutation batch headroom now reflects completed control durations (120 seconds
+per candidate; the widget timeout stays 30 seconds). SDK-lock waiting is
+excluded, and partial/invalid-selector outputs must replay. No assertion,
+selected-case list or candidate is removed. Exact runner versions, including
+the earlier 45-second-per-candidate version, are archived by their recorded
+SHA-256 under `tool-versions/`; `runtime-budget-note.json` records the observed
+cohort and change. No timeout receives kill credit.
+
+`transition_timer` adds four standalone positives on the preparation worktree's
+byte-identical **be4cd78aa application** (format/analyze clean): next/by-id/
+Stremio real pause holds observe the outgoing texture hidden under the
+transition and the incoming texture restored after open. They pump one frame
+while pause remains held; the rejected no-frame draft is archived separately
+under `pilots/transition-held-before-render`. The fourth case observes the
+Stremio switch canceling the playback listener's phase/3-second timers,
+retaining its full 1,500 ms window, stopping the public animation controller,
+removing the overlay, and refusing to rearm on a duplicate playing event.
+This file's detached replay and mutation proofs remain pending.
+
+Current new characterization: **212 cases /24 files**; frozen preparation
+inventory **257 +24 =281**. Every new file passes alone against the unchanged
+original application bytes; 23 also have detached standalone receipts. These
+counts do not mark the still-running broad sweep or final comparison complete.
