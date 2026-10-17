@@ -12719,3 +12719,30 @@ Changed-input fault refreshes remain queued on the shared serial execution
 guard; application code is still accepted P14 and the production move has not
 started. The controller's obsolete compiled count check does not invalidate the
 independently verified 140 control receipts.
+
+### P15 final rebase and Step-0 closure
+
+All affected input evidence is closed on `be4cd78aa`: 143 original controls,
+407 genuine assertion kills, 15 compile-invalid revalidations and 21 source
+proofs. The first actual test failure is audited for every kill; application
+logs merely containing “Expected” are excluded. Seventy changed/unavailable
+historical source groups were reviewed, with no setup or unhandled runtime
+credit. Two original coupled callback/capability spans were repaired in the
+mutation re-anchoring; both invalid attempts remain archived and 396 unchanged
+receipts are reused by exact point/variant/test identity.
+
+Seven affected fixed-sample faults now have refreshed kills. Thirteen reuse
+exact accepted test bytes and declaration tokens. The old k18 audio witness
+survived alone, so its exact fault is instead killed by a new public stale-ladder
+error-isolation test. Both original controls for that case pass. The accepted
+20/22 disposition keeps k4/k12 as source equivalences with guards retained.
+Unrelated clock failures are excluded from every selected witness.
+
+The 117 prior standalone files / 523 cases remain unchanged; one new file/case
+passes alone on original P14, giving 118 / 524 characterization coverage.
+The final inventory is 365 suites / 2,279 outcomes: the unchanged 2,278-identity
+baseline plus that separately observed original case. No old outcome or golden
+fixture is re-recorded. Exact 60-versus-61s distinction remains device-pending.
+See `p15/rebase/refresh-closure.json`, `assertion-audit.json`,
+`mutation-final-results/reuse-proof.json` and `newcase-original-v2.jsonl`.
+Application source is still accepted P14 until the following production move.

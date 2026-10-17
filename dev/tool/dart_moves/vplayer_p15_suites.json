@@ -133,6 +133,7 @@
     "test/features/video_player/video_player_iptv_review2_source_episode_ownership_test.dart",
     "test/features/video_player/video_player_iptv_review2_source_rows_test.dart",
     "test/features/video_player/video_player_iptv_review2_source_startup_test.dart",
+    "test/features/video_player/video_player_iptv_review2_stale_ladder_error_test.dart",
     "test/features/video_player/video_player_iptv_review2_stale_switch_reveal_test.dart",
     "test/features/video_player/video_player_iptv_review2_start_over_identity_test.dart",
     "test/features/video_player/video_player_iptv_review2_state_test.dart",
@@ -368,5 +369,8 @@
     "test/tracking_source_policy_test.dart"
   ],
   "schema": 1,
-  "original": "be4cd78aa"
+  "original": "be4cd78aa",
+  "original_extensions": [
+    "refactor-evidence/vplayer/p15/rebase/newcase-original-v2.jsonl"
+  ]
 }

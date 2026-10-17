@@ -6042,6 +6042,49 @@ for Step 0 and Claude’s independent mutation sample.
   the shared execution guard used by other executors. No guard is bypassed,
   no application source is changed and no production move begins yet.
 
+### 2026-10-17 — Phase 15 rebase / Step-0 closure (production authorized)
+
+- FINAL materialization is re-derived on accepted P14 `be4cd78aa` with all
+  32 earlier destinations protected, frozen Hosts, four regenerated adapters,
+  exhaustive partition/import/order/adapter proofs and refreshed analyzer
+  probes. All 44 serial preproduction mechanical checks pass. The seven
+  prototypes remain byte-identical to preparation; no history relaxation.
+- Changed-input evidence closes: **143 original controls**, **407 assertion
+  kills** (398 systematic/retained refreshes, two clock faults, seven affected
+  predetermined independent-sample faults), **15** compile-invalid
+  revalidations and **21** renewed source proofs. All actual first failures
+  were audited; 131 changed/unavailable historical locations were reviewed
+  in 70 source groups. No setup, unhandled runtime or timeout earns kill credit.
+- Two retained mutations originally span a callback and its capability flag.
+  Re-anchoring only their first identifier made invalid widgets. Their complete
+  original two-occurrence spans are now re-anchored and assertion-killed;
+  the invalid attempts remain archived. The other 396 receipts are reused
+  only after exact per-point fault/test/runner/original/variant-hash checks.
+- Accepted sample remains **20/22**: seven affected witnesses are refreshed,
+  13 reuse token-identical declarations and byte-identical accepted test
+  inputs; `k4`/`k12` retain their source equivalences and production guards.
+  `k18`'s selected old audio case survived in isolation and does not exercise
+  ladder cleanup. A new public-caller test overlaps two candidate ladders,
+  retires the older one, and checks that an error in the newer pending probe
+  stays muted. It passes alone and under the original wrapper, and kills the
+  exact predetermined `k18` fault at the rendered error assertion. No credit
+  relies on the unrelated old clock failures; no application bug is fixed.
+- All **117 prior files / 523 cases** retain standalone parity and pass in
+  the broader original run. The new file adds one separately observed passing
+  original case: **118 files / 524 characterization cases**. The frozen gate
+  inventory is now **365 suites / 2,279 expected outcomes**. Its baseline is
+  the unchanged 364-suite/2,278-outcome run plus the new original-only receipt;
+  no prior outcome is re-recorded. The sole historical failure remains the
+  PiP startup-shield source-text assertion. Every revised long-clock case
+  passes in standalone, broader and isolated-control runs. Exact 60-versus-61s
+  discrimination remains device-pending, without old mutation credit.
+- Evidence: `p15/rebase/refresh-closure.json`, `assertion-audit.json`,
+  `mutation-final-results/reuse-proof.json`, `independent-reuse-proof.json`,
+  `independent-k18-results/`, `clock-closure.json` and
+  `newcase-original-v2.jsonl`. Existing snapshots and shared fixtures are
+  unchanged. Application code/dependencies still equal accepted P14 at this
+  checkpoint. Next: the already-authorized Step 1, then the clean reduced gate.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
