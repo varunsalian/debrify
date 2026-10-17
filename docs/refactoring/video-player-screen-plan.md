@@ -7524,6 +7524,26 @@ for Step 0 and Claude’s independent mutation sample.
   identity receipts). No application defect or flake observed. **STOP:** Step 1
   awaits the P15 merge, explicit rebase instruction and refreshed final T;
   existing native/device and M3 integration/build obligations remain pending.
+### 2026-10-17 — Phase 17 provisional Step T (no production moves)
+
+- Preparation application `be4cd78aa`, clean facade/dependency parity. Draft
+  `vplayer_p17.json` is explicitly **PROVISIONAL**: 25 moved declarations,
+  36 retained occurrences, complete partition/import/order/adapter scaffolding,
+  zero virtual comparison differences. No P15/P16 dummy manifests or history
+  relaxation; finalization follows both accepted merges and preserves M3.
+- Normally formatted five-file sizes: **379 / 89 / 303 / 426 / 118**. The five
+  exact Hosts, including both generation accessors, are frozen in the manifest and deps. The two
+  relocated nullable initializers and all constructors are inert.
+- Original self-comparison and 12 real-configuration negatives pass. Prototype
+  root/strict/receiver diagnostics: **159 / 235 / 175**, zero errors. Probe
+  identities are provisional; current CI/analyzer ownership remains P14.
+- The Stremio guide section comment moves with initial-id discovery. P16's
+  declaration-reader retarget removes that shared anchor; repeat the scan on
+  its accepted merge. Retained adapters at this base remain unchanged.
+- Evidence `refactor-evidence/vplayer/p17/stepT/`; parser packages are isolated,
+  heavy work uses `nice -n 19`, Flutter/Dart commands serialize with the active
+  executors. `pubspec` unchanged. Step 0 remains required; no parity or
+  mutation-coverage acceptance is claimed at this checkpoint.
 
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 

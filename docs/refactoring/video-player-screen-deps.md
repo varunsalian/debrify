@@ -13089,3 +13089,194 @@ Twenty standalone original suites preserve all 201 Step-0b outcomes.
 The reduced inventory expands from 278 to 392 for every P15 player suite.
 Analyzer probes, changed-input mutation refresh and complete reduced comparison
 remain pending. Completed receipts: `p16/rebase/`, parent `commands.jsonl`.
+## Phase 17 provisional Step T — TV channels, banners and episode fetch (2026-10-17)
+
+Preparation application **be4cd78aa**; manifest status `draft`, explicitly **PROVISIONAL**. No application, dependency, production CI or history change. Final proofs wait for accepted P15/P16 parents; no placeholder manifests or history relaxation.
+
+| Destination / Host | Formatted lines | Distinct names / declarations |
+|---|---:|---:|
+| `vp_debrify_tv_channels.dart` / `VpDebrifyTvChannelsHost` | 379 | 36 / 40 |
+| `vp_debrify_tv_banner.dart` / `VpDebrifyTvBannerHost` | 89 | 10 / 12 |
+| `vp_stremio_tv_channels.dart` / `VpStremioTvChannelsHost` | 303 | 41 / 47 |
+| `vp_episode_fetch.dart` / `VpEpisodeFetchHost` | 426 | 24 / 28 |
+| `vp_episode_guide.dart` / `VpEpisodeGuideHost` | 118 | 18 / 20 |
+
+Stremio has 41 names / 47 declarations (six get/set pairs); the design estimate of approximately 46 declarations adds no Host name.
+
+All 25 moved declarations (23 methods, two inert nullable fields), complete original facade fates, imports, relative orders, receiver edits, eager inert assignments and adapter scaffolding compare with zero differences. Both `episodeNavigationGeneration` accessors are frozen. Preparation adapters route P15/P16 calls to their still-retained facade methods; the manifest records exact final routes and requires regeneration after rebase. No earlier adapter is patched at this base.
+
+VpDebrifyTvChannelsHost (live facade projections, exact signatures/access modes):
+
+```dart
+Map<String, String>? get activeHttpHeaders => _s._activeHttpHeaders;
+List<ChannelEntry> get channelEntries => _s._channelEntries;
+set channelEntries(List<ChannelEntry> v) => _s._channelEntries = v;
+ValueNotifier<bool> get controlsVisible => _s._controlsVisible;
+String? get currentChannelId => _s._currentChannelId;
+set currentChannelId(String? v) => _s._currentChannelId = v;
+set currentChannelName(String? v) => _s._currentChannelName = v;
+set currentChannelNumber(int? v) => _s._currentChannelNumber = v;
+set currentStreamUrl(String? v) => _s._currentStreamUrl = v;
+Duration get duration => _s._duration;
+set dynamicTitle(String v) => _s._dynamicTitle = v;
+set isTransitioning(bool v) => _s._isTransitioning = v;
+int get pikPakRetryId => _s._pikPakRetryId;
+set pikPakRetryId(int v) => _s._pikPakRetryId = v;
+mk.Player get player => _s._player;
+set showChannelGuide(bool v) => _s._showChannelGuide = v;
+set singleFileImdbFetched(bool v) => _s._singleFileImdbFetched = v;
+set singleFileImdbId(String? v) => _s._singleFileImdbId = v;
+int get tvScrubGeneration => _s._tvScrubGeneration;
+set tvScrubGeneration(int v) => _s._tvScrubGeneration = v;
+set tvStaticMessage(String v) => _s._tvStaticMessage = v;
+set tvStaticSubtext(String v) => _s._tvStaticSubtext = v;
+void tvAbandonScrub() => _s._tvAbandonScrub();
+void clearBufferingIndicator() => _s._clearBufferingIndicator();
+void startTransitionOverlay() => _s._startTransitionOverlay();
+void resetSubtitleState() => _s._resetSubtitleState();
+Future<void> openMedia(mk.Media media, {required bool play, bool? desiredPlay, bool liveStream = false, EpisodePlaybackRequest? request, bool Function()? beforeOpen, Torrent? source, int? preserveStartupEpoch}) => _s._openMedia(media, play: play, desiredPlay: desiredPlay, liveStream: liveStream, request: request, beforeOpen: beforeOpen, source: source, preserveStartupEpoch: preserveStartupEpoch);
+Future<void> waitForVideoReady() => _s._waitForVideoReady();
+Duration? randomStartOffset(Duration total) => _s._randomStartOffset(total);
+Duration? percentStartOffset(Duration total) => _s._percentStartOffset(total);
+void hideIptvZapBanner({bool immediate = false}) => _s._hideIptvZapBanner(immediate: immediate);
+void raiseDebrifyBanner() => _s._debrifyBanner.raiseDebrifyBanner();
+bool get mounted => _s.mounted;
+void setState(VoidCallback fn) => _s._vpSetState(fn);
+List<Map<String, dynamic>>? get channelDirectory => _s.widget.channelDirectory;
+Future<Map<String, dynamic>?> Function(String)? get requestChannelById => _s.widget.requestChannelById;
+Future<Map<String, dynamic>?> Function()? get requestNextChannel => _s.widget.requestNextChannel;
+bool get startFromRandom => _s.widget.startFromRandom;
+double? get startAtPercent => _s.widget.startAtPercent;
+Future<bool> setSubtitleTrackWithDiagnostics(mk.SubtitleTrack track, {required String source, bool Function()? isCurrent}) => _s._subtitleApply.setSubtitleTrackWithDiagnostics(track, source: source, isCurrent: isCurrent);
+```
+
+VpDebrifyTvBannerHost (live facade projections, exact signatures/access modes):
+
+```dart
+bool get anyPlayerOverlayOpen => _s._anyPlayerOverlayOpen;
+ValueNotifier<bool> get controlsVisible => _s._controlsVisible;
+bool get debrifyBannerFloatingMounted => _s._debrifyBannerFloatingMounted;
+set debrifyBannerFloatingMounted(bool v) => _s._debrifyBannerFloatingMounted = v;
+bool get debrifyTvOwnsIdentity => _s._debrifyTvOwnsIdentity;
+bool get isTransitioning => _s._isTransitioning;
+PlaybackUiClockController get playbackUiClock => _s._playbackUiClock;
+bool get showDebrifyBanner => _s._showDebrifyBanner;
+set showDebrifyBanner(bool v) => _s._showDebrifyBanner = v;
+bool get mounted => _s.mounted;
+void setState(VoidCallback fn) => _s._vpSetState(fn);
+bool get hideSeekbar => _s.widget.hideSeekbar;
+```
+
+VpStremioTvChannelsHost (live facade projections, exact signatures/access modes):
+
+```dart
+ValueNotifier<bool> get controlsVisible => _s._controlsVisible;
+set currentSourceIndex(int v) => _s._currentSourceIndex = v;
+set currentStreamUrl(String? v) => _s._currentStreamUrl = v;
+String? get currentStremioTvChannelId => _s._currentStremioTvChannelId;
+set currentStremioTvChannelId(String? v) => _s._currentStremioTvChannelId = v;
+set currentStremioTvContentEpisode(int? v) => _s._currentStremioTvContentEpisode = v;
+set currentStremioTvContentImdbId(String? v) => _s._currentStremioTvContentImdbId = v;
+set currentStremioTvContentSeason(int? v) => _s._currentStremioTvContentSeason = v;
+set currentStremioTvContentTitle(String? v) => _s._currentStremioTvContentTitle = v;
+set currentStremioTvContentType(String? v) => _s._currentStremioTvContentType = v;
+String get dynamicTitle => _s._dynamicTitle;
+set dynamicTitle(String v) => _s._dynamicTitle = v;
+List<Map<String, dynamic>>? get effectiveStremioTvChannels => _s._effectiveStremioTvChannels;
+bool get hasStremioTvGuide => _s._hasStremioTvGuide;
+set isTransitioning(bool v) => _s._isTransitioning = v;
+int get pikPakRetryId => _s._pikPakRetryId;
+set pikPakRetryId(int v) => _s._pikPakRetryId = v;
+mk.Player get player => _s._player;
+set rainbowActive(bool v) => _s._rainbowActive = v;
+AnimationController get rainbowController => _s._rainbowController;
+set resolveStremioSourceOverride(Future<String?> Function(Torrent)? v) => _s._resolveStremioSourceOverride = v;
+set showStremioTvGuide(bool v) => _s._showStremioTvGuide = v;
+bool get showStremioTvNextLoading => _s._showStremioTvNextLoading;
+set showStremioTvNextLoading(bool v) => _s._showStremioTvNextLoading = v;
+set singleFileImdbFetched(bool v) => _s._singleFileImdbFetched = v;
+set singleFileImdbId(String? v) => _s._singleFileImdbId = v;
+set stremioSourcesOverride(List<Torrent>? v) => _s._stremioSourcesOverride = v;
+set stremioTvChannelsOverride(List<Map<String, dynamic>>? v) => _s._stremioTvChannelsOverride = v;
+set transitionPhase(int v) => _s._transitionPhase = v;
+set transitionPhase2Started(DateTime? v) => _s._transitionPhase2Started = v;
+Timer? get transitionPhaseTimer => _s._transitionPhaseTimer;
+set transitionRunning(bool v) => _s._transitionRunning = v;
+Timer? get transitionStopTimer => _s._transitionStopTimer;
+set transitionStopTimer(Timer? v) => _s._transitionStopTimer = v;
+int get tvScrubGeneration => _s._tvScrubGeneration;
+set tvScrubGeneration(int v) => _s._tvScrubGeneration = v;
+void tvAbandonScrub() => _s._tvAbandonScrub();
+void clearBufferingIndicator() => _s._clearBufferingIndicator();
+void startTransitionOverlay() => _s._startTransitionOverlay();
+void resetSubtitleState() => _s._resetSubtitleState();
+Future<void> openMedia(mk.Media media, {required bool play, bool? desiredPlay, bool liveStream = false, EpisodePlaybackRequest? request, bool Function()? beforeOpen, Torrent? source, int? preserveStartupEpoch}) => _s._openMedia(media, play: play, desiredPlay: desiredPlay, liveStream: liveStream, request: request, beforeOpen: beforeOpen, source: source, preserveStartupEpoch: preserveStartupEpoch);
+bool get mounted => _s.mounted;
+void setState(VoidCallback fn) => _s._vpSetState(fn);
+String? get stremioTvCurrentChannelId => _s.widget.stremioTvCurrentChannelId;
+Future<Map<String, dynamic>?> Function(String)? get stremioTvNextProvider => _s.widget.stremioTvNextProvider;
+Future<bool> setSubtitleTrackWithDiagnostics(mk.SubtitleTrack track, {required String source, bool Function()? isCurrent}) => _s._subtitleApply.setSubtitleTrackWithDiagnostics(track, source: source, isCurrent: isCurrent);
+void resetLocalCompletionState() => _s._completion.resetLocalCompletionState();
+```
+
+VpEpisodeFetchHost (live facade projections, exact signatures/access modes):
+
+```dart
+set augmentedSources(List<Torrent>? v) => _s._augmentedSources = v;
+bool get canFetchEpisodes => _s._canFetchEpisodes;
+int get currentSourceIndex => _s._currentSourceIndex;
+set currentSourceIndex(int v) => _s._currentSourceIndex = v;
+Duration get duration => _s._duration;
+List<Torrent>? get effectiveSources => _s._effectiveSources;
+bool get episodeFetchInProgress => _s._episodeFetchInProgress;
+set episodeFetchInProgress(bool v) => _s._episodeFetchInProgress = v;
+int get episodeNavigationGeneration => _s._episodeNavigationGeneration;
+set episodeNavigationGeneration(int v) => _s._episodeNavigationGeneration = v;
+set isAutoAdvancing(bool v) => _s._isAutoAdvancing = v;
+bool get isPlaying => _s._isPlaying;
+bool get isTransitioning => _s._isTransitioning;
+set isTransitioning(bool v) => _s._isTransitioning = v;
+int get playlistIdentityToken => _s._playlistIdentityToken;
+Duration get position => _s._position;
+int get showShuffleGeneration => _s._showShuffleGeneration;
+bool get sleepStopLatched => _s._sleepStopLatched;
+bool get validationGateActive => _s._validationGateActive;
+void setManualSelectionMode({bool allowResume = false}) => _s._setManualSelectionMode(allowResume: allowResume);
+Future<bool> switchToSourcePlaylist(int sourceIndex, List<PlaylistEntry> newPlaylist, {int? targetSeason, int? targetEpisode, bool validateExplicitSelection = false, bool suppressResume = false, EpisodePlaybackRequest? request}) => _s._switchToSourcePlaylist(sourceIndex, newPlaylist, targetSeason: targetSeason, targetEpisode: targetEpisode, validateExplicitSelection: validateExplicitSelection, suppressResume: suppressResume, request: request);
+bool get mounted => _s.mounted;
+BuildContext get context => _s.context;
+void setState(VoidCallback fn) => _s._vpSetState(fn);
+SeriesSourceFetcher? get seriesSourceFetcher => _s.widget.seriesSourceFetcher;
+SourcePlaylistResolve? get resolveSourceToPlaylist => _s.widget.resolveSourceToPlaylist;
+String get title => _s.widget.title;
+VpSeasonEpisodeSelection? currentSeasonEpisodeForIdentity() => _s._identify.currentSeasonEpisodeForIdentity();
+```
+
+VpEpisodeGuideHost (live facade projections, exact signatures/access modes):
+
+```dart
+List<PlaylistEntry>? get activePlaylist => _s._activePlaylist;
+bool get canFetchEpisodes => _s._canFetchEpisodes;
+int get currentIndex => _s._currentIndex;
+String? get currentSeriesImdbId => _s._currentSeriesImdbId;
+Future<void>? get episodeMetadataReady => _s._episodeMetadataReady;
+set episodeMetadataReady(Future<void>? v) => _s._episodeMetadataReady = v;
+bool get seriesImdbKnownAtLaunch => _s._seriesImdbKnownAtLaunch;
+SeriesPlaylist? get seriesPlaylist => _s._seriesPlaylist;
+SeriesPlaylist? get syntheticGuidePlaylist => _s._syntheticGuidePlaylist;
+set syntheticGuidePlaylist(SeriesPlaylist? v) => _s._syntheticGuidePlaylist = v;
+void setManualSelectionMode({bool allowResume = false}) => _s._setManualSelectionMode(allowResume: allowResume);
+({int? season, int? episode}) traktSeasonEpisode() => _s._traktSeasonEpisode();
+Future<void> preloadEpisodeInfo() => _s._preloadEpisodeInfo();
+Map<String, dynamic>? constructPlaylistItemData() => _s._constructPlaylistItemData();
+Future<bool> loadPlaylistIndex(int index, {bool autoplay = false, EpisodePlaybackRequest? request, bool skipInitialSave = false, bool preferLocalResume = false, bool suppressResume = false, Torrent? manualValidationSource, int? manualValidationSourceIndex}) => _s._loadPlaylistIndex(index, autoplay: autoplay, request: request, skipInitialSave: skipInitialSave, preferLocalResume: preferLocalResume, suppressResume: suppressResume, manualValidationSource: manualValidationSource, manualValidationSourceIndex: manualValidationSourceIndex);
+Future<EpisodePlaybackOutcome> fetchAndPlayEpisode(int season, int episode, {int? shuffleGeneration, bool autoAdvance = false, EpisodePlaybackRequest? request}) => _s._episodeFetch.fetchAndPlayEpisode(season, episode, shuffleGeneration: shuffleGeneration, autoAdvance: autoAdvance, request: request);
+String get title => _s.widget.title;
+String get videoUrl => _s.widget.videoUrl;
+String? get contentTitle => _s.widget.contentTitle;
+PlaylistViewMode? get viewMode => _s.widget.viewMode;
+```
+
+The evidence scanner records **36** retained references in `p17/stepT/retained-sites.json`. The shared `// ─── Stremio TV Guide` comment attaches to `_findInitialStremioTvChannelId` and moves. P16 already prepares declaration-reader retargeting; P17 removes the same raw end-marker dependency and must re-scan its accepted parent.
+
+Original self-comparison and the complete normally formatted split pass; 12 independent real-manifest negatives reject. Root/strict/prototype diagnostic counts: 159/235/175; no compiler errors. The receiver probe is provisional evidence, not a current/history acceptance. Commands, prototypes, Hosts, scanner and diagnostic identities: `<git-common-dir>/refactor-evidence/vplayer/p17/stepT/`.
