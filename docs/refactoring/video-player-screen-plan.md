@@ -7545,6 +7545,31 @@ for Step 0 and Claude’s independent mutation sample.
   executors. `pubspec` unchanged. Step 0 remains required; no parity or
   mutation-coverage acceptance is claimed at this checkpoint.
 
+
+### 2026-10-17 — Phase 17 Step 0 baseline checkpoint (in progress)
+
+- Detached original application `be4cd78aa`; preparation branch application and
+  dependencies remain identical. Frozen preparation inventory **257/257 suites
+  loaded**: 1,818 successful outcomes and one observed pre-existing failure,
+  `test/playback_startup_view_test.dart::startup shield remains opaque and
+  noninteractive in PiP`. Its raw one-line substring rejects the original's
+  formatted multiline `AbsorbPointer`; the test and application are preserved.
+- Command: `nice -n 19 flutter test --reporter json --no-pub
+  --dart-define=DEBRIFY_VP_TEST_HOOKS=true --concurrency=1` with all frozen files
+  explicitly listed. Complete load/outcome identities, environment and unchanged
+  before/after test hashes are in `p17/step0/base*` beneath the shared evidence
+  root. Current architecture check and its real-guard negative proofs pass.
+- Characterization fixtures and guard retargets are still being verified. The
+  completed fixture pilots are archived and receive no acceptance or mutation
+  credit. The systematic inventory enumerates **25 declarations, 906 AST
+  points (829 candidate faults), 36 retained references**; original mutation
+  execution, per-case witnesses, individual-file positives and final reduced
+  comparison remain pending. No Step-0 completion or behavior parity is claimed.
+- The source reader keeps its existing per-worktree isolated parser location;
+  an evidence-root override was rejected and withdrawn without changing the
+  reader, checker or historical ownership rules. All proof receipts remain in
+  `refactor-evidence/vplayer/p17/`. No production changes or bug fixes.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
