@@ -1,0 +1,286 @@
+// Evidence-only mutation inventory. Requires an isolated analyzer package.
+import 'dart:convert';
+import 'dart:io';
+import 'package:analyzer/dart/analysis/utilities.dart';
+import 'package:analyzer/dart/ast/ast.dart';
+import 'package:analyzer/dart/ast/visitor.dart';
+
+class Points extends RecursiveAstVisitor<void> {
+  Points(this.source, this.owner, this.rows);
+  final String source, owner;
+  final List<Map<String, Object?>> rows;
+  void add(AstNode node, String kind, Iterable<String> replacements) {
+    for (final replacement in replacements) {
+      if (replacement == node.toSource()) continue;
+      rows.add({
+        'declaration': owner,
+        'kind': kind,
+        'offset': node.offset,
+        'end': node.end,
+        'line': '\n'.allMatches(source.substring(0, node.offset)).length + 1,
+        'text': source.substring(node.offset, node.end),
+        'after': replacement,
+      });
+    }
+  }
+
+  @override
+  void visitExpressionStatement(ExpressionStatement node) {
+    final text = node.toSource();
+    if (!text.startsWith('debugPrint(') && !text.startsWith('_iptvDiag.')) {
+      add(node, 'statement-delete', [';']);
+    }
+    super.visitExpressionStatement(node);
+  }
+
+  @override
+  void visitIfStatement(IfStatement node) {
+    add(node.expression, 'condition-negate', [
+      '!(${node.expression.toSource()})',
+    ]);
+    super.visitIfStatement(node);
+  }
+
+  @override
+  void visitIfElement(IfElement node) {
+    add(node.expression, 'collection-filter', ['true', 'false']);
+    super.visitIfElement(node);
+  }
+
+  @override
+  void visitBinaryExpression(BinaryExpression node) {
+    final op = node.operator.lexeme;
+    final left = node.leftOperand.toSource(),
+        right = node.rightOperand.toSource();
+    if (['&&', '||', '??'].contains(op)) {
+      add(node, op == '??' ? 'nullable-operand' : 'logical-operand', [
+        '($left)',
+        '($right)',
+      ]);
+    } else if (['+', '-'].contains(op)) {
+      add(node, 'arithmetic-operand', ['($left)', '($right)']);
+    }
+    final changed = {
+      '==': '!=',
+      '!=': '==',
+      '>': '>=',
+      '>=': '>',
+      '<': '<=',
+      '<=': '<',
+      '+': '-',
+      '-': '+',
+      '*': '/',
+      '/': '*',
+    }[op];
+    if (changed != null) {
+      rows.add({
+        'declaration': owner,
+        'kind': 'operator',
+        'offset': node.operator.offset,
+        'end': node.operator.end,
+        'line': '\n'.allMatches(source.substring(0, node.offset)).length + 1,
+        'text': op,
+        'after': changed,
+      });
+    }
+    super.visitBinaryExpression(node);
+  }
+
+  @override
+  void visitConditionalExpression(ConditionalExpression node) {
+    add(node, 'conditional-arm', [
+      '(${node.thenExpression.toSource()})',
+      '(${node.elseExpression.toSource()})',
+    ]);
+    super.visitConditionalExpression(node);
+  }
+
+  @override
+  void visitMethodInvocation(MethodInvocation node) {
+    if (node.target?.toSource() == 'math' &&
+        ['max', 'min'].contains(node.methodName.name)) {
+      add(
+        node,
+        'numeric-normalization',
+        node.argumentList.arguments.map((a) => '(${a.toSource()})'),
+      );
+    }
+    super.visitMethodInvocation(node);
+  }
+
+  @override
+  void visitBooleanLiteral(BooleanLiteral node) {
+    add(node, 'boolean', [node.value ? 'false' : 'true']);
+    super.visitBooleanLiteral(node);
+  }
+
+  @override
+  void visitIntegerLiteral(IntegerLiteral node) {
+    add(node, 'integer-boundary', ['${(node.value ?? 0) + 1}']);
+    super.visitIntegerLiteral(node);
+  }
+
+  @override
+  void visitSimpleStringLiteral(SimpleStringLiteral node) {
+    // Diagnostics remain protected by the move checker; they are outside this
+    // behavior mutation policy, rather than falsely called equivalent mutants.
+    final statement = node.thisOrAncestorOfType<ExpressionStatement>();
+    final text = statement?.toSource() ?? '';
+    if (!text.startsWith('debugPrint(') && !text.startsWith('_iptvDiag.')) {
+      add(node, 'string-value-or-key', [jsonEncode('${node.value} mutant')]);
+    }
+    super.visitSimpleStringLiteral(node);
+  }
+
+  @override
+  void visitPrefixExpression(PrefixExpression node) {
+    if (node.operator.lexeme == '++')
+      add(node, 'ticket-increment', [node.operand.toSource()]);
+    super.visitPrefixExpression(node);
+  }
+
+  @override
+  void visitPostfixExpression(PostfixExpression node) {
+    if (node.operator.lexeme == '++')
+      add(node, 'ticket-increment', [node.operand.toSource()]);
+    super.visitPostfixExpression(node);
+  }
+}
+
+class TraceSites extends RecursiveAstVisitor<void> {
+  TraceSites(this.owner, this.rows);
+  final String owner;
+  final List<Map<String, Object?>> rows;
+  void add(Statement node) {
+    rows.add({
+      'declaration': owner,
+      'offset': node.offset,
+      'end': node.end,
+      'kind': 'statement',
+    });
+  }
+
+  @override
+  void visitExpressionStatement(ExpressionStatement n) {
+    add(n);
+    super.visitExpressionStatement(n);
+  }
+
+  @override
+  void visitIfStatement(IfStatement n) {
+    add(n);
+    super.visitIfStatement(n);
+  }
+
+  @override
+  void visitReturnStatement(ReturnStatement n) {
+    add(n);
+    super.visitReturnStatement(n);
+  }
+
+  @override
+  void visitForStatement(ForStatement n) {
+    add(n);
+    super.visitForStatement(n);
+  }
+
+  @override
+  void visitWhileStatement(WhileStatement n) {
+    add(n);
+    super.visitWhileStatement(n);
+  }
+
+  @override
+  void visitDoStatement(DoStatement n) {
+    add(n);
+    super.visitDoStatement(n);
+  }
+
+  @override
+  void visitBreakStatement(BreakStatement n) {
+    add(n);
+    super.visitBreakStatement(n);
+  }
+
+  @override
+  void visitContinueStatement(ContinueStatement n) {
+    add(n);
+    super.visitContinueStatement(n);
+  }
+}
+
+/// Additive mode: omit an entire guard/branch, independently of negating its
+/// condition. Positive-path condition kills do not prove rejection coverage.
+class GuardOmissions extends RecursiveAstVisitor<void> {
+  GuardOmissions(this.source, this.owner, this.rows);
+  final String source, owner;
+  final List<Map<String, Object?>> rows;
+  @override
+  void visitIfStatement(IfStatement node) {
+    rows.add({
+      'declaration': owner,
+      'kind': 'if-omit',
+      'offset': node.offset,
+      'end': node.end,
+      'line': '\n'.allMatches(source.substring(0, node.offset)).length + 1,
+      'text': source.substring(node.offset, node.end),
+      'after': ';',
+    });
+    super.visitIfStatement(node);
+  }
+}
+
+void main(List<String> args) {
+  final input =
+      jsonDecode(File(args[0]).readAsStringSync()) as Map<String, dynamic>;
+  final source = input['source'] as String;
+  final names = (input['names'] as List).cast<String>().toSet();
+  final unit = parseString(content: source, throwIfDiagnostics: true).unit;
+  final state = unit.declarations.whereType<ClassDeclaration>().singleWhere(
+    (n) => n.namePart.typeName.lexeme == '_VideoPlayerScreenState',
+  );
+  final rows = <Map<String, Object?>>[];
+  final guards = <Map<String, Object?>>[];
+  final traces = <Map<String, Object?>>[];
+  for (final member in state.body.members) {
+    final name = member is MethodDeclaration
+        ? member.name.lexeme
+        : member is FieldDeclaration
+        ? member.fields.variables.first.name.lexeme
+        : null;
+    if (name != null && names.contains(name)) {
+      member.accept(Points(source, name, rows));
+      if (args.skip(2).contains('--guard-omissions')) {
+        member.accept(GuardOmissions(source, name, guards));
+      }
+      member.accept(TraceSites(name, traces));
+      if (member is MethodDeclaration && member.body is BlockFunctionBody) {
+        traces.add({
+          'declaration': name,
+          'kind': 'entry',
+          'offset': (member.body as BlockFunctionBody).block.offset + 1,
+          'end': member.end,
+        });
+      }
+    }
+  }
+  for (var i = 0; i < rows.length; i++) {
+    rows[i]['id'] = 's${(i + 1).toString().padLeft(4, '0')}';
+  }
+  for (var i = 0; i < guards.length; i++) {
+    guards[i]['id'] = 'g${(i + 1).toString().padLeft(4, '0')}';
+  }
+  rows.addAll(guards);
+  File(
+    args[1],
+  ).writeAsStringSync('${const JsonEncoder.withIndent('  ').convert(rows)}\n');
+  for (var i = 0; i < traces.length; i++) {
+    traces[i]['id'] = 't$i';
+  }
+  File('${args[1]}.traces.json').writeAsStringSync(
+    '${const JsonEncoder.withIndent('  ').convert(traces)}\n',
+  );
+  print(
+    '${rows.length} explicit mutation candidates; no descendant coverage inferred',
+  );
+}

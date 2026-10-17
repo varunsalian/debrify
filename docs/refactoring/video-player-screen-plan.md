@@ -2395,6 +2395,359 @@ the earlier seam proofs. No dummy phase-13 manifest; no history relaxation.
   `media_server_watch_player_wiring_test.dart:58`. The reduced-gate
   inventory includes these five and the resume/server/profile boundary
   tests; every expected suite must load.
+## Phase 15 — IPTV workflow
+
+Branch `refactor/vplayer-p15` (pipelined; prepared off the phase-12 merge
+`1d7699d2e` while phases 13 and 14 run; rebased onto the phase-14 merge
+before step 1 under the pipeline rebase rule). Evidence
+`refactor-evidence/vplayer/p15/`. Line numbers at `1d7699d2e`;
+re-measured after phases 13 and 14 merge. Accepted originals are P13
+`238df16f4` and P14 `be4cd78aa`; both phases' design, resolution and
+Progress sections are retained after the documentation conflict resolution.
+
+≈ 1,715 moved lines into seven files (sizes proved at step T, ≤ 500 each).
+**One switch/recovery owner:** `VpIptvChannelSwitch` is the only writer of
+`_iptvSwitchTicket` (6908, 7874) and the only code that re-opens a live
+channel (switch, source pick, recovery retune). Every other collaborator
+*requests* a tune through its Host and checks staleness against the
+owner's ticket.
+
+| Destination | Members (line, size) | Lines |
+|---|---|---|
+| `vp_iptv_zap_ring.dart` | ring/window state and page primitives: `_reanchorIptvRingToCategory` 5305 (105 incl. doc), section comment + `_kIptvZapPageSize` 5403, `_iptvZapWindowOffset` 5410, `_iptvZapCategoryTotal` 5414, `_iptvZapPagingActive` 5420, `_iptvZapSourceId` 5427, `_iptvZapCategory` 5428, `_iptvZapCategories` 5429, `_iptvZapRequestTicket` 5431, `_iptvZapRequestInFlight` 5432, `_canZapIptvChannel` 5448, `_resetIptvZapPaging` 5461 (14), `_iptvZapArmingPaging` 5475, `_ensureIptvZapPagingArmed` 5485 (21), `_requestIptvZapPage` 5545 (48), `_parseIptvZapPage` 5592 (35), `_installIptvZapWindow` 5629 (28), `_mergeIptvZapPage` 5659 (39) | ≈ 360 |
+| `vp_iptv_zap_ladder.dart` | input ladder: `_kIptvZapEdgeMargin` 5406, `_iptvZapPendingInputs` 5437, `_iptvZapDrainingInputs` 5438, `_iptvZapCachedOriginCategory` 5442, `_iptvZapCachedDirection` 5443, `_iptvZapCachedPage` 5444, `_clearIptvZapBoundaryCache` 5452, `_zapIptvChannel` 5500 (43), `_prefetchIptvZapPage` 5698 (24), `_adjacentIptvCategory` 5721, `_prefetchAdjacentIptvCategory` 5729 (44), `_consumeCachedAdjacentIptvCategory` 5775, `_enterIptvZapCategory` 5792, `_requestAdjacentIptvCategory` 5808 (50), `_queuePendingIptvZapInput` 5857, `_drainPendingIptvZapInputs` 5862 | ≈ 290 |
+| `vp_iptv_guide_catchup.dart` | guide-sheet actions + programme playback: `_iptvCatchupRequests` 787, `_iptvStartOverTimelineVisible` 792, `_toggleIptvStartOverTimeline` 797 (20), `_canStartOverCurrentIptv` 817, `_iptvLiveEdgeAction` 827, `_toggleIptvStartOver` 832 (23), `_startIptvProgrammeFromBeginning` 855 (74), `_iptvGuideContextGeneration` 1160, `_persistIptvGuideContext` 1162, `_anchorIptvGuideCategory` 1175 (15), `_applyIptvGuideCategory` 1192 (30), `_cancelPendingIptvCatchup` 1215, `_beginIptvCatchupRequest` 1225, `_isCurrentIptvCatchupRequest` 1230, `_showIptvChannelSheetOverlay` 5247, `_hideIptvChannelSheet` 5258, `_switchToIptvGuideChannel` 5268 (27), `_playIptvCatchup` 5883 (74) | ≈ 390 |
+| `vp_iptv_channel_switch.dart` | **owner**: `_iptvRecoveryEligible` 720 (16), `_performIptvLiveRetune` 739 (50), `_iptvSwitchTicket` 5959, `_switchToIptvChannel` 6897 (206), `_switchToIptvSource` 7871 (56) | ≈ 415 |
+| `vp_iptv_live_sources.dart` | per-tune stream feedback: `_onIptvStreamError` 5984 (55), `_setIptvSources` 6041 (48), `_initIptvStremioSources` 6089 (18), `_tryOpenLiveStream` 7107 (58) | ≈ 230 |
+| `vp_iptv_watch_memory.dart` | per-tune memory: startup-channel comment + `_lastLiveChannelTimer` 6131, `_lastLiveChannelArmedUrl` 6132, `_lastLiveChannelSettle` 6139, `_noteLiveChannelPlaying` 6141 (39), `_preferredIptvAudioLanguage` 6207, `_iptvSeriesAudioKey` 6212, `_captureIptvAudioLanguage` 6224 (22), `_applyIptvAudioPreference` 6251 (45), `_recordIptvWatchForChannel` 6295 (31) | ≈ 230 |
+| `vp_iptv_zap_banner.dart` | banner lifecycle: `_iptvZapHideTimer` 643, `_iptvZapTicker` 644, `_iptvZapEpgTicket` 645, `_prepareIptvBannerData` 11685 (24), `_raiseIptvZapBanner` 11706 (23), `_hideIptvZapBanner` 11760 (14), `_syncIptvBannerTicker` 11777 (21), `_iptvArchiveRetryAt` 11798, `_refreshIptvBannerEpgIfEnded` 11800 (15), `_loadIptvZapBannerEpg` 11819 (20) | ≈ 155 |
+
+Sizes = measured member spans (doc comments attached to the following
+member) + Host + imports/class scaffolding; the receiver/Host
+qualification adds formatter wraps, so step T measures the formatted file.
+The owner is the tightest; `_onIptvStreamError` lives in the live-stream
+file for that reason (it classifies and routes; the re-open it may request
+is the owner's `switchToIptvChannel(quietRecovery: true)` and the recovery
+machine's `performRetune`, see Open questions).
+
+**Not in this phase (with evidence):**
+- `_effectiveIptvChannels` 932, `_currentIptvChannel` 6108,
+  `_iptvZapBannerOwnsIdentity` 938, `_isIptvSeriesContext` 6198,
+  `_hasIptvNext` 6186, `_hasIptvPrevious` 6190 stay **State-owned derived
+  getters**: read by build/controls, P13 recording (`_currentIptvChannel`
+  ×7 in 6327–6666, `_canRecord` 1154), P14 resume (`_resumeKey` 10388,
+  `_resumeSaveBlocked` 10913, P14 manifest), P11 track preferences adapter
+  (14691), P18 episode navigation (`_onPlaybackEnded` 3996) and the
+  earlier sleep/local-completion/PiP adapters (15226, 14975, 14932). Moving
+  them would patch five more adapters for no ownership gain.
+- `_buildIptvInfoPanel` 12192 → phase 21: a pure widget builder over
+  State-owned banner fields + guide style/tokens/`_recordingActiveNow`;
+  called only from build (13397, 13725, 13743), `_buildTvControls` (11395)
+  and the dock-geometry probe (5114).
+- `_playingLiveUrl` 6518, `_canRecord` 1154 → phase 13 (recording
+  resources).
+- `_showChannelGuideOverlay` 5227, `_hideChannelGuideOverlay` 5240,
+  `_parseChannelDirectory` 5066, `_switchToStremioTvChannel` 8497,
+  `_goToChannelById` 8660, `_goToNextChannel` 8790 → phase 17: they drive
+  Debrify TV's `ChannelGuide`/`_channelEntries`/`widget.requestChannelById`
+  /`requestNextChannel` and Stremio TV, not IPTV.
+- `_resolveAdjacentWithCachedGuide` 12599 → phase 18: TVMaze episode-guide
+  adjacency for catalog series (`widget.seriesSourceFetcher`), not IPTV.
+- `_handleSourceSelected` 7839 → phase 16 (source switching). Its live
+  branch (7849–7851) keeps routing to the owner. **`_switchToIptvSource`
+  moves here, not to 16:** it is the second writer of the switch ticket
+  (7874), resets the recovery machine/pill (7886–7887) and opens through
+  `_tryOpenLiveStream`; leaving it behind would split ticket ownership.
+- IPTV lines inside `initState` (1627–1629), `_onPlayerInstanceReady`
+  (2114–2124), `_bindPlayerInstanceSubscriptions` (2811, 2908–2912) and
+  `_onPlaybackEnded` (3961–3964, 3996–3998) are startup/engine/episode code
+  (phases 16/18/20); they get call-site rewrites only.
+
+### Frozen field ownership
+
+> **Superseded in part by the Phase 15 design review resolution below**
+> (cross-collaborator fields stay State-owned; Hosts re-derived for seven
+> collaborators). Where this section and the resolution differ, the
+> resolution wins.
+
+Principle: a field moves only to the collaborator that is its **single
+writer** and only when **no retained code, build, lifecycle or other phase
+reads it**; multi-writer and build-read state stays State-owned. Every
+relocated initializer is a literal, `const`, `null` or inert allocation:
+
+| Field | Fate | Reason / inertness |
+|---|---|---|
+| `_kIptvZapPageSize` 5403 | ring (`static const kIptvZapPageSize`) | read by reanchor/request (ring) and ladder prefetch (5714) via Host `iptvZapPageSize` |
+| `_iptvZapWindowOffset`, `_iptvZapCategoryTotal`, `_iptvZapPagingActive`, `_iptvZapSourceId`, `_iptvZapCategory`, `_iptvZapCategories`, `_iptvZapRequestTicket`, `_iptvZapRequestInFlight`, `_iptvZapArmingPaging` | ring | written only by ring members; ladder and owner (6966) read via Host; literals/`const []` |
+| `_kIptvZapEdgeMargin`, `_iptvZapPendingInputs` (`[]`), `_iptvZapDrainingInputs`, cached triple | ladder | ladder-only writes except `clear()` from ring (5469, 5580, 5586) through Host getter `iptvZapPendingInputs`; growable-list literal inert |
+| `_iptvCatchupRequests` 787 | guide/catch-up | `IptvCatchupRequestGate()` has no side effects (`iptv_catchup_request_gate.dart`); dispose 10208 rewrites to `_iptvGuide.iptvCatchupRequests.cancel()` at the same position |
+| `_iptvGuideContextGeneration` 1160 | guide/catch-up | single writer `_persistIptvGuideContext` (1164); ring reads (5313, 5342, 5553, 5585) via Host |
+| `_iptvSwitchTicket` 5959 | **owner** | single writer (6908, 7874); readers via Host in four siblings; P11 adapter patched (14689) |
+| `_preferredIptvAudioLanguage`, `_lastLiveChannelTimer`, `_lastLiveChannelArmedUrl`, `_lastLiveChannelSettle` | watch memory | single-collaborator; dispose 10281 → `_iptvMemory.lastLiveChannelTimer?.cancel()` same position |
+| `_iptvZapHideTimer`, `_iptvZapTicker`, `_iptvZapEpgTicket`, `_iptvArchiveRetryAt` | banner | banner-only; dispose 10242–10243 rewrite in place |
+| `_iptvChannelsOverride` 785 | State | writers ring (5364, 5645, 5685), guide pick (5280), replay (5951); retained `_effectiveIptvChannels` |
+| `_iptvGuideContextOverride` 786 | State | build sheet 13780–13793; P14 `_saveResumeLocked` 11155 |
+| `_currentIptvIndex` 677 | State | ≈ 40 readers incl. build, resume, init |
+| `_iptvStartOverActive/Loading/TimelineRequested` 788–790 | State | build 11459–11461, 13608–13611; PiP adapter 14922; written by owner, catch-up and live stream inside their own `setState`s |
+| `_iptvErrorsMuted` 5973 | State | retained renderer guards 3127, 3207 |
+| `_lastIptvErrorShown` 5979 | State | two writers (owner 6913, live stream 6023) |
+| `_iptvChannelKey` 5964 | State | retained `_handleSourceSelected` 7849 (P16) |
+| `_showIptvChannelSheet`, `_iptvSheetKey` | State | Back/overlay/build (11492, 11512–11520, 13768, 13773) |
+| `_showIptvZapBanner`, `_iptvZapFloatingMounted`, `_iptvZapChannel`, `_iptvZapEpg`, `_iptvZapEpgLoading`, `_iptvZapClock` | State | build 13704–13722, `_infoPanelSignature` 970–997, `_buildIptvInfoPanel`; `_iptvZapClock = DateTime.now()` is not inert |
+| `_iptvDiag`, `_iptvLiveRecovery` (lazy), `_iptvReconnectText`, `_iptvErrorSub` | State | startup/engine/dispose/PiP; ValueNotifier stays State-owned |
+| `_stremioSourcesOverride`, `_resolveStremioSourceOverride`, `_currentSourceIndex` | State | source switching (P16) and build |
+
+**Patched retained initializer:** `late final _iptvLiveRecovery` (693–716)
+stays lazy and State-owned; exactly two declared rewrites
+`isEligible: _iptvSwitch.iptvRecoveryEligible`,
+`performRetune: _iptvSwitch.performIptvLiveRetune` (694–695). First access
+is in `initState`/instance setup, after the constructor body.
+
+**Scaffolding:** seven collaborators assigned eagerly in the State
+constructor after phase 14's, inert constructors, no constructor or field
+initializer reads a Host: `_zapRing`, `_zapLadder`, `_iptvGuide`,
+`_iptvSwitch`, `_iptvSources`, `_iptvMemory`, `_iptvBanner` (seven).
+
+### Hosts (≈ 14 / 17 / 31 / 53 / 28 / 13 names)
+
+Facade routing between the six siblings (no sibling imports); every
+cross-collaborator method forwarder is a plain non-`async` expression
+forwarder so the callee's synchronous prefix (ticket bump, `expectRetune`
+consumption, `onTuneStarted`) still runs before the caller's next
+statement (`_switchToIptvGuideChannel` 5286–5287 captures the ticket
+*after* calling; `_performIptvLiveRetune` 755–756 sets `expectRetune`
+before calling).
+
+- **Ring (14):** `mounted`, `_vpSetState`; widget selectors
+  `iptvBrowseProvider`, `iptvSourceId`; `currentIptvChannel`,
+  `effectiveIptvChannels`, `currentIptvIndex` (get/set),
+  `iptvChannelsOverride` (set), `iptvGuideContextOverride`;
+  sibling values `iptvSwitchTicket` (owner), `iptvGuideContextGeneration`
+  (guide), `iptvZapPendingInputs` (ladder list object);
+  `clearIptvZapBoundaryCache()` (ladder),
+  `anchorIptvGuideCategory(IptvChannel, {Object? categories})` (guide).
+- **Ladder (17):** `mounted`; `currentIptvChannel`,
+  `effectiveIptvChannels`, `currentIptvIndex`; ring getters
+  `iptvZapPagingActive`, `iptvZapWindowOffset`, `iptvZapCategoryTotal`,
+  `iptvZapCategory`, `iptvZapCategories`, `iptvZapRequestInFlight`,
+  `iptvZapPageSize`; ring ops `requestIptvZapPage({required String?
+  category, required int offset, bool fromEnd = false})` (default
+  preserved), `installIptvZapWindow(page, {required bool
+  preservePlayingChannel})`, `mergeIptvZapPage`, `ensureIptvZapPagingArmed`;
+  `switchToIptvChannel(int, {bool quietRecovery = false})` (owner),
+  `applyIptvGuideCategory` (guide). Ladder writes no ring field.
+- **Guide/catch-up (31):** `context`, `mounted`, `_vpSetState`;
+  `duration`, `controlsVisible` (State ValueNotifier), `tvProgressFocus`,
+  `scheduleAutoHide()`; `currentIptvChannel`, `currentIptvIndex`,
+  `effectiveIptvChannels`, `iptvChannelsOverride` (set),
+  `iptvGuideContextOverride` (get/set), widget selectors `iptvCategories`,
+  `iptvContentType`, `iptvSourceId`, `iptvSourceName`; start-over trio
+  (get/set), `iptvZapEpg`, `iptvDiag`, `iptvLiveRecovery`,
+  `showIptvChannelSheet` (set); `openMedia(…, beforeOpen:)` exact
+  signature; `stopRecording({bool userInitiated = true})` → **phase-13
+  recording collaborator**; `hideIptvZapBanner` (banner);
+  `resetIptvZapPaging`, `reanchorIptvRingToCategory(channel, {required int
+  switchTicket})` (ring); `switchToIptvChannel`, `iptvSwitchTicket`,
+  `iptvRecoveryEligible()` (owner).
+- **Owner (53):** `mounted`, `_vpSetState`, `screenDisposed`,
+  `sleepStopLatched`, `sleepTimerMode` (→ phase-2 `_sleep`),
+  `pausedByLifecycle`, `activeMediaUserPaused`, `player`, `openMedia`,
+  `clearBufferingIndicator`, `startTransitionOverlay`, `tvAbandonScrub()`
+  (called inside its `setState` closure), `tvScrubGeneration` (get/set,
+  `++`), `isTransitioning`/`currentChannelNumber`/`currentChannelName`
+  (set), `currentSourceIndex` (get/set), `hideSourceSheet()` (P16 retained),
+  the transition block (`transitionStopTimer` get/set,
+  `transitionPhaseTimer`, `transitionPhase`, `transitionPhase2Started`,
+  `rainbowController`, `transitionRunning`, `rainbowActive`); IPTV State
+  values (`currentIptvChannel`, `currentIptvIndex` get/set,
+  `effectiveIptvChannels`, start-over trio, `iptvDiag`, `iptvLiveRecovery`,
+  `iptvReconnectText`, `iptvErrorsMuted` get/set, `lastIptvErrorShown`
+  set, `iptvChannelKey`, `isIptvSeriesContext`); siblings
+  `iptvZapPagingActive` (ring), `cancelPendingIptvCatchup`,
+  `hideIptvChannelSheet`, `anchorIptvGuideCategory` (guide),
+  `prepareIptvBannerData`, `raiseIptvZapBanner`, `hideIptvZapBanner`
+  (banner), `recordIptvWatchForChannel`, `setIptvSources(String?,
+  List<StremioIptvCandidate>?, {int currentIndex = 0})`,
+  `tryOpenLiveStream(url, {Duration timeout = …12 s, Map? httpHeaders})`,
+  `applyIptvAudioPreference(int)` (live stream); **phase 13**:
+  `stopRecording`, `refreshEngineRecordingState`, `engineFlagOn`;
+  **phase 14 (State-owned)**: `resumeWriteGuard` (6936 `.clear()`), not a
+  resume collaborator method.
+- **Live stream (28):** `context`, `mounted`, `_vpSetState`, `player`,
+  `openMedia`, `stopRecording` (P13), `isPlaying`; `currentIptvChannel`,
+  `currentIptvIndex`, `effectiveIptvChannels`, `isIptvSeriesContext`,
+  `iptvChannelKey` (get/set), `iptvGuideContextOverride`,
+  `stremioSourcesOverride`/`resolveStremioSourceOverride` (get/set),
+  `currentSourceIndex` (set); widget `iptvSourceId`, `iptvStartIndex`,
+  `videoUrl`; `iptvDiag`, `iptvErrorsMuted`, `lastIptvErrorShown`
+  (get/set), start-over active/timeline (get/set), `iptvLiveRecovery`;
+  owner `iptvSwitchTicket`, `iptvRecoveryEligible()`,
+  `switchToIptvChannel`.
+- **Banner (13):** `mounted`, `_vpSetState`, `controlsVisible`,
+  `iptvZapBannerOwnsIdentity`; State presentation fields `iptvZapChannel`,
+  `iptvZapEpg`, `iptvZapEpgLoading`, `iptvZapClock`,
+  `iptvZapFloatingMounted`, `showIptvZapBanner` (get/set); overlay flags
+  `showIptvChannelSheet`, `showSourceSheet`, `showChannelGuide`.
+
+No Host exposes a collaborator object. No phase-14 resume *method* is
+borrowed (`_saveResume`/`_observeServerWatch` are not called by any moved
+IPTV member); only the State-owned `_resumeWriteGuard`. Lexical
+`context` stays lexical in `_persistIptvGuideContext(IptvGuideContext
+context)` (1162–1165: the parameter shadows State `context`; context-guard
+negative required). `_playIptvCatchup` keeps capturing
+`ScaffoldMessenger.of(context)` before its first await (5902).
+
+### Patched facade adapters (exactly four, five counted rewrites — corrected per design-review resolution finding 1)
+
+Whole-class `patched_class_projection`, regenerated on the accepted
+phase-14 base:
+- `_VpTrackPreferencesHostAdapter` (P11): `applyIptvAudioPreference`
+  14680 → `_s._iptvMemory.applyIptvAudioPreference(ticket)`.
+  `iptvSwitchTicket` 14689 is **unchanged** — the ticket stays State-owned
+  (resolution finding 1), so no redirect.
+  (`isIptvSeriesContext` 14691 unchanged — State-owned.)
+- `_VpPipLifecycleHostAdapter` (P8): `cancelPendingIptvCatchup` 14914 →
+  `_s._iptvGuide.cancelPendingIptvCatchup(hideFeedback: hideFeedback)`.
+  `iptvStartOverActive`, `iptvLiveRecovery`, `iptvReconnectText`,
+  `currentIptvChannel` unchanged.
+- `_VpPlayerMenuUiHostAdapter` (P13): `captureIptvAudioLanguage` (from
+  `_showTracksSheet` 14027) → `_s._iptvMemory.captureIptvAudioLanguage`.
+- `_VpPlayerMenuHostAdapter` (P13): `captureIptvAudioLanguage` (14180,
+  14188) and `hideIptvZapBanner({bool immediate = false})` (14093) →
+  `_iptvMemory` / `_iptvBanner`.
+
+Unchanged and asserted unchanged: local-completion
+`effectiveIptvChannels` 14975, sleep `currentIptvChannel` 15226, P13
+recording adapters (`currentIptvChannel`, `iptvZapBannerOwnsIdentity`,
+`playingLiveUrl`), every P14 adapter (P14 manifest reads only
+`_currentIptvChannel`/`_effectiveIptvChannels`, both State-owned).
+
+### Retained references (62 entries: 60 facade sites + 2 initializer)
+
+Measured by scanning non-comment code outside the moved spans; Step T's
+scanner is authoritative (`p15/stepT/retained-sites.json`).
+
+| Group | Facade lines |
+|---|---|
+| Lazy recovery initializer | 694, 695 |
+| `_tvNoTimeline` | 589 (`iptvStartOverTimelineVisible`) |
+| `initState` | 1629 (`initIptvStremioSources`) |
+| `_onPlayerInstanceReady` | 2119 prepare banner, 2120 raise, 2121 anchor, 2122 arm paging |
+| Instance subscriptions | 2811 `noteLiveChannelPlaying`, 2910 `onIptvStreamError` |
+| `_onPlaybackEnded` | 3997 `switchToIptvChannel` |
+| Other overlays | 5232 (`_showChannelGuideOverlay`), 7803 (`_showSourceSheetOverlay`) → `hideIptvZapBanner` |
+| `_handleSourceSelected` | 7850 `switchToIptvSource` |
+| `dispose` | 10208 catch-up gate, 10242 hide timer, 10243 ticker, 10281 last-live timer (order kept) |
+| `_buildTvControls` | 11422, 11427 switch; 11423, 11428 can-zap; 11424, 11429 zap; 11453 sheet; 11458 live edge; 11462 timeline toggle; 11464 timeline visible |
+| Back / guide | 11516 hide sheet; 11544 show sheet |
+| `_handleTvKey` | 11590, 11630, 11632 can-zap; 11591 zap |
+| `_onControlsVisibilityChanged` | 11735 hide banner; 11755 sync ticker |
+| `build` | 12812, 12820, 13582 sheet; 12923, 13036, 13047, 13519, 13530, 13538, 13555 can-zap; 12925, 12929, 13037, 13048, 13520, 13531 zap; 13516, 13527 switch; 13566, 13615 timeline visible; 13607 live edge; 13612 toggle; 13776 guide pick; 13777 catch-up; 13778 hide sheet; 13798 persist context |
+
+Tear-offs passed to widgets (`IptvChannelSheet.onChannelSelected`,
+`onPlayProgramme`, `onClose`, `onContextChanged`, dock `onLiveEdgeAction`,
+`onToggleStartOverTimeline`, `onShowIptvChannels`) become tear-offs of the
+same long-lived collaborator, so `==` across rebuilds is preserved.
+Preserve: stop-before-open ordering in retune (768), start-over (883),
+switch (6924) and candidate probe (7118); the switch's
+ticket-before-first-await; dispose order (recovery cancel 10143 → catch-up
+cancel 10208 → banner timers 10242–10243 → last-live timer 10281).
+
+**History:** a pre-phase-14 step-T materialization is **provisional**;
+after phases 13 and 14 merge, rebase and regenerate facade
+partition/import/order/adapter proofs, refresh analyzer probes and
+mutation witnesses, protect every earlier destination derived from the
+applied manifests (≈ 32: 25 + P13's four + P14's three), P12 `--at
+1d7699d2e`, P13 and P14 `--at` their accepted merges, S2d with the earlier
+seam proofs. No dummy manifests; no history relaxation. The theme
+frozen-path list (`theme_surface_manifest.txt:26`,
+`theme_rendered_set.py:57`, `source_guard_test.dart` exact list) gains the
+seven files in the commit that creates them. Analyzer: the P12 inventory has
+**no** diagnostics on these members; the receiver probe must check for
+new `use_build_context_synchronously` infos where `_host.context` follows
+an await behind `_host.mounted` (877, 6029 sync, 5902 captured).
+
+### Step 0 — characterization of the original
+
+Existing coverage to keep/extend: `video_player_zap_test.dart`,
+`video_player_zap_categories_test.dart`,
+`video_player_catchup_caller_test.dart`,
+`video_player_catchup_gate_test.dart` (pure gate),
+`video_player_pip_recovery_test.dart`,
+`video_player_resume_iptv_window_test.dart`,
+`video_player_resume_live_key_test.dart`; external boundary tests
+`test/iptv_channel_sheet_responsive_test.dart`,
+`test/iptv_live_recovery_test.dart`, `test/iptv_zap_banner_test.dart`,
+`test/iptv_player_paging_test.dart`, `test/iptv_epg_service_test.dart`.
+
+- **Zap ring/ladder:** non-paged wrap + arm on first press; in-window step
+  with edge-margin (12) prefetch both directions; page crossing queues the
+  press (cap 24) and drains after merge; category crossing via cached
+  prefetch vs round trip; direction reversal drops the cache; empty
+  categories skipped, full walk clears the queue; uncategorized wrap with
+  `fromEnd`; one request in flight (second returns null without clearing);
+  reset/guide pick strands an in-flight page (request ticket); a user
+  browse (generation bump) drops page and queue; re-anchor rejections
+  (switch ticket, generation, playing channel changed, page lacks playing
+  channel); arming retry after a lost bootstrap and `whenComplete` reset;
+  drain stops when a request starts or the press re-queues.
+- **Guide:** anchor/apply category (equal-context no-op, null category,
+  response categories, `IPTV`/`live` fallbacks); persist bumps the
+  generation, apply does not; sheet show hides banner and controls, hide
+  cancels catch-up; guide pick adopts the list, resets paging, captures the
+  ticket after calling the switch, re-anchors only if still current.
+- **Catch-up / Start Over:** live-edge availability (airing + archive),
+  toggle on/off, loading flag, unavailable snackbar, recording stop before
+  open, `beforeOpen` rejection of stale requests, open failure → quiet live
+  retune only when eligible, timeline toggle (loading snackbar; TV focus
+  via `PlatformUtil` test override or device-pending); archived replay
+  (snackbars, history row, paging reset, single-item override) vs airing
+  programme (switch then start-over); cancellation from sheet close, zap,
+  PiP background, dispose. Hold `catchupUrl` and the history write
+  separately.
+- **Owner:** switch order (ticket → mute/reset → `onTuneStarted` /
+  `expectRetune` → pill → stop recording → catch-up cancel → sheet hide →
+  buffering → resume-guard clear → start-over reset/transition/banner or
+  quiet → anchor only when not paged → non-live history → pause → Stremio
+  ladder or M3U open → series audio → 1.5 s transition cleanup → engine
+  refresh). Overlapping switches with the older one held at stop-recording,
+  `resolveCandidates`, each candidate probe and `openMedia`: no open, winner
+  mark, mute release or cleanup from the stale one. Retune: Stremio
+  (`expectRetune` + quiet switch) vs direct reopen with ticket strand
+  during stop-recording. Eligibility matrix (disposed, non-live, sleep
+  latched, end-of-item, lifecycle pause, user pause). Source pick: winner
+  mark, failed pick restores highlight, superseded pick.
+- **Live stream:** error classification — muted, start-over active →
+  quiet retune when eligible, auth regex (401/403/404) skips the machine,
+  live → `onError()`, 6 s burst debounce, non-live message text; source
+  rows set/clear/clamp; init race (zapped away, rows already set);
+  candidate probe success only after open returns (width/position),
+  error, open throw, 12 s timeout, subscriptions cancelled; audio capture
+  (series only, unchanged language skipped, storage write) and apply
+  (20×100 ms wait, session → stored → default precedence, ticket/mounted
+  aborts, manual pick during the wait wins); last-live-channel 1 s settle
+  (no re-arm for the same URL, zap during settle, not playing, playlist-id
+  precedence); history attributes for series episodes.
+- **Banner:** known EPG paints immediately, archive-aware upgrade, late
+  answer for a previous channel dropped; raise blocked by sheet/source/
+  guide/controls; 4.5 s fade, immediate handoff to the dock; 1 s ticker
+  only while on screen (floating or dock with live identity); ended
+  programme / 60 s archive retry refresh.
+- **Profile/disposal matrix:** the IPTV storage writes resolve the profile
+  implicitly at write time (`ProfilePreferences.instance()`:
+  `iptv_last_channel_storage.dart:65`, `iptv_audio_storage.dart:32`,
+  `iptv_history_storage.dart`). Hold the settle timer, audio write,
+  switch history write and replay history write across A→B and disposal;
+  inspect both profiles; pin outcomes as-is (Follow-ups).
+- **Source-text guards:** none of the nine direct readers anchors a moved
+  IPTV declaration (`playback_checkpoint_contract_test.dart:73` anchors
+  `effectiveIptvChannels` inside P14's `_resumeSaveBlocked`, State-owned;
+  `player_auto_next_routing_test.dart` reads `_onPlaybackEnded`, whose
+  body gains only the 3997 rewrite — its anchors are unaffected; verify
+  with the validating reader). Theme guard path lists extended.
+- **Reduced-gate inventory:** every `test/features/video_player/**` file,
+  the readers and theme guard, plus the external boundary tests above;
+  every expected suite must load.
 - Early windows; mutation proofs; coverage; Claude sample.
 
 ### Device checklist (end of series)
@@ -2402,6 +2755,110 @@ the earlier seam proofs. No dummy phase-13 manifest; no history relaxation.
 Resume lands at the saved position for movies, series episodes, TorBox
 and PikPak entries; leaving during a slow resume never resets the saved
 point to 0; speed/aspect/subtitle choices restore with the position.
+Zap with CH+/CH−/arrows (and held keys) across page and category
+boundaries on phone, Android TV and tvOS; picking a search result in the
+guide re-anchors the ring to its category; Start Over and archived replay
+on an Xtream source with catch-up, and returning to live; Stremio IPTV
+channel ladder and a manual source pick; a dropped stream shows the
+reconnect pill and the surrender snackbar with Retry; series audio
+language carries across episodes and sessions; "start on last channel"
+re-tunes the last channel that actually played; the zap banner floats,
+fades, hands off to the dock and its countdown ticks while paused.
+
+### Follow-ups found (record, do not fix)
+
+- **Route-wide audio session memory (Step 0 addendum):** a French pick in
+  one series survives a switch to another series whose stored language is
+  absent or English. `_preferredIptvAudioLanguage` belongs to the route;
+  preserve this precedence without adding a per-series reset.
+- **Drain-proof premise (Step 0 addendum):** current production launch routes
+  retain the browse-provider function for the State lifetime. An in-place
+  replacement with null while paging is active would invalidate i14's
+  reachability argument. Keep the existing break; re-audit before introducing
+  such route updates. No production change is authorized here.
+- **Cancelled replay still writes history:** `_playIptvCatchup` writes the
+  replay row (5938) before the final request check (5946); a replay
+  cancelled during the write leaves a Continue Watching row for an item
+  that never played.
+- **Manual Stremio source pick is not error-muted (confirmed at Step 0):**
+  `_switchToIptvSource` probes with `_iptvErrorsMuted` false. The original
+  public-source test observes its error start a quiet ladder and replace the
+  selected candidate, contrary to its doc comment (7866–7870). Preserve as-is.
+- **Source pick skips switch-boundary steps:** no catch-up cancel,
+  start-over reset, `_resumeWriteGuard.clear()` or error-debounce reset
+  (compare 6912–6940).
+- **Implicit-profile IPTV writes:** settle-timer last channel (6161),
+  audio language (6240), switch history (6978) and replay history (5938)
+  don't capture the originating profile.
+- **Candidate probe binds the pre-open player:** `_tryOpenLiveStream`
+  subscribes to `_player.stream` before `_openMedia`; a renderer
+  replacement during the open leaves it waiting on the old instance until
+  the 12 s timeout (device-pending).
+- **Two audio-preference appliers per switch:** owner's unawaited apply
+  (7075) and the P11 track-preference path (`vp_track_preferences.dart`
+  126, 214) can both call `setAudioTrack`; pin the order.
+- **Unhandled futures:** `_initIptvStremioSources` `.then` has no error
+  handler (6095); unawaited switch futures from the ladder (5511, 5520,
+  5794) and the retune closure (764–782, only `_openMedia` is guarded)
+  surface any throw from `resolveCandidates`/`stopRecording` to the zone.
+
+
+- **Distinct stale-switch outcomes (Step 0):** an old direct switch released
+  after pause can open late; an already-issued open can finish late too. Newer
+  metadata/index can therefore disagree with playback. Recording-stop, stop/
+  resolution, pre-open and probe holds have different outcomes; no uniform
+  stale-rejection claim. A candidate probe also has no switch ticket after its
+  own recording-stop await. Winner marking after an acknowledged probe checks
+  the ticket but can still succeed after disposal.
+- **Same-turn zap index (Step 0):** the switch ticket increments before its
+  recording-stop await, but the index advances afterward. Immediate repeated
+  presses and a queued 24-input drain can share the old index and advance once.
+- **Profile capture/admission (Step 0):** pre-capture audio, settle/playlist
+  last-channel and pre-admission history can write incoming B; stale captured
+  preferences reject, including A→B→A; admitted writes finish outgoing A even
+  after authorized deletion. Cleanup is still pending. Held reads can publish
+  outgoing data across B/ABA, while explicit disposal has separate guards.
+  Tests inspect physical A, incoming/final scope and intermediate B in ABA.
+- **Replay writes twice (Step 0):** the replay path records before switching,
+  then the switch owner records its non-live item again. Admitted A plus a
+  mounted continuation in B can leave history in both profiles. Disposal
+  prevents the second switch write; it does not undo an admitted first write.
+- **Audio captures vs live player (Step 0):** a track snapshot taken before
+  storage can be applied through the replacement player, even when that ordinal
+  is absent there. With P11's initial restore held, the observed two-applier
+  order is French→English→French. No deduplication or replacement fix here.
+
+### Open questions for the design review
+
+1. **Owner size vs placement of `_onIptvStreamError`.** With the error
+   handler inside the owner the file is ≈ 490 before formatter wraps.
+   Proposed: the handler lives in the live-stream file and requests
+   re-opens only via `switchToIptvChannel(quietRecovery: true)` /
+   `iptvLiveRecovery.onError()`. Alternative: a seventh
+   `vp_iptv_stream_feedback.dart`, or accept a documented ≤ 520 owner.
+2. **Live-stream split (Claude decision, review it).** The draft's single
+   live-stream file mixed stream feedback with watch/audio memory; the table
+   above uses two files (`vp_iptv_live_sources.dart`,
+   `vp_iptv_watch_memory.dart`, ≈ 230 each). Re-derive their Hosts (the
+   28-name live-stream Host splits; facade routing between them, no
+   sibling imports) and the patched adapters (`captureIptvAudioLanguage`/
+   `applyIptvAudioPreference` now route to watch memory). Text below that
+   says "live stream" means whichever of the two owns the member.
+3. **Ring/ladder field split.** Ring owns the window and request state;
+   the ladder owns queue/cache. The ring mutates the ladder's list via a
+   Host getter (three `clear()` sites) and calls `clearIptvZapBoundaryCache`
+   via the facade. Acceptable, or keep the queue/cache State-owned?
+4. **Static const across classes.** `_kIptvZapPageSize` becomes
+   `VpIptvZapRing.kIptvZapPageSize` and the ladder reads it through a Host
+   getter; the checker needs a declared static-to-static move (not the
+   static→top-level opt-in) — confirm support or keep it top-level in the
+   ring file.
+5. **Owner Host breadth (53).** Dominated by the duplicated transition
+   cleanup block (7084–7098, 7908–7922) that phase 21 owns; forwarding
+   nine transition members is the verbatim cost. Confirm acceptable vs a
+   later extraction.
+6. **`_isIptvSeriesContext` State-owned.** Kept State-owned to avoid
+   splitting a predicate read by P11, P18 and the owner; confirm.
 
 ## Follow-ups
 
@@ -5248,6 +5705,459 @@ for Step 0 and Claude’s independent mutation sample.
   explicit load/identity proofs, analyzer identities, structural results and
   commit receipt). No push, merge, branch change or production bug fix. STOP.
 
+### 2026-10-15 — Phase 15 provisional Step T (STOP before production)
+
+- Original application `1d7699d2e`, design/review `b605aed86`; application and
+  pubspec remain byte-identical to the original. Seven evidence-only prototypes
+  measure **347/283/408/433/245/207/162** normally formatted physical lines,
+  including imports, Hosts and receiver wraps. The switch owner's 433 lines
+  satisfies the 500-line prerequisite; no exception or production file created.
+- Frozen seven Hosts: [exact declarations](video-player-iptv-hosts.md) and
+  `dev/tool/dart_moves/vplayer_p15_hosts.json`. Distinct names/declarations:
+  **21/26, 18/18, 32/37, 54/61, 23/28, 8/8, 13/18** after all shared fields
+  remain State-owned. Switch ticket has a setter only on the switch Host;
+  the constant stays State-owned. Seventeen inert fields and 53 methods/getters
+  move in the virtual split; constructors only store their Host.
+- `vplayer_p15_provisional.json` is explicitly **PROVISIONAL**. All-retained
+  original and complete virtual body/ownership comparison PASS; 12 real-config
+  corruption negatives PASS. The unchanged history checker **rejects** missing
+  P13/P14 manifests. No dummy manifest, waiver, current CI switch or historical
+  success is claimed. Regenerate the complete partition and all four approved
+  P8/P11/P13 adapter classes on the accepted P14 merge before Step 1.
+- `p15/stepT/retained-sites.json` preserves all **68** scanned occurrences:
+  the design's 62 core sites (60 facade +two lazy-initializer references), four
+  pre-P13 menu call sites and two existing adapter forwarders. Recompute their
+  final projections after P13/P14; the P11 ticket forwarder stays unchanged.
+- Nice19 and local serialization throughout; explicit isolated parser packages.
+  Root/strict original diagnostics **124/198**; formatted provisional probe
+  **135**, zero errors, physical declaration identities/multiplicity archived.
+  Its P15 history-based analyzer inventory remains provisional too. One moved
+  async-context info, two formatting brace infos and two import infos recorded;
+  no application lint fix. Format, size/architecture, Python compile and diff
+  checks PASS. Initial import/static-access and diagnostic-collector pilots are
+  excluded, with completed corrected proofs under `p15/stepT/`.
+- Frozen original reduced baseline loads **143/143** expected suites:
+  **1259 pass /one pre-existing source-text failure**, the exact startup-shield
+  formatting identity also failing in P12's recorded gate. No missing/load-error
+  suite, allowance or app change. Step 0 continues on detached original app code;
+  production stays blocked on P13/P14 and later independent sampling/review.
+
+
+
+### 2026-10-15 — Phase 15 Step 0 (pipelined original characterization; STOP)
+
+- **Original/scope.** Application exactly `1d7699d2e`; follows provisional
+  Step T `2a21e8833`. Twenty new behavior suites/two support files; no production,
+  pubspec, seam, dependency, allowance, size-ratchet or theme-path change.
+  Production remains blocked until accepted P13/P14 merges and proof refresh.
+- **Behavior.** **219 original cases pass**: ring/ladder both directions and
+  queue cap/reversal/merge, guide/Start Over/replay, distinct stale-switch holds,
+  open-ack probe events, source/error classification, memory and physical profile
+  ownership, banner/clock/resource cancellation, early windows and desktop/TV
+  input/focus. Real six-second debounce and programme expiry are covered;
+  60-second archive retry and physical/native checklist remain pending.
+- **Profile capture.** Actual pre/post preference capture, playlist lookup,
+  scoped DB admission/transaction and transport completion are held separately.
+  B/ABA/deletion/disposal inspect physical keys/rows. The final **93-case**
+  profile/read run also independently inspects intermediate B during ABA;
+  final A's new-session storage is not mislabelled as B. Deletion cleanup is
+  pending. Reads, stale direct opens, disposed winner marks, replay's two writes
+  and captured audio ordinals remain as-is; new Follow-ups recorded.
+- **Sweep/proofs (nested-coverage claim withdrawn in the second-sample
+  addendum).** **70 moved declarations**, **1521 inventoried nested AST points** and
+  **68 retained occurrences** recorded. The inventory is not evidence that
+  those nested points were killed. All 53 methods/getters have
+  assertion witnesses; 17 initializers have explicit inertness/operational
+  coverage (five independently mutated). Retained sites: **65 assertion-proved,
+  three explicit source audits**. Every new case has an original assertion
+  witness. **239 canonical attempts /221 completed assertion kills**; initial
+  survivors, invalid candidates and runtime/timeout failures receive no credit.
+  Full matrices and mutation table are in the deps report and `p15/step0/`.
+- **Reduced baseline.** Explicit committed inventory loads **163/163 suites**,
+  no missing/load-error suite: **1478 success /one pre-existing failure**.
+  Reuse of the 143-suite base verifies all 173 old test/support hashes, unchanged
+  application/dependencies/analysis and SDK. Fresh restored-original 20-suite
+  run passes 219; refreshed profile/read run passes 93. The startup-shield
+  source-format failure reproduces on the original and matches P12's observed
+  gate; not allowlisted or fixed.
+- **Checks.** Nice19, local serialization and test hook define throughout;
+  isolated parser packages. Flutter 3.44.8 /Dart 3.12.2. New Dart formatted;
+  analyzer **124 scoped diagnostics, zero identity/multiplicity changes**, zero
+  new test/support diagnostics. Size/import architecture and diff checks pass.
+  Complete evidence only under `<git-common-dir>/refactor-evidence/vplayer/p15/`.
+- **Next, not executed.** Independent Step 0b/sample, accepted P13/P14 rebase,
+  regeneration of the provisional partition, four adapters/prototypes/analyzer
+  probes and changed witnesses. History still rejects absent P13/P14; no dummy
+  manifest or waiver. Full suite/builds deferred to M3 under pipeline rules.
+  STOP before production moves; no push, merge, branch switch or device action.
+
+### 2026-10-15 — Phase 15 Step 0 independent-sample survivor addendum (STOP)
+
+- **Acceptance remains pending.** Claude's original sample at `4f8222e03`
+  (application `1d7699d2e`) killed **16/26 = 62%**, below 75%. The earlier
+  declaration/reference sweep did not establish adequate branch coverage.
+  Step 0 is **not accepted**; Claude will draw a fresh second sample.
+- **Nine exact assertion kills.** Three new suites add **11 original-caller
+  cases**, each file passing alone on the detached original. Exact original
+  patches i5/i6/i7/i9/i11/i20/i21/i23/i26 now fail assertions: changed category
+  lists at an equal selection; persisted content type; unrelated snackbar;
+  page reset followed by same-category reanchor; backward paging at nonzero
+  offset; session audio against absent/differing destination-series storage;
+  visible dock vs floating banner; recovery pill vs real zap; unnumbered
+  channel ordinals 1 and 3 through the displayed identity.
+- **i14 source proof, not a kill.** The two requeue paths either already have
+  a request or synchronously start one before the first break. At the window
+  boundary, the page-prefetch predicate necessarily holds. Each other path
+  consumes a press or clears the queue, bounding a synchronous drain by 24
+  iterations. The deps report records every writer/caller and the premise:
+  current production routes retain their launch browse-provider function.
+  Replacing that function with null in place would invalidate the proof;
+  retain the guard and re-audit if route updates change. No private-State
+  injection, guard deletion, timeout credit or blanket widget-update claim.
+  Exact i14 mutant completes **241/241 cases, 27/27 suites**, zero errors;
+  detached original verified restored. The incomplete 240-second-cap pilot
+  receives no credit; the completed retry has a sufficient external cap.
+- **Evidence/verification.** `p15/survivor-addendum/` holds isolated controls,
+  exact patches, assertion identities, source-bound reachability audit and
+  final reduced-baseline receipt. The frozen inventory and CI list include
+  all three new suites: **166/166 loaded, 1489 success / one unchanged failure**
+  in the hash-verified composite baseline. New-file analyzer: zero issues;
+  format/diff checks pass. Existing baseline inputs remain unchanged; no
+  allowances, application changes or bug fixes. The original startup-shield
+  source-format failure remains recorded without a fix.
+- **Pipeline.** Stop for the fresh sample/review. Production remains blocked
+  on accepted P13/P14 merges and regeneration of provisional tooling/proofs.
+  No push, merge, branch switch, app launch/install or device action.
+
+
+### 2026-10-16 — Phase 15 second-sample closure checkpoint (Step 0 unaccepted)
+
+- **Original remains `1d7699d2e`.** P13 merged at `238df16f4`; this work does
+  not rebase or move production. P14 integration, proof regeneration and
+  independent Step 0 acceptance remain prerequisites for production work.
+- **Second sample.** Nine exact independent faults fail behavioural assertions
+  through the original callers. j6/j9/j11 have explicit caller/consumer
+  equivalence proofs, with all thirteen page/protocol cases also passing under
+  each exact fault. The deps report contains all twelve dispositions and the
+  eight-method audit of the old sweep. Its 221 kills never established coverage
+  of the 1,521 inventoried descendants; that claim is withdrawn.
+- **Fixtures and baseline.** Forty-four new files pass in independent file
+  isolates; their standalone controls are retained. A fresh serial original run
+  passes 389 cases in 70 files, and the additional arming file passes its two
+  cases alone. The frozen inventory now loads **210/210 expected suites**:
+  **1639 successes / one unchanged startup-shield failure**. Reused suites have
+  unchanged inputs and cannot import the modified IPTV driver. Existing
+  expectations and failure allowances are preserved. SDK, application,
+  dependencies and analyzer configuration remain unchanged.
+- **Audit continues.** The explicit single-fault inventory and serial batch
+  runner are checked in with their original-output fixtures. Completed mutation
+  batches are retained under `p15/review2/`; invalid candidates, missing
+  selections, runtime-only failures and timeouts receive no kill credit.
+  The point audit and final per-declaration closure table are still in progress.
+  This checkpoint does not claim Step 0 acceptance or completion of that audit.
+
+### 2026-10-16 — Phase 15 original boundary controls and runner integrity checkpoint
+
+- **No application change.** Original application remains `1d7699d2e`;
+  production and integration work remain blocked. Step 0 is still unaccepted.
+- Nine more files pass alone on the original: paging and category margins,
+  concurrent early caches, latched reanchor source, launch-index/source races,
+  no-op source-clear publication timing, last-live timer/storage capture,
+  escaped recovery Retry lifetime, and candidate narration. The guide bounds
+  case now captures an invalid-row error before its explicit assertion.
+- Frozen inventory: **219/219 loaded**, **1667 successes / the same one
+  startup-shield failure**; **419 fresh original cases**. Existing expectations
+  are unchanged. Exact input hashes and suite/case identities bind reused runs.
+- Sixteen combined original profiles pass with every selected widget body run
+  and zero skips. Their 80-point follow-up mutation run is in progress, followed
+  by unfinished original batches; saved completed IDs are not repeated.
+- Runner sets the widget binding's real 30-second default (explicit long clock
+  cases retain their timeout), stops later mutation bodies after the first
+  failed body, and reports those bodies as skips. Original controls execute
+  all bodies. A first runtime failure cannot acquire kill credit from a later
+  cleanup assertion. Only independently completed candidate isolates can be
+  recovered from an interrupted batch, with exact name/completion/hash receipts.
+- Evidence: `p15/review2/adaptive5-controls/`, standalone `*-controls.json`,
+  `baseline-receipt.json`, `completed-isolates/`, and `first-failure-audit.json`.
+  The final point-by-point and per-declaration audit remains unfinished.
+
+### 2026-10-16 — Phase 15 second-sample point audit addendum (STOP; unaccepted)
+
+- **Original/scope.** Follows `b0b1c3116`; application, packages, pubspec/lock and
+  analyzer configuration remain `1d7699d2e`. P13 is merged at `238df16f4`; no
+  P15 production move, rebase, fix or manifest-history waiver occurs.
+- **Sample A.** All twelve j survivors are closed: nine exact canonical-screen
+  manual assertion kills; j6/j9/j11 have explicit original caller/consumer
+  equivalence proofs. Their original and exact-mutant receipts are retained.
+- **Audit B.** The old 221-to-nested-point claim stays withdrawn. The corrected
+  1,571-point finite sweep records 1,205 unique assertion kills, 157 scoped
+  equivalences and 201 invalid candidates across 70 audited declarations
+  (three null Timer initializers excluded). The deps report contains the full
+  per-declaration table; each disposition links its witness, source proof or
+  explicit pending limitation.
+  Seven native recording paths are proved unreachable on macOS but remain
+  target-pending; exact six-second equality (`s0871`) remains clock-pending per
+  design finding 4. Neither classification earns kill/equivalence credit.
+- **Integrity.** Existing completed batches reused; serial nice-19 batches of
+  at most eight mutants, one combined isolate each, hook define enabled.
+  Exact original profiles execute every selected body, zero skips. First-failure
+  audit rejects runtime-first/cleanup assertions and initialization failures;
+  the single withdrawn old s0789 witness has a later valid queue assertion.
+  Timer read observation now respects the callback's creation zone and the
+  initial enrichment/deadline capture boundary. No private State injection.
+- **Baseline/checks.** All 37 new files pass alone (104 cases). Frozen inventory
+  loads 256/256 suites: 1,771 successes / the unchanged startup-shield failure;
+  523 fresh original cases, 197 unchanged old inputs. All 414 committed output
+  expectations remain exact. All 39 changed Dart files pass formatting and
+  focused analysis; architecture/negative/size checks pass. SDK unchanged;
+  evidence only under `refactor-evidence/vplayer/p15/review2/`.
+- **Follow-ups.** New original borrowed-row/source-protocol/queued-input and
+  disposed-callback observations recorded; exact original directory-row
+  one-pixel overflow characterized without a production fix or allowlist edit.
+- **STOP.** Step 0 remains unaccepted pending the third independent sample.
+  Production, P14 integration/rebase and regeneration remain unexecuted;
+  full-suite/build/device checks remain deferred by the reduced-gate rules.
+
+
+### 2026-10-17 — Phase 15 accepted sample / rebase materialization checkpoint
+
+- Plan owner accepted the third fresh independent sample: **20/22 (91%)**,
+  `p15/claude-mut4/results.json`. Historical Step-0 unaccepted entries above
+  describe their own checkpoints; they do not supersede this acceptance.
+- Original application remains accepted P14 **be4cd78aa**, byte-identical in
+  this worktree; pubspec and lockfile unchanged. FINAL evidence-only split
+  passes exhaustive comparison: **757 fates (682 retained, 70 moved, five
+  patched)**; seven prototypes **347/283/408/433/245/207/162** lines, frozen
+  Host signatures retained. The 67-site scan comprises 62 core references
+  and five regenerated P8/P11/P13 adapter actions. P13's two menu audio call
+  sites now share one adapter forwarder. No reference is dropped.
+- `k4`/`k12` source-equivalence arguments: reanchor's entry ticket check runs
+  synchronously before calling the browse provider; all three operational
+  category writers clear the boundary cache before another consume can run,
+  and cache publication rechecks its captured origin without suspension.
+  The exact original mutants each passed 523 cases. Guards stay in production.
+  Rebased source hashes and exhaustive writer inventory are recorded with the
+  final audit; no kill credit is assigned to these equivalences.
+- The unchanged rebased original reproduces the three long clock timeouts:
+  retry-after-60s and both capability=true siblings. Both short capability=false
+  cases pass. Complete stable-tree run: `p15/rebase/clock-original.jsonl`.
+  Revised tests retain request/loading/result assertions, use a future programme
+  expiry and a larger scheduling budget, and remove the fragile 60-to-61s
+  admission window. **Exact 60-versus-61s discrimination is device-pending**;
+  the old tight-window mutation witness is historical, not a current guarantee.
+- Verification continues in short, serial checkpoints. The standalone original
+  replay, changed-input witnesses, analyzer probes, historical proofs and expanded
+  reduced baseline are pending. A mount-ready fixture miss was recorded on the
+  original in `initial-failed-alone-video_player_iptv_memory_test.jsonl`; its
+  unchanged file replay passes all 23 cases. No fixture or expectation was changed.
+  No application move, CI transition, full suite, build, push or device action.
+
+### 2026-10-17 — Phase 15 rebased original inputs verified
+
+- All **117 affected suites / 523 cases** pass alone on accepted P14
+  `be4cd78aa`; every accepted preparation outcome matches by suite/test identity.
+  This includes all 113 new suites and four existing IPTV suites. Reused file
+  controls have exact unchanged hashes. The original mount-ready miss and the
+  75-second retained-Retry test's two-minute scheduling timeout are archived;
+  unchanged memory-file replay passes, and the Retry test passes with the same
+  assertions and a 15-minute scheduling budget. No production or fixture change.
+- FINAL prototypes pass **17 independent corruption negatives**, including each
+  regenerated adapter and a falsely declared substitution of the lexical guide
+  `context`. Exhaustive whole-file proof permits only AST-identified optional
+  commas; normal formatting is idempotent. All **32** earlier destinations are
+  protected. The source-bound `k4`/`k12` equivalences and hashes are complete.
+- Input audit: **66/70 moved declarations token-identical** to preparation;
+  the four changed bodies contain only accepted P13 recording-action rewrites.
+  **322** targeted refreshes prepared: all 258 previously killed points in
+  these bodies, plus 64 retained occurrences; three retained source audits remain.
+  Original combined controls and refreshed assertion outcomes are pending.
+- Analyzer root/strict/final probe **159/235/170**; zero errors, P1–P14
+  identities/maxima retained. The 11 probe additions are the previously measured
+  receiver-context/formatter/import effects: five infos, five unused-import
+  warnings and one unused shown name. No application lint fix. Frozen expanded
+  reduced inventory has **364 files**, every current video-player suite plus
+  reader/theme and inherited P13/P14/IPTV boundary coverage. Its fresh baseline
+  and serial historical/self-test run are in progress.
+- Evidence: `p15/rebase/` standalone receipts, `input-audit.json`,
+  `survivor-equivalences.json`, `optional-commas.json`, `earlier-destinations.json`,
+  `final-negatives.log` and analyzer probes. No application move or CI activation.
+
+### 2026-10-17 — Phase 15 historical proofs and final standalone checkpoint
+
+- All **44 serial mechanical checks pass**: every Dart manifest self-test,
+  Kotlin self-test, P1–P14 historical checks (P13 `238df16f4`, P14
+  `be4cd78aa`) and S/S2/S2b/S2c/S2d proofs. Completed receipts are reused
+  only for unchanged inputs; parser transport has stock-output equivalence
+  evidence, including direct and nested process serialization.
+- Eight local await-delivery selectors now use the unique method-name stem,
+  so they match the same original private frame and its declared public
+  relocation. Assertions, intercepted values and fixture behavior are unchanged.
+  All eight files pass alone again on P14. Final-input receipts retain exact
+  **117-file / 523-case** parity with the preparation baseline.
+- Refresh scope is now **398 exact faults**: 258 prior kills in the four
+  P13-rewritten bodies, 76 witnesses affected by selector/scheduling-budget
+  test edits, and 64 retained references. Three retained source audits remain.
+  **140** original control selections precede these runs. Two clock faults
+  separately check late retry and archive capability; the retained-Retry
+  lifetime fault is identical to refresh point `rb_g0001`.
+- The fresh **364-file / 2,278-outcome** original comparison is running;
+  mutation outcomes are pending. Evidence remains `p15/rebase/`. Application
+  source and dependencies still match accepted P14. No production creation,
+  CI transition, full suite, build, push or device action at this checkpoint.
+
+### 2026-10-17 — Phase 15 rebased reduced baseline identity checkpoint
+
+- Fresh accepted-P14 original run loads **all 364 expected suites** and
+  matches **all 2,278 identities** in the preparation/P14 union: **2,277
+  successes, one unchanged failure**. Both the 1,772 preparation outcomes
+  and 1,681 P14 outcomes match exactly; overlaps agree. No missing cases,
+  changed outcomes, new skips or baseline recording. Flutter SDK matches
+  preparation. Application/dependency inputs remain accepted `be4cd78aa`.
+- All **523 P15 cases pass** in the broader run as well as the final-input
+  standalone runs. This includes the revised three long-clock archive cases,
+  their capability=false siblings and the retained 75-second Retry case.
+  The sole failure is the existing source-text assertion
+  `test/playback_startup_view_test.dart::startup shield remains opaque and
+  noninteractive in PiP`, already present in both prior baselines. Its source
+  and expected outcome are unchanged; it is not added to a failure allowlist.
+- The four changed-body audit also renews **21 source-equivalence arguments**
+  by exact token projection of accepted P13 recording receivers. Their
+  predicates/order/callers remain protected by the historical proofs; none
+  earns kill credit. **15** changed-body compile-invalid candidates are
+  queued for revalidation; all seven target-pending entries remain pending.
+- Evidence: `p15/rebase/rebased-baseline-proof.json`,
+  `reduced-original.jsonl` / `.env.json`, `source-proof-rebase.json`.
+  The **140** original control selections are running before the 398
+  assertion-witness refreshes and two additional clock faults. Production
+  creation remains pending those results and first-assertion trace review.
+
+### 2026-10-17 — Phase 15 original control checkpoint
+
+- All **140 exact original control selections pass**, with every selected
+  body executed and zero skips. This includes all revised clock controls.
+  Exact plan/test hashes are pinned in `p15/rebase/refresh-control-results/`.
+  The long-running controller retained an obsolete compiled count assertion;
+  its receipts independently validate all 140. Controls are not repeated.
+- The 15 compile-invalid revalidations, two additional clock faults and 398
+  assertion-witness refreshes remain pending. Their serial driver waits on
+  the shared execution guard used by other executors. No guard is bypassed,
+  no application source is changed and no production move begins yet.
+
+### 2026-10-17 — Phase 15 rebase / Step-0 closure (production authorized)
+
+- FINAL materialization is re-derived on accepted P14 `be4cd78aa` with all
+  32 earlier destinations protected, frozen Hosts, four regenerated adapters,
+  exhaustive partition/import/order/adapter proofs and refreshed analyzer
+  probes. All 44 serial preproduction mechanical checks pass. The seven
+  prototypes remain byte-identical to preparation; no history relaxation.
+- Changed-input evidence closes: **143 original controls**, **407 assertion
+  kills** (398 systematic/retained refreshes, two clock faults, seven affected
+  predetermined independent-sample faults), **15** compile-invalid
+  revalidations and **21** renewed source proofs. All actual first failures
+  were audited; 131 changed/unavailable historical locations were reviewed
+  in 70 source groups. No setup, unhandled runtime or timeout earns kill credit.
+- Two retained mutations originally span a callback and its capability flag.
+  Re-anchoring only their first identifier made invalid widgets. Their complete
+  original two-occurrence spans are now re-anchored and assertion-killed;
+  the invalid attempts remain archived. The other 396 receipts are reused
+  only after exact per-point fault/test/runner/original/variant-hash checks.
+- Accepted sample remains **20/22**: seven affected witnesses are refreshed,
+  13 reuse token-identical declarations and byte-identical accepted test
+  inputs; `k4`/`k12` retain their source equivalences and production guards.
+  `k18`'s selected old audio case survived in isolation and does not exercise
+  ladder cleanup. A new public-caller test overlaps two candidate ladders,
+  retires the older one, and checks that an error in the newer pending probe
+  stays muted. It passes alone and under the original wrapper, and kills the
+  exact predetermined `k18` fault at the rendered error assertion. No credit
+  relies on the unrelated old clock failures; no application bug is fixed.
+- All **117 prior files / 523 cases** retain standalone parity and pass in
+  the broader original run. The new file adds one separately observed passing
+  original case: **118 files / 524 characterization cases**. The frozen gate
+  inventory is now **365 suites / 2,279 expected outcomes**. Its baseline is
+  the unchanged 364-suite/2,278-outcome run plus the new original-only receipt;
+  no prior outcome is re-recorded. The sole historical failure remains the
+  PiP startup-shield source-text assertion. Every revised long-clock case
+  passes in standalone, broader and isolated-control runs. Exact 60-versus-61s
+  discrimination remains device-pending, without old mutation credit.
+- Evidence: `p15/rebase/refresh-closure.json`, `assertion-audit.json`,
+  `mutation-final-results/reuse-proof.json`, `independent-reuse-proof.json`,
+  `independent-k18-results/`, `clock-closure.json` and
+  `newcase-original-v2.jsonl`. Existing snapshots and shared fixtures are
+  unchanged. Application code/dependencies still equal accepted P14 at this
+  checkpoint. Next: the already-authorized Step 1, then the clean reduced gate.
+
+### 2026-10-17 — Phase 15 Step 1 applied (reduced gate pending)
+
+- Production callers now use all seven frozen IPTV collaborators. **70
+  declarations (17 fields, 53 methods/getters)** move; the 757-fate manifest
+  is **applied**. All **67** retained occurrences route to the proper owner.
+  The four P8/P11/P13 facade adapters retain earlier rewrites; P11's ticket
+  getter stays State-owned. Shared fields remain State-owned, with the switch
+  owner as the sole operational ticket writer. No sibling imports.
+- The State constructor appends seven eager inert assignments after P14.
+  Recovery remains State-owned and lazy with exactly two initializer redirects.
+  Plain forwarders preserve ticket capture and expectRetune prefixes; lexical
+  guide-model `context` and original disposal statement order are retained.
+- Formatted destination sizes: ring **347**, ladder **283**, guide/catchup
+  **408**, switch/recovery **433**, live sources **245**, watch memory **207**,
+  banner **162**. Facade **14,005 → 12,876** lines; only its size ratchet is
+  lowered. All 32 earlier destinations remain protected and unchanged.
+- CI current/self-test and both analyzer inputs select P15. P1–P14 historical
+  commands remain, including P13 `238df16f4` and P14 `be4cd78aa`; every seam
+  proof stays enabled. All seven destinations are in the theme manifest,
+  rendered set and three source-guard lists. Characterization files remain
+  in the deduplicated behavior list. Six measured original-directive warnings
+  are registered without removing frozen imports or fixing application lint.
+- Verification passes: actual current move proof, full CI format scope plus
+  theme guard, size/architecture, analyzer allowlist/identity comparator and
+  **127/127 cases in 14 behavior suites**, matching the original receipt union.
+  The running comparison driver initially lacked the newly added case in its
+  compiled expected map; the completed test log was compared against both
+  original receipts without replaying tests. All eight production files are
+  byte-identical to the reviewed FINAL prototypes. Pubspec/lock unchanged.
+- Evidence: `p15/rebase/step1-application.json`, `step1-proof.json`,
+  `step1-smoke.jsonl` / `.env.json` and check logs. Next: commit this creation
+  checkpoint, then the complete reduced gate on that clean tree. No full
+  suite, release build, push, merge or device action.
+
+### 2026-10-17 — Phase 15 clean-tree reduced gate complete (STOP)
+
+- Gate revision **177e532ff**, clean before and after the entire run. All
+  **365 expected suites load**: every video-player suite, readers/theme guard
+  and inherited boundary coverage. **2,279/2,279 outcomes match by identity**
+  against the unchanged 2,278-outcome original run plus the separately observed
+  new stale-ladder case: **2,278 successes, one unchanged failure**, zero new
+  failures, missing cases or newly skipped tests. All **524 P15 cases pass**.
+- The sole failure is the historical source-text assertion
+  `test/playback_startup_view_test.dart::startup shield remains opaque and
+  noninteractive in PiP`. It remains identical to both prior baselines; no
+  outcome, failure allowlist or original golden is re-recorded.
+- All **48 serial mechanical checks pass**: shared P1–P15 Dart manifest
+  self-test, all 26 TSV Dart manifest self-tests, Kotlin self-test, current
+  P15 and P1–P14 history (including P13 `238df16f4`, P14 `be4cd78aa`), all
+  S/S2/S2b/S2c/S2d proofs, size/architecture and architecture negatives.
+  Full CI format plus theme-guard format, analyzer allowlist and the P15
+  analyzer identity comparator/self-test also pass. Diagnostic identities and
+  earlier-phase maxima remain protected. Flutter **3.44.8**, Dart **3.12.2**,
+  matching the original configuration.
+- Final production files retain their reviewed prototype bytes. Facade
+  **12,876** lines; seven collaborators **347/283/408/433/245/207/162** lines.
+  Manifest is applied, Hosts remain frozen, all 32 earlier destinations remain
+  protected, and State shared-field/resource ownership and disposal order are
+  preserved. Pubspec and lockfile remain unchanged.
+- Caveats closed by evidence: k4/k12 source equivalences keep their guards;
+  revised long-clock tests pass original standalone, broad original, controls
+  and extracted gate; the exact k18 fault is killed by the new public stale-
+  ladder error-isolation case. **Exact 60-versus-61-second discrimination and
+  existing target-only/device checklist items remain pending**, without old
+  mutation credit. Independent post-gate review remains with the plan owner.
+- Evidence: `p15/gate/final-proof.json`, `clean-tree-start.json`,
+  `mechanical-results.json`, `commands.jsonl`, `reduced.jsonl` / `.env.json`
+  and analyzer logs; detailed rebase/characterization receipts remain under
+  `p15/rebase/`. Global serial-lock waits are preserved in the execution record.
+  Full suite and release builds remain deferred to M3 after P16. No push,
+  merge, branch switch, app launch/install, adb or emulator action. **STOP**.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
@@ -5428,3 +6338,90 @@ stale-result matrix; landing timeouts via a bounded real-time driver or
 device-pending; five source-text guards retargeted. P3: 28-reference ledger,
 CI transition. Final accepted-P13 proofs and measurements are recorded in
 Progress; the preparation line numbers and provisional checkpoint stay historical.
+## Phase 15 design review resolution (Codex `vp-design`, 2026-10-15) — "No P1s"
+
+Reviewed at `a5ce21c49` (facade byte-identical to `1d7699d2e`); five P2s
+and two P3s, all adopted:
+
+1. **Ownership vs the binding guard** (`occurrence_field_bindings.py:145`
+   rejects an owned field forwarded through a Host). Fields read or
+   written by more than one collaborator stay **State-owned** with narrow
+   live accessors: `_iptvSwitchTicket` (the switch owner remains its only
+   operational writer through its Host setter; every other Host gets a
+   getter only — so the P11 adapter's `iptvSwitchTicket` forwarder is
+   **not** patched), `_iptvGuideContextGeneration`, the ring paging fields
+   read by ladder/owner (`_iptvZapWindowOffset`, `_iptvZapCategoryTotal`,
+   `_iptvZapPagingActive`, `_iptvZapCategory`, `_iptvZapCategories`,
+   `_iptvZapRequestInFlight`), `_iptvZapPendingInputs` (ring `clear()`s
+   5469/5580/5586 + ladder add/remove) and `_kIptvZapPageSize` (stays a
+   State `static const`; no cross-class static move — finding 6). Still
+   moving: ring-only `_iptvZapSourceId`, `_iptvZapRequestTicket`,
+   `_iptvZapArmingPaging`; ladder-only cached triple and
+   `_iptvZapDrainingInputs`; guide `_iptvCatchupRequests`; memory
+   `_preferredIptvAudioLanguage` + last-live trio; banner timers/ticket/
+   `_iptvArchiveRetryAt`. Checker extension not pursued; binding
+   protection unchanged.
+2. **Seven Hosts, frozen at step T.** Pre-correction distinct-name counts
+   ring 14 / ladder 17 / guide 31 / switch 53 / sources 23 / memory 8 /
+   banner 13 (re-derived after finding 1). Memory Host exactly `mounted`,
+   `player`, `currentIptvChannel`, `iptvGuideContextOverride`,
+   `iptvSourceId`, `iptvSwitchTicket`, `isIptvSeriesContext`, `isPlaying`;
+   Sources drops those memory-only names and keeps live `iptvStartIndex`
+   and `videoUrl`. Signatures frozen: resolver `Future<String?>
+   Function(Torrent)?`; `tryOpenLiveStream` keeps its 12 s default and
+   typed headers; `openMedia` includes the synchronous `bool Function()?
+   beforeOpen`; the `_sleep.sleepTimerMode → _host.sleepTimerMode` chain
+   is registered. Step T measures all seven formatted prototypes (imports,
+   Host, receiver wraps); the owner's ≤ 500 is a step-T prerequisite.
+3. **Stale switches characterized as-is, not idealized.** Separate outcomes
+   at recording stop, pause, player stop, resolution, pre-open setup,
+   issued open and probe completion. Known original effects to pin and
+   record as Follow-ups: after `await _player.pause()` (≈ 6980) the switch
+   clears sources / stops / resolves / opens without re-checking the
+   ticket, so an older direct switch released late can still `_openMedia`;
+   `_tryOpenLiveStream` (7118) opens after recording stop with no ticket
+   (caller checks afterwards); winner marking (7022) checks the ticket but
+   not `mounted`, and disposal does not bump the ticket. Include same-turn
+   repeated zap inputs: the ticket advances synchronously but the index
+   only after recording stop (contra the 5513 comment). Preserve all.
+4. **Probe driver + wall clock.** `FakePlayer.open` emits its default frame
+   before returning (`fake_player.dart:129`) and the probe ignores events
+   until `_openMedia` returns (7125), so step 0 adds a driver controlling
+   open acknowledgement separately from later width/position/error events
+   (pre-ack events leave the probe pending; a post-ack event wins); drain
+   timed-out/disposed probes before teardown. No new app seam: candidate
+   and catch-up HTTP via an installed fixture addon (`stream`/`tv`), the
+   existing transport or `debugStreamHttpClientFactory`, controlled Xtream
+   responses, unique identities (candidate/catch-up-form caches can bypass
+   barriers). `DateTime.now()` deadlines (6 s error debounce, 60 s archive
+   retry at 11829) need bounded real-time cases or are device-pending; the
+   4.5 s hide timer and 12 s probe timeout use timer advancement.
+5. **Profile matrix at real boundaries.** Last-channel storage awaits a
+   playlist lookup before taking preferences
+   (`iptv_last_channel_storage.dart:49`); audio takes a profile-bound
+   preferences object before editing (`iptv_audio_storage.dart:32`);
+   history awaits the tracking preference before `IptvMediaStore`'s scoped
+   admission (`iptv_history_storage.dart:71`, `debrify_tv_database.dart:164`).
+   Hold pre-preference capture, post-capture/pre-write, pre-admission and
+   admitted transaction; inspect physical keys and rows in both profiles
+   incl. A→B→A and deletion; record rejection / outgoing completion /
+   incoming writes separately. Also hold reads (browse/re-anchor,
+   candidate resolution, catch-up lookup, banner EPG, audio preference)
+   across handoff/disposal, and audio application across renderer
+   replacement while storage is pending. Outcomes pinned as Follow-ups.
+6. **Tooling fallbacks dropped.** No static-to-static or top-level constant
+   move (constant stays State-owned); no ≤ 520 owner exception (the
+   500-line cap in `check_search_architecture.py:104` stands); stream-error
+   classification stays outside the owner (it classifies and routes through
+   the facade).
+7. **Ledger + CI.** 62 entries = 60 facade sites + 2 initializer; seven
+   theme files. CI transition: current/self-test manifest and both analyzer
+   inputs → P15; P1–P14 `--at` at accepted merges; all seam proofs incl.
+   S2d; every new test in `ci_behavior_tests.txt`; seven destinations in
+   theme lists; facade size ratchet; reduced-gate expected-suite loading;
+   M3 full suite + builds after phase 16.
+
+Patched adapters after finding 1: P8 PiP (`cancelPendingIptvCatchup`),
+P13 menu UI and menu controller (`captureIptvAudioLanguage`,
+`hideIptvZapBanner`), P11 track preferences only for
+`applyIptvAudioPreference` (→ memory). Regenerated on the accepted P14 base.
