@@ -7738,6 +7738,25 @@ remain byte-identical to `be4cd78aa`; no production moves or bug fixes.
   Remaining systematic, retained and per-case closure and the reduced-gate
   comparison are still pending; this checkpoint does not claim Step 0 complete.
 
+
+### 2026-10-17 — Phase 17 Step 0 publication checkpoint (in progress)
+
+- Current preparation positives: **287 cases /37 files**, each new file
+  passes alone against byte-identical `be4cd78aa` application code. Six new
+  files cover failed by-ID identity/banner publication, overlapping failure
+  subtext, payload-title precedence, renderer recovery using the updated
+  stream URI, independent next-channel metadata, public guide dispatch and
+  the refused-fetch curtain. Format and focused analysis pass.
+- The earlier **260 cases /31 files** retain detached standalone receipts;
+  the six additions' detached runs are queued behind the systematic sweep's
+  checkout lock. Their preparation successes do not substitute for those runs.
+  Frozen preparation inventory: **257 baseline +37 new =294 suites**.
+- All **66** selected real-boundary witnesses assertion-fail on the original;
+  the systematic run has reached candidate cleanup. Exact replays, per-case
+  closure, mutation tables and the reduced-gate identity comparison remain
+  pending. Runtime errors, timeouts and structural reader rejections receive
+  no behavioral kill credit. No production or dependency change.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

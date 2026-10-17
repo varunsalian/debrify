@@ -13462,3 +13462,12 @@ At the 210-candidate checkpoint only mutation selection narrows: all 829 source
 fault edits and 36 retained sites remain required. Final affected analysis
 preserves P14 diagnostics; changed test/prototype formatting passes. Complete
 mutation accounting, per-case closure and reduced-gate comparison remain pending.
+
+
+Preparation publication checkpoint: **287 positives /37 new files**, each
+passing alone on unchanged original application bytes in this worktree.
+The six latest detached standalone replays remain queued; the previous
+**260 /31** have detached receipts. Frozen preparation inventory:
+**257 +37 =294**. All 66 exact selected-boundary witnesses assertion-fail;
+complete systematic/retained/case accounting and the final gate are pending.
+No production move, dependency change or P17 checker activation.
