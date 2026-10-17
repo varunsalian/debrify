@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""PROVISIONAL P16 evidence materialization; never writes application files.
+"""FINAL P16 evidence materialization on accepted P15 plus reviewed S2e.
 
-P15 has not merged. Full history and its single patched adapter MUST be
-regenerated on the accepted P15 base. No dummy P15 ledger or history exemption.
+Never writes application files. Protects all fifteen applied historical phases.
 """
 import argparse
 import json
@@ -19,7 +18,7 @@ from dart_move_fixture import edited_text
 SOURCE = 'lib/screens/video_player_screen.dart'
 FEATURE = 'lib/features/video_player'
 STATE = '_VideoPlayerScreenState'
-BASE = '574b2a85e'
+BASE = '2dadfc7a4'
 GROUPS = [
  dict(name='VpStartupCandidates', receiver='_startupCandidates', file='vp_startup_candidates.dart', names=['_openStartupDebridDirect', '_tryOpenStartupVod', '_commitValidatedStremioSource', '_startupSourceFields']),
  dict(name='VpStartupFailover', receiver='_startupFailover', file='vp_startup_failover.dart', names=['_openInitialVodWithFailover']),
@@ -86,6 +85,8 @@ CHAINS = [dict(before=['VpS2Hooks','.','isAndroid'], name='isAndroid', type='boo
 for root,member,typ in [('_trakt','traktLastScrobbleAction','String?'), ('_simkl','simklScrobbleEnabled','bool'), ('_simkl','simklLastScrobbleAction','String?')]:
  CHAINS.append(dict(before=[root,'.',member], name=member, type=typ))
 for root,member,sig,args in [
+ ('_iptvBanner','hideIptvZapBanner','void hideIptvZapBanner({bool immediate = false})','(immediate: immediate)'),
+ ('_iptvSwitch','switchToIptvSource','Future<void> switchToIptvSource(int index, String url)','(index, url)'),
  ('_trakt','traktScrobble','void traktScrobble(String action)','(action)'),
  ('_trakt','startTraktHeartbeat','void startTraktHeartbeat()','()'),
  ('_simkl','startSimklHeartbeat','void startSimklHeartbeat()','()'),
@@ -153,7 +154,7 @@ EXPECTED_HOSTS = {
  'VpStartupGate': (28, 31), 'VpSourceSwitch': (46, 53),
  'VpSourcePlaylistSwitch': (48, 58),
 }
-PATCHED = []  # P15's _VpIptvChannelSwitchHostAdapter does not exist yet.
+PATCHED = ['_VpIptvChannelSwitchHostAdapter']
 
 def occurrences(vals,before):return [i for i in range(len(vals)) if vals[i:i+len(before)]==before]
 def name_edits(vals,name,after):
@@ -195,7 +196,7 @@ def build(package):
     if write:g['forwarders'].append('set '+name+'('+c['type']+' v) => '+target+' = v;')
    else:g['forwarders'].append(c['signature']+' => '+target+c['args']+';')
   names=[(re.search(r'\b(?:get|set)\s+(\w+)',f.split(' => ')[0]) or re.search(r'(\w+)\s*\(',f.split(' => ')[0])).group(1) for f in g['forwarders']];g['host_names']=names;assert len(g['forwarders'])==len(set(g['forwarders'])),g['name'];assert (len(set(names)),len(names))==EXPECTED_HOSTS[g['name']],(g['name'],names)
- spec.update(phase=16,status='draft',span_order=list(spans),patched_class_projection=PATCHED,provisional=dict(label='PROVISIONAL',preparation_base='be4cd78aa',seam_original=BASE,history='BLOCKED until accepted P15 merge; no dummy manifest/history exemption.',future_patched_adapter='_VpIptvChannelSwitchHostAdapter.hideSourceSheet',regenerate='All partition/import/order/adapter proofs, Hosts, analyzer probes and changed mutation inputs on accepted P15.'))
+ spec.update(phase=16,status='FINAL',span_order=list(spans),patched_class_projection=PATCHED,finalization=dict(label='FINAL',preparation_base='be4cd78aa',accepted_p15='ed7c6717a',seam_original=BASE,history='All fifteen applied phases; every earlier destination derived without a whitelist.'))
  registrations=[dict(before=['widget','.',n],after=['_host','.',n],binding='unbound',role_change='live widget selector') for n in WIDGET]+[dict(before=c['before'],after=['_host','.',c['name']],binding='unbound',role_change='Complete live chain to exact facade Host projection') for c in CHAINS]
  spec['guards']=dict(occurrence_field_bindings=dict(owners=[STATE],state_classes=[STATE],mandatory_qualification=True,owner_scoped_bare_fields={STATE+'._pendingSourcePlaylist':'VpSourceSwitch',STATE+'._sourcePlaylistResolution':'VpSourceSwitch'}),record_owners=[STATE],record_fields={STATE:['_pendingSourcePlaylist','_sourcePlaylistResolution']},receiver_owners={g['receiver']:g['name'] for g in GROUPS},receiver_paths={g['receiver']:g['name'] for g in GROUPS},receiver_members={g['name']:[n[1:] for n in g['names']] for g in GROUPS},receivers=['_host',*[g['receiver'] for g in GROUPS]],live_state_receivers=['_host'],require_live_state_callbacks=True,host_property_bindings=hostbindings,registered_occurrence_substitutions=registrations)
  for row in spec['declarations']:
@@ -209,13 +210,13 @@ def build(package):
     indices=occurrences(vals,before)
     if indices:edits.append(dict(before=before,after=after,count=len(indices)))
   if key in PATCHED:
-   assert len(edits)==1 and edits[0]['count']==1,(key,edits);row.update(fate='patched',reason='Reserved for accepted-P15 owner adapter; no provisional stand-in.',test='dev/tool/draft_vplayer_startup_moves.py',patches=edits);edits=[]
+   assert len(edits)==1 and edits[0]['count']==1,(key,edits);row.update(fate='patched',reason='Route P15 owner hideSourceSheet to its P16 owner, preserving every earlier rewrite.',test='dev/tool/draft_vplayer_startup_moves.py',patches=edits);edits=[]
   if edits:row['substitutions']=sorted(edits,key=lambda e:json.dumps(e['before']));measured.append(dict(declaration=key,fate=row['fate'],edits=edits))
   if key==STATE+'.'+STATE:
    append=[]
    for g2 in GROUPS:append += [g2['receiver'],'=',g2['name'],'(','_'+g2['name']+'HostAdapter','(','this',')',')',';']
-   row.update(fate='patched',reason='PROVISIONAL inert assignments after P14; append after seven P15 collaborators on accepted P15.',test='dev/tool/draft_vplayer_startup_moves.py',patches=[dict(before=[';','}'],after=[';',*append,'}'],count=1)])
- retained={r['original'] for r in spec['declarations'] if r['fate']!='moved'};spec['span_order']=[k for k in spans if k in retained];scaff={};previous=STATE+'._resumeSave'
+   row.update(fate='patched',reason='Five inert eager assignments after all seven accepted P15 collaborators.',test='dev/tool/draft_vplayer_startup_moves.py',patches=[dict(before=[';','}'],after=[';',*append,'}'],count=1)])
+ retained={r['original'] for r in spec['declarations'] if r['fate']!='moved'};spec['span_order']=[k for k in spans if k in retained];scaff={};previous=STATE+'._iptvBanner'
  for i,g in enumerate(GROUPS):
   host=g['name']+'Host';adapter='_'+host+'Adapter';key=STATE+'.'+g['receiver'];scaff['@directive:'+str(len(u['directives'])+i)]="import '../"+g['dest'][4:]+"';";scaff[key]='late final '+g['name']+' '+g['receiver']+';';scaff[adapter]='class '+adapter+' implements '+host+' {\n  '+adapter+'(this._s);\n  final _VideoPlayerScreenState _s;\n'+''.join('  @override\n  '+f+'\n' for f in g['forwarders'])+'}\n';at=spec['span_order'].index(previous)+1;spec['span_order'].insert(at,key);previous=key
  for key in scaff:
@@ -249,7 +250,7 @@ def main():
  sizes={g['name']:len(formatted[g['dest']].splitlines()) for g in GROUPS}
  assert all(v<=500 for v in sizes.values()),sizes
  hosts={g['name']:g['forwarders'] for g in GROUPS}
- spec['provisional']['host_contracts'] = hosts
+ spec['finalization']['host_contracts'] = hosts
  # Scan scanner occurrences, never comments or substrings, outside moved spans.
  unit=parse({'base':original},a.parser_package,ownership=True)['base']
  spans,_,_=partition(unit,[STATE])
@@ -264,11 +265,11 @@ def main():
    retained.append(dict(declaration=row['original'],member=name,
        line=original.count('\n',0,offset)+1,
        substitution=byname[name]['receiver']+'.'+name[1:],
-       p15_regeneration=row['original']==STATE+'._switchToIptvSource'))
+       p15_adapter=row['original']=='_VpIptvChannelSwitchHostAdapter'))
  assert len(retained)==22,retained
  (a.probe.parent/'retained-sites.json').write_text(json.dumps(dict(
-     label='PROVISIONAL',original=BASE,sites=retained,count=len(retained),
-     after_p15='21 facade sites plus the single owner adapter; regenerate actual locations.'),indent=2)+'\n')
+     label='FINAL',original=BASE,sites=retained,count=len(retained),
+     after_p15='21 facade sites plus the single owner adapter, regenerated on accepted P15.'),indent=2)+'\n')
  assert not next(r for r in spec['declarations'] if r['original']==STATE+'.dispose').get('substitutions')
  (a.probe.parent/'field-inertness.json').write_text(json.dumps(dict(
      pendingSourcePlaylist='Implicit null, no allocation/call/Host read.',
@@ -280,7 +281,10 @@ def main():
  (R/'dev/tool/dart_moves/vplayer_p16.json').write_text(json.dumps(spec,indent=2)+'\n')
  (a.probe.parent/'membership.json').write_text(json.dumps(measured,indent=2)+'\n')
  (a.probe.parent/'hosts.json').write_text(json.dumps(hosts,indent=2)+'\n')
- (a.probe.parent/'result.json').write_text(json.dumps(dict(label='PROVISIONAL',comparison_errors=errors,sizes=sizes,hosts={g['name']:dict(names=len(set(g['host_names'])),declarations=len(g['host_names'])) for g in GROUPS},history='BLOCKED until P15 merge',future_adapter='_VpIptvChannelSwitchHostAdapter.hideSourceSheet'),indent=2)+'\n')
- print('PROVISIONAL zero comparison differences',sizes,'history blocked until P15 merge')
+ from dart_move_history import earlier_sources,check_earlier
+ history_errors=check_earlier(spec,a.parser_package)
+ assert not history_errors,history_errors
+ (a.probe.parent/'result.json').write_text(json.dumps(dict(label='FINAL',comparison_errors=errors,sizes=sizes,hosts={g['name']:dict(names=len(set(g['host_names'])),declarations=len(g['host_names'])) for g in GROUPS},protected_earlier_destinations=len(earlier_sources(spec)),patched_adapter='_VpIptvChannelSwitchHostAdapter.hideSourceSheet'),indent=2)+'\n')
+ print('FINAL zero comparison differences',sizes,'all fifteen historical phases protected')
 
 if __name__=='__main__':main()

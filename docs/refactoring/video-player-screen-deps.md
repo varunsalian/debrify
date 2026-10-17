@@ -13074,3 +13074,18 @@ no-pub/concurrency1 with `DEBRIFY_VP_TEST_HOOKS=true`; parser packages are
 isolated and copied kernels removed. Independent review and accepted-P15
 rebase/final T remain prerequisites. Full-suite/build/device claims wait for
 M3 and the relevant device checklist. Phase 16 Step 0 STOP.
+
+## Phase 16 accepted-P15 rebase tooling checkpoint (2026-10-18)
+
+Final original `2dadfc7a4` is accepted P15 `ed7c6717a` plus reviewed S2e.
+The regenerated seam exhaustively classifies 708 spans with two patches.
+FINAL production materialization classifies the same source, moves 16 methods
+and two inert fields, protects all 39 prior destinations, and enumerates
+21 facade occurrences plus `_VpIptvChannelSwitchHostAdapter.hideSourceSheet`.
+Host names/declarations and formatted sizes match the provisional table above;
+final contracts now live under `finalization.host_contracts`. No applied claim.
+
+Twenty standalone original suites preserve all 201 Step-0b outcomes.
+The reduced inventory expands from 278 to 392 for every P15 player suite.
+Analyzer probes, changed-input mutation refresh and complete reduced comparison
+remain pending. Completed receipts: `p16/rebase/`, parent `commands.jsonl`.

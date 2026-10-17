@@ -1,9 +1,9 @@
-"""Validate the pipelined S2e seam without inventing phase-15 history.
+"""Validate rebased S2e against accepted P15 and all historical destinations.
 
 The exhaustive seam ledger proves the facade delta. The accepted applied
 ownership ledger, extended by just those patches, still proves its complete
 facade/destinations and unmodified historical destination protections. This is
-not a phase-16 move/history proof; that remains blocked until phase 15 merges.
+not a phase-16 production move/history proof.
 """
 import copy
 
@@ -18,17 +18,17 @@ def run_current_manifest(path, package):
     seam = load_manifest(path)
     if seam.get('checkpoint') != 'S2e':
         return run_manifest(path, package)
-    # These constants are the accepted pre-P15 boundary, not a configurable
-    # history exemption. All ordinary production manifests use run_manifest.
-    assert seam['phase'] == 16 and seam['base'] == 'be4cd78aa'
+    # The accepted P15 boundary is fixed; ordinary production manifests use
+    # run_manifest without an overlay or history exemption.
+    assert seam['phase'] == 16 and seam['base'] == 'ed7c6717a'
     assert seam['destinations'] == seam['scaffolding'] == {}
     source = seam['source']
     current = (ROOT / source).read_text()
     errors = check(seam, git_text(seam['base'], source), {source: current}, package)
-    owner_path = 'dev/tool/dart_moves/vplayer_p14.json'
+    owner_path = 'dev/tool/dart_moves/vplayer_p15.json'
     owner = load_manifest(owner_path)
     assert owner == load_manifest(owner_path, seam['base'])
-    assert owner['status'] == 'applied' and owner['phase'] == 14
+    assert owner['status'] == 'applied' and owner['phase'] == 15
     errors += run_manifest(owner_path, package, at=seam['base'])
     overlay = copy.deepcopy(owner)
     patches = {r['original']: r for r in seam['declarations'] if r['fate'] == 'patched'}

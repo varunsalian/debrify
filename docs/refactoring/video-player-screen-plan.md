@@ -7156,6 +7156,29 @@ P13 menu UI and menu controller (`captureIptvAudioLanguage`,
 `hideIptvZapBanner`), P11 track preferences only for
 `applyIptvAudioPreference` (→ memory). Regenerated on the accepted P14 base.
 
+### 2026-10-18 — Phase 16 accepted-P15 rebase tooling checkpoint
+
+- Resumed at `2dadfc7a4` on accepted P15 `ed7c6717a`; application code is
+  exactly P15 plus the two reviewed S2e substitutions. No production move.
+- FINAL materialization re-derived: **708 original spans / 18 moves**, five
+  destinations **391/336/167/366/398** lines, Hosts **10/26/28/46/48** names.
+  All **39** earlier destinations protected; **22** retained occurrences
+  include the regenerated whole-class P15 owner adapter patch. Its other
+  rewrites and all previous adapters retain their accepted bodies.
+- Original all-retained comparison, P15 `--at ed7c6717a`, rebased S2e and
+  its independent default/order negatives pass. CI union-merge cleanup adds
+  P15 history and corrects the current-phase comment; current remains P15
+  until production creation. FINAL is an evidence manifest, not applied.
+- All **20 P16 suites / 201 cases** pass alone with exact Step-0b identity
+  parity. Frozen reduced inventory now includes P15's **114** added player
+  suites: **392** total. Its comparison is queued on the shared serial lock;
+  the earlier interrupted broad attempt is excluded, without outcome credit.
+- Evidence: `p16/rebase/` materialization, retained-site/Host ledgers, seam,
+  history/self-comparison logs and standalone receipts. Analyzer refresh,
+  changed-input mutation witnesses and complete reduced baseline remain
+  pending. Extraction-side S2e projection guard is prepared, not yet tested.
+  Pubspec unchanged; no full suite, release build, push or device work.
+
 ## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
 
 Reviewed at `c5c8e3500` (facade byte-identical to `be4cd78aa`; split,
