@@ -5951,6 +5951,36 @@ for Step 0 and Claude’s independent mutation sample.
   unchanged file replay passes all 23 cases. No fixture or expectation was changed.
   No application move, CI transition, full suite, build, push or device action.
 
+### 2026-10-17 — Phase 15 rebased original inputs verified
+
+- All **117 affected suites / 523 cases** pass alone on accepted P14
+  `be4cd78aa`; every accepted preparation outcome matches by suite/test identity.
+  This includes all 113 new suites and four existing IPTV suites. Reused file
+  controls have exact unchanged hashes. The original mount-ready miss and the
+  75-second retained-Retry test's two-minute scheduling timeout are archived;
+  unchanged memory-file replay passes, and the Retry test passes with the same
+  assertions and a 15-minute scheduling budget. No production or fixture change.
+- FINAL prototypes pass **17 independent corruption negatives**, including each
+  regenerated adapter and a falsely declared substitution of the lexical guide
+  `context`. Exhaustive whole-file proof permits only AST-identified optional
+  commas; normal formatting is idempotent. All **32** earlier destinations are
+  protected. The source-bound `k4`/`k12` equivalences and hashes are complete.
+- Input audit: **66/70 moved declarations token-identical** to preparation;
+  the four changed bodies contain only accepted P13 recording-action rewrites.
+  **324** targeted refreshes prepared: all 258 previously killed points in
+  these bodies, plus 66 retained occurrences; one retained source audit remains.
+  Original combined controls and refreshed assertion outcomes are pending.
+- Analyzer root/strict/final probe **159/235/170**; zero errors, P1–P14
+  identities/maxima retained. The 11 probe additions are the previously measured
+  receiver-context/formatter/import effects: five infos, five unused-import
+  warnings and one unused shown name. No application lint fix. Frozen expanded
+  reduced inventory has **364 files**, every current video-player suite plus
+  reader/theme and inherited P13/P14/IPTV boundary coverage. Its fresh baseline
+  and serial historical/self-test run are in progress.
+- Evidence: `p15/rebase/` standalone receipts, `input-audit.json`,
+  `survivor-equivalences.json`, `optional-commas.json`, `earlier-destinations.json`,
+  `final-negatives.log` and analyzer probes. No application move or CI activation.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

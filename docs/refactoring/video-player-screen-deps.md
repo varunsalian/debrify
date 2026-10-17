@@ -12660,3 +12660,29 @@ The four regenerated adapter classes carry five action rewrites, alongside 62
 core sites. The former two P13 menu-controller audio sites now share one Host
 forwarder. Earlier ticket and resume/recording adapters retain their State-owned
 values and all earlier rewrites. No production file is created at this checkpoint.
+
+### P15 rebased original verification
+
+All **117 files / 523 cases** pass in independent standalone runs on `be4cd78aa`,
+with exact identity parity against the accepted `1d7699d2e` preparation results.
+Receipts and hashes: `p15/rebase/standalone-results.json` and
+`characterization-proof.json`. The unchanged original mount-ready miss and the
+75-second retained Retry test's scheduling timeout remain archived. The former
+passes on unchanged replay; the latter passes with all assertions unchanged and
+a larger scheduling budget, as do all three revised long archive cases.
+
+The real-config **17 negatives** pass, including each of the four regenerated
+adapters and an independently declared lexical-context corruption. The exhaustive
+formatter proof records optional-comma sites and idempotence for all eight files.
+All 32 earlier destinations remain protected. Hosts are unchanged from the frozen
+ledger. **66 moved declarations are token-identical** to preparation; four bodies
+have accepted P13 recording-action receiver changes. The refresh plan covers all
+258 prior assertion kills in those bodies and 66 current retained references;
+one explicit retained source audit remains. Controls and refreshed kills follow.
+
+Analyzer **159 root / 235 strict / 170 final probe**; P1–P14 diagnostic mappings
+and maxima preserved. Five probe infos (two brace, two redundant-import and one
+receiver-context) and six original-directive warnings are recorded without fixes.
+The expanded frozen inventory contains **364 suites**; every suite must load
+before baseline/gate identity comparisons. Fresh baseline and historical proofs
+are pending; this checkpoint creates no production collaborator.

@@ -1,8 +1,8 @@
-# Phase 15 provisional IPTV Hosts
+# Phase 15 frozen IPTV Hosts
 
-Frozen against `1d7699d2e`, under the Phase 15 design review resolution.
-The complete partition is **PROVISIONAL** until phases 13 and 14 merge.
-No historical proof is satisfied or weakened by this prototype.
+Prepared against `1d7699d2e` under the Phase 15 design review resolution;
+re-derived unchanged on accepted P14 `be4cd78aa`. The complete partition
+is FINAL; all earlier destinations remain subject to history protection.
 
 | Destination | Formatted physical lines |
 | --- | ---: |

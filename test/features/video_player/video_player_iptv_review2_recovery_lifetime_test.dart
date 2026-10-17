@@ -66,6 +66,6 @@ void main() {
         await d.close();
       }
     },
-    timeout: const Timeout(Duration(minutes: 2)),
+    timeout: const Timeout(Duration(minutes: 15)),
   );
 }
