@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:debrify/models/torrent.dart';
 import 'package:debrify/services/series_source_fetcher.dart';
 import 'package:debrify/screens/video_player_screen.dart';
+import 'package:debrify/screens/video_player/widgets/stremio_tv_guide_sheet.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'support/player_actions.dart';
 import 'support/tv_episode_driver.dart';
@@ -101,6 +102,7 @@ void main() {
             return 'https://player.test/resolved.mp4';
           },
         );
+        expect(find.byType(StremioTvGuideSheet), findsNothing);
         expect(playerControls(t).onShowStremioSources, isNotNull);
         final sheet = await d.sourceSheet();
         expect(sheet.sources, [source]);

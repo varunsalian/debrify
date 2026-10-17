@@ -7706,6 +7706,38 @@ remain byte-identical to `be4cd78aa`; no production moves or bug fixes.
   36 retained sites stay frozen. Application, packages and pubspec remain
   byte-identical to `be4cd78aa`; no production moves or bug fixes.
 
+
+### 2026-10-17 — Phase 17 Step 0 race/signal checkpoint (in progress)
+
+- Current positives: **260 cases /31 files**, every file passing alone on
+  preparation and detached `be4cd78aa` application code. New eligibility (9),
+  navigation-generation race (1), and channel-signal/guide-publication (4)
+  suites pass; the existing eight-case channel suite also replays its added
+  guide-close assertion. The reduced preparation inventory is **257 +31 =288**.
+- The generation case holds an older shuffle at the real custom-inventory
+  callback, finishes a guide fetch and ordinary playlist action, then observes
+  the older operation's actual completion through the existing delivery driver.
+  Eligibility distinguishes manual/EOF fallback, restored texture, and silent
+  provider delivery after disposal. Signal cases observe acquired text before
+  held opens and distinct shallow now/next maps through the next-slot provider.
+- Two detached replay attempts caught an unrelated test-file edit through their
+  conservative whole-root input-hash check. They earn no acceptance credit;
+  archived originals are under `pilots/whole-root-hash-during-signal-edit`.
+  Both replay groups subsequently pass with inputs held fixed. Receipts:
+  `alone-guide-close-*`, `alone-eligibility-*`, `alone-boundary-additions-*`.
+- Final changed-test/prototype formatting and affected Flutter analysis pass;
+  the P14 analyzer comparator reports zero additions. Three later test suites
+  and the strengthened channel file have separate clean format/analyzer runs.
+  Existing unchanged ownership/architecture/reader/14-negative evidence is
+  reused. No application/dependency changes, production moves or bug fixes.
+- All nine fixed focused original controls pass. At a completed 210-candidate
+  checkpoint, the broad sweep yields to two narrower Debrify cohorts; **both
+  original controls pass**, every selected body runs and none skips. All 829
+  source edits and the 36 retained sites remain frozen; only relevant mutation
+  case selection changes. `scoped-selection-note.json` records this boundary.
+  Remaining systematic, retained and per-case closure and the reduced-gate
+  comparison are still pending; this checkpoint does not claim Step 0 complete.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |

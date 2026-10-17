@@ -13448,3 +13448,17 @@ receipts). Preparation inventory: **257 +28 =285**. The passive-error adapter's
 inferred-field narrowing was rejected by original controls and corrected to
 preserve `List<Object>`; those failed controls are archived and receive no
 proof credit. Fixed controls and remaining mutation/gate closure are pending.
+
+
+Current standalone positives are **260 cases /31 files** on both unchanged
+preparation and detached original application code. Eligibility (9), a real
+older-shuffle generation race (1), and channel signal/next-slot guide publication
+(4) supplement the earlier suites. The channel contract suite's explicit guide
+close assertion also has a fresh detached receipt. Preparation inventory:
+**257 +31 =288**. Two input-hash-invalidated replay attempts are archived and
+superseded by fixed-input successes. The nine corrected focused controls and
+two narrowed Debrify controls all pass with every selected body and zero skips.
+At the 210-candidate checkpoint only mutation selection narrows: all 829 source
+fault edits and 36 retained sites remain required. Final affected analysis
+preserves P14 diagnostics; changed test/prototype formatting passes. Complete
+mutation accounting, per-case closure and reduced-gate comparison remain pending.
