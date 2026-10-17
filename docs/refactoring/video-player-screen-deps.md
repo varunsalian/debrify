@@ -12746,3 +12746,30 @@ fixture is re-recorded. Exact 60-versus-61s distinction remains device-pending.
 See `p15/rebase/refresh-closure.json`, `assertion-audit.json`,
 `mutation-final-results/reuse-proof.json` and `newcase-original-v2.jsonl`.
 Application source is still accepted P14 until the following production move.
+
+### P15 applied ownership and physical footprint
+
+The final manifest is applied. Production routing uses the seven frozen Hosts,
+State-owned shared values and one switch/recovery operational owner. All 67
+retained occurrences, four patched facade adapters, the lazy recovery initializer,
+State constructor and original disposal ordering pass the actual current proof.
+All 32 earlier destinations are unchanged. No collaborator imports a sibling.
+
+| Destination | Formatted lines |
+| --- | ---: |
+| `vp_iptv_zap_ring.dart` | 347 |
+| `vp_iptv_zap_ladder.dart` | 283 |
+| `vp_iptv_guide_catchup.dart` | 408 |
+| `vp_iptv_channel_switch.dart` | 433 |
+| `vp_iptv_live_sources.dart` | 245 |
+| `vp_iptv_watch_memory.dart` | 207 |
+| `vp_iptv_zap_banner.dart` | 162 |
+
+Facade: 14,005 → 12,876 lines. The six probe-measured unused original-directive
+warnings are registered; imports and application behavior are preserved.
+CI current/self/analyzer inputs now select P15, P1–P14 accepted history and all
+seam proofs remain, and all seven theme/source-guard paths are registered.
+Current move, CI format, theme format, size/architecture and analyzer comparisons
+pass. All 127 cases in 14 selected behavior suites exactly match the original
+receipt union, including the new stale-ladder test. See `p15/rebase/step1-proof.json`.
+The clean-tree 365-suite reduced gate follows; full suite/builds stay deferred.

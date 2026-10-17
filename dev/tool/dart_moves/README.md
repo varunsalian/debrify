@@ -275,3 +275,16 @@ is `vplayer_p15.json`; the old provisional manifest is historical preparation
 only. `test_dart_iptv_moves.py` checks its real partition and forwarding negatives
 with all 32 earlier destinations derived from fourteen applied manifests.
 CI switches to P15 only when the seven production files are created.
+
+P15 Step 1 applies the FINAL `be4cd78aa` materialization: seven IPTV
+collaborators, 70 moves, five patched declarations and 67 retained occurrences.
+Shared fields stay State-owned; the switch/recovery collaborator is their only
+operational ticket writer. State eagerly constructs the seven inert collaborators
+after P14 while keeping recovery lazy. Plain facade forwarders, lexical guide
+`context`, all previous adapter rewrites and disposal ordering are preserved.
+CI current/self-test and both analyzer arguments now select P15; P1–P14 history
+includes P13 `238df16f4` and P14 `be4cd78aa`. The final 365-suite gate inventory
+adds one separately observed original stale-ladder case to the unchanged original
+2,278 outcomes; no old outcome or fixture is re-recorded. All seven theme paths
+are registered and the facade ratchet is 12,876 lines. Full reduced-gate evidence
+belongs in Progress after the clean-tree run.

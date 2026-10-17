@@ -198,6 +198,13 @@ import '../features/video_player/presentation/legacy_video_player/vp_iptv_record
 import '../features/video_player/presentation/legacy_video_player/vp_resume_keys.dart';
 import '../features/video_player/presentation/legacy_video_player/vp_resume_restore.dart';
 import '../features/video_player/presentation/legacy_video_player/vp_resume_save.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_iptv_zap_ring.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_iptv_zap_ladder.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_iptv_guide_catchup.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_iptv_channel_switch.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_iptv_live_sources.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_iptv_watch_memory.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_iptv_zap_banner.dart';
 
 /// A full-featured video player screen with playlist support and navigation controls.
 ///
@@ -430,6 +437,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _resumeKeys = VpResumeKeys(_VpResumeKeysHostAdapter(this));
     _resumeRestore = VpResumeRestore(_VpResumeRestoreHostAdapter(this));
     _resumeSave = VpResumeSave(_VpResumeSaveHostAdapter(this));
+    _zapRing = VpIptvZapRing(_VpIptvZapRingHostAdapter(this));
+    _zapLadder = VpIptvZapLadder(_VpIptvZapLadderHostAdapter(this));
+    _iptvGuide = VpIptvGuideCatchup(_VpIptvGuideCatchupHostAdapter(this));
+    _iptvSwitch = VpIptvChannelSwitch(_VpIptvChannelSwitchHostAdapter(this));
+    _iptvSources = VpIptvLiveSources(_VpIptvLiveSourcesHostAdapter(this));
+    _iptvMemory = VpIptvWatchMemory(_VpIptvWatchMemoryHostAdapter(this));
+    _iptvBanner = VpIptvZapBanner(_VpIptvZapBannerHostAdapter(this));
   }
   void _vpSetState(VoidCallback fn) => setState(fn);
 
@@ -602,7 +616,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// its finite archive timeline explicitly. Mirrors the signal the bar uses,
   /// so the keys and the UI can never disagree.
   bool get _tvNoTimeline =>
-      (_iptvZapBannerOwnsIdentity && !_iptvStartOverTimelineVisible) ||
+      (_iptvZapBannerOwnsIdentity &&
+          !_iptvGuide.iptvStartOverTimelineVisible) ||
       widget.hideSeekbar ||
       _duration <= Duration.zero;
 
@@ -656,9 +671,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // second only while the banner is up, so the rule advances on screen
   // without costing a rebuild for the rest of the session.
   DateTime _iptvZapClock = DateTime.now();
-  Timer? _iptvZapHideTimer;
-  Timer? _iptvZapTicker;
-  int _iptvZapEpgTicket = 0;
 
   DoubleTapRipple? _ripple;
   bool _panIgnore = false;
@@ -707,8 +719,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   final ValueNotifier<String?> _iptvReconnectText = ValueNotifier(null);
 
   late final IptvLiveRecovery _iptvLiveRecovery = IptvLiveRecovery(
-    isEligible: _iptvRecoveryEligible,
-    performRetune: _performIptvLiveRetune,
+    isEligible: _iptvSwitch.iptvRecoveryEligible,
+    performRetune: _iptvSwitch.performIptvLiveRetune,
     onEpisodeVisible: (_) => _iptvReconnectText.value = 'Reconnecting…',
     onRecovered: () => _iptvReconnectText.value = null,
     onSurrender: (source) {
@@ -730,217 +742,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     },
   );
 
-  /// The machine may act only on a LIVE channel with playback wanted and
-  /// nobody else in charge: sleep stops outrank reconnects, a backgrounded
-  /// app must stay quiet (the resume path re-arms recovery itself).
-  bool _iptvRecoveryEligible() {
-    if (!mounted || _screenDisposed) return false;
-    final channel = _currentIptvChannel;
-    if (channel == null || !channel.isLive) return false;
-    if (_sleepStopLatched) return false;
-    if (_sleep.sleepTimerMode == SleepTimerMode.endOfItem) return false;
-    if (_pausedByLifecycle) return false;
-    // An explicit user pause (including the PiP pause action) means nobody
-    // asked for playback — a pending retry must not restart the channel
-    // (codex round 2, finding 3).
-    if (_activeMediaUserPaused) return false;
-    return true;
-  }
-
-  /// Re-open the current live channel with its full identity (URL + the
-  /// channel's own headers — plan finding P7). A fresh open joins the live
-  /// edge. Stremio channels re-run the whole switch so their candidate
-  /// ladder stays the owner of which URL plays; [IptvLiveRecovery.expectRetune]
-  /// keeps the recovery episode alive across that switch's tune-start.
-  void _performIptvLiveRetune(String source, int attempt) {
-    final channel = _currentIptvChannel;
-    if (channel == null || !channel.isLive) return;
-    _cancelPendingIptvCatchup(hideFeedback: false);
-    if (_iptvStartOverActive || _iptvStartOverLoading) {
-      setState(() {
-        _iptvStartOverActive = false;
-        _iptvStartOverLoading = false;
-        _iptvStartOverTimelineRequested = false;
-      });
-    }
-    _iptvDiag.onRecovery(source, 'retune', 'attempt=$attempt');
-    if (StremioIptvService.isStremioChannelUrl(channel.url)) {
-      // expectRetune is consumed synchronously by the switch's entry (its
-      // ticket + machine bookkeeping run before any await), so no real zap
-      // can pick the flag up instead.
-      _iptvLiveRecovery.expectRetune = true;
-      unawaited(_switchToIptvChannel(_currentIptvIndex, quietRecovery: true));
-      return;
-    }
-    // Direct reopen path. The ticket pins this retune to the channel the
-    // machine saw: a real zap bumps it and the stale retune dissolves at
-    // the checks below instead of stealing playback back (codex round 2's
-    // blocker).
-    final ticket = _iptvSwitchTicket;
-    unawaited(() async {
-      // mpv makes no promise about `stream-record` across an open() — a
-      // running capture must be stopped first, exactly like every other
-      // media replacement path (codex round 2, finding 6).
-      await _recording.stopRecording(userInitiated: false);
-      if (!mounted || ticket != _iptvSwitchTicket) return;
-      _iptvDiag.onTuneStart(channel.name, channel.url, isLive: true);
-      _iptvLiveRecovery.expectRetune = true;
-      _iptvLiveRecovery.onTuneStarted();
-      try {
-        await _openMedia(
-          mk.Media(channel.url, httpHeaders: channel.playbackHeaders),
-          play: true,
-          liveStream: true,
-        );
-      } catch (e) {
-        debugPrint('Player: IPTV live retune failed to open: $e');
-      }
-    }());
-  }
-
   List<IptvChannel>? _iptvChannelsOverride;
   IptvGuideContext? _iptvGuideContextOverride;
-  final IptvCatchupRequestGate _iptvCatchupRequests = IptvCatchupRequestGate();
   bool _iptvStartOverActive = false;
   bool _iptvStartOverLoading = false;
   bool _iptvStartOverTimelineRequested = false;
-
-  bool get _iptvStartOverTimelineVisible =>
-      _iptvStartOverActive &&
-      _iptvStartOverTimelineRequested &&
-      _duration > Duration.zero;
-
-  void _toggleIptvStartOverTimeline() {
-    if (!_iptvStartOverActive) return;
-    if (_duration <= Duration.zero) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Timeline is still loading')),
-      );
-      return;
-    }
-    final reveal = !_iptvStartOverTimelineRequested;
-    setState(() => _iptvStartOverTimelineRequested = reveal);
-    if (reveal && PlatformUtil.isTelevision) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _iptvStartOverTimelineVisible) {
-          _tvProgressFocus.requestFocus();
-        }
-      });
-    }
-    _scheduleAutoHide();
-  }
-
-  bool get _canStartOverCurrentIptv {
-    final channel = _currentIptvChannel;
-    final programme = _iptvZapEpg?.now;
-    return channel != null &&
-        channel.isLive &&
-        programme != null &&
-        programme.airsAt(DateTime.now()) &&
-        IptvEpgService.isStartOverAvailable(channel, programme);
-  }
-
-  VoidCallback? get _iptvLiveEdgeAction =>
-      _iptvStartOverActive || _canStartOverCurrentIptv
-      ? () => unawaited(_toggleIptvStartOver())
-      : null;
-
-  Future<void> _toggleIptvStartOver() async {
-    if (_iptvStartOverLoading) return;
-    if (_iptvStartOverActive) {
-      setState(() {
-        _iptvStartOverActive = false;
-        _iptvStartOverTimelineRequested = false;
-      });
-      await _switchToIptvChannel(_currentIptvIndex);
-      return;
-    }
-
-    final channel = _currentIptvChannel;
-    final programme = _iptvZapEpg?.now;
-    if (channel == null ||
-        programme == null ||
-        !programme.airsAt(DateTime.now()) ||
-        !IptvEpgService.isStartOverAvailable(channel, programme)) {
-      return;
-    }
-
-    await _startIptvProgrammeFromBeginning(channel, programme);
-  }
-
-  Future<void> _startIptvProgrammeFromBeginning(
-    IptvChannel channel,
-    EpgProgramme programme,
-  ) async {
-    final requestTicket = _beginIptvCatchupRequest();
-    final switchTicket = _iptvSwitchTicket;
-    setState(() => _iptvStartOverLoading = true);
-    String? url;
-    try {
-      url = await IptvEpgService.instance.catchupUrl(channel.url, programme);
-    } catch (error) {
-      debugPrint('Player: IPTV start-over lookup failed: $error');
-    }
-    if (!_isCurrentIptvCatchupRequest(requestTicket) ||
-        switchTicket != _iptvSwitchTicket ||
-        _currentIptvChannel?.url != channel.url) {
-      return;
-    }
-    if (url == null) {
-      _iptvCatchupRequests.complete(requestTicket);
-      setState(() => _iptvStartOverLoading = false);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Start over is not available')),
-      );
-      return;
-    }
-
-    await _recording.stopRecording(userInitiated: false);
-    if (!_isCurrentIptvCatchupRequest(requestTicket) ||
-        switchTicket != _iptvSwitchTicket ||
-        _currentIptvChannel?.url != channel.url) {
-      return;
-    }
-    _iptvDiag.onTuneStart(channel.name, url, isLive: true);
-    _iptvLiveRecovery.onTuneStarted();
-    try {
-      await _openMedia(
-        mk.Media(url, httpHeaders: channel.playbackHeaders),
-        play: true,
-        liveStream: true,
-        beforeOpen: () {
-          if (!_isCurrentIptvCatchupRequest(requestTicket) ||
-              switchTicket != _iptvSwitchTicket ||
-              _currentIptvChannel?.url != channel.url) {
-            return false;
-          }
-          _iptvCatchupRequests.complete(requestTicket);
-          setState(() {
-            _iptvStartOverLoading = false;
-            _iptvStartOverActive = true;
-            _iptvStartOverTimelineRequested = false;
-          });
-          return true;
-        },
-      );
-    } catch (error) {
-      debugPrint('Player: IPTV start-over failed to open: $error');
-      if (!mounted || switchTicket != _iptvSwitchTicket) return;
-      if (!_iptvStartOverActive &&
-          !_isCurrentIptvCatchupRequest(requestTicket)) {
-        return;
-      }
-      _cancelPendingIptvCatchup(hideFeedback: false);
-      if (_iptvRecoveryEligible()) {
-        setState(() {
-          _iptvStartOverActive = false;
-          _iptvStartOverTimelineRequested = false;
-        });
-        await _switchToIptvChannel(_currentIptvIndex, quietRecovery: true);
-      }
-    }
-  }
 
   /// The guide may replace the launch window after a source/category/search
   /// request. Playback always reads this effective list so the selected row,
@@ -1169,77 +975,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// category, silently undoing what the user just asked for.
   int _iptvGuideContextGeneration = 0;
 
-  void _persistIptvGuideContext(IptvGuideContext context) {
-    if (!mounted) return;
-    _iptvGuideContextGeneration++;
-    setState(() => _iptvGuideContextOverride = context);
-  }
-
-  /// Make the guide's selected category follow the playing channel.
-  ///
-  /// The native player re-anchors its browsing context to the playing
-  /// channel's group on every tune and every pick. Here the category only
-  /// ever moved when the user chose one, so after zapping — or after picking
-  /// a channel from a different category — reopening the guide showed a
-  /// category that no longer contained what was on screen.
-  void _anchorIptvGuideCategory(IptvChannel channel, {Object? categories}) {
-    if (!mounted || !channel.isLive) return;
-    final group = channel.group?.trim();
-    _applyIptvGuideCategory(
-      (group == null || group.isEmpty) ? null : group,
-      categories is List ? categories.whereType<String>().toList() : null,
-    );
-  }
-
-  /// Point the guide at [category] verbatim, without inferring it from a
-  /// channel. A zap that crossed a category boundary knows the category it
-  /// landed in from the response — including the null the "All"/uncategorized
-  /// wrap lands on, which no single channel's group can express.
-  ///
-  /// Deliberately does NOT bump [_iptvGuideContextGeneration]: that counter
-  /// means "the user browsed", and an in-flight zap prefetch reading it must
-  /// not be invalidated by the zap's own bookkeeping.
-  void _applyIptvGuideCategory(String? category, List<String>? categories) {
-    if (!mounted) return;
-    final current = _iptvGuideContextOverride;
-    final nextCategories =
-        categories ??
-        (current?.categories ?? widget.iptvCategories ?? const <String>[]);
-    if (current != null &&
-        current.selectedCategory == category &&
-        listEquals(nextCategories, current.categories)) {
-      return;
-    }
-    setState(() {
-      _iptvGuideContextOverride = IptvGuideContext(
-        categories: nextCategories,
-        sourceId: current?.sourceId ?? widget.iptvSourceId,
-        // Same fallback the sheet applies to a nameless source.
-        sourceName: current?.sourceName ?? widget.iptvSourceName ?? 'IPTV',
-        selectedCategory: category,
-        contentType: current?.contentType ?? widget.iptvContentType ?? 'live',
-      );
-    });
-  }
-
-  void _cancelPendingIptvCatchup({bool hideFeedback = true}) {
-    final canceled = _iptvCatchupRequests.cancel();
-    if (_iptvStartOverLoading && mounted) {
-      setState(() => _iptvStartOverLoading = false);
-    }
-    if (canceled && hideFeedback && mounted) {
-      ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
-    }
-  }
-
-  int _beginIptvCatchupRequest() {
-    _cancelPendingIptvCatchup();
-    return _iptvCatchupRequests.begin();
-  }
-
-  bool _isCurrentIptvCatchupRequest(int ticket) =>
-      mounted && _iptvCatchupRequests.isCurrent(ticket);
-
   // Stremio source sheet state
   bool _showSourceSheet = false;
   int _currentSourceIndex = 0;
@@ -1363,6 +1098,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   late final VpResumeKeys _resumeKeys;
   late final VpResumeRestore _resumeRestore;
   late final VpResumeSave _resumeSave;
+  late final VpIptvZapRing _zapRing;
+  late final VpIptvZapLadder _zapLadder;
+  late final VpIptvGuideCatchup _iptvGuide;
+  late final VpIptvChannelSwitch _iptvSwitch;
+  late final VpIptvLiveSources _iptvSources;
+  late final VpIptvWatchMemory _iptvMemory;
+  late final VpIptvZapBanner _iptvBanner;
 
   // The quiet bottom-right auto-sync surface: a 5s announce line, then
   // nothing until a real event — statuses during passes, word-only results.
@@ -1643,7 +1385,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _currentChannelNumber = widget.channelNumber;
     _currentIptvIndex = widget.iptvStartIndex ?? 0;
     _currentSourceIndex = widget.stremioCurrentSourceIndex ?? 0;
-    _initIptvStremioSources();
+    _iptvSources.initIptvStremioSources();
     _currentStremioTvChannelId = _findInitialStremioTvChannelId();
     _parseChannelDirectory();
     // The sync offset is per-subtitle and session-scoped, but it lives in a
@@ -2133,10 +1875,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (iptvChannel != null && iptvChannel.isLive) {
       _hideTimer?.cancel();
       _controlsVisible.value = false;
-      _prepareIptvBannerData(iptvChannel);
-      _raiseIptvZapBanner();
-      _anchorIptvGuideCategory(iptvChannel);
-      _ensureIptvZapPagingArmed();
+      _iptvBanner.prepareIptvBannerData(iptvChannel);
+      _iptvBanner.raiseIptvZapBanner();
+      _iptvGuide.anchorIptvGuideCategory(iptvChannel);
+      _zapRing.ensureIptvZapPagingArmed();
     } else {
       _raiseDebrifyBanner();
     }
@@ -2831,7 +2573,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       ProfileLockController.instance.setPlaybackActive(p);
       _pip.syncWakelock(p);
       _pip.pushPipState();
-      if (p) _noteLiveChannelPlaying();
+      if (p) _iptvMemory.noteLiveChannelPlaying();
       if (!_validationGateActive && p && _duration > Duration.zero) {
         _trakt.traktScrobble('start');
         if (_trakt.traktLastScrobbleAction == 'start') {
@@ -2930,7 +2672,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     });
     if (_effectiveIptvChannels != null) {
       _iptvErrorSub = player.stream.error.listen((error) {
-        if (isCurrent()) _onIptvStreamError(error);
+        if (isCurrent()) _iptvSources.onIptvStreamError(error);
       });
     }
   }
@@ -4017,7 +3759,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // carry no playlist / magic-next, so the branches below would otherwise
     // leave the player parked on the final frame with a next episode available.
     if (_hasIptvNext) {
-      await _switchToIptvChannel(_currentIptvIndex + 1);
+      await _iptvSwitch.switchToIptvChannel(_currentIptvIndex + 1);
       return;
     }
 
@@ -5252,7 +4994,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       debugPrint('Player: No channels available for guide');
       return;
     }
-    _hideIptvZapBanner();
+    _iptvBanner.hideIptvZapBanner();
     setState(() {
       _showChannelGuide = true;
       _controlsVisible.value = false;
@@ -5264,145 +5006,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     setState(() {
       _showChannelGuide = false;
     });
-  }
-
-  /// Show IPTV channel sheet overlay
-  void _showIptvChannelSheetOverlay() {
-    final channels = _effectiveIptvChannels;
-    if (channels == null || channels.isEmpty) return;
-    _hideIptvZapBanner();
-    setState(() {
-      _showIptvChannelSheet = true;
-      _controlsVisible.value = false;
-    });
-  }
-
-  /// Hide IPTV channel sheet overlay
-  void _hideIptvChannelSheet() {
-    _cancelPendingIptvCatchup();
-    setState(() {
-      _showIptvChannelSheet = false;
-    });
-  }
-
-  /// A full-catalog guide result is not necessarily part of the launch
-  /// window. Adopt the result set before tuning so every player read uses the
-  /// selected channel's real index and metadata.
-  Future<void> _switchToIptvGuideChannel(
-    List<IptvChannel> channels,
-    int index,
-  ) async {
-    if (index < 0 || index >= channels.length) return;
-    _cancelPendingIptvCatchup();
-    final channel = channels[index];
-    // Adopt the visible list first so playback starts immediately; the
-    // re-anchor below then replaces it with the channel's own category.
-    // A browse result is not a page of any category, so the zap window's
-    // coordinates stop describing the ring until the re-anchor lands.
-    _resetIptvZapPaging();
-    _iptvChannelsOverride = List<IptvChannel>.from(channels);
-    // Take this tune's generation from the call itself. _switchToIptvChannel
-    // bumps the ticket synchronously before its first await, and it returns
-    // normally when a newer tune supersedes it — so reading the ticket AFTER
-    // the await would read the newer tune's value and defeat every staleness
-    // check downstream.
-    final switchFuture = _switchToIptvChannel(index);
-    final switchTicket = _iptvSwitchTicket;
-    await switchFuture;
-    if (!mounted || switchTicket != _iptvSwitchTicket) return;
-    unawaited(_reanchorIptvRingToCategory(channel, switchTicket: switchTicket));
-  }
-
-  /// Rebuild the channel ring around [channel] from its own category.
-  ///
-  /// The native guide does this on every pick (`beginIptvCategoryZapSession`):
-  /// the list you navigate afterwards is the channel's category, never the
-  /// list you happened to pick from. Without it, choosing a channel out of a
-  /// search left the search matches standing in as the entire channel list —
-  /// so the guide reopened onto a handful of unrelated channels, and the
-  /// category shown alongside them belonged to the previous selection.
-  ///
-  /// Best effort by design: playback has already started, so a failed or
-  /// unhelpful page simply leaves the adopted list in place, which is what
-  /// the native fallback does too.
-  Future<void> _reanchorIptvRingToCategory(
-    IptvChannel channel, {
-    required int switchTicket,
-  }) async {
-    final provider = widget.iptvBrowseProvider;
-    if (provider == null || !channel.isLive) return;
-    if (switchTicket != _iptvSwitchTicket) return;
-    final category = channel.group?.trim();
-    final contextGeneration = _iptvGuideContextGeneration;
-
-    Map<String, dynamic>? result;
-    try {
-      result = await provider({
-        'action': 'zapPage',
-        'sourceId': _iptvGuideContextOverride?.sourceId ?? widget.iptvSourceId,
-        'contentType': 'live',
-        'category': (category == null || category.isEmpty) ? null : category,
-        'query': '',
-        'anchorUrl': channel.url,
-        'anchorName': channel.name,
-        'offset': 0,
-        // A full page rather than the native player's 200: unlike the native
-        // guide this one has no scroll-prefetch to grow a small window, so the
-        // ring has to arrive anchored AND whole. Anything past the provider's
-        // own maximum is clamped there.
-        'limit': _kIptvZapPageSize,
-      });
-    } catch (error) {
-      debugPrint('Player: IPTV ring re-anchor failed: $error');
-      return;
-    }
-    if (!mounted || result == null) return;
-    // A newer zap owns the ring now — installing this page would drop the
-    // viewer onto the wrong channel's neighbours.
-    if (switchTicket != _iptvSwitchTicket) return;
-    // The user browsed while this was in flight. Their category is the
-    // current intent; this page predates it.
-    if (contextGeneration != _iptvGuideContextGeneration) return;
-    // Last line of defence: whatever else moved, the ring must only ever be
-    // rebuilt around the channel that is actually playing.
-    final playing = _currentIptvChannel;
-    if (playing == null ||
-        playing.url != channel.url ||
-        playing.name != channel.name) {
-      return;
-    }
-
-    final page = _parseIptvZapPage(result);
-    if (page == null) return;
-    final playingIndex = page.channels.indexWhere(
-      (candidate) =>
-          candidate.url == channel.url && candidate.name == channel.name,
-    );
-    // The page has to contain what is playing, or the ring would no longer
-    // describe the channel on screen.
-    if (playingIndex < 0) return;
-
-    _clearIptvZapBoundaryCache();
-    setState(() {
-      _iptvChannelsOverride = page.channels;
-      _currentIptvIndex = playingIndex;
-      // Where this window sits in the category. Zapping past its edge needs
-      // both numbers: without them the window's end and the category's end
-      // are indistinguishable, and a category larger than one page would
-      // cross into the next category partway through.
-      _iptvZapWindowOffset = page.offset;
-      _iptvZapCategoryTotal = page.total;
-      // Binds every later boundary request to the source this ring came from,
-      // however far the guide wanders afterwards.
-      _iptvZapSourceId =
-          page.sourceId ??
-          _iptvGuideContextOverride?.sourceId ??
-          widget.iptvSourceId;
-      _iptvZapCategory = page.category;
-      if (page.categories.isNotEmpty) _iptvZapCategories = page.categories;
-      _iptvZapPagingActive = true;
-    });
-    _anchorIptvGuideCategory(channel, categories: result['categories']);
   }
 
   // ── Live channel zapping ─────────────────────────────────────────────────
@@ -5425,9 +5028,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// leaves more to fetch.
   static const int _kIptvZapPageSize = 1500;
 
-  /// How close to the window's edge counts as "about to need what's next".
-  static const int _kIptvZapEdgeMargin = 12;
-
   /// Absolute position, within the active category, of the first channel of
   /// [_effectiveIptvChannels].
   int _iptvZapWindowOffset = 0;
@@ -5441,539 +5041,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// browse result standing in — zapping then just wraps inside the list,
   /// which is what native does before its paging session starts.
   bool _iptvZapPagingActive = false;
-
-  /// The source and category the ring belongs to. Kept apart from the guide's
-  /// selection on purpose: browsing can move the guide to another source or
-  /// category — and leave it there without ever tuning — while the ring keeps
-  /// describing what is playing. Asking the guide's source for the ring's
-  /// category would fetch a category that source may not even have.
-  String? _iptvZapSourceId;
   String? _iptvZapCategory;
   List<String> _iptvZapCategories = const [];
-
-  int _iptvZapRequestTicket = 0;
   bool _iptvZapRequestInFlight = false;
 
   /// Presses that arrived while a page was loading. Crossing a page or a
   /// category is a round trip, so holding the key down has to queue rather
   /// than drop.
   final List<int> _iptvZapPendingInputs = [];
-  bool _iptvZapDrainingInputs = false;
-
-  /// The adjacent category, fetched before it is needed so crossing one costs
-  /// no more than stepping inside the current one.
-  String? _iptvZapCachedOriginCategory;
-  int _iptvZapCachedDirection = 0;
-  VpIptvZapPage? _iptvZapCachedPage;
-
-  /// Live IPTV with somewhere to zap to — either more than one channel in the
-  /// ring, or a paged context that can fetch more.
-  bool get _canZapIptvChannel =>
-      _currentIptvChannel?.isLive == true &&
-      ((_effectiveIptvChannels?.length ?? 0) > 1 || _iptvZapPagingActive);
-
-  void _clearIptvZapBoundaryCache() {
-    _iptvZapCachedOriginCategory = null;
-    _iptvZapCachedDirection = 0;
-    _iptvZapCachedPage = null;
-  }
-
-  /// The ring is about to stop being a page of a category. Bumping the request
-  /// ticket strands anything in flight: it would otherwise merge a page of the
-  /// old category into the new ring at positions that mean nothing there.
-  void _resetIptvZapPaging() {
-    _iptvZapPagingActive = false;
-    _iptvZapWindowOffset = 0;
-    _iptvZapCategoryTotal = 0;
-    _iptvZapSourceId = null;
-    _iptvZapCategory = null;
-    _iptvZapRequestTicket++;
-    _iptvZapRequestInFlight = false;
-    _iptvZapPendingInputs.clear();
-    _clearIptvZapBoundaryCache();
-  }
-
-  /// A re-anchor is out arming the ladder, so a burst of presses can't stack
-  /// full-category queries behind it.
-  bool _iptvZapArmingPaging = false;
-
-  /// Arm the ladder around whatever live channel is playing now.
-  ///
-  /// The launch bootstrap re-anchors the channel the player opened with, but a
-  /// zap landing before that response does moves the switch ticket on and the
-  /// response is dropped. Nothing else would re-arm it, so the ladder would sit
-  /// inactive and zapping would circle the launch window until the user opened
-  /// the guide and retuned. Retrying from the zap itself closes that: the first
-  /// press after a lost bootstrap arms the ladder for the channel it landed on.
-  void _ensureIptvZapPagingArmed() {
-    if (_iptvZapPagingActive || _iptvZapArmingPaging) return;
-    if (widget.iptvBrowseProvider == null) return;
-    final channel = _currentIptvChannel;
-    if (channel == null || !channel.isLive) return;
-    _iptvZapArmingPaging = true;
-    unawaited(
-      _reanchorIptvRingToCategory(
-        channel,
-        switchTicket: _iptvSwitchTicket,
-      ).whenComplete(() => _iptvZapArmingPaging = false),
-    );
-  }
-
-  /// Previous/next channel in guide order.
-  void _zapIptvChannel(int delta) {
-    final channels = _effectiveIptvChannels;
-    final current = _currentIptvChannel;
-    if (channels == null || current == null || !current.isLive) return;
-    if (!_iptvZapPagingActive && channels.length < 2) return;
-    final from = _currentIptvIndex.clamp(0, channels.length - 1);
-    final next = from + delta;
-
-    if (!_iptvZapPagingActive) {
-      // No paged context: the ring is all there is, so wrap inside it.
-      unawaited(
-        _switchToIptvChannel((next + channels.length) % channels.length),
-      );
-      // Tuning has already moved the index and the switch ticket, so this arms
-      // the ladder around the channel just landed on.
-      _ensureIptvZapPagingArmed();
-      return;
-    }
-
-    if (next >= 0 && next < channels.length) {
-      unawaited(_switchToIptvChannel(next));
-      unawaited(_prefetchIptvZapPage(delta));
-      unawaited(_prefetchAdjacentIptvCategory(delta));
-      return;
-    }
-
-    final firstAbsolute = _iptvZapWindowOffset;
-    final lastAbsolute = _iptvZapWindowOffset + channels.length - 1;
-    final hasAnotherPage = delta > 0
-        ? lastAbsolute + 1 < _iptvZapCategoryTotal
-        : firstAbsolute > 0;
-    if (hasAnotherPage) {
-      // The category continues past the window. Hold the press until the page
-      // it needs has landed, then replay it against the grown ring.
-      _queuePendingIptvZapInput(delta);
-      unawaited(_prefetchIptvZapPage(delta));
-      return;
-    }
-
-    if (_consumeCachedAdjacentIptvCategory(delta)) return;
-    unawaited(_requestAdjacentIptvCategory(delta));
-  }
-
-  /// One page request at a time, like native: a second in-flight request would
-  /// race the first into the ring with no way to order the two.
-  Future<VpIptvZapPage?> _requestIptvZapPage({
-    required String? category,
-    required int offset,
-    bool fromEnd = false,
-  }) async {
-    final provider = widget.iptvBrowseProvider;
-    if (provider == null || _iptvZapRequestInFlight) return null;
-    final ticket = ++_iptvZapRequestTicket;
-    final contextGeneration = _iptvGuideContextGeneration;
-    _iptvZapRequestInFlight = true;
-
-    Map<String, dynamic>? result;
-    try {
-      result = await provider({
-        'action': 'zapPage',
-        // The ring's own source, not the guide's — see [_iptvZapSourceId].
-        'sourceId':
-            _iptvZapSourceId ??
-            _iptvGuideContextOverride?.sourceId ??
-            widget.iptvSourceId,
-        'contentType': 'live',
-        'category': (category == null || category.isEmpty) ? null : category,
-        'query': '',
-        'offset': offset < 0 ? 0 : offset,
-        'limit': _kIptvZapPageSize,
-        'fromEnd': fromEnd,
-      });
-    } catch (error) {
-      debugPrint('Player: IPTV zap page failed: $error');
-    }
-    // A newer request (or a reset) owns the flag now — leave it to them.
-    if (ticket != _iptvZapRequestTicket) return null;
-    _iptvZapRequestInFlight = false;
-    if (!mounted || result == null) {
-      // Replaying queued presses against a ring that never grew would spin.
-      _iptvZapPendingInputs.clear();
-      return null;
-    }
-    // The user browsed while this was in flight; their category is the current
-    // intent and every queued press belonged to the old one.
-    if (contextGeneration != _iptvGuideContextGeneration) {
-      _iptvZapPendingInputs.clear();
-      return null;
-    }
-    return _parseIptvZapPage(result);
-  }
-
-  VpIptvZapPage? _parseIptvZapPage(Map<String, dynamic> result) {
-    final raw = result['channels'];
-    if (raw is! List) return null;
-    final channels = [
-      for (final entry in raw.whereType<Map>())
-        iptvChannelFromBrowsePayload(Map<String, dynamic>.from(entry)),
-    ];
-    final rawOffset = result['pageOffset'];
-    final offset = rawOffset is num ? math.max(0, rawOffset.toInt()) : 0;
-    final rawTotal = result['totalChannels'];
-    final total = rawTotal is num ? rawTotal.toInt() : channels.length;
-    final rawSourceId = (result['sourceId'] as String?)?.trim();
-    final rawCategory = (result['selectedCategory'] as String?)?.trim();
-    final rawCategories = result['categories'];
-    return VpIptvZapPage(
-      channels: channels,
-      offset: offset,
-      // A total that doesn't cover the page it came with would put the
-      // category's end behind the window's own last row.
-      total: math.max(total, offset + channels.length),
-      sourceId: (rawSourceId == null || rawSourceId.isEmpty)
-          ? null
-          : rawSourceId,
-      category: (rawCategory == null || rawCategory.isEmpty)
-          ? null
-          : rawCategory,
-      categories: rawCategories is List
-          ? [
-              for (final entry in rawCategories.whereType<String>())
-                if (entry.isNotEmpty) entry,
-            ]
-          : const [],
-    );
-  }
-
-  /// Replace the ring with [page]. The caller tunes afterwards, so the index
-  /// left behind here is only a starting point.
-  void _installIptvZapWindow(
-    VpIptvZapPage page, {
-    required bool preservePlayingChannel,
-  }) {
-    if (page.channels.isEmpty) return;
-    if (page.category != _iptvZapCategory) _clearIptvZapBoundaryCache();
-    final playing = preservePlayingChannel ? _currentIptvChannel : null;
-    var index = 0;
-    if (playing != null) {
-      final found = page.channels.indexWhere(
-        (candidate) =>
-            candidate.url == playing.url && candidate.name == playing.name,
-      );
-      if (found >= 0) index = found;
-    }
-    setState(() {
-      _iptvChannelsOverride = page.channels;
-      _currentIptvIndex = index;
-      _iptvZapWindowOffset = page.offset;
-      _iptvZapCategoryTotal = page.total;
-      _iptvZapSourceId = page.sourceId ?? _iptvZapSourceId;
-      _iptvZapCategory = page.category;
-      if (page.categories.isNotEmpty) _iptvZapCategories = page.categories;
-      _iptvZapPagingActive = true;
-    });
-  }
-
-  /// Splice a freshly loaded page into the ring, growing the window rather
-  /// than replacing it — the channel on screen has to keep its place, and the
-  /// guide is looking at the same list.
-  void _mergeIptvZapPage(VpIptvZapPage page) {
-    if (!_iptvZapPagingActive || page.channels.isEmpty) return;
-    if (page.category != _iptvZapCategory) return;
-    final channels = _effectiveIptvChannels;
-    if (channels == null || channels.isEmpty) return;
-
-    final windowStart = _iptvZapWindowOffset;
-    final merged = iptvMergeZapWindow(
-      window: channels,
-      windowOffset: windowStart,
-      page: page.channels,
-      pageOffset: page.offset,
-    );
-    // The page didn't touch the window — see iptvMergeZapWindow.
-    if (merged == null) return;
-
-    final playing = _currentIptvChannel;
-    var index = _currentIptvIndex + (windowStart - merged.offset);
-    if (playing != null) {
-      final found = merged.channels.indexWhere(
-        (candidate) =>
-            candidate.url == playing.url && candidate.name == playing.name,
-      );
-      if (found >= 0) index = found;
-    }
-    setState(() {
-      _iptvChannelsOverride = merged.channels;
-      _currentIptvIndex = index.clamp(0, merged.channels.length - 1);
-      _iptvZapWindowOffset = merged.offset;
-      _iptvZapCategoryTotal = math.max(
-        page.total,
-        merged.offset + merged.channels.length,
-      );
-      if (page.categories.isNotEmpty) _iptvZapCategories = page.categories;
-    });
-  }
-
-  /// Pull in the next page of the current category once zapping gets near the
-  /// window's edge.
-  Future<void> _prefetchIptvZapPage(int delta) async {
-    if (!_iptvZapPagingActive || _iptvZapRequestInFlight) return;
-    final channels = _effectiveIptvChannels;
-    if (channels == null || channels.isEmpty) return;
-    final firstAbsolute = _iptvZapWindowOffset;
-    final lastAbsolute = firstAbsolute + channels.length - 1;
-    final shouldLoad = delta > 0
-        ? lastAbsolute + 1 < _iptvZapCategoryTotal &&
-              _currentIptvIndex >= channels.length - _kIptvZapEdgeMargin
-        : firstAbsolute > 0 && _currentIptvIndex < _kIptvZapEdgeMargin;
-    if (!shouldLoad) return;
-
-    final page = await _requestIptvZapPage(
-      category: _iptvZapCategory,
-      offset: delta > 0
-          ? lastAbsolute + 1
-          : math.max(0, firstAbsolute - _kIptvZapPageSize),
-    );
-    if (!mounted || page == null) return;
-    _mergeIptvZapPage(page);
-    _drainPendingIptvZapInputs();
-  }
-
-  String? _adjacentIptvCategory(int delta, int attempt) =>
-      iptvAdjacentZapCategory(
-        categories: _iptvZapCategories,
-        current: _iptvZapCategory,
-        delta: delta,
-        attempt: attempt,
-      );
-
-  Future<void> _prefetchAdjacentIptvCategory(
-    int delta, {
-    int attempt = 1,
-  }) async {
-    // A cached page only answers the direction it was fetched for; turning
-    // around makes it the wrong end of the wrong category.
-    if (_iptvZapCachedPage != null && _iptvZapCachedDirection != delta) {
-      _clearIptvZapBoundaryCache();
-    }
-    if (!_iptvZapPagingActive ||
-        _iptvZapRequestInFlight ||
-        _iptvZapCategory == null ||
-        _iptvZapCachedPage != null) {
-      return;
-    }
-    final channels = _effectiveIptvChannels;
-    if (channels == null || channels.isEmpty) return;
-    final nearBoundary = delta > 0
-        ? _iptvZapWindowOffset + channels.length >= _iptvZapCategoryTotal &&
-              _currentIptvIndex >= channels.length - _kIptvZapEdgeMargin
-        : _iptvZapWindowOffset == 0 && _currentIptvIndex < _kIptvZapEdgeMargin;
-    if (!nearBoundary) return;
-
-    final target = _adjacentIptvCategory(delta, attempt);
-    if (target == null) return;
-    final origin = _iptvZapCategory;
-    final page = await _requestIptvZapPage(
-      category: target,
-      offset: 0,
-      fromEnd: delta < 0,
-    );
-    if (!mounted || page == null) return;
-    // Zapping moved on while this loaded; it is no longer the next category.
-    if (origin != _iptvZapCategory) return;
-    if (page.channels.isEmpty) {
-      await _prefetchAdjacentIptvCategory(delta, attempt: attempt + 1);
-      return;
-    }
-    _iptvZapCachedOriginCategory = origin;
-    _iptvZapCachedDirection = delta;
-    _iptvZapCachedPage = page;
-    _drainPendingIptvZapInputs();
-  }
-
-  /// Cross into the prefetched category with no round trip. Returns false when
-  /// nothing usable was cached, leaving the caller to fetch.
-  bool _consumeCachedAdjacentIptvCategory(int delta) {
-    final cached = _iptvZapCachedPage;
-    if (cached == null ||
-        cached.channels.isEmpty ||
-        _iptvZapCachedOriginCategory != _iptvZapCategory ||
-        _iptvZapCachedDirection != delta) {
-      return false;
-    }
-    _clearIptvZapBoundaryCache();
-    _enterIptvZapCategory(cached, delta);
-    unawaited(_prefetchAdjacentIptvCategory(delta));
-    return true;
-  }
-
-  /// Adopt [page] as the ring and tune the channel the zap was heading for:
-  /// going forwards that is the new category's first channel, going backwards
-  /// its last.
-  void _enterIptvZapCategory(VpIptvZapPage page, int delta) {
-    _installIptvZapWindow(page, preservePlayingChannel: false);
-    unawaited(_switchToIptvChannel(delta > 0 ? 0 : page.channels.length - 1));
-    // After the tune, not before: the switch anchors the guide to the tuned
-    // channel's own group, and the response's category is the more accurate
-    // of the two (it can be the null of an uncategorized wrap, which no
-    // channel's group expresses).
-    _applyIptvGuideCategory(
-      page.category,
-      page.categories.isEmpty ? null : page.categories,
-    );
-    unawaited(_prefetchIptvZapPage(delta));
-  }
-
-  /// The category ran out. Load the adjacent one, skipping any that come back
-  /// empty, and give up once every category has been tried.
-  Future<void> _requestAdjacentIptvCategory(
-    int delta, {
-    int attempt = 1,
-  }) async {
-    if (_iptvZapRequestInFlight) {
-      _queuePendingIptvZapInput(delta);
-      return;
-    }
-    final hasCategories = _iptvZapCategories.any((c) => c.isNotEmpty);
-    if (_iptvZapCategory == null || !hasCategories) {
-      // An uncategorized/"All" context has no category boundary to cross:
-      // wrap by paging the opposite end of the same result set.
-      final page = await _requestIptvZapPage(
-        category: null,
-        offset: 0,
-        fromEnd: delta < 0,
-      );
-      if (!mounted || page == null || page.channels.isEmpty) {
-        // Nothing came back to zap into, so nothing will drain these either.
-        _iptvZapPendingInputs.clear();
-        return;
-      }
-      _enterIptvZapCategory(page, delta);
-      _drainPendingIptvZapInputs();
-      return;
-    }
-
-    // Null once the walk has been all the way round — every category was
-    // empty, so nothing will ever drain the queued presses.
-    final target = _adjacentIptvCategory(delta, attempt);
-    if (target == null) {
-      _iptvZapPendingInputs.clear();
-      return;
-    }
-    final page = await _requestIptvZapPage(
-      category: target,
-      offset: 0,
-      fromEnd: delta < 0,
-    );
-    if (!mounted || page == null) return;
-    if (page.channels.isEmpty) {
-      await _requestAdjacentIptvCategory(delta, attempt: attempt + 1);
-      return;
-    }
-    _enterIptvZapCategory(page, delta);
-    unawaited(_prefetchAdjacentIptvCategory(delta));
-    _drainPendingIptvZapInputs();
-  }
-
-  void _queuePendingIptvZapInput(int delta) {
-    if (_iptvZapPendingInputs.length >= 24) return;
-    _iptvZapPendingInputs.add(delta >= 0 ? 1 : -1);
-  }
-
-  void _drainPendingIptvZapInputs() {
-    if (_iptvZapDrainingInputs) return;
-    _iptvZapDrainingInputs = true;
-    try {
-      while (_iptvZapPendingInputs.isNotEmpty) {
-        final queued = _iptvZapPendingInputs.length;
-        _zapIptvChannel(_iptvZapPendingInputs.removeAt(0));
-        // Another round trip started: the rest drain when it lands.
-        if (_iptvZapRequestInFlight) break;
-        // The press went straight back on the queue without starting one, so
-        // nothing will arrive to move it along — stop instead of spinning.
-        if (_iptvZapPendingInputs.length >= queued) break;
-      }
-    } finally {
-      _iptvZapDrainingInputs = false;
-    }
-  }
-
-  /// Turn an archived EPG programme into a finite, seekable IPTV item in the
-  /// current player. The normal IPTV switching path remains responsible for
-  /// headers, transition feedback, tracks, and resume identity.
-  Future<void> _playIptvCatchup(
-    IptvChannel channel,
-    EpgProgramme programme,
-  ) async {
-    if (programme.airsAt(DateTime.now())) {
-      final channels = _effectiveIptvChannels;
-      final index = channels?.indexWhere(
-        (candidate) => candidate.url == channel.url,
-      );
-      if (index != null && index >= 0 && index != _currentIptvIndex) {
-        await _switchToIptvChannel(index);
-      }
-      final current = _currentIptvChannel;
-      if (current != null && current.url == channel.url) {
-        await _startIptvProgrammeFromBeginning(current, programme);
-      }
-      return;
-    }
-    final requestTicket = _beginIptvCatchupRequest();
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text('Preparing replay of "${programme.title}"…'),
-        duration: const Duration(seconds: 30),
-      ),
-    );
-    String? url;
-    try {
-      url = await IptvEpgService.instance.catchupUrl(channel.url, programme);
-    } catch (error) {
-      debugPrint('Player: IPTV replay lookup failed: $error');
-    }
-    if (!_isCurrentIptvCatchupRequest(requestTicket)) return;
-    if (url == null) {
-      _iptvCatchupRequests.complete(requestTicket);
-      messenger.hideCurrentSnackBar();
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Replay is not available')),
-      );
-      return;
-    }
-
-    final sourceId =
-        channel.attributes['source_playlist_id'] ??
-        _iptvGuideContextOverride?.sourceId ??
-        widget.iptvSourceId;
-    final replay = IptvChannel(
-      name: programme.title,
-      url: url,
-      logoUrl: channel.logoUrl,
-      group: channel.name,
-      contentType: 'vod',
-      httpHeaders: channel.httpHeaders,
-      attributes: {if (sourceId != null) 'source_playlist_id': sourceId},
-    );
-    await IptvHistoryStorage.recordIptvWatch(
-      replay.url,
-      channelName: replay.name,
-      logoUrl: replay.logoUrl,
-      group: replay.group,
-      playlistId: sourceId,
-      httpHeaders: replay.httpHeaders,
-    );
-    if (!_isCurrentIptvCatchupRequest(requestTicket)) return;
-    _iptvCatchupRequests.complete(requestTicket);
-    messenger.hideCurrentSnackBar();
-    // A replay is a single on-demand item, not a page of any category.
-    _resetIptvZapPaging();
-    _iptvChannelsOverride = [replay];
-    await _switchToIptvChannel(0);
-  }
 
   /// Monotonic ticket for IPTV channel switches. The Stremio candidate ladder
   /// can hold [_switchToIptvChannel] open for many seconds; a newer switch
@@ -6001,130 +5076,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// channel's genuine failure.
   DateTime? _lastIptvErrorShown;
 
-  /// A plain IPTV channel's stream failed. Say so — the alternative (and the
-  /// pre-existing behavior) is an indefinite black screen that reads as the
-  /// whole IPTV section being broken.
-  void _onIptvStreamError(String error) {
-    _iptvDiag.onError(error);
-    if (!mounted || _iptvErrorsMuted) return;
-    final channels = _effectiveIptvChannels;
-    if (channels == null) return;
-
-    // mpv reports HTTP rejection on its error stream even when open()
-    // completes normally. An archive failure must return to the live URL
-    // before AUTH classification can bypass the recovery ladder.
-    if (_iptvStartOverActive && _currentIptvChannel?.isLive == true) {
-      if (_iptvRecoveryEligible()) {
-        setState(() {
-          _iptvStartOverActive = false;
-          _iptvStartOverTimelineRequested = false;
-        });
-        unawaited(_switchToIptvChannel(_currentIptvIndex, quietRecovery: true));
-      }
-      return;
-    }
-
-    // Phase 2: a live channel's error goes to the recovery machine first —
-    // the snackbar below is now the SURRENDER voice (via the machine's
-    // onSurrender), not the first response. Non-live keeps the old
-    // say-it-immediately behavior. Auth-class failures (mpv's error string
-    // is all we have — best-effort match) skip the ladder entirely: a
-    // 401/403/404 repeats deterministically, so say so NOW instead of
-    // retrying for 75 seconds (mirror of the TV policy's AUTH class).
-    final looksAuthError = RegExp(r'\b(401|403|404)\b').hasMatch(error);
-    if (_currentIptvChannel?.isLive == true &&
-        !looksAuthError &&
-        _iptvLiveRecovery.onError()) {
-      return;
-    }
-
-    final now = DateTime.now();
-    final last = _lastIptvErrorShown;
-    if (last != null && now.difference(last) < const Duration(seconds: 6)) {
-      return;
-    }
-    _lastIptvErrorShown = now;
-
-    final name = (_currentIptvIndex >= 0 && _currentIptvIndex < channels.length)
-        ? channels[_currentIptvIndex].name
-        : 'This channel';
-    debugPrint('Player: IPTV stream error on "$name": $error');
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text("$name didn't play — $error"),
-        duration: const Duration(seconds: 5),
-      ),
-    );
-  }
-
-  /// Surface a Stremio IPTV channel's candidate links in the existing source
-  /// sheet: the candidates become direct-URL [Torrent] rows via the override
-  /// the sheet already honors. Null/empty clears the sheet (plain M3U
-  /// channels have exactly one link — nothing to pick).
-  void _setIptvSources(
-    String? channelKey,
-    List<StremioIptvCandidate>? candidates, {
-    int currentIndex = 0,
-  }) {
-    if (!mounted) return;
-    _iptvChannelKey = channelKey;
-    if (channelKey == null || candidates == null || candidates.isEmpty) {
-      if (_stremioSourcesOverride != null ||
-          _resolveStremioSourceOverride != null) {
-        setState(() {
-          _stremioSourcesOverride = null;
-          _resolveStremioSourceOverride = null;
-        });
-      }
-      return;
-    }
-    final sources = <Torrent>[
-      for (var i = 0; i < candidates.length; i++)
-        Torrent(
-          rowid: i,
-          // Same synthetic-hash convention _convertToTorrents uses for
-          // direct-URL streams (stable per-URL dedupe key, not a real hash).
-          infohash:
-              'url:${candidates[i].url.hashCode.toRadixString(16).padLeft(40, '0')}',
-          name: candidates[i].label,
-          sizeBytes: 0,
-          createdUnix: 0,
-          seeders: 0,
-          leechers: 0,
-          completed: 0,
-          scrapedDate: 0,
-          source: 'stremio',
-          streamType: StreamType.directUrl,
-          directUrl: candidates[i].url,
-          hasRealInfoHash: false,
-        ),
-    ];
-    setState(() {
-      _stremioSourcesOverride = sources;
-      _resolveStremioSourceOverride = (t) async => t.directUrl;
-      _currentSourceIndex = currentIndex.clamp(0, sources.length - 1);
-    });
-  }
-
-  /// The launch already resolved the initial channel's URL, but the source
-  /// sheet wants the whole candidate list — fetch it (cache hit from the
-  /// launch resolve) and populate the override for the starting channel.
-  void _initIptvStremioSources() {
-    final channels = _effectiveIptvChannels;
-    final idx = widget.iptvStartIndex ?? 0;
-    if (channels == null || idx < 0 || idx >= channels.length) return;
-    final channel = channels[idx];
-    if (!StremioIptvService.isStremioChannelUrl(channel.url)) return;
-    StremioIptvService.instance.resolveCandidates(channel.url).then((found) {
-      if (!mounted || found.isEmpty) return;
-      // The user already zapped away (or a switch populated sources itself).
-      if (_iptvChannelKey != null || _currentIptvIndex != idx) return;
-      var current = found.indexWhere((c) => c.url == widget.videoUrl);
-      if (current < 0) current = 0;
-      _setIptvSources(channel.url, found, currentIndex: current);
-    });
-  }
-
   /// Switch to IPTV channel at given index
   /// The IPTV channel currently playing, or null
   /// when not in an IPTV context or the index is out of range.
@@ -6136,68 +5087,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       return null;
     }
     return chans[_currentIptvIndex];
-  }
-
-  // ==========================================================================
-  // Startup-channel memory
-  //
-  // Remembers the last LIVE channel that actually reached a playing state, so
-  // "start on my last channel" re-tunes what was being watched rather than what
-  // was last launched — zapping is how live IPTV is used, and the launch
-  // channel is stale the moment the user presses up.
-  //
-  // Recorded on PLAYBACK, not on tune: a dead stream must never replace the
-  // last working channel, because the startup feature re-tunes this unattended
-  // on every cold boot.
-  // ==========================================================================
-
-  Timer? _lastLiveChannelTimer;
-  String? _lastLiveChannelArmedUrl;
-
-  /// Commit-on-settle: a channel counts once it has been *playing* for
-  /// [_lastLiveChannelSettle]. Zapping through twenty channels arms and
-  /// supersedes one timer rather than writing twenty times, and the commit
-  /// lands while the app is alive — an abrupt force-stop runs no lifecycle
-  /// callback, so a flush-on-dispose alone would lose it.
-  static const Duration _lastLiveChannelSettle = Duration(seconds: 1);
-
-  void _noteLiveChannelPlaying() {
-    final channel = _currentIptvChannel;
-    if (channel == null || !channel.isLive) return;
-    // Already counting down for this very channel — a pause/resume or a
-    // re-emitted playing event must not restart the settle window.
-    if (_lastLiveChannelArmedUrl == channel.url &&
-        (_lastLiveChannelTimer?.isActive ?? false)) {
-      return;
-    }
-    _lastLiveChannelTimer?.cancel();
-    _lastLiveChannelArmedUrl = channel.url;
-    _lastLiveChannelTimer = Timer(_lastLiveChannelSettle, () {
-      // Re-read rather than closing over: the user may have zapped on during
-      // the settle window, and the channel that settled is the one that counts.
-      final settled = _currentIptvChannel;
-      if (settled == null || !settled.isLive || settled.url != channel.url) {
-        return;
-      }
-      if (!_isPlaying) return;
-      unawaited(
-        IptvLastChannelStorage.setIptvLastLiveChannel(
-          settled.url,
-          name: settled.name,
-          // Origin provider, resolved the same way the catchup path does —
-          // `_originPlaylistIdFor` lives on the IPTV page and is not reachable
-          // from here.
-          playlistId:
-              settled.attributes['source_playlist_id'] ??
-              _iptvGuideContextOverride?.sourceId ??
-              widget.iptvSourceId,
-          channelNumber: settled.channelNumber,
-          group: settled.group,
-          logoUrl: settled.logoUrl,
-          httpHeaders: settled.httpHeaders.isEmpty ? null : settled.httpHeaders,
-        ),
-      );
-    });
   }
 
   /// Next/Previous (and end-of-episode auto-advance) are scoped to an Xtream
@@ -6222,389 +5111,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final ch = _currentIptvChannel;
     if (ch == null || ch.isLive) return false;
     return (ch.attributes['series_id'] ?? '').isNotEmpty;
-  }
-
-  /// Session-scoped audio language the user picked while in this IPTV series
-  /// (carries across episode switches in this sitting). Persisted per-series
-  /// too — see [StorageService.setIptvSeriesAudioLanguage].
-  String? _preferredIptvAudioLanguage;
-
-  /// Per-series key for remembering the audio language — `<playlistId>::<id>`,
-  /// the SAME identity Continue Watching keys by, so two series that merely
-  /// share a display name never collide. Null unless this is a series episode.
-  String? _iptvSeriesAudioKey() {
-    final ch = _currentIptvChannel;
-    if (ch == null || ch.isLive) return null;
-    final sid = ch.attributes['series_id'];
-    if (sid == null || sid.isEmpty) return null;
-    final pid = ch.attributes['series_playlist_id'] ?? '';
-    return '$pid::$sid';
-  }
-
-  /// Remember the audio language the user just chose for the current IPTV
-  /// series episode, so later episodes and future sessions default to it.
-  /// No-op for non-IPTV / live / non-series content.
-  void _captureIptvAudioLanguage(String audioId) {
-    if (!_isIptvSeriesContext) return;
-    String? lang;
-    for (final t in _player.state.tracks.audio) {
-      if (t.id == audioId) {
-        lang = t.language;
-        break;
-      }
-    }
-    if (lang == null || lang.isEmpty || lang == 'auto' || lang == 'und') return;
-    // onTrackChanged also fires on subtitle-only changes and after our own
-    // auto-apply — skip the redundant write when the language is unchanged.
-    if (lang == _preferredIptvAudioLanguage) return;
-    _preferredIptvAudioLanguage = lang;
-    final key = _iptvSeriesAudioKey();
-    if (key != null) {
-      unawaited(IptvAudioStorage.setIptvSeriesAudioLanguage(key, lang));
-    }
-  }
-
-  /// Re-apply the preferred audio track for an IPTV series episode after a
-  /// source change: this sitting's pick → this series' stored pick → the
-  /// global default audio language. Matches by language (robust across
-  /// episodes whose track ordinals differ). [ticket] is the switch generation
-  /// this apply belongs to — a newer switch (or unmount) abandons it, so it
-  /// can't set audio on the wrong episode. The preferred language is read
-  /// AFTER the track wait, so a manual pick made during the wait wins.
-  Future<void> _applyIptvAudioPreference(int ticket) async {
-    try {
-      // Tracks aren't enumerated the instant open() returns — wait briefly,
-      // bailing if a newer switch supersedes this one.
-      for (var i = 0; i < 20; i++) {
-        if (!mounted || ticket != _iptvSwitchTicket) return;
-        if (_player.state.tracks.audio.length >= 2) break;
-        await Future.delayed(const Duration(milliseconds: 100));
-      }
-      if (!mounted || ticket != _iptvSwitchTicket) return;
-      final tracks = _player.state.tracks;
-      if (tracks.audio.length < 2) return; // nothing to switch to
-
-      // Resolve the target language now (not before the wait): a manual pick
-      // during the wait updated _preferredIptvAudioLanguage, and it should win.
-      String? lang = _preferredIptvAudioLanguage;
-      if (lang == null) {
-        final key = _iptvSeriesAudioKey();
-        if (key != null) {
-          lang = await IptvAudioStorage.getIptvSeriesAudioLanguage(key);
-        }
-      }
-      lang ??= await SubtitleSettingsStorage.getDefaultAudioLanguage();
-      if (lang == null || !mounted || ticket != _iptvSwitchTicket) return;
-
-      mk.AudioTrack? match;
-      for (final t in tracks.audio) {
-        if (LanguageMapper.matchesLanguage(lang, t.language) ||
-            LanguageMapper.matchesLanguage(lang, t.title)) {
-          match = t;
-          break;
-        }
-      }
-      if (match != null) await _player.setAudioTrack(match);
-    } catch (_) {
-      // Non-critical — audio preference is best-effort.
-    }
-  }
-
-  /// Write one on-demand IPTV item to the watch history, carrying whatever
-  /// series identity the channel was built with (see `openXtreamEpisode`,
-  /// which stamps these attributes on every episode of a series). The
-  /// playlist id has to match the one the series page records or the shelf
-  /// would group the same series under two keys.
-  Future<void> _recordIptvWatchForChannel(IptvChannel channel) async {
-    final attrs = channel.attributes;
-    final seriesId = attrs['series_id'];
-    final hasNext = attrs['has_next_episode'];
-    final headers = channel.httpHeaders;
-    try {
-      await IptvHistoryStorage.recordIptvWatch(
-        channel.url,
-        channelName: channel.name,
-        logoUrl: channel.logoUrl,
-        group: channel.group,
-        playlistId:
-            attrs['series_playlist_id'] ??
-            attrs['source_playlist_id'] ??
-            widget.iptvSourceId,
-        httpHeaders: headers.isEmpty ? null : headers,
-        seriesId: (seriesId != null && seriesId.isNotEmpty) ? seriesId : null,
-        seriesName: attrs['series_name'] ?? channel.group,
-        season: int.tryParse(attrs['season'] ?? ''),
-        episode: int.tryParse(attrs['episode'] ?? ''),
-        hasNextEpisode: hasNext == null ? null : hasNext == 'true',
-      );
-    } catch (e) {
-      debugPrint('Player: IPTV watch registration failed: $e');
-    }
-  }
-
-  Future<void> _switchToIptvChannel(
-    int index, {
-    bool quietRecovery = false,
-  }) async {
-    final channels = _effectiveIptvChannels;
-    if (channels == null || index < 0 || index >= channels.length) return;
-    // Ticket FIRST, before any await — codex round 2's blocker: with the
-    // ticket taken after the recording stop below, two overlapping switch
-    // calls could resume from that await in either order and the OLDER
-    // intent could take the newer ticket, hijacking playback back to the
-    // channel the user just left.
-    final ticket = ++_iptvSwitchTicket;
-    // This switch owns the error gate now (a superseded ladder's state doesn't
-    // survive). Muted until the new media is opened below; the burst debounce
-    // resets too, so this channel can report its own failure.
-    _iptvErrorsMuted = true;
-    _lastIptvErrorShown = null;
-    // One machine tune-start per SWITCH, not per Stremio candidate — the
-    // candidate ladder below is this switch's own hunt. A machine-driven
-    // stremio re-tune arrives here with expectRetune set and keeps its
-    // episode; a real zap resets the machine and takes the pill with it.
-    final wasRecoveryRetune = _iptvLiveRecovery.expectRetune;
-    _iptvLiveRecovery.onTuneStarted();
-    if (!wasRecoveryRetune) _iptvReconnectText.value = null;
-    // A channel change ends the current recording (the stream identity flips).
-    // Unconditional: it must also cancel a start still awaiting its storage
-    // setup, which `_isRecording` would not report yet.
-    await _recording.stopRecording(userInitiated: false);
-    if (!mounted || ticket != _iptvSwitchTicket) return;
-    _cancelPendingIptvCatchup();
-
-    _hideIptvChannelSheet();
-
-    final channel = channels[index];
-    _clearBufferingIndicator();
-    // The zap path never runs _maybeRestoreResume, so the previous channel's
-    // resume guard (a VOD movie mid-resume) would otherwise stay armed and
-    // suppress the incoming channel's saves. Same switch-boundary rule as
-    // _loadPlaylistIndex.
-    _resumeWriteGuard.clear();
-    setState(() {
-      _iptvStartOverActive = false;
-      _iptvStartOverLoading = false;
-      _iptvStartOverTimelineRequested = false;
-      // A quiet recovery re-tune is not a zap: no transition overlay, no
-      // zap banner — the reconnect pill is the only narration (plan
-      // invariant "retune ≠ zap"; codex round 2, finding 14).
-      _isTransitioning = !quietRecovery;
-      _tvScrubGeneration++;
-      _tvAbandonScrub();
-      _currentIptvIndex = index;
-      _currentChannelNumber = channel.channelNumber ?? (index + 1);
-      // The corner badge is painted from this pair; without the name it kept
-      // showing the launch channel under the new channel's number.
-      _currentChannelName = channel.name;
-    });
-    if (!quietRecovery) _startTransitionOverlay();
-    // Identity paints from the channel itself, so it is correct before a
-    // single byte of the new stream has arrived; the guide fills in behind it.
-    // Zapping to on-demand retires the panel outright — it has no live
-    // identity to present, and leaving it up would describe the wrong item.
-    if (channel.isLive && !quietRecovery) {
-      _prepareIptvBannerData(channel);
-      _raiseIptvZapBanner();
-      // The guide follows what is playing, so reopening it lands on the
-      // category the current channel actually belongs to. A paged ring is the
-      // exception: it already knows its own category from the response, which
-      // a single channel's group can't always express — an "All"/uncategorized
-      // window would keep narrowing the guide to whichever group it landed on.
-      if (!_iptvZapPagingActive) _anchorIptvGuideCategory(channel);
-    } else {
-      _hideIptvZapBanner();
-    }
-
-    // Register the item we're switching TO in the IPTV watch history, exactly
-    // as the native TV player does before every non-live start. Only the item
-    // the user LAUNCHED used to be recorded, so an auto-advanced episode wrote
-    // a resume position that no history row accounted for: the Continue
-    // Watching shelf kept pointing at the launch episode, and a series-wide
-    // removal (which finds episodes through the history) couldn't reach the
-    // rest of them. Unawaited — the shelf can settle a frame late, a zap can't.
-    if (!channel.isLive) unawaited(_recordIptvWatchForChannel(channel));
-
-    try {
-      await _player.pause();
-    } catch (_) {}
-
-    if (StremioIptvService.isStremioChannelUrl(channel.url)) {
-      // Retire the outgoing channel's source rows NOW — during the resolve
-      // await below the sheet must not offer the previous channel's links
-      // (picking one would abort this switch's ladder and play the old
-      // channel under the new channel's identity).
-      _setIptvSources(null, null);
-      // Mirror the native path: the UI has already committed to the new
-      // channel, so clear the outgoing stream now — a failed or empty
-      // resolve must not leave the previous channel's frozen frame sitting
-      // under the new channel's title/index.
-      try {
-        await _player.stop();
-      } catch (_) {}
-      // Stremio-addon channel: resolve its candidate URLs and walk them until
-      // one produces playback — the same serial ladder the IPTV preview runs.
-      // A zap is an explicit play intent, so a cached-empty resolve is
-      // re-checked fresh instead of replaying a stale "nothing".
-      final candidates = await StremioIptvService.instance.resolveCandidates(
-        channel.url,
-        refreshIfEmpty: true,
-      );
-      if (!mounted || ticket != _iptvSwitchTicket) return;
-      // The candidates double as the source sheet's rows for this channel.
-      _setIptvSources(channel.url, candidates);
-      var opened = false;
-      try {
-        for (var i = 0; i < candidates.length; i++) {
-          if (!mounted || ticket != _iptvSwitchTicket) return;
-          final url = candidates[i].url;
-          _iptvDiag.onTuneStart(channel.name, url, isLive: channel.isLive);
-          _iptvDiag.note('stremio candidate ${i + 1}/${candidates.length}');
-          final ok = await _tryOpenLiveStream(
-            url,
-            httpHeaders: channel.playbackHeaders,
-          );
-          // A newer switch superseded this ladder mid-probe: its success or
-          // failure belongs to the other channel's playback now — don't
-          // credit it here.
-          if (ticket != _iptvSwitchTicket) return;
-          if (ok) {
-            StremioIptvService.instance.markWinner(channel.url, url);
-            if (mounted && _currentSourceIndex != i) {
-              setState(() => _currentSourceIndex = i);
-            }
-            opened = true;
-            break;
-          }
-        }
-      } finally {
-        // Only this ladder's own probing is silenced; a newer switch owns the
-        // flag from here (it sets it again on entry).
-        if (ticket == _iptvSwitchTicket) _iptvErrorsMuted = false;
-      }
-      if (ticket != _iptvSwitchTicket) return;
-      if (!opened) {
-        // Dead channel — forget the stale candidates so a later attempt
-        // re-resolves. Playback just stays down, like a dead M3U channel.
-        StremioIptvService.instance.invalidate(channel.url);
-        debugPrint('Player: no playable stream for ${channel.name}');
-      }
-    } else {
-      // Plain M3U/Xtream channel: single link, no source sheet. Headers are
-      // per-channel (the playlist declares them per entry), so they come from
-      // the channel rather than widget.httpHeaders.
-      _setIptvSources(null, null);
-      try {
-        _iptvDiag.onTuneStart(
-          channel.name,
-          channel.url,
-          isLive: channel.isLive,
-        );
-        final media = mk.Media(
-          channel.url,
-          httpHeaders: channel.playbackHeaders,
-        );
-        // The outgoing stream is torn down (pause above); everything mpv
-        // reports from here is this channel's, including a fast failure that
-        // lands while open() is still awaiting.
-        _iptvErrorsMuted = false;
-        await _openMedia(media, play: true, liveStream: channel.isLive);
-      } catch (e) {
-        debugPrint('Player: IPTV channel switch failed: $e');
-      }
-    }
-
-    if (!mounted || ticket != _iptvSwitchTicket) return;
-
-    // Carry the audio choice onto the new episode (series memory). Fire and
-    // forget: it waits for the new source's tracks then matches by language;
-    // [ticket] is this switch's generation so a newer switch abandons it.
-    if (_isIptvSeriesContext) {
-      unawaited(_applyIptvAudioPreference(ticket));
-    }
-
-    // Directly trigger transition overlay cleanup sequence.
-    // Unlike debrid channel switching (where _playSub listener handles
-    // the transition phases after 'playing' fires), IPTV URLs are already
-    // resolved so we skip phase 1 and go straight to the reveal phase.
-    // This prevents the overlay from getting stuck if the playing event
-    // doesn't fire reliably for HLS/live streams.
-    _transitionStopTimer?.cancel();
-    _transitionPhaseTimer?.cancel();
-    _transitionPhase = 2;
-    _transitionPhase2Started = DateTime.now();
-    setState(() {
-      _isTransitioning = false;
-    });
-    _transitionStopTimer = Timer(const Duration(milliseconds: 1500), () {
-      _rainbowController.stop();
-      _transitionRunning = false;
-      _rainbowActive = false;
-      if (mounted) setState(() {});
-    });
-
-    // The NEW channel may itself already be recording (engine captures keep
-    // running across zaps) — repaint the Record button from native truth.
-    if (_engineFlagOn) unawaited(_recording.refreshEngineRecordingState());
-  }
-
-  /// Open [url] and wait until it demonstrably plays (a decoded video size or
-  /// advancing position) or demonstrably fails (player error, open() throw,
-  /// or the timeout — live streams can stall without ever erroring). Used by
-  /// the Stremio channel ladder to decide whether to try the next candidate.
-  Future<bool> _tryOpenLiveStream(
-    String url, {
-    Duration timeout = const Duration(seconds: 12),
-    Map<String, String>? httpHeaders,
-  }) async {
-    // Every live media replacement ends the recording, not just a channel zap:
-    // picking another row in the Sources sheet lands here via
-    // _switchToIptvSource, and mpv makes no promise about `stream-record`
-    // across an open() — it may quietly stop or overwrite the file while
-    // `_isRecording` still claims it is running. Redundant (and harmless) on
-    // the _switchToIptvChannel path, which already stopped before its ladder.
-    await _recording.stopRecording(userInitiated: false);
-
-    final completer = Completer<bool>();
-    void finish(bool ok) {
-      if (!completer.isCompleted) completer.complete(ok);
-    }
-
-    // Position/error events only count after open() returns — the stream can
-    // still be draining the previous media's positions (or a dead outgoing
-    // channel's queued error) before then. Genuine pre-open failures are
-    // covered by the open() throw and the timeout.
-    var openDone = false;
-    final subs = <StreamSubscription>[
-      _player.stream.error.listen((_) {
-        if (openDone) finish(false);
-      }),
-      _player.stream.width.listen((w) {
-        if (openDone && w != null && w > 0) finish(true);
-      }),
-      _player.stream.position.listen((p) {
-        if (openDone && p > Duration.zero) finish(true);
-      }),
-    ];
-    try {
-      // Plan finding P7: candidate opens used to drop the channel's own
-      // headers — the one open path that lost them. Carry them like every
-      // other open does.
-      await _openMedia(
-        mk.Media(url, httpHeaders: httpHeaders),
-        play: true,
-        liveStream: true,
-      );
-      openDone = true;
-    } catch (e) {
-      debugPrint('Player: stremio candidate failed to open: $e');
-      finish(false);
-    }
-    final ok = await completer.future.timeout(timeout, onTimeout: () => false);
-    for (final s in subs) {
-      unawaited(s.cancel());
-    }
-    return ok;
   }
 
   /// Opens one VOD candidate with the real media-kit player and keeps that
@@ -7248,7 +5754,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void _showSourceSheetOverlay() {
     final sources = _effectiveSources;
     if (sources == null || sources.isEmpty) return;
-    _hideIptvZapBanner();
+    _iptvBanner.hideIptvZapBanner();
     setState(() {
       _showSourceSheet = true;
       _controlsVisible.value = false;
@@ -7295,7 +5801,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // position and reloads subtitles — both meaningless (and harmful) for a
     // live stream. Route to the dedicated live switch instead.
     if (_iptvChannelKey != null) {
-      await _switchToIptvSource(index, url);
+      await _iptvSwitch.switchToIptvSource(index, url);
       return;
     }
     final pendingPlaylist = _pendingSourcePlaylist;
@@ -7309,63 +5815,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     } else {
       await _switchToStremioSource(index, url);
     }
-  }
-
-  /// Manual pick from the source sheet while a Stremio IPTV channel plays:
-  /// open the chosen link directly. No position seek, no subtitle
-  /// bookkeeping, and no auto-advance on failure — the user chose this link
-  /// deliberately, so a dead pick just leaves the channel down (they can
-  /// pick another from the sheet).
-  Future<void> _switchToIptvSource(int index, String url) async {
-    _hideSourceSheet();
-    final key = _iptvChannelKey;
-    final ticket = ++_iptvSwitchTicket;
-    final previousIndex = _currentSourceIndex;
-    _clearBufferingIndicator();
-    setState(() {
-      _isTransitioning = true;
-      _tvScrubGeneration++;
-      _tvAbandonScrub();
-      _currentSourceIndex = index;
-    });
-    _startTransitionOverlay();
-    // A deliberate source pick is a fresh tune: any recovery episode (and
-    // its pill) belonged to the link being abandoned.
-    _iptvLiveRecovery.onTuneStarted();
-    _iptvReconnectText.value = null;
-    try {
-      await _player.pause();
-    } catch (_) {}
-    final ok = await _tryOpenLiveStream(
-      url,
-      httpHeaders: _currentIptvChannel?.playbackHeaders,
-    );
-    if (!mounted || ticket != _iptvSwitchTicket) return;
-    if (ok) {
-      if (key != null) {
-        StremioIptvService.instance.markWinner(key, url);
-      }
-    } else {
-      // Failed pick: restore the highlight — leaving it on the dead row
-      // would both show a false PLAYING badge and block retrying it (the
-      // sheet ignores selecting the "current" source).
-      setState(() => _currentSourceIndex = previousIndex);
-    }
-    // Same direct transition-overlay cleanup as _switchToIptvChannel — the
-    // 'playing' event is unreliable for HLS/live streams.
-    _transitionStopTimer?.cancel();
-    _transitionPhaseTimer?.cancel();
-    _transitionPhase = 2;
-    _transitionPhase2Started = DateTime.now();
-    setState(() {
-      _isTransitioning = false;
-    });
-    _transitionStopTimer = Timer(const Duration(milliseconds: 1500), () {
-      _rainbowController.stop();
-      _transitionRunning = false;
-      _rainbowActive = false;
-      if (mounted) setState(() {});
-    });
   }
 
   Future<bool> _switchToSourcePlaylist(
@@ -9657,7 +8106,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         unawaited(_recording.publishRecording(path, userInitiated: false));
       }
     }
-    _iptvCatchupRequests.cancel();
+    _iptvGuide.iptvCatchupRequests.cancel();
     // Detach from PiP (disarms auto-enter); ignored if a newer player already
     // took ownership, so route replacement can't disarm the incoming screen.
     PipService.detach(this);
@@ -9691,8 +8140,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _autosaveTimer?.cancel();
     _manualSelectionResetTimer?.cancel();
     _debrifyBannerTimer?.cancel();
-    _iptvZapHideTimer?.cancel();
-    _iptvZapTicker?.cancel();
+    _iptvBanner.iptvZapHideTimer?.cancel();
+    _iptvBanner.iptvZapTicker?.cancel();
     _tvScrubGeneration++; // invalidate any scrub still in flight
     _tvBarScope.dispose();
     _dockExtent.dispose();
@@ -9730,7 +8179,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _playbackUiClock.dispose();
     _activeSkipSegmentUi.dispose();
     _playSub?.cancel();
-    _lastLiveChannelTimer?.cancel();
+    _iptvMemory.lastLiveChannelTimer?.cancel();
     _paramsSub?.cancel();
     _trackSub?.cancel();
     _tvosDecodeRemedy?.dispose();
@@ -10042,14 +8491,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               aspectMode: _display.aspectMode,
               hideOptions: widget.hideOptions,
               onNext: _hasIptvNext
-                  ? () => _switchToIptvChannel(_currentIptvIndex + 1)
-                  : _canZapIptvChannel
-                  ? () => _zapIptvChannel(1)
+                  ? () => _iptvSwitch.switchToIptvChannel(_currentIptvIndex + 1)
+                  : _zapRing.canZapIptvChannel
+                  ? () => _zapLadder.zapIptvChannel(1)
                   : (_hasAnyNext ? _goToNextEpisode : null),
               onPrevious: _hasIptvPrevious
-                  ? () => _switchToIptvChannel(_currentIptvIndex - 1)
-                  : _canZapIptvChannel
-                  ? () => _zapIptvChannel(-1)
+                  ? () => _iptvSwitch.switchToIptvChannel(_currentIptvIndex - 1)
+                  : _zapRing.canZapIptvChannel
+                  ? () => _zapLadder.zapIptvChannel(-1)
                   : (_hasPreviousEpisode() ? _goToPreviousEpisode : null),
               onNextChannel: widget.requestNextChannel != null
                   ? _goToNextChannel
@@ -10073,20 +8522,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                         : _showStremioTvGuideOverlay)
                   : null,
               onShowIptvChannels: _effectiveIptvChannels?.isNotEmpty == true
-                  ? _showIptvChannelSheetOverlay
+                  ? _iptvGuide.showIptvChannelSheetOverlay
                   : null,
               hasRecord: _recording.canRecord,
               isRecording: _recording.recordingActiveNow,
               onRecord: _recording.canRecord
                   ? _recording.toggleRecording
                   : null,
-              onLiveEdgeAction: _iptvLiveEdgeAction,
+              onLiveEdgeAction: _iptvGuide.iptvLiveEdgeAction,
               liveEdgeActionActive: _iptvStartOverActive,
               liveEdgeActionLoading: _iptvStartOverLoading,
               onToggleStartOverTimeline: _iptvStartOverActive
-                  ? _toggleIptvStartOverTimeline
+                  ? _iptvGuide.toggleIptvStartOverTimeline
                   : null,
-              startOverTimelineVisible: _iptvStartOverTimelineVisible,
+              startOverTimelineVisible: _iptvGuide.iptvStartOverTimelineVisible,
             );
           },
         ),
@@ -10138,7 +8587,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // Delegate: the guide's own back walks schedule -> channels first, and
       // its close restores a search-interrupted category.
       if (_iptvSheetKey.currentState?.handleHostBack() != true) {
-        _hideIptvChannelSheet();
+        _iptvGuide.hideIptvChannelSheet();
       }
       // It may still be open (pane change rather than close). Taking focus to
       // the player root would leave its DPAD dead.
@@ -10166,7 +8615,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       return true;
     }
     if (_effectiveIptvChannels?.isNotEmpty == true) {
-      _showIptvChannelSheetOverlay();
+      _iptvGuide.showIptvChannelSheetOverlay();
       return true;
     }
     return false;
@@ -10212,8 +8661,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // Zap directly rather than falling through: the mapping below only zaps
       // when the bar is hidden, so with it up the press would reach the seek
       // branch and seek the OUTGOING item.
-      if ((isLeft || isRight) && _canZapIptvChannel) {
-        _zapIptvChannel(isRight ? 1 : -1);
+      if ((isLeft || isRight) && _zapRing.canZapIptvChannel) {
+        _zapLadder.zapIptvChannel(isRight ? 1 : -1);
         return KeyEventResult.handled;
       }
       return KeyEventResult.handled;
@@ -10252,9 +8701,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         // seek, which on a live stream is a blind jump on a rolling window and
         // on a `hideSeekbar` session is exactly the seek that session turned
         // off. And never enter a scrub whose progress row is hidden.
-        return _canZapIptvChannel ? null : KeyEventResult.handled;
+        return _zapRing.canZapIptvChannel ? null : KeyEventResult.handled;
       }
-      if ((isLeft || isRight) && !_canZapIptvChannel) {
+      if ((isLeft || isRight) && !_zapRing.canZapIptvChannel) {
         // Repeats arriving in quick succession mean the key is held; the third
         // one enters scrub. Slower taps stay 10s nudges, so a single press
         // still does the obvious thing.
@@ -10302,62 +8751,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
-  /// Adopt [channel] as the banner's subject and start its guide lookup.
-  ///
-  /// Called on the first tune and on every zap, whatever is on screen at the
-  /// time: the dock can be opened minutes later and must find the panel's
-  /// data already loaded.
-  void _prepareIptvBannerData(IptvChannel channel) {
-    if (!mounted || !channel.isLive) return;
-    final ticket = ++_iptvZapEpgTicket;
-    // Whatever the guide already knows paints immediately; the fetch below
-    // only ever upgrades it.
-    final known = IptvEpgService.instance.peekNowNext(channel.url);
-    setState(() {
-      _iptvZapChannel = channel;
-      _iptvZapEpg = known;
-      _iptvZapEpgLoading = known == null;
-      _iptvZapClock = DateTime.now();
-    });
-    // Even with an immediate XMLTV answer, the playing Xtream channel needs
-    // one archive-aware upgrade: XMLTV has titles/times but no has_archive.
-    unawaited(_loadIptvZapBannerEpg(channel, ticket));
-    // Zapping from VOD to live with the dock already open gives the panel its
-    // first channel here rather than at raise time — start its clock.
-    _syncIptvBannerTicker();
-  }
-
-  /// Float the banner over bare video and let it fade itself out.
-  void _raiseIptvZapBanner() {
-    if (!mounted || _iptvZapChannel == null) return;
-    // Anything the user deliberately opened keeps the frame. The dock is the
-    // exception it used to share this strip with: it now carries the same
-    // panel itself, so there is nothing to raise over it.
-    if (_showIptvChannelSheet ||
-        _showSourceSheet ||
-        _showChannelGuide ||
-        _controlsVisible.value) {
-      return;
-    }
-    setState(() {
-      _showIptvZapBanner = true;
-      _iptvZapFloatingMounted = true;
-    });
-    _iptvZapHideTimer?.cancel();
-    _iptvZapHideTimer = Timer(
-      const Duration(milliseconds: 4500),
-      _hideIptvZapBanner,
-    );
-    _syncIptvBannerTicker();
-  }
-
   void _onControlsVisibilityChanged() {
     _syncPlaybackClockVisibility();
     // The dock carries its own copy of the panel, so the floating one goes the
     // instant the dock opens. Fading it would cross-dissolve two copies of the
     // same panel at two different heights.
     if (_controlsVisible.value) {
-      _hideIptvZapBanner(immediate: true);
+      _iptvBanner.hideIptvZapBanner(immediate: true);
       _hideDebrifyBanner(immediate: true);
       // The Record button is about to be looked at — make sure it reflects
       // engine captures stopped from the notification (which this screen
@@ -10377,85 +8777,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _tvRootFocus.requestFocus();
       }
     }
-    _syncIptvBannerTicker();
-  }
-
-  /// [immediate] skips the fade and unmounts in the same frame — for a handoff
-  /// to the dock's copy, where a fade would show both at once.
-  void _hideIptvZapBanner({bool immediate = false}) {
-    _iptvZapHideTimer?.cancel();
-    _iptvZapHideTimer = null;
-    final live = _showIptvZapBanner || (immediate && _iptvZapFloatingMounted);
-    if (mounted && live) {
-      setState(() {
-        _showIptvZapBanner = false;
-        if (immediate) _iptvZapFloatingMounted = false;
-      });
-    }
-    _syncIptvBannerTicker();
-  }
-
-  /// The panel's clock only has to run while the panel is on screen — in
-  /// either home. Without it the countdown and the elapsed rule sit frozen,
-  /// which is most obvious exactly where the dock is used: while paused,
-  /// where the position stream has stopped driving rebuilds.
-  void _syncIptvBannerTicker() {
-    final onScreen =
-        _iptvZapChannel != null &&
-        (_showIptvZapBanner ||
-            (_controlsVisible.value && _iptvZapBannerOwnsIdentity));
-    if (!onScreen) {
-      _iptvZapTicker?.cancel();
-      _iptvZapTicker = null;
-      return;
-    }
-    if (_iptvZapTicker != null) return;
-    _iptvZapTicker = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!mounted) return;
-      setState(() => _iptvZapClock = DateTime.now());
-      _refreshIptvBannerEpgIfEnded();
-    });
-  }
-
-  /// The dock can stay open past the end of the programme it is describing.
-  /// Re-ask once the current one has finished rather than leave a listing
-  /// that is quietly wrong.
-  DateTime? _iptvArchiveRetryAt;
-
-  void _refreshIptvBannerEpgIfEnded() {
-    if (_iptvZapEpgLoading) return;
-    final channel = _iptvZapChannel;
-    final current = _iptvZapEpg?.now;
-    if (channel == null || current == null) return;
-    final retryArchive =
-        !current.hasArchive &&
-        _iptvArchiveRetryAt != null &&
-        !DateTime.now().isBefore(_iptvArchiveRetryAt!);
-    if (current.stop.isAfter(DateTime.now()) && !retryArchive) return;
-    final ticket = ++_iptvZapEpgTicket;
-    setState(() => _iptvZapEpgLoading = true);
-    unawaited(_loadIptvZapBannerEpg(channel, ticket));
-  }
-
-  /// The same lazy now/next fetch the guide rows use. [ticket] is the banner's
-  /// generation: a zap that lands mid-flight owns the banner, so a late answer
-  /// for the previous channel is dropped rather than painted under the new
-  /// channel's name.
-  Future<void> _loadIptvZapBannerEpg(IptvChannel channel, int ticket) async {
-    EpgNowNext? result;
-    try {
-      result = await IptvEpgService.instance.nowNextWithCatchupMetadata(
-        channel.url,
-      );
-    } catch (_) {
-      result = null;
-    }
-    if (!mounted || ticket != _iptvZapEpgTicket) return;
-    _iptvArchiveRetryAt = DateTime.now().add(const Duration(seconds: 60));
-    setState(() {
-      _iptvZapEpg = result;
-      _iptvZapEpgLoading = false;
-    });
+    _iptvBanner.syncIptvBannerTicker();
   }
 
   Future<void> _handleDoubleTap(TapDownDetails details) async {
@@ -11425,7 +9747,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 return KeyEventResult.handled;
               }
               if (_effectiveIptvChannels?.isNotEmpty == true) {
-                _showIptvChannelSheetOverlay();
+                _iptvGuide.showIptvChannelSheetOverlay();
                 return KeyEventResult.handled;
               }
             }
@@ -11433,7 +9755,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             // C -> IPTV channel sheet
             if (key == LogicalKeyboardKey.keyC) {
               if (_effectiveIptvChannels?.isNotEmpty == true) {
-                _showIptvChannelSheetOverlay();
+                _iptvGuide.showIptvChannelSheetOverlay();
                 return KeyEventResult.handled;
               }
             }
@@ -11536,13 +9858,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             // hidden — the same contract as the native player's
             // isLiveIptvZapContext(). There is nothing to seek on a live
             // stream, and with the dock up these keys belong to its buttons.
-            if (_canZapIptvChannel && !_controlsVisible.value) {
+            if (_zapRing.canZapIptvChannel && !_controlsVisible.value) {
               if (key == LogicalKeyboardKey.arrowRight) {
-                _zapIptvChannel(1);
+                _zapLadder.zapIptvChannel(1);
                 return KeyEventResult.handled;
               }
               if (key == LogicalKeyboardKey.arrowLeft) {
-                _zapIptvChannel(-1);
+                _zapLadder.zapIptvChannel(-1);
                 return KeyEventResult.handled;
               }
             }
@@ -11649,8 +9971,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             }
             if (key == LogicalKeyboardKey.channelUp ||
                 key == LogicalKeyboardKey.pageUp) {
-              if (_canZapIptvChannel) {
-                _zapIptvChannel(1);
+              if (_zapRing.canZapIptvChannel) {
+                _zapLadder.zapIptvChannel(1);
                 return KeyEventResult.handled;
               }
               if (widget.requestNextChannel != null) {
@@ -11660,8 +9982,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             }
             if (key == LogicalKeyboardKey.channelDown ||
                 key == LogicalKeyboardKey.pageDown) {
-              if (_canZapIptvChannel) {
-                _zapIptvChannel(-1);
+              if (_zapRing.canZapIptvChannel) {
+                _zapLadder.zapIptvChannel(-1);
                 return KeyEventResult.handled;
               }
             }
@@ -12130,29 +10452,29 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                   // only way to zap without a CH +/- key. Falls back
                                   // to the Debrify-TV episode/playlist flow.
                                   onNext: _hasIptvNext
-                                      ? () => _switchToIptvChannel(
+                                      ? () => _iptvSwitch.switchToIptvChannel(
                                           _currentIptvIndex + 1,
                                         )
-                                      : _canZapIptvChannel
-                                      ? () => _zapIptvChannel(1)
+                                      : _zapRing.canZapIptvChannel
+                                      ? () => _zapLadder.zapIptvChannel(1)
                                       : (_hasAnyNext ? _goToNextEpisode : null),
                                   onNextChannel:
                                       widget.requestNextChannel != null
                                       ? _goToNextChannel
                                       : null,
                                   onPrevious: _hasIptvPrevious
-                                      ? () => _switchToIptvChannel(
+                                      ? () => _iptvSwitch.switchToIptvChannel(
                                           _currentIptvIndex - 1,
                                         )
-                                      : _canZapIptvChannel
-                                      ? () => _zapIptvChannel(-1)
+                                      : _zapRing.canZapIptvChannel
+                                      ? () => _zapLadder.zapIptvChannel(-1)
                                       : (_hasPreviousEpisode()
                                             ? _goToPreviousEpisode
                                             : null),
                                   hasNext:
                                       _hasAnyNext ||
                                       _hasIptvNext ||
-                                      _canZapIptvChannel,
+                                      _zapRing.canZapIptvChannel,
                                   hasNextChannel:
                                       widget.requestNextChannel != null,
                                   hasGuide:
@@ -12169,7 +10491,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                   hasPrevious:
                                       _hasPreviousEpisode() ||
                                       _hasIptvPrevious ||
-                                      _canZapIptvChannel,
+                                      _zapRing.canZapIptvChannel,
                                   // A live channel has no timeline to scrub: the
                                   // position/duration mpv reports is just the HLS
                                   // rolling window, so the bar counts something
@@ -12180,7 +10502,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                   hideSeekbar:
                                       widget.hideSeekbar ||
                                       (_iptvZapBannerOwnsIdentity &&
-                                          !_iptvStartOverTimelineVisible),
+                                          !_iptvGuide
+                                              .iptvStartOverTimelineVisible),
                                   // Same call the native dock makes for live.
                                   hideSpeed: _iptvZapBannerOwnsIdentity,
                                   // Shuffle picks from _activePlaylist, which an
@@ -12196,7 +10519,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                       true,
                                   onShowIptvChannels:
                                       _effectiveIptvChannels?.isNotEmpty == true
-                                      ? _showIptvChannelSheetOverlay
+                                      ? _iptvGuide.showIptvChannelSheetOverlay
                                       : null,
                                   hasStremioSources:
                                       _effectiveSources != null &&
@@ -12221,15 +10544,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                   onRecord: _recording.canRecord
                                       ? _recording.toggleRecording
                                       : null,
-                                  onLiveEdgeAction: _iptvLiveEdgeAction,
+                                  onLiveEdgeAction:
+                                      _iptvGuide.iptvLiveEdgeAction,
                                   liveEdgeActionActive: _iptvStartOverActive,
                                   liveEdgeActionLoading: _iptvStartOverLoading,
                                   onToggleStartOverTimeline:
                                       _iptvStartOverActive
-                                      ? _toggleIptvStartOverTimeline
+                                      ? _iptvGuide.toggleIptvStartOverTimeline
                                       : null,
                                   startOverTimelineVisible:
-                                      _iptvStartOverTimelineVisible,
+                                      _iptvGuide.iptvStartOverTimelineVisible,
                                 ),
                         ),
                       );
@@ -12390,9 +10714,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                       key: _iptvSheetKey,
                       channels: _effectiveIptvChannels!,
                       currentIndex: _currentIptvIndex,
-                      onChannelSelected: _switchToIptvGuideChannel,
-                      onPlayProgramme: _playIptvCatchup,
-                      onClose: _hideIptvChannelSheet,
+                      onChannelSelected: _iptvGuide.switchToIptvGuideChannel,
+                      onPlayProgramme: _iptvGuide.playIptvCatchup,
+                      onClose: _iptvGuide.hideIptvChannelSheet,
                       categories:
                           _iptvGuideContextOverride?.categories ??
                           widget.iptvCategories ??
@@ -12412,7 +10736,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                           'live',
                       sources: widget.iptvSources ?? const [],
                       browseProvider: widget.iptvBrowseProvider,
-                      onContextChanged: _persistIptvGuideContext,
+                      onContextChanged: _iptvGuide.persistIptvGuideContext,
                       style: _playerGuideStyle,
                       tokens: _playerGuideTokens,
                     ),
@@ -12556,6 +10880,553 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
     return null;
   }
+}
+
+class _VpIptvZapBannerHostAdapter implements VpIptvZapBannerHost {
+  _VpIptvZapBannerHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  ValueNotifier<bool> get controlsVisible => _s._controlsVisible;
+  @override
+  bool get iptvZapBannerOwnsIdentity => _s._iptvZapBannerOwnsIdentity;
+  @override
+  IptvChannel? get iptvZapChannel => _s._iptvZapChannel;
+  @override
+  set iptvZapChannel(IptvChannel? v) => _s._iptvZapChannel = v;
+  @override
+  set iptvZapClock(DateTime v) => _s._iptvZapClock = v;
+  @override
+  EpgNowNext? get iptvZapEpg => _s._iptvZapEpg;
+  @override
+  set iptvZapEpg(EpgNowNext? v) => _s._iptvZapEpg = v;
+  @override
+  bool get iptvZapEpgLoading => _s._iptvZapEpgLoading;
+  @override
+  set iptvZapEpgLoading(bool v) => _s._iptvZapEpgLoading = v;
+  @override
+  bool get iptvZapFloatingMounted => _s._iptvZapFloatingMounted;
+  @override
+  set iptvZapFloatingMounted(bool v) => _s._iptvZapFloatingMounted = v;
+  @override
+  bool get showChannelGuide => _s._showChannelGuide;
+  @override
+  bool get showIptvChannelSheet => _s._showIptvChannelSheet;
+  @override
+  bool get showIptvZapBanner => _s._showIptvZapBanner;
+  @override
+  set showIptvZapBanner(bool v) => _s._showIptvZapBanner = v;
+  @override
+  bool get showSourceSheet => _s._showSourceSheet;
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  void setState(VoidCallback fn) => _s._vpSetState(fn);
+}
+
+class _VpIptvWatchMemoryHostAdapter implements VpIptvWatchMemoryHost {
+  _VpIptvWatchMemoryHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  IptvChannel? get currentIptvChannel => _s._currentIptvChannel;
+  @override
+  IptvGuideContext? get iptvGuideContextOverride =>
+      _s._iptvGuideContextOverride;
+  @override
+  int get iptvSwitchTicket => _s._iptvSwitchTicket;
+  @override
+  bool get isIptvSeriesContext => _s._isIptvSeriesContext;
+  @override
+  bool get isPlaying => _s._isPlaying;
+  @override
+  mk.Player get player => _s._player;
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  String? get iptvSourceId => _s.widget.iptvSourceId;
+}
+
+class _VpIptvLiveSourcesHostAdapter implements VpIptvLiveSourcesHost {
+  _VpIptvLiveSourcesHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  IptvChannel? get currentIptvChannel => _s._currentIptvChannel;
+  @override
+  int get currentIptvIndex => _s._currentIptvIndex;
+  @override
+  set currentSourceIndex(int v) => _s._currentSourceIndex = v;
+  @override
+  List<IptvChannel>? get effectiveIptvChannels => _s._effectiveIptvChannels;
+  @override
+  String? get iptvChannelKey => _s._iptvChannelKey;
+  @override
+  set iptvChannelKey(String? v) => _s._iptvChannelKey = v;
+  @override
+  IptvTuneDiagnostics get iptvDiag => _s._iptvDiag;
+  @override
+  bool get iptvErrorsMuted => _s._iptvErrorsMuted;
+  @override
+  IptvLiveRecovery get iptvLiveRecovery => _s._iptvLiveRecovery;
+  @override
+  bool iptvRecoveryEligible() => _s._iptvSwitch.iptvRecoveryEligible();
+  @override
+  bool get iptvStartOverActive => _s._iptvStartOverActive;
+  @override
+  set iptvStartOverActive(bool v) => _s._iptvStartOverActive = v;
+  @override
+  set iptvStartOverTimelineRequested(bool v) =>
+      _s._iptvStartOverTimelineRequested = v;
+  @override
+  DateTime? get lastIptvErrorShown => _s._lastIptvErrorShown;
+  @override
+  set lastIptvErrorShown(DateTime? v) => _s._lastIptvErrorShown = v;
+  @override
+  Future<void> openMedia(
+    mk.Media media, {
+    required bool play,
+    bool? desiredPlay,
+    bool liveStream = false,
+    EpisodePlaybackRequest? request,
+    bool Function()? beforeOpen,
+    Torrent? source,
+    int? preserveStartupEpoch,
+  }) => _s._openMedia(
+    media,
+    play: play,
+    desiredPlay: desiredPlay,
+    liveStream: liveStream,
+    request: request,
+    beforeOpen: beforeOpen,
+    source: source,
+    preserveStartupEpoch: preserveStartupEpoch,
+  );
+  @override
+  mk.Player get player => _s._player;
+  @override
+  Future<String?> Function(Torrent)? get resolveStremioSourceOverride =>
+      _s._resolveStremioSourceOverride;
+  @override
+  set resolveStremioSourceOverride(Future<String?> Function(Torrent)? v) =>
+      _s._resolveStremioSourceOverride = v;
+  @override
+  Future<void> stopRecording({bool userInitiated = true}) =>
+      _s._recording.stopRecording(userInitiated: userInitiated);
+  @override
+  List<Torrent>? get stremioSourcesOverride => _s._stremioSourcesOverride;
+  @override
+  set stremioSourcesOverride(List<Torrent>? v) =>
+      _s._stremioSourcesOverride = v;
+  @override
+  Future<void> switchToIptvChannel(int index, {bool quietRecovery = false}) =>
+      _s._iptvSwitch.switchToIptvChannel(index, quietRecovery: quietRecovery);
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  BuildContext get context => _s.context;
+  @override
+  void setState(VoidCallback fn) => _s._vpSetState(fn);
+  @override
+  int? get iptvStartIndex => _s.widget.iptvStartIndex;
+  @override
+  String get videoUrl => _s.widget.videoUrl;
+}
+
+class _VpIptvChannelSwitchHostAdapter implements VpIptvChannelSwitchHost {
+  _VpIptvChannelSwitchHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  bool get activeMediaUserPaused => _s._activeMediaUserPaused;
+  @override
+  void anchorIptvGuideCategory(IptvChannel channel, {Object? categories}) =>
+      _s._iptvGuide.anchorIptvGuideCategory(channel, categories: categories);
+  @override
+  Future<void> applyIptvAudioPreference(int ticket) =>
+      _s._iptvMemory.applyIptvAudioPreference(ticket);
+  @override
+  void cancelPendingIptvCatchup({bool hideFeedback = true}) =>
+      _s._iptvGuide.cancelPendingIptvCatchup(hideFeedback: hideFeedback);
+  @override
+  void clearBufferingIndicator() => _s._clearBufferingIndicator();
+  @override
+  set currentChannelName(String? v) => _s._currentChannelName = v;
+  @override
+  set currentChannelNumber(int? v) => _s._currentChannelNumber = v;
+  @override
+  IptvChannel? get currentIptvChannel => _s._currentIptvChannel;
+  @override
+  int get currentIptvIndex => _s._currentIptvIndex;
+  @override
+  set currentIptvIndex(int v) => _s._currentIptvIndex = v;
+  @override
+  int get currentSourceIndex => _s._currentSourceIndex;
+  @override
+  set currentSourceIndex(int v) => _s._currentSourceIndex = v;
+  @override
+  List<IptvChannel>? get effectiveIptvChannels => _s._effectiveIptvChannels;
+  @override
+  bool get engineFlagOn => _s._engineFlagOn;
+  @override
+  void hideIptvChannelSheet() => _s._iptvGuide.hideIptvChannelSheet();
+  @override
+  void hideIptvZapBanner({bool immediate = false}) =>
+      _s._iptvBanner.hideIptvZapBanner(immediate: immediate);
+  @override
+  void hideSourceSheet() => _s._hideSourceSheet();
+  @override
+  String? get iptvChannelKey => _s._iptvChannelKey;
+  @override
+  IptvTuneDiagnostics get iptvDiag => _s._iptvDiag;
+  @override
+  set iptvErrorsMuted(bool v) => _s._iptvErrorsMuted = v;
+  @override
+  IptvLiveRecovery get iptvLiveRecovery => _s._iptvLiveRecovery;
+  @override
+  ValueNotifier<String?> get iptvReconnectText => _s._iptvReconnectText;
+  @override
+  bool get iptvStartOverActive => _s._iptvStartOverActive;
+  @override
+  set iptvStartOverActive(bool v) => _s._iptvStartOverActive = v;
+  @override
+  bool get iptvStartOverLoading => _s._iptvStartOverLoading;
+  @override
+  set iptvStartOverLoading(bool v) => _s._iptvStartOverLoading = v;
+  @override
+  set iptvStartOverTimelineRequested(bool v) =>
+      _s._iptvStartOverTimelineRequested = v;
+  @override
+  int get iptvSwitchTicket => _s._iptvSwitchTicket;
+  @override
+  set iptvSwitchTicket(int v) => _s._iptvSwitchTicket = v;
+  @override
+  bool get iptvZapPagingActive => _s._iptvZapPagingActive;
+  @override
+  bool get isIptvSeriesContext => _s._isIptvSeriesContext;
+  @override
+  set isTransitioning(bool v) => _s._isTransitioning = v;
+  @override
+  set lastIptvErrorShown(DateTime? v) => _s._lastIptvErrorShown = v;
+  @override
+  Future<void> openMedia(
+    mk.Media media, {
+    required bool play,
+    bool? desiredPlay,
+    bool liveStream = false,
+    EpisodePlaybackRequest? request,
+    bool Function()? beforeOpen,
+    Torrent? source,
+    int? preserveStartupEpoch,
+  }) => _s._openMedia(
+    media,
+    play: play,
+    desiredPlay: desiredPlay,
+    liveStream: liveStream,
+    request: request,
+    beforeOpen: beforeOpen,
+    source: source,
+    preserveStartupEpoch: preserveStartupEpoch,
+  );
+  @override
+  bool get pausedByLifecycle => _s._pausedByLifecycle;
+  @override
+  mk.Player get player => _s._player;
+  @override
+  void prepareIptvBannerData(IptvChannel channel) =>
+      _s._iptvBanner.prepareIptvBannerData(channel);
+  @override
+  set rainbowActive(bool v) => _s._rainbowActive = v;
+  @override
+  AnimationController get rainbowController => _s._rainbowController;
+  @override
+  void raiseIptvZapBanner() => _s._iptvBanner.raiseIptvZapBanner();
+  @override
+  Future<void> recordIptvWatchForChannel(IptvChannel channel) =>
+      _s._iptvMemory.recordIptvWatchForChannel(channel);
+  @override
+  Future<void> refreshEngineRecordingState() =>
+      _s._recording.refreshEngineRecordingState();
+  @override
+  ResumeWriteGuard get resumeWriteGuard => _s._resumeWriteGuard;
+  @override
+  bool get screenDisposed => _s._screenDisposed;
+  @override
+  void setIptvSources(
+    String? channelKey,
+    List<StremioIptvCandidate>? candidates, {
+    int currentIndex = 0,
+  }) => _s._iptvSources.setIptvSources(
+    channelKey,
+    candidates,
+    currentIndex: currentIndex,
+  );
+  @override
+  bool get sleepStopLatched => _s._sleepStopLatched;
+  @override
+  void startTransitionOverlay() => _s._startTransitionOverlay();
+  @override
+  Future<void> stopRecording({bool userInitiated = true}) =>
+      _s._recording.stopRecording(userInitiated: userInitiated);
+  @override
+  set transitionPhase(int v) => _s._transitionPhase = v;
+  @override
+  set transitionPhase2Started(DateTime? v) => _s._transitionPhase2Started = v;
+  @override
+  Timer? get transitionPhaseTimer => _s._transitionPhaseTimer;
+  @override
+  set transitionRunning(bool v) => _s._transitionRunning = v;
+  @override
+  Timer? get transitionStopTimer => _s._transitionStopTimer;
+  @override
+  set transitionStopTimer(Timer? v) => _s._transitionStopTimer = v;
+  @override
+  Future<bool> tryOpenLiveStream(
+    String url, {
+    Duration timeout = const Duration(seconds: 12),
+    Map<String, String>? httpHeaders,
+  }) => _s._iptvSources.tryOpenLiveStream(
+    url,
+    timeout: timeout,
+    httpHeaders: httpHeaders,
+  );
+  @override
+  void tvAbandonScrub() => _s._tvAbandonScrub();
+  @override
+  int get tvScrubGeneration => _s._tvScrubGeneration;
+  @override
+  set tvScrubGeneration(int v) => _s._tvScrubGeneration = v;
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  void setState(VoidCallback fn) => _s._vpSetState(fn);
+  @override
+  SleepTimerMode get sleepTimerMode => _s._sleep.sleepTimerMode;
+}
+
+class _VpIptvGuideCatchupHostAdapter implements VpIptvGuideCatchupHost {
+  _VpIptvGuideCatchupHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  ValueNotifier<bool> get controlsVisible => _s._controlsVisible;
+  @override
+  IptvChannel? get currentIptvChannel => _s._currentIptvChannel;
+  @override
+  int get currentIptvIndex => _s._currentIptvIndex;
+  @override
+  Duration get duration => _s._duration;
+  @override
+  List<IptvChannel>? get effectiveIptvChannels => _s._effectiveIptvChannels;
+  @override
+  void hideIptvZapBanner({bool immediate = false}) =>
+      _s._iptvBanner.hideIptvZapBanner(immediate: immediate);
+  @override
+  set iptvChannelsOverride(List<IptvChannel>? v) =>
+      _s._iptvChannelsOverride = v;
+  @override
+  IptvTuneDiagnostics get iptvDiag => _s._iptvDiag;
+  @override
+  int get iptvGuideContextGeneration => _s._iptvGuideContextGeneration;
+  @override
+  set iptvGuideContextGeneration(int v) => _s._iptvGuideContextGeneration = v;
+  @override
+  IptvGuideContext? get iptvGuideContextOverride =>
+      _s._iptvGuideContextOverride;
+  @override
+  set iptvGuideContextOverride(IptvGuideContext? v) =>
+      _s._iptvGuideContextOverride = v;
+  @override
+  IptvLiveRecovery get iptvLiveRecovery => _s._iptvLiveRecovery;
+  @override
+  bool iptvRecoveryEligible() => _s._iptvSwitch.iptvRecoveryEligible();
+  @override
+  bool get iptvStartOverActive => _s._iptvStartOverActive;
+  @override
+  set iptvStartOverActive(bool v) => _s._iptvStartOverActive = v;
+  @override
+  bool get iptvStartOverLoading => _s._iptvStartOverLoading;
+  @override
+  set iptvStartOverLoading(bool v) => _s._iptvStartOverLoading = v;
+  @override
+  bool get iptvStartOverTimelineRequested => _s._iptvStartOverTimelineRequested;
+  @override
+  set iptvStartOverTimelineRequested(bool v) =>
+      _s._iptvStartOverTimelineRequested = v;
+  @override
+  int get iptvSwitchTicket => _s._iptvSwitchTicket;
+  @override
+  EpgNowNext? get iptvZapEpg => _s._iptvZapEpg;
+  @override
+  Future<void> openMedia(
+    mk.Media media, {
+    required bool play,
+    bool? desiredPlay,
+    bool liveStream = false,
+    EpisodePlaybackRequest? request,
+    bool Function()? beforeOpen,
+    Torrent? source,
+    int? preserveStartupEpoch,
+  }) => _s._openMedia(
+    media,
+    play: play,
+    desiredPlay: desiredPlay,
+    liveStream: liveStream,
+    request: request,
+    beforeOpen: beforeOpen,
+    source: source,
+    preserveStartupEpoch: preserveStartupEpoch,
+  );
+  @override
+  Future<void> reanchorIptvRingToCategory(
+    IptvChannel channel, {
+    required int switchTicket,
+  }) => _s._zapRing.reanchorIptvRingToCategory(
+    channel,
+    switchTicket: switchTicket,
+  );
+  @override
+  void resetIptvZapPaging() => _s._zapRing.resetIptvZapPaging();
+  @override
+  void scheduleAutoHide() => _s._scheduleAutoHide();
+  @override
+  set showIptvChannelSheet(bool v) => _s._showIptvChannelSheet = v;
+  @override
+  Future<void> stopRecording({bool userInitiated = true}) =>
+      _s._recording.stopRecording(userInitiated: userInitiated);
+  @override
+  Future<void> switchToIptvChannel(int index, {bool quietRecovery = false}) =>
+      _s._iptvSwitch.switchToIptvChannel(index, quietRecovery: quietRecovery);
+  @override
+  FocusNode get tvProgressFocus => _s._tvProgressFocus;
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  BuildContext get context => _s.context;
+  @override
+  void setState(VoidCallback fn) => _s._vpSetState(fn);
+  @override
+  String? get iptvSourceId => _s.widget.iptvSourceId;
+  @override
+  List<String>? get iptvCategories => _s.widget.iptvCategories;
+  @override
+  String? get iptvContentType => _s.widget.iptvContentType;
+  @override
+  String? get iptvSourceName => _s.widget.iptvSourceName;
+}
+
+class _VpIptvZapLadderHostAdapter implements VpIptvZapLadderHost {
+  _VpIptvZapLadderHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  void applyIptvGuideCategory(String? category, List<String>? categories) =>
+      _s._iptvGuide.applyIptvGuideCategory(category, categories);
+  @override
+  IptvChannel? get currentIptvChannel => _s._currentIptvChannel;
+  @override
+  int get currentIptvIndex => _s._currentIptvIndex;
+  @override
+  List<IptvChannel>? get effectiveIptvChannels => _s._effectiveIptvChannels;
+  @override
+  void ensureIptvZapPagingArmed() => _s._zapRing.ensureIptvZapPagingArmed();
+  @override
+  void installIptvZapWindow(
+    VpIptvZapPage page, {
+    required bool preservePlayingChannel,
+  }) => _s._zapRing.installIptvZapWindow(
+    page,
+    preservePlayingChannel: preservePlayingChannel,
+  );
+  @override
+  List<String> get iptvZapCategories => _s._iptvZapCategories;
+  @override
+  String? get iptvZapCategory => _s._iptvZapCategory;
+  @override
+  int get iptvZapCategoryTotal => _s._iptvZapCategoryTotal;
+  @override
+  bool get iptvZapPagingActive => _s._iptvZapPagingActive;
+  @override
+  List<int> get iptvZapPendingInputs => _s._iptvZapPendingInputs;
+  @override
+  bool get iptvZapRequestInFlight => _s._iptvZapRequestInFlight;
+  @override
+  int get iptvZapWindowOffset => _s._iptvZapWindowOffset;
+  @override
+  int get iptvZapPageSize => _VideoPlayerScreenState._kIptvZapPageSize;
+  @override
+  void mergeIptvZapPage(VpIptvZapPage page) =>
+      _s._zapRing.mergeIptvZapPage(page);
+  @override
+  Future<VpIptvZapPage?> requestIptvZapPage({
+    required String? category,
+    required int offset,
+    bool fromEnd = false,
+  }) => _s._zapRing.requestIptvZapPage(
+    category: category,
+    offset: offset,
+    fromEnd: fromEnd,
+  );
+  @override
+  Future<void> switchToIptvChannel(int index, {bool quietRecovery = false}) =>
+      _s._iptvSwitch.switchToIptvChannel(index, quietRecovery: quietRecovery);
+  @override
+  bool get mounted => _s.mounted;
+}
+
+class _VpIptvZapRingHostAdapter implements VpIptvZapRingHost {
+  _VpIptvZapRingHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  void anchorIptvGuideCategory(IptvChannel channel, {Object? categories}) =>
+      _s._iptvGuide.anchorIptvGuideCategory(channel, categories: categories);
+  @override
+  void clearIptvZapBoundaryCache() => _s._zapLadder.clearIptvZapBoundaryCache();
+  @override
+  IptvChannel? get currentIptvChannel => _s._currentIptvChannel;
+  @override
+  int get currentIptvIndex => _s._currentIptvIndex;
+  @override
+  set currentIptvIndex(int v) => _s._currentIptvIndex = v;
+  @override
+  List<IptvChannel>? get effectiveIptvChannels => _s._effectiveIptvChannels;
+  @override
+  set iptvChannelsOverride(List<IptvChannel>? v) =>
+      _s._iptvChannelsOverride = v;
+  @override
+  int get iptvGuideContextGeneration => _s._iptvGuideContextGeneration;
+  @override
+  IptvGuideContext? get iptvGuideContextOverride =>
+      _s._iptvGuideContextOverride;
+  @override
+  int get iptvSwitchTicket => _s._iptvSwitchTicket;
+  @override
+  set iptvZapCategories(List<String> v) => _s._iptvZapCategories = v;
+  @override
+  String? get iptvZapCategory => _s._iptvZapCategory;
+  @override
+  set iptvZapCategory(String? v) => _s._iptvZapCategory = v;
+  @override
+  set iptvZapCategoryTotal(int v) => _s._iptvZapCategoryTotal = v;
+  @override
+  bool get iptvZapPagingActive => _s._iptvZapPagingActive;
+  @override
+  set iptvZapPagingActive(bool v) => _s._iptvZapPagingActive = v;
+  @override
+  List<int> get iptvZapPendingInputs => _s._iptvZapPendingInputs;
+  @override
+  bool get iptvZapRequestInFlight => _s._iptvZapRequestInFlight;
+  @override
+  set iptvZapRequestInFlight(bool v) => _s._iptvZapRequestInFlight = v;
+  @override
+  int get iptvZapWindowOffset => _s._iptvZapWindowOffset;
+  @override
+  set iptvZapWindowOffset(int v) => _s._iptvZapWindowOffset = v;
+  @override
+  int get iptvZapPageSize => _VideoPlayerScreenState._kIptvZapPageSize;
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  void setState(VoidCallback fn) => _s._vpSetState(fn);
+  @override
+  Future<Map<String, dynamic>?> Function(Map<String, dynamic>)?
+  get iptvBrowseProvider => _s.widget.iptvBrowseProvider;
+  @override
+  String? get iptvSourceId => _s.widget.iptvSourceId;
 }
 
 class _VpResumeSaveHostAdapter implements VpResumeSaveHost {
@@ -12848,7 +11719,7 @@ class _VpPlayerMenuHostAdapter implements VpPlayerMenuHost {
   String? get cachedSubtitleKey => _s._cachedSubtitleKey;
   @override
   void captureIptvAudioLanguage(String audioId) =>
-      _s._captureIptvAudioLanguage(audioId);
+      _s._iptvMemory.captureIptvAudioLanguage(audioId);
   @override
   ValueNotifier<bool> get controlsVisible => _s._controlsVisible;
   @override
@@ -12865,7 +11736,7 @@ class _VpPlayerMenuHostAdapter implements VpPlayerMenuHost {
   bool get hasSubtitlePolicy => _s._hasSubtitlePolicy;
   @override
   void hideIptvZapBanner({bool immediate = false}) =>
-      _s._hideIptvZapBanner(immediate: immediate);
+      _s._iptvBanner.hideIptvZapBanner(immediate: immediate);
   @override
   Timer? get hideTimer => _s._hideTimer;
   @override
@@ -12980,7 +11851,7 @@ class _VpPlayerMenuUiHostAdapter implements VpPlayerMenuUiHost {
   bool get canFetchEpisodes => _s._canFetchEpisodes;
   @override
   void captureIptvAudioLanguage(String audioId) =>
-      _s._captureIptvAudioLanguage(audioId);
+      _s._iptvMemory.captureIptvAudioLanguage(audioId);
   @override
   bool get continuousShuffleEnabled => _s._continuousShuffleEnabled;
   @override
@@ -13353,7 +12224,7 @@ class _VpTrackPreferencesHostAdapter implements VpTrackPreferencesHost {
   );
   @override
   Future<void> applyIptvAudioPreference(int ticket) =>
-      _s._applyIptvAudioPreference(ticket);
+      _s._iptvMemory.applyIptvAudioPreference(ticket);
   @override
   set embeddedSubtitleApplied(bool v) => _s._embeddedSubtitleApplied = v;
   @override
@@ -13587,7 +12458,7 @@ class _VpPipLifecycleHostAdapter implements VpPipLifecycleHost {
   Future<void> goToNextEpisode() => _s._goToNextEpisode();
   @override
   void cancelPendingIptvCatchup({bool hideFeedback = true}) =>
-      _s._cancelPendingIptvCatchup(hideFeedback: hideFeedback);
+      _s._iptvGuide.cancelPendingIptvCatchup(hideFeedback: hideFeedback);
   @override
   bool get rendererFallbackInProgress => _s._rendererFallbackInProgress;
   @override

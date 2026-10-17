@@ -6085,6 +6085,40 @@ for Step 0 and Claude’s independent mutation sample.
   unchanged. Application code/dependencies still equal accepted P14 at this
   checkpoint. Next: the already-authorized Step 1, then the clean reduced gate.
 
+### 2026-10-17 — Phase 15 Step 1 applied (reduced gate pending)
+
+- Production callers now use all seven frozen IPTV collaborators. **70
+  declarations (17 fields, 53 methods/getters)** move; the 757-fate manifest
+  is **applied**. All **67** retained occurrences route to the proper owner.
+  The four P8/P11/P13 facade adapters retain earlier rewrites; P11's ticket
+  getter stays State-owned. Shared fields remain State-owned, with the switch
+  owner as the sole operational ticket writer. No sibling imports.
+- The State constructor appends seven eager inert assignments after P14.
+  Recovery remains State-owned and lazy with exactly two initializer redirects.
+  Plain forwarders preserve ticket capture and expectRetune prefixes; lexical
+  guide-model `context` and original disposal statement order are retained.
+- Formatted destination sizes: ring **347**, ladder **283**, guide/catchup
+  **408**, switch/recovery **433**, live sources **245**, watch memory **207**,
+  banner **162**. Facade **14,005 → 12,876** lines; only its size ratchet is
+  lowered. All 32 earlier destinations remain protected and unchanged.
+- CI current/self-test and both analyzer inputs select P15. P1–P14 historical
+  commands remain, including P13 `238df16f4` and P14 `be4cd78aa`; every seam
+  proof stays enabled. All seven destinations are in the theme manifest,
+  rendered set and three source-guard lists. Characterization files remain
+  in the deduplicated behavior list. Six measured original-directive warnings
+  are registered without removing frozen imports or fixing application lint.
+- Verification passes: actual current move proof, full CI format scope plus
+  theme guard, size/architecture, analyzer allowlist/identity comparator and
+  **127/127 cases in 14 behavior suites**, matching the original receipt union.
+  The running comparison driver initially lacked the newly added case in its
+  compiled expected map; the completed test log was compared against both
+  original receipts without replaying tests. All eight production files are
+  byte-identical to the reviewed FINAL prototypes. Pubspec/lock unchanged.
+- Evidence: `p15/rebase/step1-application.json`, `step1-proof.json`,
+  `step1-smoke.jsonl` / `.env.json` and check logs. Next: commit this creation
+  checkpoint, then the complete reduced gate on that clean tree. No full
+  suite, release build, push, merge or device action.
+
 ## Design review round 1 resolution (Codex `vp-design`, 2026-10-11)
 
 | Finding | Resolution |
