@@ -448,4 +448,69 @@ void main() {
       },
     );
   }
+
+  for (final stage in ['episodes', 'packs']) {
+    testWidgets(
+      'P17 $stage search that completes after staleness tries no candidate',
+      (t) async {
+        final d = TvEpisodeDriver(t);
+        await d.initialize();
+        final type = stage == 'packs'
+            ? StreamType.torrent
+            : StreamType.directUrl;
+        final found = episodeSource('Found.S01E02', type: type);
+        final search = Completer<List<Torrent>>();
+        final trace = <String>[];
+        try {
+          await d.mount(
+            screen: VideoPlayerScreen(
+              videoUrl: 'https://player.test/a.mp4',
+              title: 'Show.S01E01.mkv',
+              contentType: 'series',
+              contentSeason: 1,
+              contentEpisode: 1,
+              seriesSourceFetcher: SeriesSourceFetcher(
+                season: 1,
+                episode: 1,
+                resolveAdjacentEpisode: (s, e, direction) async =>
+                    (season: 1, episode: 2),
+                searchEpisodes: (s, e) {
+                  trace.add('episodes');
+                  return stage == 'episodes'
+                      ? search.future
+                      : Future.value(<Torrent>[]);
+                },
+                searchPacks: (s, e) {
+                  trace.add('packs');
+                  return stage == 'packs'
+                      ? search.future
+                      : Future.value(<Torrent>[]);
+                },
+                validateCandidate: (source) async {
+                  trace.add('allow:${source.name}');
+                  return true;
+                },
+              ),
+              resolveSourceToPlaylist: (s, {canContinue}) async => [
+                PlaylistEntry(url: s.directUrl!, title: s.displayTitle),
+              ],
+            ),
+          );
+          trace.clear();
+          d.player.emit('completed', true);
+          await d.f.until(t, () => trace.contains(stage));
+          await _expireSleep(t, d);
+          search.complete([found]);
+          await d.f.actions.settle(t);
+          await d.f.advance(t, const Duration(seconds: 1));
+          expect(trace, ['episodes', if (stage == 'packs') 'packs']);
+          expect(d.opens, hasLength(1));
+          expect(d.errors, isEmpty);
+        } finally {
+          if (!search.isCompleted) search.complete([]);
+          await d.close();
+        }
+      },
+    );
+  }
 }
