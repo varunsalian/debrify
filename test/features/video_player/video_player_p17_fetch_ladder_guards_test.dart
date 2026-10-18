@@ -3,6 +3,7 @@ import 'package:debrify/models/torrent.dart';
 import 'package:debrify/screens/video_player/widgets/sleep_timer_sheet.dart';
 import 'package:debrify/screens/video_player_screen.dart';
 import 'package:debrify/services/series_source_fetcher.dart';
+import 'package:debrify/services/storage/series_progress_storage.dart';
 import 'package:debrify/widgets/series_browser.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -797,6 +798,72 @@ void main() {
           t,
           () => d.periodic.contains(const Duration(seconds: 6)),
         );
+        expect(d.errors, isEmpty);
+      } finally {
+        await d.close();
+      }
+    },
+  );
+
+  testWidgets(
+    'P17 manual fetch clears a stale auto-advance flag and restores the saved point',
+    (t) async {
+      final d = TvEpisodeDriver(t);
+      await d.initialize();
+      final incoming = episodeSource('Show.S01E03');
+      try {
+        await d.mount(
+          screen: VideoPlayerScreen(
+            videoUrl: 'https://player.test/a.mp4',
+            title: 'Show.S01E01.mkv',
+            contentImdbId: 'tt1700024',
+            contentType: 'series',
+            contentSeason: 1,
+            contentEpisode: 1,
+            playlist: const [
+              PlaylistEntry(
+                url: 'https://player.test/a.mp4',
+                title: 'Show.S01E01.mkv',
+              ),
+              // Unresolvable: the EOF advance fails before resume handling.
+              PlaylistEntry(url: '', title: 'Show.S01E02.mkv'),
+            ],
+            seriesSourceFetcher: SeriesSourceFetcher(
+              season: 1,
+              episode: 1,
+              searchPacks: (s, e) async => [],
+              searchEpisodes: (s, e) async => e == 3 ? [incoming] : [],
+            ),
+            resolveSourceToPlaylist: (s, {canContinue}) async => [
+              PlaylistEntry(url: s.directUrl!, title: s.displayTitle),
+            ],
+          ),
+        );
+        d.player.emit('completed', true);
+        await waitSleepToast(t, d.f, 'No playable URL found for this entry');
+        await d.f.advance(t, const Duration(seconds: 1));
+        expect(d.opens, hasLength(1));
+        final b = await d.browser();
+        await d.f.finish(
+          t,
+          SeriesProgressStorage.saveSeriesPlaybackState(
+            seriesTitle: b.seriesPlaylist.seriesTitle!,
+            imdbId: b.seriesPlaylist.imdbId,
+            season: 1,
+            episode: 3,
+            positionMs: 240000,
+            durationMs: 1200000,
+          ),
+        );
+        final before = d.seeks.length;
+        await d.f.finish<dynamic>(
+          t,
+          d.observe<dynamic>(() => b.onEpisodeSelected(1, 3)),
+        );
+        await d.f.actions.settle(t);
+        await d.f.advance(t, const Duration(seconds: 1));
+        expect(d.opens.last.uri, incoming.directUrl);
+        expect(d.seeks.skip(before), contains(const Duration(minutes: 4)));
         expect(d.errors, isEmpty);
       } finally {
         await d.close();
