@@ -7227,6 +7227,22 @@ added/load-error cases (re-run: 397 suites loaded both sides, IDENTICAL);
 facade imports left unused by the verbatim move stay allowlisted (P15
 precedent) — removal milestone: the end-state import cleanup in phase 21.
 
+### 2026-10-18 — Milestone M3 (after phase 16) — PASS
+
+- Phase 16 merged `c094c864c` and pushed; all merge checks pass.
+- **Full suite** on `c094c864c` (`suite_evidence.py run vplayer/m3/gate/flutter-gate
+  --no-pub --dart-define=DEBRIFY_VP_TEST_HOOKS=true --concurrency=2`) compared by
+  identity against M2's `m2/gate/flutter-gate.jsonl`: **PASS** — 14,942 successes,
+  0 new failures, 0 missing tests, 0 newly skipped; the 13 failures / 28 errors are
+  the identical M2 set; 1,194 added identities (phases 12–16 tests).
+- **Release builds** (no install/run): `flutter build apk --release --no-pub`
+  exit 0 (91 s, Android Studio JBR); `flutter build macos --release --no-pub`
+  exit 0 (69 s). Evidence `refactor-evidence/vplayer/m3/gate/`.
+- M3 scenarios (recording/resume/source handoff) are covered by the phase-16
+  step-0 M3 cases (e.g. source handoff carrying an unlanded resume into the
+  physical incoming row), all passing in the full suite. Device checks remain on
+  the end-of-series checklist.
+
 ## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
 
 Reviewed at `c5c8e3500` (facade byte-identical to `be4cd78aa`; split,
