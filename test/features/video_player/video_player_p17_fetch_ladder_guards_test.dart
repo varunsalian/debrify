@@ -513,4 +513,54 @@ void main() {
       },
     );
   }
+
+  for (final stage in ['episodes', 'packs']) {
+    testWidgets(
+      'P17 $stage stage exhausting a short result list reports no source',
+      (t) async {
+        final d = TvEpisodeDriver(t);
+        await d.initialize();
+        final type = stage == 'packs'
+            ? StreamType.torrent
+            : StreamType.directUrl;
+        final only = episodeSource('Only.S01E02', type: type);
+        final allowed = <String>[];
+        try {
+          await d.mount(
+            screen: VideoPlayerScreen(
+              videoUrl: 'https://player.test/a.mp4',
+              title: 'Show.S01E01.mkv',
+              contentType: 'series',
+              contentSeason: 1,
+              contentEpisode: 1,
+              seriesSourceFetcher: SeriesSourceFetcher(
+                season: 1,
+                episode: 1,
+                searchEpisodes: (s, e) async =>
+                    stage == 'episodes' ? [only] : [],
+                searchPacks: (s, e) async => stage == 'packs' ? [only] : [],
+                validateCandidate: (source) async {
+                  allowed.add(source.name);
+                  return false;
+                },
+              ),
+              resolveSourceToPlaylist: (s, {canContinue}) async => [],
+            ),
+          );
+          allowed.clear();
+          final b = await d.browser();
+          await d.f.finish<dynamic>(
+            t,
+            d.observe<dynamic>(() => b.onEpisodeSelected(1, 2)),
+          );
+          await waitSleepToast(t, d.f, 'No playable source found for S01E02');
+          expect(allowed, [only.name]);
+          expect(d.opens, hasLength(1));
+          expect(d.errors, isEmpty);
+        } finally {
+          await d.close();
+        }
+      },
+    );
+  }
 }
