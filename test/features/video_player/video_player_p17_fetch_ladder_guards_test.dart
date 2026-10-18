@@ -755,4 +755,52 @@ void main() {
       },
     );
   }
+
+  testWidgets(
+    'P17 guide opened before startup finishes starts the series metadata preload',
+    (t) async {
+      final d = TvEpisodeDriver(
+        t,
+        configurePlayer: (player) {
+          // No launch duration: startup stalls before its own preload.
+          player.onOpen = () => player.publishFrame(duration: Duration.zero);
+        },
+      );
+      await d.initialize();
+      try {
+        await d.mount(
+          screen: const VideoPlayerScreen(
+            videoUrl: 'https://player.test/a.mp4',
+            title: 'Show.S01E01.mkv',
+            playlist: [
+              PlaylistEntry(
+                url: 'https://player.test/a.mp4',
+                title: 'Show.S01E01.mkv',
+              ),
+              PlaylistEntry(
+                url: 'https://player.test/b.mp4',
+                title: 'Show.S01E02.mkv',
+              ),
+            ],
+          ),
+          settleInitialization: false,
+        );
+        await d.f.advance(t, const Duration(seconds: 1));
+        final b = await d.browser();
+        expect(b.seriesPlaylist.isSeries, isTrue);
+        expect(b.metadataReady, isNotNull);
+        Navigator.of(t.element(find.byType(SeriesBrowser))).pop();
+        await d.f.until(t, () => find.byType(SeriesBrowser).evaluate().isEmpty);
+        // Release the stalled startup so it settles before teardown.
+        d.player.publishFrame(duration: const Duration(minutes: 40));
+        await d.f.until(
+          t,
+          () => d.periodic.contains(const Duration(seconds: 6)),
+        );
+        expect(d.errors, isEmpty);
+      } finally {
+        await d.close();
+      }
+    },
+  );
 }
