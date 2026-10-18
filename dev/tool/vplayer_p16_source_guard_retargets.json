@@ -1,0 +1,31 @@
+{
+  "phase": 16,
+  "status": "live-reader retargets active at Step 0; production ownership projection awaits accepted P15 rebase",
+  "files": [
+    "test/manual_source_validation_contract_test.dart",
+    "test/android_tv_mdblist_progress_source_test.dart",
+    "test/media_server_service_test.dart",
+    "test/media_server_watch_player_wiring_test.dart",
+    "test/playback_startup_view_test.dart"
+  ],
+  "contracts": [
+    {"name": "selected playlist alone is validated", "declaration": "_handleSourceSelected", "anchors": ["validateExplicitSelection : true"]},
+    {"name": "direct selected candidate validation and rollback", "declaration": "_switchToStremioSource", "anchors": ["await _tryOpenStartupVod (", "previous source restore failed", "This source is unavailable. Choose another source."], "absent": ["_tryStartupSourceFailover ("]},
+    {"name": "validation release action", "declaration": "_resumeTrackingAfterValidationGate", "anchors": ["void _resumeTrackingAfterValidationGate ( )"]},
+    {"name": "outgoing direct playlist rollback", "declaration": "_switchToSourcePlaylist", "anchors": ["final outgoingDirectUrl", "_activePlaylist = null", "mk . Media ( outgoingDirectUrl", "_currentStreamUrl = outgoingDirectUrl"], "ordered": [["final outgoingDirectUrl", "_activePlaylist = null"], ["mk . Media ( outgoingDirectUrl", "_currentStreamUrl = outgoingDirectUrl"]]},
+    {"name": "missing explicit episode never opens", "declaration": "_switchToSourcePlaylist", "anchors": ["if ( containsRequestedEpisode )"]},
+    {"name": "startup ladder stays validation only", "declaration": "_openInitialVodWithFailover", "anchors": ["await _tryOpenStartupVod (", "source : source ,"], "absent": ["_reportRejectedStremioSource"]},
+    {"name": "source-specific probe arms at final native boundary", "declaration": "_tryOpenStartupVod", "anchors": ["source : source ,", "beforeOpen : ( ) { armed = true ;"]},
+    {"name": "exact route startup recovery", "declaration": "_reportStartupFailure", "anchors": ["final playerRoute = ModalRoute . of ( context )", "bool current ( ) => mounted && ! _screenDisposed && ( isCurrent ?. call ( ) ?? true ) ;", "current ( ) && playerRoute ?. isActive == true", "if ( ! mounted || ! current ( ) || playerRoute ?. isCurrent != true ) return ;", "'startupSourcesExhausted' : true"], "ordered": [["final playerRoute = ModalRoute . of ( context )", "await Future < void > . delayed"], ["if ( ! mounted || ! current ( ) || playerRoute ?. isCurrent != true ) return ;", "Navigator . of ( context )"]]},
+    {"name": "carried TVMaze identity reaches rebuilt playlist", "declaration": "_switchToSourcePlaylist", "anchors": ["final carriedImdbId", "rebuilt . imdbId ??= carriedImdbId"], "ordered": [["final carriedImdbId", "rebuilt . imdbId ??= carriedImdbId"]]},
+    {"name": "server watch commit precedes optional binding callback", "declaration": "_commitValidatedStremioSource", "anchors": ["_serverWatch . commit", "commit == null"], "ordered": [["_serverWatch . commit", "commit == null"]]},
+    {"name": "retained startup and transition build fields", "declaration": "build", "anchors": ["_startupGateActive", "_startupGateOverlayHidden", "PlaybackStartupView (", "if ( _rainbowActive ) _buildTransitionOverlay ( )"]}
+  ],
+  "notes": [
+    "The reader validates live declarations and their ownership chain before checking contracts; it never returns git-show text.",
+    "Canonical receiver projection reverses only occurrence-counted substitutions from the supplied checked manifest. No arbitrary qualifier erasure.",
+    "Whitespace is normalized through Dart scanner tokens. Ordering requires both anchors to exist before comparison; every anchor has an independent deletion negative and every ordered pair a reorder negative.",
+    "These are structural guards, never behavioural mutation witnesses. The observed existing playback_startup_view PiP failure is retained; this preparation neither fixes nor allowlists it.",
+    "Other assertions in the five source suites remain in place and must be retained when Step 1 activates the retargets."
+  ]
+}

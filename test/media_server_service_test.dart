@@ -47,6 +47,7 @@ import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'features/video_player/support/vp_source_reader.dart';
 import 'support/stremio_tv_source.dart';
 
 void main() {
@@ -1476,20 +1477,23 @@ void main() {
         open.indexOf('runIfAuthorized'),
         greaterThan(open.indexOf('await remedy.onNewMedia')),
       );
-      final probe = code.substring(
-        code.indexOf('Future<bool> _tryOpenStartupVod('),
-        code.indexOf('Future<bool> _openInitialVodWithFailover('),
+      final probe = vpSourceDeclaration(
+        '_VideoPlayerScreenState._tryOpenStartupVod',
       );
       expect(probe, contains('source: source,'));
-      expect(probe, contains('beforeOpen: () {\n          armed = true;'));
-      final failover = code.substring(
-        code.indexOf('Future<bool> _openInitialVodWithFailover('),
-        code.indexOf('Future<void> _commitValidatedStremioSource('),
-      );
       expect(
-        failover.substring(failover.indexOf(': await _tryOpenStartupVod(')),
-        contains('source: source,'),
+        probe,
+        contains(RegExp(r'beforeOpen:\s*\(\)\s*\{\s*armed\s*=\s*true;')),
       );
+      final failover = vpSourceDeclaration(
+        '_VideoPlayerScreenState._openInitialVodWithFailover',
+      );
+      // P16 moved the ladder into VpStartupFailover; the probe is reached
+      // through its facade Host.
+      final candidate = failover.indexOf(': await _host.tryOpenStartupVod(');
+      expect(candidate, isNonNegative);
+      final sourceArgument = failover.indexOf('source: source,', candidate);
+      expect(sourceArgument, greaterThan(candidate));
     },
   );
 

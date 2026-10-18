@@ -147,3 +147,5 @@ warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 
 warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/iptv_history_storage.dart'. Try removing the import directive
 warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/iptv_last_channel_storage.dart'. Try removing the import directive
 warning | unused_shown_name | lib/screens/video_player_screen.dart | The name listEquals is shown, but isn't used. Try removing the name from the list of shown members
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/quick_play_storage.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../features/video_player/models/vp_manual_source_validation_failure.dart'. Try removing the import directive

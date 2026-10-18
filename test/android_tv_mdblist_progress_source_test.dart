@@ -151,14 +151,16 @@ void main() {
     final player = File(
       'lib/screens/video_player_screen.dart',
     ).readAsStringSync();
-    final sourceSwitch = _between(
-      player,
-      'Future<bool> _switchToSourcePlaylist(',
-      '// Resume the SAME episode from the new source',
+    final sourceSwitch = vpSourceDeclaration(
+      '_VideoPlayerScreenState._switchToSourcePlaylist',
     );
 
     expect(sourceSwitch, contains('final carriedImdbId'));
     expect(sourceSwitch, contains('rebuilt.imdbId ??= carriedImdbId'));
+    final capture = sourceSwitch.indexOf('final carriedImdbId');
+    final carry = sourceSwitch.indexOf('rebuilt.imdbId ??= carriedImdbId');
+    expect(capture, isNonNegative);
+    expect(carry, greaterThan(capture));
     for (final reader in {
       '_currentEpisodeTraktPercent': '_host.',
       '_currentEpisodeSimklPercent': '_host.',

@@ -205,6 +205,11 @@ import '../features/video_player/presentation/legacy_video_player/vp_iptv_channe
 import '../features/video_player/presentation/legacy_video_player/vp_iptv_live_sources.dart';
 import '../features/video_player/presentation/legacy_video_player/vp_iptv_watch_memory.dart';
 import '../features/video_player/presentation/legacy_video_player/vp_iptv_zap_banner.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_startup_candidates.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_startup_failover.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_startup_gate.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_source_switch.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_source_playlist_switch.dart';
 
 /// A full-featured video player screen with playlist support and navigation controls.
 ///
@@ -444,6 +449,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _iptvSources = VpIptvLiveSources(_VpIptvLiveSourcesHostAdapter(this));
     _iptvMemory = VpIptvWatchMemory(_VpIptvWatchMemoryHostAdapter(this));
     _iptvBanner = VpIptvZapBanner(_VpIptvZapBannerHostAdapter(this));
+    _startupCandidates = VpStartupCandidates(
+      _VpStartupCandidatesHostAdapter(this),
+    );
+    _startupFailover = VpStartupFailover(_VpStartupFailoverHostAdapter(this));
+    _startupGate = VpStartupGate(_VpStartupGateHostAdapter(this));
+    _sourceSwitch = VpSourceSwitch(_VpSourceSwitchHostAdapter(this));
+    _sourcePlaylistSwitch = VpSourcePlaylistSwitch(
+      _VpSourcePlaylistSwitchHostAdapter(this),
+    );
   }
   void _vpSetState(VoidCallback fn) => setState(fn);
 
@@ -981,8 +995,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   final _serverWatch = MediaServerWatchController();
   Torrent? _openedWatchSource;
   int _watchOpenEpoch = 0;
-  List<PlaylistEntry>? _pendingSourcePlaylist;
-  int _sourcePlaylistResolution = 0;
   // Overrides for sources after Stremio TV channel switch
   List<Torrent>? _stremioSourcesOverride;
   Future<String?> Function(Torrent)? _resolveStremioSourceOverride;
@@ -1105,6 +1117,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   late final VpIptvLiveSources _iptvSources;
   late final VpIptvWatchMemory _iptvMemory;
   late final VpIptvZapBanner _iptvBanner;
+  late final VpStartupCandidates _startupCandidates;
+  late final VpStartupFailover _startupFailover;
+  late final VpStartupGate _startupGate;
+  late final VpSourceSwitch _sourceSwitch;
+  late final VpSourcePlaylistSwitch _sourcePlaylistSwitch;
 
   // The quiet bottom-right auto-sync surface: a 5s announce line, then
   // nothing until a real event — statuses during passes, word-only results.
@@ -1503,21 +1520,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         }
       },
     );
-  }
-
-  void _resumeTrackingAfterValidationGate() {
-    if (!mounted || _validationGateActive) return;
-    _mdblist.updateMdblistPosition();
-    if (!_isPlaying || _duration <= Duration.zero) return;
-    _trakt.traktScrobble('start');
-    if (_trakt.traktLastScrobbleAction == 'start') _trakt.startTraktHeartbeat();
-    if (_simkl.simklScrobbleEnabled) {
-      // Simkl uses a local playing marker and pause-based checkpoints; sending
-      // its remote "start" would erase the resumable playback entry.
-      _simkl.simklLastScrobbleAction = 'start';
-      _simkl.startSimklHeartbeat();
-    }
-    _mdblist.mdblistPlay();
   }
 
   /// The current episode's cross-device Trakt progress percent (0-100), or null.
@@ -2166,7 +2168,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           // PikPak uses its own cold-storage readiness gate instead of the
           // ranked VOD gate. Report the winner only after that gate confirms
           // duration, otherwise a queued-but-unplayable file would be pinned.
-          unawaited(_commitValidatedStremioSource(launchSource));
+          unawaited(
+            _startupCandidates.commitValidatedStremioSource(launchSource),
+          );
           // Wait for the video to load and duration to be available
           await _waitForVideoReady();
           if (!pikpakStillCurrent()) return;
@@ -2228,7 +2232,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 // Subscribe before open: media-kit reports failures later.
                 beforeOpen: isStremioTv
                     ? () {
-                        _watchStremioTvStartup(initialUrl);
+                        _startupGate.watchStremioTvStartup(initialUrl);
                         if (deferStremioTvStart) {
                           _stremioTvStartupSeek.arm(
                             widget.startAtPercent,
@@ -2243,14 +2247,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               await opening;
               directOpenCompleted = true;
             },
-            openValidated: () => _openInitialVodWithFailover(
+            openValidated: () => _startupFailover.openInitialVodWithFailover(
               initialUrl,
               httpHeaders: _activeHttpHeaders,
               initialAttemptAlreadyFailed: initialRankedAttemptFailed,
             ),
           );
           if (!opened) {
-            await _reportStartupFailure();
+            await _startupGate.reportStartupFailure();
             return;
           }
           // Wait for duration-dependent resume and random-start calculations.
@@ -2294,8 +2298,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           // The candidate is now decoded, resume has been applied, and track
           // restoration is complete. Only now may progress escape to local
           // completion or remote scrobblers.
-          _setStartupGateActive(false);
-          _resumeTrackingAfterValidationGate();
+          _startupGate.setStartupGateActive(false);
+          _startupGate.resumeTrackingAfterValidationGate();
         } catch (e) {
           if (isStremioTv &&
               !directOpenCompleted &&
@@ -2304,16 +2308,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             if (watch != null) {
               watch.fail();
             } else {
-              await _reportStartupFailure(
+              await _startupGate.reportStartupFailure(
                 isCurrent: () => directOpenEpoch == _resumeVerifyEpoch,
               );
             }
           }
-          _setStartupGateActive(false);
+          _startupGate.setStartupGateActive(false);
           // A late throw (seek/track restore) can land after a successful
           // open — playback proceeds, so re-arm tracking or the start
           // scrobble stays swallowed until the next play/pause transition.
-          _resumeTrackingAfterValidationGate();
+          _startupGate.resumeTrackingAfterValidationGate();
           debugPrint('VideoPlayer: initial open failed: $e');
         }
       }
@@ -2330,96 +2334,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // Preload episode information if this is a series
     _episodeMetadataReady ??= _preloadEpisodeInfo();
-  }
-
-  void _watchStremioTvStartup(String url) {
-    _stremioTvStartupWatch?.dispose();
-    final epoch = _resumeVerifyEpoch;
-    final instance = _playerInstanceGeneration;
-    final mediaGeneration = _decoderProbeGeneration;
-    final sources = _effectiveSources;
-    final source =
-        sources != null &&
-            _currentSourceIndex >= 0 &&
-            _currentSourceIndex < sources.length
-        ? sources[_currentSourceIndex]
-        : null;
-    final sourceName = [
-      source?.source,
-      source?.addonDisplayName,
-      source?.name,
-    ].whereType<String>().join(' ');
-    final isAioStreams = StartupStreamPolicy.isAioStreams(
-      addonId: source?.stremioAddonId,
-      sourceName: sourceName,
-      url: url,
-    );
-    bool isCurrent() =>
-        mounted &&
-        !_screenDisposed &&
-        epoch == _resumeVerifyEpoch &&
-        instance == _playerInstanceGeneration;
-    _stremioTvStartupWatch = ChannelStartupWatch(
-      errors: _player.stream.error,
-      widths: _player.stream.width,
-      positions: _player.stream.position,
-      durations: _player.stream.duration,
-      completed: _player.stream.completed,
-      addonId: source?.stremioAddonId,
-      sourceName: sourceName,
-      url: url,
-      isCurrent: isCurrent,
-      onReady: () {
-        if (isCurrent() && isAioStreams) {
-          _resumeTrackingAfterValidationGate();
-        }
-      },
-      // Do not depend on which error-stream subscription runs first. The
-      // renderer listener owns recoverable output errors; the new backend
-      // installs its own watch and can still report an unrecoverable failure.
-      shouldDeferError: (error) =>
-          AndroidRendererStartupFallback.isRendererFailure(error) &&
-          _canFallbackExplicitRenderer(
-            instanceGeneration: instance,
-            mediaGeneration: mediaGeneration,
-          ),
-      onFailure: () {
-        _stremioTvStartupSeek.cancel();
-        unawaited(_reportStartupFailure(isCurrent: isCurrent));
-      },
-    );
-  }
-
-  Future<void> _reportStartupFailure({bool Function()? isCurrent}) async {
-    bool current() =>
-        mounted && !_screenDisposed && (isCurrent?.call() ?? true);
-    if (!current()) return;
-    final canRecover = widget.onStartupSourcesExhausted != null;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          canRecover
-              ? 'Saved source failed. Looking for another source…'
-              : 'No playable source could be started.',
-        ),
-      ),
-    );
-    // A covering dialog may leave later. Only close this player route, and
-    // abandon the failure if the viewer has since selected different media.
-    final playerRoute = ModalRoute.of(context);
-    await Future<void>.delayed(Duration(milliseconds: canRecover ? 250 : 900));
-    while (current() && playerRoute?.isActive == true) {
-      if (playerRoute?.isCurrent == true) break;
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-    }
-    if (!mounted || !current() || playerRoute?.isCurrent != true) return;
-    if (canRecover) {
-      Navigator.of(
-        context,
-      ).pop(<String, dynamic>{'startupSourcesExhausted': true});
-    } else {
-      Navigator.of(context).maybePop();
-    }
   }
 
   void _bindPlayerInstanceSubscriptions(
@@ -3088,7 +3002,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         preserveStartupEpoch: startupEpoch,
         beforeOpen: restartChannelWatch
             ? () {
-                _watchStremioTvStartup(media.uri);
+                _startupGate.watchStremioTvStartup(media.uri);
                 return true;
               }
             : null,
@@ -3135,7 +3049,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           watch?.dispose();
           _stremioTvStartupSeek.cancel();
           unawaited(
-            _reportStartupFailure(
+            _startupGate.reportStartupFailure(
               isCurrent: () => failureEpoch == _resumeVerifyEpoch,
             ),
           );
@@ -5113,1207 +5027,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     return (ch.attributes['series_id'] ?? '').isNotEmpty;
   }
 
-  /// Opens one VOD candidate with the real media-kit player and keeps that
-  /// exact player session on success. Unlike the old Dart HEAD probe this has
-  /// no validation/playback race: decoded video or advancing position commits
-  /// the candidate; an error, open throw, or bounded startup stall rejects it.
-  /// Debrid-resolved candidates skip the decode probe. The debrid API minted
-  /// (and thereby vouched for) the URL moments ago, so the probe's dead-link
-  /// protection is redundant — and its cost is real: committing on the first
-  /// decoded frame means the resume seek lands mid-startup-burst at 0, which
-  /// mpv on a cold stream answers by restarting (the masked-seek repro).
-  /// A plain open instead accepts on duration (header metadata, pre-decode),
-  /// so the resume seek folds into startup as "begin here" — the pre-ladder
-  /// timing that always worked. Addon direct URLs (the stale-cached-link
-  /// class the probe exists for) keep the full validation.
-  Future<bool> _openStartupDebridDirect(
-    String url, {
-    Map<String, String>? httpHeaders,
-    Torrent? source,
-    int? sourceIndex,
-    int attempt = 1,
-    int maxAttempts = 1,
-    Duration timeout = const Duration(seconds: 12),
-  }) async {
-    final stopwatch = Stopwatch()..start();
-    final completer = Completer<bool>();
-    var candidateDuration = Duration.zero;
-    var bufferedAmount = Duration.zero;
-    final sourceFields = _startupSourceFields(sourceIndex, source);
-    debugPrint(
-      '[StartupFailover] event=candidate_open platform=flutter '
-      'attempt=$attempt/$maxAttempts $sourceFields route=debrid_direct '
-      'timeoutMs=${timeout.inMilliseconds}',
-    );
-    void finish(bool ok, String reason) {
-      if (completer.isCompleted) return;
-      debugPrint(
-        '[StartupFailover] event=candidate_result platform=flutter '
-        'attempt=$attempt/$maxAttempts $sourceFields ok=$ok reason=$reason '
-        'elapsedMs=${stopwatch.elapsedMilliseconds} '
-        'durationMs=${candidateDuration.inMilliseconds}',
-      );
-      completer.complete(ok);
-    }
-
-    // A dead debrid link (deleted torrent race, expired token) errors or
-    // serves something with no parseable duration — either way the ladder
-    // advances to the next candidate exactly like a failed probe.
-    final subs = <StreamSubscription>[
-      _player.stream.error.listen((error) {
-        if (AndroidRendererStartupFallback.isRendererFailure(error) &&
-            AndroidRendererStartupFallback.shouldArm(
-              isAndroid: Platform.isAndroid,
-              isAndroidTv: PlatformUtil.isAndroidTvCached,
-              mode: _androidVideoRendererMode,
-              alreadyValidated: _rendererValidatedForSession,
-              fallbackInProgress: _rendererFallbackInProgress,
-            )) {
-          // Renderer-bound failure, owned by the renderer fallback — same
-          // contract as the probe path (see _tryOpenStartupVod).
-          finish(true, 'renderer_fallback_deferred');
-          return;
-        }
-        finish(false, 'player_error');
-      }),
-      _player.stream.duration.listen((value) {
-        candidateDuration = value;
-        if (value > Duration.zero) finish(true, 'duration_known');
-      }),
-      // Durationless media (some MPEG-TS/M2TS and non-seekable progressive
-      // files) never publishes a duration — accept on decoded, advancing
-      // video like the probe would, or the watchdog eventually kills a
-      // stream that is visibly playing. Duration almost always arrives
-      // first, so this fallback does not delay the common case.
-      _player.stream.width.listen((width) {
-        if ((width ?? 0) > 0 && _player.state.position > Duration.zero) {
-          finish(true, 'decoded_video');
-        }
-      }),
-      _player.stream.position.listen((value) {
-        if (value > Duration.zero && (_player.state.width ?? 0) > 0) {
-          finish(true, 'decoded_video');
-        }
-      }),
-      _player.stream.buffer.listen((value) {
-        bufferedAmount = value;
-      }),
-    ];
-    try {
-      await _openMedia(
-        mk.Media(url, httpHeaders: httpHeaders),
-        play: true,
-        source: source,
-      );
-    } catch (e) {
-      debugPrint(
-        '[StartupFailover] event=open_exception platform=flutter '
-        '$sourceFields exception=${e.runtimeType}',
-      );
-      finish(false, 'open_exception');
-    }
-    // Same slow-versus-dead distinction as the probe path: a link whose
-    // buffer keeps growing is downloading, not dead — failing it would burn
-    // a possibly single-use debrid link. Extend in steps up to the same cap.
-    const extendStep = Duration(seconds: 3);
-    const maxWait = Duration(seconds: 45);
-    var lastBufferMark = Duration.zero;
-    var ok = false;
-    while (true) {
-      final remaining = timeout - stopwatch.elapsed;
-      try {
-        ok = await completer.future.timeout(
-          remaining > Duration.zero ? remaining : extendStep,
-        );
-        break;
-      } on TimeoutException {
-        if (bufferedAmount > lastBufferMark && stopwatch.elapsed < maxWait) {
-          lastBufferMark = bufferedAmount;
-          debugPrint(
-            '[StartupFailover] event=watchdog_extend platform=flutter '
-            '$sourceFields elapsedMs=${stopwatch.elapsedMilliseconds} '
-            'bufferedMs=${bufferedAmount.inMilliseconds}',
-          );
-          continue;
-        }
-        finish(false, 'timeout');
-        ok = false;
-        break;
-      }
-    }
-    for (final sub in subs) {
-      unawaited(sub.cancel());
-    }
-    if (!ok) {
-      try {
-        await _player.stop();
-      } catch (_) {}
-    }
-    return ok;
-  }
-
-  Future<bool> _tryOpenStartupVod(
-    String url, {
-    Duration timeout = const Duration(seconds: 12),
-    Map<String, String>? httpHeaders,
-    Torrent? source,
-    int? sourceIndex,
-    int attempt = 1,
-    int maxAttempts = 1,
-  }) async {
-    final stopwatch = Stopwatch()..start();
-    final completer = Completer<bool>();
-    var armed = false;
-    var videoWidth = 0;
-    var position = Duration.zero;
-    var candidateDuration = Duration.zero;
-    Timer? durationGraceTimer;
-    final isAioStreams = StartupStreamPolicy.isAioStreams(
-      addonId: source?.stremioAddonId,
-      sourceName: source?.source,
-      url: url,
-    );
-    final sourceFields = _startupSourceFields(sourceIndex, source);
-    debugPrint(
-      '[StartupFailover] event=candidate_open platform=flutter '
-      'attempt=$attempt/$maxAttempts $sourceFields aio=$isAioStreams '
-      'timeoutMs=${timeout.inMilliseconds}',
-    );
-    void finish(bool ok, String reason) {
-      if (completer.isCompleted) return;
-      debugPrint(
-        '[StartupFailover] event=candidate_result platform=flutter '
-        'attempt=$attempt/$maxAttempts $sourceFields ok=$ok reason=$reason '
-        'elapsedMs=${stopwatch.elapsedMilliseconds} width=$videoWidth '
-        'positionMs=${position.inMilliseconds} '
-        'durationMs=${candidateDuration.inMilliseconds}',
-      );
-      completer.complete(ok);
-    }
-
-    void maybeCommit() {
-      // Width alone can be parsed from container metadata before a decoder has
-      // produced anything. Requiring the media clock to advance as well keeps
-      // metadata-only and permanently-buffering candidates behind the gate.
-      if (!armed || videoWidth <= 0 || position <= Duration.zero) return;
-      if (StartupStreamPolicy.isLikelyAioStreamsErrorSlate(
-        addonId: source?.stremioAddonId,
-        sourceName: source?.source,
-        url: url,
-        duration: candidateDuration,
-      )) {
-        finish(false, 'aiostreams_error_slate');
-        return;
-      }
-      if (isAioStreams && candidateDuration <= Duration.zero) {
-        // Progressive sources can publish duration just after playback starts.
-        // Give that metadata a bounded chance to expose AIOStreams' short,
-        // decodable error slate; unknown-duration real streams still proceed.
-        durationGraceTimer ??= Timer(const Duration(seconds: 1), () {
-          final isSlate = StartupStreamPolicy.isLikelyAioStreamsErrorSlate(
-            addonId: source?.stremioAddonId,
-            sourceName: source?.source,
-            url: url,
-            duration: candidateDuration,
-          );
-          finish(
-            !isSlate,
-            isSlate ? 'aiostreams_error_slate' : 'decoded_video',
-          );
-        });
-        return;
-      }
-      finish(true, 'decoded_video');
-    }
-
-    var bufferedAmount = Duration.zero;
-    final subs = <StreamSubscription>[
-      _player.stream.error.listen((error) {
-        if (!armed) return;
-        // An explicit-renderer startup failure is owned by the renderer
-        // fallback (_rendererStartupErrorSub sees this same event): it
-        // disposes and rebuilds the player, then reopens THIS media on the
-        // automatic renderer. Failing the candidate here would race two
-        // opens on one surface — the ladder advancing on a player being
-        // disposed — and the failure is renderer-bound, not source-bound,
-        // so every other candidate would fail identically anyway. Accept
-        // the candidate and let the fallback finish its recovery.
-        if (AndroidRendererStartupFallback.isRendererFailure(error) &&
-            AndroidRendererStartupFallback.shouldArm(
-              isAndroid: Platform.isAndroid,
-              isAndroidTv: PlatformUtil.isAndroidTvCached,
-              mode: _androidVideoRendererMode,
-              alreadyValidated: _rendererValidatedForSession,
-              fallbackInProgress: _rendererFallbackInProgress,
-            )) {
-          finish(true, 'renderer_fallback_deferred');
-          return;
-        }
-        finish(false, 'player_error');
-      }),
-      _player.stream.width.listen((width) {
-        videoWidth = width ?? 0;
-        maybeCommit();
-      }),
-      _player.stream.position.listen((value) {
-        position = value;
-        maybeCommit();
-      }),
-      _player.stream.duration.listen((value) {
-        candidateDuration = value;
-        maybeCommit();
-      }),
-      _player.stream.buffer.listen((value) {
-        bufferedAmount = value;
-      }),
-    ];
-    try {
-      // Arm at the final open boundary, after setup and authorization. Old
-      // candidate events during those awaits must not validate this source.
-      await _openMedia(
-        mk.Media(url, httpHeaders: httpHeaders),
-        play: true,
-        source: source,
-        beforeOpen: () {
-          armed = true;
-          return true;
-        },
-      );
-    } catch (e) {
-      // Exception strings from media backends may embed signed stream URLs.
-      // The runtime type is enough to distinguish open failures safely.
-      debugPrint(
-        '[StartupFailover] event=open_exception platform=flutter '
-        '$sourceFields exception=${e.runtimeType}',
-      );
-      finish(false, 'open_exception');
-    }
-    // The base timeout is for dead sources (no error, no data). A source
-    // that is demonstrably still downloading — its buffer keeps growing —
-    // is slow, not dead (large 4K remux, cold CDN, slow debrid peering);
-    // failing it would burn a possibly single-use link and fall to a
-    // lower-ranked source. Extend in short steps while bytes keep arriving,
-    // bounded by a hard cap.
-    const extendStep = Duration(seconds: 3);
-    const maxWait = Duration(seconds: 45);
-    var lastBufferMark = Duration.zero;
-    var ok = false;
-    while (true) {
-      final remaining = timeout - stopwatch.elapsed;
-      try {
-        ok = await completer.future.timeout(
-          remaining > Duration.zero ? remaining : extendStep,
-        );
-        break;
-      } on TimeoutException {
-        if (bufferedAmount > lastBufferMark && stopwatch.elapsed < maxWait) {
-          lastBufferMark = bufferedAmount;
-          debugPrint(
-            '[StartupFailover] event=watchdog_extend platform=flutter '
-            '$sourceFields elapsedMs=${stopwatch.elapsedMilliseconds} '
-            'bufferedMs=${bufferedAmount.inMilliseconds}',
-          );
-          continue;
-        }
-        finish(false, 'timeout');
-        ok = false;
-        break;
-      }
-    }
-    durationGraceTimer?.cancel();
-    for (final sub in subs) {
-      unawaited(sub.cancel());
-    }
-    if (!ok) {
-      try {
-        await _player.stop();
-      } catch (_) {}
-    }
-    return ok;
-  }
-
-  /// Startup-only automatic failover for Stremio/Quick Play VOD. Candidates
-  /// remain behind the player loading surface until the actual player decodes
-  /// one. The successful URL is never reopened, which is essential for
-  /// single-use and first-request-IP-bound debrid links.
-  Future<bool> _openInitialVodWithFailover(
-    String initialUrl, {
-    Map<String, String>? httpHeaders,
-    bool initialAttemptAlreadyFailed = false,
-  }) async {
-    final sources = _effectiveSources;
-    final contentType = _effectiveContentType;
-    final isVod = contentType == 'movie' || contentType == 'series';
-    if (!isVod) {
-      debugPrint(
-        '[StartupFailover] event=bypass platform=flutter reason=non_vod '
-        'contentType=${contentType ?? 'unknown'}',
-      );
-      return _tryOpenStartupVod(initialUrl, httpHeaders: httpHeaders);
-    }
-
-    _setStartupGateActive(true);
-    if (sources == null || sources.isEmpty) {
-      debugPrint(
-        '[StartupFailover] event=begin platform=flutter contentType=$contentType '
-        'sourceCount=0 policy=single_candidate',
-      );
-      final ok = await _tryOpenStartupVod(initialUrl, httpHeaders: httpHeaders);
-      // A successful candidate stays gated through resume/track restoration
-      // in the caller. Failure must release the surface before route cleanup.
-      if (!ok) _setStartupGateActive(false);
-      return ok;
-    }
-
-    final rules = widget.startupFailoverEnabled
-        ? await QuickPlayStorage.getQuickPlayRules(
-            isMovie: contentType == 'movie',
-          )
-        : null;
-    final tryNext = rules?.tryNextOnFailure ?? false;
-    final maxAttempts = tryNext ? rules!.maxAttempts.clamp(1, 10) : 1;
-    final firstIndex = _currentSourceIndex.clamp(0, sources.length - 1);
-    final start = StartupStreamPolicy.rankedFailoverStart(
-      selectedSourceIndex: firstIndex,
-      initialAttemptAlreadyFailed: initialAttemptAlreadyFailed,
-    );
-    var attempts = start.attempts;
-    debugPrint(
-      '[StartupFailover] event=begin platform=flutter contentType=$contentType '
-      'sourceCount=${sources.length} selectedIndex=$firstIndex '
-      'startIndex=${start.sourceIndex} initialFailed=$initialAttemptAlreadyFailed '
-      'tryNext=$tryNext maxAttempts=$maxAttempts '
-      'targetSeason=${_effectiveContentSeason ?? '-'} '
-      'targetEpisode=${_effectiveContentEpisode ?? '-'}',
-    );
-
-    final pikPakResolver =
-        widget.startupResolverProvider?.toLowerCase() == 'pikpak';
-    var pikPakTorrentAcquisitionAttempted =
-        StartupStreamPolicy.initialPikPakAcquisitionAttempted(
-          isPikPakResolver: pikPakResolver,
-          initialSourceIsTorrent:
-              sources[firstIndex].streamType == StreamType.torrent,
-          hasResolvedInitialUrl: initialUrl.isNotEmpty,
-          initialAttemptAlreadyFailed: initialAttemptAlreadyFailed,
-        );
-
-    for (
-      var sourceIndex = start.sourceIndex;
-      sourceIndex < sources.length && attempts < maxAttempts;
-      sourceIndex++
-    ) {
-      final source = sources[sourceIndex];
-      // The launch URL is already resolved and playable in-app regardless of
-      // how its source row is typed — never skip it over streamType.
-      final isResolvedLaunchUrl =
-          sourceIndex == firstIndex && initialUrl.isNotEmpty;
-      if (!isResolvedLaunchUrl && source.streamType == StreamType.externalUrl) {
-        debugPrint(
-          '[StartupFailover] event=candidate_skip platform=flutter '
-          '${_startupSourceFields(sourceIndex, source)} reason=external_url',
-        );
-        continue;
-      }
-      if (pikPakResolver &&
-          !isResolvedLaunchUrl &&
-          source.streamType == StreamType.torrent) {
-        if (pikPakTorrentAcquisitionAttempted) {
-          debugPrint(
-            '[StartupFailover] event=candidate_skip platform=flutter '
-            '${_startupSourceFields(sourceIndex, source)} '
-            'reason=pikpak_acquisition_limit',
-          );
-          continue;
-        }
-        // Count the acquisition before resolving: a cold-storage request may
-        // have been queued even when the resolver ultimately returns null.
-        pikPakTorrentAcquisitionAttempted = true;
-      }
-      attempts++;
-      final sourceFields = _startupSourceFields(sourceIndex, source);
-      // A debrid-direct first open isn't "checking" anything — it's loading
-      // the user's own source; say so. Failover retries keep the counter
-      // (the ladder really is trying alternatives at that point).
-      final firstAttempt = attempts == 1 && !initialAttemptAlreadyFailed;
-      final debridFirstOpen =
-          firstAttempt &&
-          !pikPakResolver &&
-          source.streamType == StreamType.torrent;
-      if (_startupGateOverlayHidden != debridFirstOpen) {
-        _startupGateOverlayHidden = debridFirstOpen;
-        if (mounted) setState(() {});
-      }
-      _setStartupGateMessage(
-        debridFirstOpen
-            ? 'Loading stream…'
-            : firstAttempt
-            ? 'Checking stream 1 of $maxAttempts…'
-            : 'Stream unavailable · Trying $attempts of $maxAttempts…',
-      );
-
-      String? url;
-      List<PlaylistEntry>? resolvedPlaylist;
-      var resolvedPlaylistIndex = 0;
-      if (isResolvedLaunchUrl) {
-        debugPrint(
-          '[StartupFailover] event=resolve platform=flutter attempt=$attempts/$maxAttempts '
-          '$sourceFields route=launch_url',
-        );
-        url = initialUrl;
-      } else if (source.streamType == StreamType.directUrl &&
-          source.directUrl?.isNotEmpty == true) {
-        debugPrint(
-          '[StartupFailover] event=resolve platform=flutter attempt=$attempts/$maxAttempts '
-          '$sourceFields route=direct_url',
-        );
-        url = source.directUrl;
-      } else if (widget.resolveSourceToPlaylist != null) {
-        debugPrint(
-          '[StartupFailover] event=resolve platform=flutter attempt=$attempts/$maxAttempts '
-          '$sourceFields route=playlist',
-        );
-        try {
-          resolvedPlaylist = await widget.resolveSourceToPlaylist!(
-            source,
-            canContinue: () => mounted && !_screenDisposed,
-          );
-        } catch (e) {
-          debugPrint(
-            '[StartupFailover] event=resolve_result platform=flutter '
-            '$sourceFields ok=false reason=exception exception=${e.runtimeType}',
-          );
-          resolvedPlaylist = null;
-        }
-        if (resolvedPlaylist != null && resolvedPlaylist.isNotEmpty) {
-          if (StartupStreamPolicy.requiresExactEpisodeMatch(
-                isSeries: contentType == 'series',
-                playlistLength: resolvedPlaylist.length,
-              ) &&
-              _effectiveContentSeason != null &&
-              _effectiveContentEpisode != null) {
-            final parsed = SeriesPlaylist.fromPlaylistEntries(
-              resolvedPlaylist,
-              collectionTitle: widget.title,
-              forceSeries: true,
-            );
-            final target = parsed.findOriginalIndexBySeasonEpisode(
-              _effectiveContentSeason!,
-              _effectiveContentEpisode!,
-            );
-            final exactIndex = StartupStreamPolicy.resolvedPlaylistIndex(
-              requiresEpisodeMatch: true,
-              matchedEpisodeIndex: target,
-            );
-            if (exactIndex == null) {
-              // A pack that omits the requested episode is not a valid
-              // fallback. Opening row zero would silently play the wrong
-              // episode and then adopt that unrelated playlist.
-              resolvedPlaylist = null;
-              debugPrint(
-                '[StartupFailover] event=candidate_reject platform=flutter '
-                '$sourceFields reason=playlist_missing_episode '
-                'targetSeason=$_effectiveContentSeason '
-                'targetEpisode=$_effectiveContentEpisode',
-              );
-              continue;
-            }
-            resolvedPlaylistIndex = exactIndex;
-          }
-          url = resolvedPlaylist[resolvedPlaylistIndex].url;
-        }
-      } else if (_effectiveResolver != null) {
-        debugPrint(
-          '[StartupFailover] event=resolve platform=flutter attempt=$attempts/$maxAttempts '
-          '$sourceFields route=single_url',
-        );
-        try {
-          url = await _effectiveResolver!(source);
-        } catch (e) {
-          debugPrint(
-            '[StartupFailover] event=resolve_result platform=flutter '
-            '$sourceFields ok=false reason=exception exception=${e.runtimeType}',
-          );
-          url = null;
-        }
-      }
-
-      if (url == null || url.isEmpty) {
-        debugPrint(
-          '[StartupFailover] event=candidate_reject platform=flutter '
-          '$sourceFields reason=empty_resolution',
-        );
-        continue;
-      }
-      // Debrid-resolved torrents bypass the decode probe (see
-      // _openStartupDebridDirect); addon direct URLs keep it, and so do
-      // PikPak sessions — cold-storage opens are the slowest in the app and
-      // have their own readiness needs.
-      final isDebridResolved =
-          !pikPakResolver && source.streamType == StreamType.torrent;
-      final candidateHeaders = isResolvedLaunchUrl
-          ? httpHeaders
-          : resolvedPlaylist != null
-          ? resolvedPlaylist[resolvedPlaylistIndex].httpHeaders
-          : source.httpHeaders;
-      final ok = isDebridResolved
-          ? await _openStartupDebridDirect(
-              url,
-              httpHeaders: candidateHeaders,
-              source: source,
-              sourceIndex: sourceIndex,
-              attempt: attempts,
-              maxAttempts: maxAttempts,
-            )
-          : await _tryOpenStartupVod(
-              url,
-              httpHeaders: candidateHeaders,
-              source: source,
-              sourceIndex: sourceIndex,
-              attempt: attempts,
-              maxAttempts: maxAttempts,
-            );
-      if (!mounted) return false;
-      if (!ok) continue;
-
-      _activeHttpHeaders = candidateHeaders;
-
-      _currentSourceIndex = sourceIndex;
-      _currentStreamUrl = url;
-      if (resolvedPlaylist != null && resolvedPlaylist.isNotEmpty) {
-        _activePlaylist = resolvedPlaylist;
-        _currentIndex = resolvedPlaylistIndex;
-        _cachedSeriesPlaylist = null;
-        _playlistIdentityToken++;
-      }
-      unawaited(_commitValidatedStremioSource(source));
-      debugPrint(
-        '[StartupFailover] event=commit platform=flutter '
-        'attempt=$attempts/$maxAttempts $sourceFields '
-        'playlistItems=${resolvedPlaylist?.length ?? 0} '
-        'playlistIndex=$resolvedPlaylistIndex',
-      );
-      return true;
-    }
-    _setStartupGateActive(false);
-    debugPrint(
-      '[StartupFailover] event=exhausted platform=flutter '
-      'attempts=$attempts maxAttempts=$maxAttempts sourceCount=${sources.length}',
-    );
-    return false;
-  }
-
-  Future<void> _commitValidatedStremioSource(Torrent? source) async {
-    if (identical(source, _openedWatchSource)) {
-      _serverWatch.commit(source);
-    }
-    logSourceSelection(
-      'player_source_committed',
-      source: source,
-      index: _currentSourceIndex,
-      player: 'mpv',
-    );
-    final commit = widget.onStremioSourceCommitted;
-    if (source == null || commit == null) return;
-    try {
-      await commit(source);
-    } catch (error) {
-      debugPrint(
-        '[StartupFailover] event=binding_commit_failed platform=flutter '
-        'exception=${error.runtimeType}',
-      );
-    }
-  }
-
-  String _startupSourceFields(int? index, Torrent? source) {
-    String safe(String? value) {
-      if (value == null || value.isEmpty) return '-';
-      final compact = value.replaceAll(RegExp(r'\s+'), ' ');
-      return compact.length <= 64 ? compact : compact.substring(0, 64);
-    }
-
-    return 'sourceIndex=${index ?? '-'} type=${source?.streamType.name ?? '-'} '
-        'addon=${safe(source?.stremioAddonId)} source=${safe(source?.source)}';
-  }
-
-  void _setStartupGateActive(bool active) {
-    if (_startupGateActive == active) return;
-    _startupGateActive = active;
-    if (!active) _startupGateOverlayHidden = false;
-    if (mounted) setState(() {});
-  }
-
-  void _setStartupGateMessage(String message) {
-    if (_startupGateMessage == message) return;
-    _startupGateMessage = message;
-    if (mounted && _startupGateActive) setState(() {});
-  }
-
-  // ─── Stremio Source Sheet ───────────────────────────────────────────
-
-  void _showSourceSheetOverlay() {
-    final sources = _effectiveSources;
-    if (sources == null || sources.isEmpty) return;
-    _iptvBanner.hideIptvZapBanner();
-    setState(() {
-      _showSourceSheet = true;
-      _controlsVisible.value = false;
-    });
-  }
-
-  void _hideSourceSheet() {
-    _sourcePlaylistResolution++;
-    setState(() {
-      _showSourceSheet = false;
-    });
-  }
-
-  Future<String?> Function(Torrent) _buildSourceSheetResolver() {
-    if (widget.resolveSourceToPlaylist != null) {
-      return (Torrent torrent) async {
-        final generation = ++_sourcePlaylistResolution;
-        bool active() =>
-            mounted &&
-            !_screenDisposed &&
-            _showSourceSheet &&
-            generation == _sourcePlaylistResolution;
-        final playlist = await widget.resolveSourceToPlaylist!(
-          torrent,
-          canContinue: active,
-        );
-        if (!active() || playlist == null || playlist.isEmpty) return null;
-        _pendingSourcePlaylist = playlist;
-        final firstUrl = playlist.first.url;
-        return firstUrl.isNotEmpty ? firstUrl : null;
-      };
-    }
-    return _effectiveResolver!;
-  }
-
-  Future<void> _handleSourceSelected(int index, String url) async {
-    // Picking a source aborts the landing verifier — it must not re-issue the
-    // old target against the replacement stream (that could even trip the
-    // validator's position gate). The GUARD deliberately stays armed: the
-    // switch paths below checkpoint the outgoing position, and that save must
-    // still be protected (they substitute the held target where needed).
-    _resumeVerifyEpoch++;
-    // Live IPTV channel: the movie pipeline below seeks to the previous
-    // position and reloads subtitles — both meaningless (and harmful) for a
-    // live stream. Route to the dedicated live switch instead.
-    if (_iptvChannelKey != null) {
-      await _iptvSwitch.switchToIptvSource(index, url);
-      return;
-    }
-    final pendingPlaylist = _pendingSourcePlaylist;
-    _pendingSourcePlaylist = null;
-    if (pendingPlaylist != null && pendingPlaylist.isNotEmpty) {
-      await _switchToSourcePlaylist(
-        index,
-        pendingPlaylist,
-        validateExplicitSelection: true,
-      );
-    } else {
-      await _switchToStremioSource(index, url);
-    }
-  }
-
-  Future<bool> _switchToSourcePlaylist(
-    int sourceIndex,
-    List<PlaylistEntry> newPlaylist, {
-    int? targetSeason,
-    int? targetEpisode,
-    bool validateExplicitSelection = false,
-    bool suppressResume = false,
-    EpisodePlaybackRequest? request,
-  }) async {
-    if (request == null) _episodeNavigationGeneration++;
-    if (request?.isCurrent == false) return false;
-    _hideSourceSheet();
-    _clearBufferingIndicator();
-    final outgoingPlaylist = _activePlaylist == null
-        ? null
-        : List<PlaylistEntry>.of(_activePlaylist!);
-    final outgoingIndex = _currentIndex;
-    final outgoingCachedSeries = _cachedSeriesPlaylist;
-    final outgoingSourceIndex = _currentSourceIndex;
-    // If a startup resume never landed, the live position is a restart
-    // artifact — carry the HELD target across the switch (and into the
-    // failure-restore path) so the new source opens at the bookmark, not ~0.
-    // Pure query: the guard itself stays armed for the checkpoint save below.
-    final outgoingHeldMs = _resumeWriteGuard.heldTargetIfBlocked(
-      _position.inMilliseconds,
-    );
-    final outgoingPosition = outgoingHeldMs != null
-        ? Duration(milliseconds: outgoingHeldMs)
-        : _position;
-    final outgoingDirectUrl = _currentStreamUrl;
-    final outgoingHeaders = _activeHttpHeaders;
-    final selectedSource =
-        (_effectiveSources != null &&
-            sourceIndex >= 0 &&
-            sourceIndex < _effectiveSources!.length)
-        ? _effectiveSources![sourceIndex]
-        : null;
-    // Capture the episode we're on BEFORE swapping the playlist, so we can
-    // land on it in the new source instead of jumping to the pack's first
-    // entry (S1E1). Read from the current playlist entry (tracks auto-advance).
-    // An episode-guide fetch targets a DIFFERENT episode: land there instead.
-    final current = _traktSeasonEpisode();
-    final explicitTarget = targetSeason != null && targetEpisode != null;
-    final se = explicitTarget
-        ? (season: targetSeason, episode: targetEpisode)
-        : current;
-    // Checkpoint the OUTGOING episode now, while _activePlaylist/_currentIndex
-    // still point at it — after the swap the index would resolve against the
-    // new playlist. _loadPlaylistIndex below is told to skip its own save.
-    await _resumeSave.saveResume();
-    if (!mounted || request?.isCurrent == false) return false;
-    setState(() {
-      _isTransitioning = true;
-      _tvScrubGeneration++;
-      _tvAbandonScrub();
-    });
-    _startTransitionOverlay();
-    try {
-      await _player.pause();
-    } catch (_) {}
-    if (!mounted || request?.isCurrent == false) return false;
-
-    // Replace playlist and invalidate series cache. A source/episode switch
-    // stays within the same show, so the full TVMaze episode list carries
-    // over — without it, guide adjacency and the full episode sheet would go
-    // dark until another TVMaze fetch succeeds (never, when offline).
-    final outgoingSeries = _seriesPlaylist ?? _syntheticGuidePlaylist;
-    final carriedGuide = outgoingSeries?.fullTvmazeEpisodes.isNotEmpty == true
-        ? outgoingSeries!.fullTvmazeEpisodes
-        : null;
-    final carriedImdbId = outgoingSeries?.imdbId ?? _currentSeriesImdbId;
-    final carriedTvmazeShowId = outgoingSeries?.tvmazeShowId;
-    final carriedTvmazeShowName = outgoingSeries?.tvmazeShowName;
-    final carriedPosterUrl = outgoingSeries?.showPosterUrl;
-    void replacePlaylist() => setState(() {
-      _currentSourceIndex = sourceIndex;
-      _activePlaylist = newPlaylist;
-      _cachedSeriesPlaylist = null;
-      _playlistIdentityToken++;
-    });
-    if (request != null) {
-      if (!request.replacePlaylist(replacePlaylist)) return false;
-    } else {
-      replacePlaylist();
-    }
-    final rebuilt = _seriesPlaylist;
-    if (rebuilt != null) {
-      rebuilt.imdbId ??= carriedImdbId;
-      rebuilt.tvmazeShowId ??= carriedTvmazeShowId;
-      rebuilt.tvmazeShowName ??= carriedTvmazeShowName;
-      rebuilt.showPosterUrl ??= carriedPosterUrl;
-      if (carriedGuide != null &&
-          carriedGuide.isNotEmpty &&
-          rebuilt.fullTvmazeEpisodes.isEmpty) {
-        rebuilt.fullTvmazeEpisodes = carriedGuide;
-      }
-      _episodeMetadataReady = _preloadEpisodeInfo();
-    }
-
-    // Resume the SAME episode from the new source (a season/complete pack would
-    // otherwise restart at S1E1); _loadPlaylistIndex restores its saved
-    // position.
-    var targetIndex = 0;
-    // Whether the new source landed on the SAME content we were watching — only
-    // then does "prefer the checkpointed local position over Trakt" apply. When
-    // we fall back to a different episode, its own Trakt resume must still work.
-    // An explicit episode-guide target is different content by definition.
-    var landedOnSameContent =
-        !explicitTarget ||
-        (targetSeason == current.season && targetEpisode == current.episode);
-    var containsRequestedEpisode = true;
-    if (se.season != null && se.episode != null) {
-      final sp = _seriesPlaylist;
-      final idx =
-          sp?.findOriginalIndexBySeasonEpisode(se.season!, se.episode!) ?? -1;
-      if (idx >= 0) {
-        targetIndex = idx;
-      } else if (newPlaylist.length == 1) {
-        // A single resolved stream often has an unparseable name ("Torrentio
-        // 1080p", anime/absolute numbering); its one entry IS the requested
-        // episode — the fetch was episode-scoped. This must hold for manual
-        // sheet picks too (no explicit target), or a legitimate singleton
-        // would be rejected below without ever being opened. Mirrors the
-        // Kotlin cursor's `episodes.size <= 1` exemption.
-        targetIndex = 0;
-      } else {
-        landedOnSameContent = false;
-        containsRequestedEpisode = false;
-        // The exact episode isn't in this source. Don't fall back to raw entry
-        // 0 — in torrent order that's often an extras/bonus clip. Land on the
-        // first REAL episode (skips season 0 / specials) and warn the user.
-        final firstReal = sp?.getFirstEpisodeOriginalIndex() ?? -1;
-        if (firstReal >= 0) targetIndex = firstReal;
-        if (mounted && !validateExplicitSelection) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'S${se.season}E${se.episode} not in this source — playing from the start',
-              ),
-            ),
-          );
-        }
-      }
-    }
-    // A source switch must resume the outgoing episode's position (saved above).
-    // Clear any lingering manual-selection state first: if the user had manually
-    // jumped to an episode within the last 30s, that stale flag makes
-    // `_maybeRestoreResume` bail out and the new source opens at 0:00 instead of
-    // resuming. The switch is not a "manual episode pick", so drop the flag.
-    _isManualEpisodeSelection = false;
-    _allowResumeForManualSelection = false;
-    // Resume the checkpointed LOCAL position, not Trakt (this is a source swap
-    // mid-episode, not a fresh open) — but only when the new source landed on
-    // the same content; a fallback episode keeps its own Trakt resume.
-    var committed = false;
-    if (!validateExplicitSelection) {
-      try {
-        committed = await _loadPlaylistIndex(
-          targetIndex,
-          autoplay: true,
-          skipInitialSave: true,
-          preferLocalResume: landedOnSameContent,
-          suppressResume: suppressResume,
-          request: request,
-        );
-      } catch (error) {
-        if (request == null) rethrow;
-        debugPrint('Episode source load failed: $error');
-        committed = false;
-      }
-    } else {
-      _manualSourceGateActive = true;
-      try {
-        try {
-          if (containsRequestedEpisode) {
-            committed = await _loadPlaylistIndex(
-              targetIndex,
-              autoplay: true,
-              skipInitialSave: true,
-              preferLocalResume: landedOnSameContent,
-              suppressResume: suppressResume,
-              request: request,
-              manualValidationSource: selectedSource,
-              manualValidationSourceIndex: sourceIndex,
-            );
-          }
-        } catch (error) {
-          debugPrint(
-            'Player: manual playlist source rejected '
-            '(${error.runtimeType})',
-          );
-          committed = false;
-        }
-        if (!mounted || request?.isCurrent == false) return false;
-        if (!committed &&
-            outgoingPlaylist != null &&
-            outgoingPlaylist.isNotEmpty) {
-          setState(() {
-            _activePlaylist = outgoingPlaylist;
-            _cachedSeriesPlaylist = null;
-            _playlistIdentityToken++;
-            _currentSourceIndex = outgoingSourceIndex;
-            _currentIndex = outgoingIndex.clamp(0, outgoingPlaylist.length - 1);
-          });
-          final restored = await _loadPlaylistIndex(
-            _currentIndex,
-            autoplay: true,
-            skipInitialSave: true,
-            preferLocalResume: true,
-          );
-          if (restored && outgoingPosition > Duration.zero) {
-            // Guarded: a failure-path restore must not leave the bookmark at
-            // the mercy of a stream that answers this seek with a restart.
-            await _resumeRestore.seekForResume(outgoingPosition.inMilliseconds);
-          }
-        } else if (!committed &&
-            outgoingDirectUrl != null &&
-            outgoingDirectUrl.isNotEmpty) {
-          // A direct launch has no active playlist to restore. The candidate
-          // validator has stopped its media on failure, so explicitly rebuild
-          // the outgoing direct session instead of leaving the player stopped
-          // with the rejected playlist selected.
-          setState(() {
-            _activePlaylist = null;
-            _cachedSeriesPlaylist = null;
-            _playlistIdentityToken++;
-            _currentSourceIndex = outgoingSourceIndex;
-            _currentIndex = outgoingIndex;
-          });
-          try {
-            _activeHttpHeaders = outgoingHeaders;
-            await _openMedia(
-              mk.Media(outgoingDirectUrl, httpHeaders: _activeHttpHeaders),
-              play: true,
-            );
-            await _waitForVideoReady();
-            if (outgoingPosition > Duration.zero) {
-              await _resumeRestore.seekForResume(
-                outgoingPosition.inMilliseconds,
-              );
-            }
-            _currentStreamUrl = outgoingDirectUrl;
-            _serverWatch.commit(_openedWatchSource);
-            unawaited(_trackPreferences.restoreTrackPreferences());
-          } catch (restoreError) {
-            debugPrint(
-              'Player: outgoing direct source restore failed '
-              '(${restoreError.runtimeType})',
-            );
-          }
-        }
-      } finally {
-        _manualSourceGateActive = false;
-        _resumeTrackingAfterValidationGate();
-      }
-    }
-    if (!mounted) return false;
-    if (!committed && request != null) {
-      // Only roll back preparation. If media open has started, the request
-      // retains the incoming identity so progress stays with that media.
-      final restored = request.restorePlaylist(
-        () => setState(() {
-          _activePlaylist = outgoingPlaylist;
-          _cachedSeriesPlaylist = outgoingCachedSeries;
-          _playlistIdentityToken++;
-          _currentSourceIndex = outgoingSourceIndex;
-          _currentIndex = outgoingIndex;
-          _currentStreamUrl = outgoingDirectUrl;
-          _activeHttpHeaders = outgoingHeaders;
-        }),
-      );
-      if (restored) await _mdblist.switchMdblistTarget();
-    }
-    if (request?.isCurrent == false) return false;
-
-    if (committed) {
-      unawaited(_commitValidatedStremioSource(selectedSource));
-    }
-    if (validateExplicitSelection && !committed) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('This source is unavailable. Choose another source.'),
-        ),
-      );
-    }
-
-    // End transition (same pattern as _switchToStremioSource)
-    _transitionStopTimer?.cancel();
-    _transitionPhaseTimer?.cancel();
-    _transitionPhase = 2;
-    _transitionPhase2Started = DateTime.now();
-    setState(() {
-      _isTransitioning = false;
-    });
-    _transitionStopTimer = Timer(const Duration(milliseconds: 1500), () {
-      _rainbowController.stop();
-      _transitionRunning = false;
-      _rainbowActive = false;
-      if (mounted) setState(() {});
-    });
-    return committed;
-  }
-
   Map<String, String>? _activeHttpHeaders;
-
-  Future<void> _switchToStremioSource(int index, String url) async {
-    _hideSourceSheet();
-
-    // Capture current position before switching so playback continues
-    // seamlessly. A held (unlanded) resume target outranks the live position —
-    // the live value is a restart artifact and the new source must open at
-    // the bookmark. Pure query; the guard stays armed so the new source's own
-    // landing (or failure) keeps the bookmark protected.
-    final heldSwitchMs = _resumeWriteGuard.heldTargetIfBlocked(
-      _position.inMilliseconds,
-    );
-    final resumePosition = heldSwitchMs != null
-        ? Duration(milliseconds: heldSwitchMs)
-        : _position;
-    final previousUrl = _currentStreamUrl;
-    final previousHeaders = _activeHttpHeaders;
-    final previousSourceIndex = _currentSourceIndex;
-    final source =
-        (_effectiveSources != null &&
-            index >= 0 &&
-            index < _effectiveSources!.length)
-        ? _effectiveSources![index]
-        : null;
-
-    _clearBufferingIndicator();
-    setState(() {
-      _isTransitioning = true;
-      _tvScrubGeneration++;
-      _tvAbandonScrub();
-      _currentSourceIndex = index;
-    });
-    _startTransitionOverlay();
-
-    try {
-      await _player.pause();
-    } catch (_) {}
-
-    if (!mounted) return;
-
-    _manualSourceGateActive = true;
-
-    // For YouTube each quality is a video-only track sharing one audio stream
-    // (widget.audioUrl). Mirror the initial-launch ordering: open PAUSED,
-    // attach the external audio, seek, then play — so both tracks load in sync
-    // (attaching audio mid-play makes mpv resync and drift). Sources without a
-    // separate audio track (torrents) keep the plain open-and-play path.
-    final hasExternalAudio =
-        widget.audioUrl != null && widget.audioUrl!.isNotEmpty;
-
-    // For direct/torrent switches, `_player.open` discards the old media's
-    // subtitle tracks, so an active external/addon subtitle would silently
-    // vanish and the cached identifiers would dangle. Reset now (mirrors
-    // `_loadPlaylistIndex`) so the new media starts clean and addon-subtitle
-    // logic re-runs. Deliberately NOT done for the external-audio (YouTube)
-    // path — that flow is left exactly as before to avoid any regression.
-    if (!hasExternalAudio) {
-      _resetSubtitleState();
-    }
-
-    var committed = false;
-    try {
-      final valid = hasExternalAudio
-          ? await (() async {
-              await _openMedia(mk.Media(url), play: false, desiredPlay: true);
-              await _waitForVideoReady();
-              return _duration > Duration.zero;
-            })()
-          : await _tryOpenStartupVod(
-              url,
-              httpHeaders: source?.httpHeaders,
-              source: source,
-              sourceIndex: index,
-            );
-      if (!mounted) return;
-      if (!valid) {
-        throw const VpManualSourceValidationFailure();
-      }
-      if (!mounted) return;
-      if (hasExternalAudio) {
-        await _setExternalAudioTrack(widget.audioUrl!);
-      }
-      // Seek to the position from the previous source. _seekForResume
-      // re-ARMS the guard (a pure held-target query never restarted the
-      // settle window), so a switched-to stream that restarts at 0 cannot
-      // have its first autosave file ~0 over the carried bookmark — the
-      // identical failure the guard exists for, on the switch path.
-      if (resumePosition > Duration.zero) {
-        await _resumeRestore.seekForResume(resumePosition.inMilliseconds);
-      }
-      if (hasExternalAudio) {
-        await _player.play();
-      } else {
-        // Restore stored audio/subtitle track preferences for this content
-        // (same as the playlist path). Skipped for the external-audio (YouTube)
-        // case above, where the merged audio track is set explicitly and track
-        // preferences would fight it.
-        //
-        // Fire-and-forget: `_restoreTrackPreferences` awaits `_waitForSubtitleTracks`,
-        // which polls up to ~5s on media with no embedded subtitle tracks
-        // (common for direct MP4/torrent streams). Awaiting it here would hold
-        // the black transition overlay for that whole wait — a regression vs the
-        // old direct-switch path, which ended the transition right after the
-        // seek. Let it apply in the background; the overlay ends below on time.
-        unawaited(_trackPreferences.restoreTrackPreferences());
-      }
-      _currentSourceIndex = index;
-      _currentStreamUrl = url;
-      _activeHttpHeaders = source?.httpHeaders;
-      committed = true;
-      unawaited(_commitValidatedStremioSource(source));
-    } catch (e) {
-      debugPrint('Player: manual Stremio source rejected (${e.runtimeType})');
-      logSourceSelection(
-        'player_switch_rejected',
-        source: source,
-        index: index,
-        previousIndex: previousSourceIndex,
-        player: 'mpv',
-        reason: 'validation_failed',
-      );
-      // The candidate player is stopped by the validator. Restore the known
-      // working stream when possible, but never validate/fail over to another
-      // row: this was an explicit user selection.
-      if (previousUrl != null && previousUrl.isNotEmpty) {
-        try {
-          _activeHttpHeaders = previousHeaders;
-          await _openMedia(
-            mk.Media(previousUrl, httpHeaders: _activeHttpHeaders),
-            play: true,
-            source:
-                _effectiveSources != null &&
-                    previousSourceIndex >= 0 &&
-                    previousSourceIndex < _effectiveSources!.length &&
-                    MediaServerWatchController.isServerSource(
-                      _effectiveSources![previousSourceIndex],
-                    )
-                ? _effectiveSources![previousSourceIndex]
-                : null,
-          );
-          await _waitForVideoReady();
-          if (hasExternalAudio) {
-            // YouTube-style split streams: the reopen dropped the external
-            // audio track — without this the restored video plays silent.
-            await _setExternalAudioTrack(widget.audioUrl!);
-          }
-          if (resumePosition > Duration.zero) {
-            await _resumeRestore.seekForResume(resumePosition.inMilliseconds);
-          }
-          _currentStreamUrl = previousUrl;
-          _serverWatch.commit(_openedWatchSource);
-          if (!hasExternalAudio) {
-            // Subtitle state was reset for the candidate; bring the user's
-            // subtitle/audio choices back on the restored stream.
-            unawaited(_trackPreferences.restoreTrackPreferences());
-          }
-        } catch (restoreError) {
-          debugPrint(
-            'Player: previous source restore failed '
-            '(${restoreError.runtimeType})',
-          );
-        }
-      }
-      _currentSourceIndex = previousSourceIndex;
-    } finally {
-      _manualSourceGateActive = false;
-      _resumeTrackingAfterValidationGate();
-    }
-
-    if (!mounted) return;
-
-    if (!committed) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('This source is unavailable. Choose another source.'),
-        ),
-      );
-    }
-
-    _transitionStopTimer?.cancel();
-    _transitionPhaseTimer?.cancel();
-    _transitionPhase = 2;
-    _transitionPhase2Started = DateTime.now();
-    setState(() {
-      _isTransitioning = false;
-    });
-    _transitionStopTimer = Timer(const Duration(milliseconds: 1500), () {
-      _rainbowController.stop();
-      _transitionRunning = false;
-      _rainbowActive = false;
-      if (mounted) setState(() {});
-    });
-  }
 
   // ─── Stremio TV Guide ─────────────────────────────────────────────
 
@@ -7127,7 +5841,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // Cancel any ongoing PikPak retry when switching to non-PikPak video
       _pikPakRetryId++;
       if (manualValidationSourceIndex != null) {
-        final valid = await _tryOpenStartupVod(
+        final valid = await _startupCandidates.tryOpenStartupVod(
           videoUrl,
           httpHeaders: _activeHttpHeaders,
           source: manualValidationSource,
@@ -8514,7 +7228,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                           _canFetchEpisodes)
                   ? () => unawaited(_showRandomPlaybackMenu())
                   : null,
-              onShowSources: hasSources ? _showSourceSheetOverlay : null,
+              onShowSources: hasSources
+                  ? _sourceSwitch.showSourceSheetOverlay
+                  : null,
               onShowGuide: hasGuide
                   ? (_channelEntries.isNotEmpty &&
                             widget.requestChannelById != null
@@ -8593,7 +7309,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // the player root would leave its DPAD dead.
       if (_showIptvChannelSheet) return;
     } else if (_showSourceSheet) {
-      _hideSourceSheet();
+      _sourceSwitch.hideSourceSheet();
     } else if (_showStremioTvGuide) {
       _hideStremioTvGuide();
     } else {
@@ -9489,7 +8205,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _isAutoAdvancing = autoAdvance;
     final resolvedPlaylist = playlist;
     final outcome = await request.attempt(
-      () => _switchToSourcePlaylist(
+      () => _sourcePlaylistSwitch.switchToSourcePlaylist(
         sourceIndex,
         resolvedPlaylist,
         targetSeason: season,
@@ -9700,7 +8416,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             if (_showSourceSheet) {
               if (key == LogicalKeyboardKey.escape ||
                   key == LogicalKeyboardKey.goBack) {
-                _hideSourceSheet();
+                _sourceSwitch.hideSourceSheet();
                 return KeyEventResult.handled;
               }
               // Let source sheet handle other keys
@@ -9766,7 +8482,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                   _effectiveSources!.isNotEmpty &&
                   (_effectiveResolver != null ||
                       widget.resolveSourceToPlaylist != null)) {
-                _showSourceSheetOverlay();
+                _sourceSwitch.showSourceSheetOverlay();
                 return KeyEventResult.handled;
               }
             }
@@ -10533,7 +9249,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                           (_effectiveResolver != null ||
                                               widget.resolveSourceToPlaylist !=
                                                   null)
-                                      ? _showSourceSheetOverlay
+                                      ? _sourceSwitch.showSourceSheetOverlay
                                       : null,
                                   showPipButton: PipService.isOwner(this),
                                   onPip: PipService.isOwner(this)
@@ -10761,9 +9477,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                         return SourceSheet(
                           sources: _effectiveSources!,
                           currentSourceIndex: _currentSourceIndex,
-                          resolveSource: _buildSourceSheetResolver(),
-                          onSourceSelected: _handleSourceSelected,
-                          onClose: _hideSourceSheet,
+                          resolveSource: _sourceSwitch
+                              .buildSourceSheetResolver(),
+                          onSourceSelected: _sourceSwitch.handleSourceSelected,
+                          onClose: _sourceSwitch.hideSourceSheet,
                           seriesFetcher: fetcher,
                           currentSeason: se.season,
                           currentEpisode: se.episode,
@@ -10880,6 +9597,567 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
     return null;
   }
+}
+
+class _VpSourcePlaylistSwitchHostAdapter implements VpSourcePlaylistSwitchHost {
+  _VpSourcePlaylistSwitchHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  Map<String, String>? get activeHttpHeaders => _s._activeHttpHeaders;
+  @override
+  set activeHttpHeaders(Map<String, String>? v) => _s._activeHttpHeaders = v;
+  @override
+  List<PlaylistEntry>? get activePlaylist => _s._activePlaylist;
+  @override
+  set activePlaylist(List<PlaylistEntry>? v) => _s._activePlaylist = v;
+  @override
+  set allowResumeForManualSelection(bool v) =>
+      _s._allowResumeForManualSelection = v;
+  @override
+  SeriesPlaylist? get cachedSeriesPlaylist => _s._cachedSeriesPlaylist;
+  @override
+  set cachedSeriesPlaylist(SeriesPlaylist? v) => _s._cachedSeriesPlaylist = v;
+  @override
+  int get currentIndex => _s._currentIndex;
+  @override
+  set currentIndex(int v) => _s._currentIndex = v;
+  @override
+  String? get currentSeriesImdbId => _s._currentSeriesImdbId;
+  @override
+  int get currentSourceIndex => _s._currentSourceIndex;
+  @override
+  set currentSourceIndex(int v) => _s._currentSourceIndex = v;
+  @override
+  String? get currentStreamUrl => _s._currentStreamUrl;
+  @override
+  set currentStreamUrl(String? v) => _s._currentStreamUrl = v;
+  @override
+  List<Torrent>? get effectiveSources => _s._effectiveSources;
+  @override
+  set episodeMetadataReady(Future<void>? v) => _s._episodeMetadataReady = v;
+  @override
+  int get episodeNavigationGeneration => _s._episodeNavigationGeneration;
+  @override
+  set episodeNavigationGeneration(int v) => _s._episodeNavigationGeneration = v;
+  @override
+  set isManualEpisodeSelection(bool v) => _s._isManualEpisodeSelection = v;
+  @override
+  set isTransitioning(bool v) => _s._isTransitioning = v;
+  @override
+  set manualSourceGateActive(bool v) => _s._manualSourceGateActive = v;
+  @override
+  Torrent? get openedWatchSource => _s._openedWatchSource;
+  @override
+  mk.Player get player => _s._player;
+  @override
+  int get playlistIdentityToken => _s._playlistIdentityToken;
+  @override
+  set playlistIdentityToken(int v) => _s._playlistIdentityToken = v;
+  @override
+  Duration get position => _s._position;
+  @override
+  set rainbowActive(bool v) => _s._rainbowActive = v;
+  @override
+  AnimationController get rainbowController => _s._rainbowController;
+  @override
+  ResumeWriteGuard get resumeWriteGuard => _s._resumeWriteGuard;
+  @override
+  SeriesPlaylist? get seriesPlaylist => _s._seriesPlaylist;
+  @override
+  MediaServerWatchController get serverWatch => _s._serverWatch;
+  @override
+  SeriesPlaylist? get syntheticGuidePlaylist => _s._syntheticGuidePlaylist;
+  @override
+  set transitionPhase(int v) => _s._transitionPhase = v;
+  @override
+  set transitionPhase2Started(DateTime? v) => _s._transitionPhase2Started = v;
+  @override
+  Timer? get transitionPhaseTimer => _s._transitionPhaseTimer;
+  @override
+  set transitionRunning(bool v) => _s._transitionRunning = v;
+  @override
+  Timer? get transitionStopTimer => _s._transitionStopTimer;
+  @override
+  set transitionStopTimer(Timer? v) => _s._transitionStopTimer = v;
+  @override
+  int get tvScrubGeneration => _s._tvScrubGeneration;
+  @override
+  set tvScrubGeneration(int v) => _s._tvScrubGeneration = v;
+  @override
+  BuildContext get context => _s.context;
+  @override
+  Future<void> openMedia(
+    mk.Media media, {
+    required bool play,
+    bool? desiredPlay,
+    bool liveStream = false,
+    EpisodePlaybackRequest? request,
+    bool Function()? beforeOpen,
+    Torrent? source,
+    int? preserveStartupEpoch,
+  }) => _s._openMedia(
+    media,
+    play: play,
+    desiredPlay: desiredPlay,
+    liveStream: liveStream,
+    request: request,
+    beforeOpen: beforeOpen,
+    source: source,
+    preserveStartupEpoch: preserveStartupEpoch,
+  );
+  @override
+  Future<void> commitValidatedStremioSource(Torrent? source) =>
+      _s._startupCandidates.commitValidatedStremioSource(source);
+  @override
+  void resumeTrackingAfterValidationGate() =>
+      _s._startupGate.resumeTrackingAfterValidationGate();
+  @override
+  void tvAbandonScrub() => _s._tvAbandonScrub();
+  @override
+  void startTransitionOverlay() => _s._startTransitionOverlay();
+  @override
+  void clearBufferingIndicator() => _s._clearBufferingIndicator();
+  @override
+  Future<void> waitForVideoReady() => _s._waitForVideoReady();
+  @override
+  ({int? season, int? episode}) traktSeasonEpisode() =>
+      _s._traktSeasonEpisode();
+  @override
+  Future<void> preloadEpisodeInfo() => _s._preloadEpisodeInfo();
+  @override
+  Future<bool> loadPlaylistIndex(
+    int index, {
+    bool autoplay = false,
+    EpisodePlaybackRequest? request,
+    bool skipInitialSave = false,
+    bool preferLocalResume = false,
+    bool suppressResume = false,
+    Torrent? manualValidationSource,
+    int? manualValidationSourceIndex,
+  }) => _s._loadPlaylistIndex(
+    index,
+    autoplay: autoplay,
+    request: request,
+    skipInitialSave: skipInitialSave,
+    preferLocalResume: preferLocalResume,
+    suppressResume: suppressResume,
+    manualValidationSource: manualValidationSource,
+    manualValidationSourceIndex: manualValidationSourceIndex,
+  );
+  @override
+  void hideSourceSheet() => _s._sourceSwitch.hideSourceSheet();
+  @override
+  void setState(VoidCallback fn) => _s._vpSetState(fn);
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  Future<void> switchMdblistTarget() => _s._mdblist.switchMdblistTarget();
+  @override
+  Future<void> seekForResume(int posMs, {bool verifyLanding = false}) =>
+      _s._resumeRestore.seekForResume(posMs, verifyLanding: verifyLanding);
+  @override
+  Future<void> saveResume({
+    bool debounced = false,
+    Duration? positionOverride,
+  }) => _s._resumeSave.saveResume(
+    debounced: debounced,
+    positionOverride: positionOverride,
+  );
+  @override
+  Future<void> restoreTrackPreferences() =>
+      _s._trackPreferences.restoreTrackPreferences();
+}
+
+class _VpSourceSwitchHostAdapter implements VpSourceSwitchHost {
+  _VpSourceSwitchHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  Map<String, String>? get activeHttpHeaders => _s._activeHttpHeaders;
+  @override
+  set activeHttpHeaders(Map<String, String>? v) => _s._activeHttpHeaders = v;
+  @override
+  ValueNotifier<bool> get controlsVisible => _s._controlsVisible;
+  @override
+  int get currentSourceIndex => _s._currentSourceIndex;
+  @override
+  set currentSourceIndex(int v) => _s._currentSourceIndex = v;
+  @override
+  String? get currentStreamUrl => _s._currentStreamUrl;
+  @override
+  set currentStreamUrl(String? v) => _s._currentStreamUrl = v;
+  @override
+  Duration get duration => _s._duration;
+  @override
+  Future<String?> Function(Torrent)? get effectiveResolver =>
+      _s._effectiveResolver;
+  @override
+  List<Torrent>? get effectiveSources => _s._effectiveSources;
+  @override
+  String? get iptvChannelKey => _s._iptvChannelKey;
+  @override
+  set isTransitioning(bool v) => _s._isTransitioning = v;
+  @override
+  set manualSourceGateActive(bool v) => _s._manualSourceGateActive = v;
+  @override
+  Torrent? get openedWatchSource => _s._openedWatchSource;
+  @override
+  mk.Player get player => _s._player;
+  @override
+  Duration get position => _s._position;
+  @override
+  set rainbowActive(bool v) => _s._rainbowActive = v;
+  @override
+  AnimationController get rainbowController => _s._rainbowController;
+  @override
+  int get resumeVerifyEpoch => _s._resumeVerifyEpoch;
+  @override
+  set resumeVerifyEpoch(int v) => _s._resumeVerifyEpoch = v;
+  @override
+  ResumeWriteGuard get resumeWriteGuard => _s._resumeWriteGuard;
+  @override
+  bool get screenDisposed => _s._screenDisposed;
+  @override
+  MediaServerWatchController get serverWatch => _s._serverWatch;
+  @override
+  bool get showSourceSheet => _s._showSourceSheet;
+  @override
+  set showSourceSheet(bool v) => _s._showSourceSheet = v;
+  @override
+  set transitionPhase(int v) => _s._transitionPhase = v;
+  @override
+  set transitionPhase2Started(DateTime? v) => _s._transitionPhase2Started = v;
+  @override
+  Timer? get transitionPhaseTimer => _s._transitionPhaseTimer;
+  @override
+  set transitionRunning(bool v) => _s._transitionRunning = v;
+  @override
+  Timer? get transitionStopTimer => _s._transitionStopTimer;
+  @override
+  set transitionStopTimer(Timer? v) => _s._transitionStopTimer = v;
+  @override
+  int get tvScrubGeneration => _s._tvScrubGeneration;
+  @override
+  set tvScrubGeneration(int v) => _s._tvScrubGeneration = v;
+  @override
+  BuildContext get context => _s.context;
+  @override
+  Future<void> openMedia(
+    mk.Media media, {
+    required bool play,
+    bool? desiredPlay,
+    bool liveStream = false,
+    EpisodePlaybackRequest? request,
+    bool Function()? beforeOpen,
+    Torrent? source,
+    int? preserveStartupEpoch,
+  }) => _s._openMedia(
+    media,
+    play: play,
+    desiredPlay: desiredPlay,
+    liveStream: liveStream,
+    request: request,
+    beforeOpen: beforeOpen,
+    source: source,
+    preserveStartupEpoch: preserveStartupEpoch,
+  );
+  @override
+  Future<bool> tryOpenStartupVod(
+    String url, {
+    Duration timeout = const Duration(seconds: 12),
+    Map<String, String>? httpHeaders,
+    Torrent? source,
+    int? sourceIndex,
+    int attempt = 1,
+    int maxAttempts = 1,
+  }) => _s._startupCandidates.tryOpenStartupVod(
+    url,
+    timeout: timeout,
+    httpHeaders: httpHeaders,
+    source: source,
+    sourceIndex: sourceIndex,
+    attempt: attempt,
+    maxAttempts: maxAttempts,
+  );
+  @override
+  Future<void> commitValidatedStremioSource(Torrent? source) =>
+      _s._startupCandidates.commitValidatedStremioSource(source);
+  @override
+  Future<bool> switchToSourcePlaylist(
+    int sourceIndex,
+    List<PlaylistEntry> newPlaylist, {
+    int? targetSeason,
+    int? targetEpisode,
+    bool validateExplicitSelection = false,
+    bool suppressResume = false,
+    EpisodePlaybackRequest? request,
+  }) => _s._sourcePlaylistSwitch.switchToSourcePlaylist(
+    sourceIndex,
+    newPlaylist,
+    targetSeason: targetSeason,
+    targetEpisode: targetEpisode,
+    validateExplicitSelection: validateExplicitSelection,
+    suppressResume: suppressResume,
+    request: request,
+  );
+  @override
+  void resumeTrackingAfterValidationGate() =>
+      _s._startupGate.resumeTrackingAfterValidationGate();
+  @override
+  void tvAbandonScrub() => _s._tvAbandonScrub();
+  @override
+  void startTransitionOverlay() => _s._startTransitionOverlay();
+  @override
+  void clearBufferingIndicator() => _s._clearBufferingIndicator();
+  @override
+  void resetSubtitleState() => _s._resetSubtitleState();
+  @override
+  Future<void> waitForVideoReady() => _s._waitForVideoReady();
+  @override
+  Future<void> setExternalAudioTrack(String url) =>
+      _s._setExternalAudioTrack(url);
+  @override
+  void setState(VoidCallback fn) => _s._vpSetState(fn);
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  SourcePlaylistResolve? get resolveSourceToPlaylist =>
+      _s.widget.resolveSourceToPlaylist;
+  @override
+  String? get audioUrl => _s.widget.audioUrl;
+  @override
+  void hideIptvZapBanner({bool immediate = false}) =>
+      _s._iptvBanner.hideIptvZapBanner(immediate: immediate);
+  @override
+  Future<void> switchToIptvSource(int index, String url) =>
+      _s._iptvSwitch.switchToIptvSource(index, url);
+  @override
+  Future<void> seekForResume(int posMs, {bool verifyLanding = false}) =>
+      _s._resumeRestore.seekForResume(posMs, verifyLanding: verifyLanding);
+  @override
+  Future<void> restoreTrackPreferences() =>
+      _s._trackPreferences.restoreTrackPreferences();
+}
+
+class _VpStartupGateHostAdapter implements VpStartupGateHost {
+  _VpStartupGateHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  int get currentSourceIndex => _s._currentSourceIndex;
+  @override
+  int get decoderProbeGeneration => _s._decoderProbeGeneration;
+  @override
+  Duration get duration => _s._duration;
+  @override
+  List<Torrent>? get effectiveSources => _s._effectiveSources;
+  @override
+  bool get isPlaying => _s._isPlaying;
+  @override
+  mk.Player get player => _s._player;
+  @override
+  int get playerInstanceGeneration => _s._playerInstanceGeneration;
+  @override
+  int get resumeVerifyEpoch => _s._resumeVerifyEpoch;
+  @override
+  bool get screenDisposed => _s._screenDisposed;
+  @override
+  bool get startupGateActive => _s._startupGateActive;
+  @override
+  set startupGateActive(bool v) => _s._startupGateActive = v;
+  @override
+  String get startupGateMessage => _s._startupGateMessage;
+  @override
+  set startupGateMessage(String v) => _s._startupGateMessage = v;
+  @override
+  set startupGateOverlayHidden(bool v) => _s._startupGateOverlayHidden = v;
+  @override
+  DeferredStartupSeek get stremioTvStartupSeek => _s._stremioTvStartupSeek;
+  @override
+  ChannelStartupWatch? get stremioTvStartupWatch => _s._stremioTvStartupWatch;
+  @override
+  set stremioTvStartupWatch(ChannelStartupWatch? v) =>
+      _s._stremioTvStartupWatch = v;
+  @override
+  bool get validationGateActive => _s._validationGateActive;
+  @override
+  BuildContext get context => _s.context;
+  @override
+  bool canFallbackExplicitRenderer({
+    required int instanceGeneration,
+    required int mediaGeneration,
+  }) => _s._canFallbackExplicitRenderer(
+    instanceGeneration: instanceGeneration,
+    mediaGeneration: mediaGeneration,
+  );
+  @override
+  void setState(VoidCallback fn) => _s._vpSetState(fn);
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  Future<void> Function()? get onStartupSourcesExhausted =>
+      _s.widget.onStartupSourcesExhausted;
+  @override
+  String? get traktLastScrobbleAction => _s._trakt.traktLastScrobbleAction;
+  @override
+  bool get simklScrobbleEnabled => _s._simkl.simklScrobbleEnabled;
+  @override
+  set simklLastScrobbleAction(String? v) =>
+      _s._simkl.simklLastScrobbleAction = v;
+  @override
+  void traktScrobble(String action) => _s._trakt.traktScrobble(action);
+  @override
+  void startTraktHeartbeat() => _s._trakt.startTraktHeartbeat();
+  @override
+  void startSimklHeartbeat() => _s._simkl.startSimklHeartbeat();
+  @override
+  void updateMdblistPosition() => _s._mdblist.updateMdblistPosition();
+  @override
+  void mdblistPlay() => _s._mdblist.mdblistPlay();
+}
+
+class _VpStartupFailoverHostAdapter implements VpStartupFailoverHost {
+  _VpStartupFailoverHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  set activeHttpHeaders(Map<String, String>? v) => _s._activeHttpHeaders = v;
+  @override
+  set activePlaylist(List<PlaylistEntry>? v) => _s._activePlaylist = v;
+  @override
+  set cachedSeriesPlaylist(SeriesPlaylist? v) => _s._cachedSeriesPlaylist = v;
+  @override
+  set currentIndex(int v) => _s._currentIndex = v;
+  @override
+  int get currentSourceIndex => _s._currentSourceIndex;
+  @override
+  set currentSourceIndex(int v) => _s._currentSourceIndex = v;
+  @override
+  set currentStreamUrl(String? v) => _s._currentStreamUrl = v;
+  @override
+  int? get effectiveContentEpisode => _s._effectiveContentEpisode;
+  @override
+  int? get effectiveContentSeason => _s._effectiveContentSeason;
+  @override
+  String? get effectiveContentType => _s._effectiveContentType;
+  @override
+  Future<String?> Function(Torrent)? get effectiveResolver =>
+      _s._effectiveResolver;
+  @override
+  List<Torrent>? get effectiveSources => _s._effectiveSources;
+  @override
+  int get playlistIdentityToken => _s._playlistIdentityToken;
+  @override
+  set playlistIdentityToken(int v) => _s._playlistIdentityToken = v;
+  @override
+  bool get screenDisposed => _s._screenDisposed;
+  @override
+  bool get startupGateOverlayHidden => _s._startupGateOverlayHidden;
+  @override
+  set startupGateOverlayHidden(bool v) => _s._startupGateOverlayHidden = v;
+  @override
+  Future<bool> tryOpenStartupVod(
+    String url, {
+    Duration timeout = const Duration(seconds: 12),
+    Map<String, String>? httpHeaders,
+    Torrent? source,
+    int? sourceIndex,
+    int attempt = 1,
+    int maxAttempts = 1,
+  }) => _s._startupCandidates.tryOpenStartupVod(
+    url,
+    timeout: timeout,
+    httpHeaders: httpHeaders,
+    source: source,
+    sourceIndex: sourceIndex,
+    attempt: attempt,
+    maxAttempts: maxAttempts,
+  );
+  @override
+  Future<bool> openStartupDebridDirect(
+    String url, {
+    Map<String, String>? httpHeaders,
+    Torrent? source,
+    int? sourceIndex,
+    int attempt = 1,
+    int maxAttempts = 1,
+    Duration timeout = const Duration(seconds: 12),
+  }) => _s._startupCandidates.openStartupDebridDirect(
+    url,
+    httpHeaders: httpHeaders,
+    source: source,
+    sourceIndex: sourceIndex,
+    attempt: attempt,
+    maxAttempts: maxAttempts,
+    timeout: timeout,
+  );
+  @override
+  String startupSourceFields(int? index, Torrent? source) =>
+      _s._startupCandidates.startupSourceFields(index, source);
+  @override
+  Future<void> commitValidatedStremioSource(Torrent? source) =>
+      _s._startupCandidates.commitValidatedStremioSource(source);
+  @override
+  void setStartupGateActive(bool active) =>
+      _s._startupGate.setStartupGateActive(active);
+  @override
+  void setStartupGateMessage(String message) =>
+      _s._startupGate.setStartupGateMessage(message);
+  @override
+  void setState(VoidCallback fn) => _s._vpSetState(fn);
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  bool get startupFailoverEnabled => _s.widget.startupFailoverEnabled;
+  @override
+  String? get startupResolverProvider => _s.widget.startupResolverProvider;
+  @override
+  SourcePlaylistResolve? get resolveSourceToPlaylist =>
+      _s.widget.resolveSourceToPlaylist;
+  @override
+  String get title => _s.widget.title;
+}
+
+class _VpStartupCandidatesHostAdapter implements VpStartupCandidatesHost {
+  _VpStartupCandidatesHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  AndroidVideoRendererMode get androidVideoRendererMode =>
+      _s._androidVideoRendererMode;
+  @override
+  int get currentSourceIndex => _s._currentSourceIndex;
+  @override
+  Torrent? get openedWatchSource => _s._openedWatchSource;
+  @override
+  mk.Player get player => _s._player;
+  @override
+  bool get rendererFallbackInProgress => _s._rendererFallbackInProgress;
+  @override
+  bool get rendererValidatedForSession => _s._rendererValidatedForSession;
+  @override
+  MediaServerWatchController get serverWatch => _s._serverWatch;
+  @override
+  Future<void> openMedia(
+    mk.Media media, {
+    required bool play,
+    bool? desiredPlay,
+    bool liveStream = false,
+    EpisodePlaybackRequest? request,
+    bool Function()? beforeOpen,
+    Torrent? source,
+    int? preserveStartupEpoch,
+  }) => _s._openMedia(
+    media,
+    play: play,
+    desiredPlay: desiredPlay,
+    liveStream: liveStream,
+    request: request,
+    beforeOpen: beforeOpen,
+    source: source,
+    preserveStartupEpoch: preserveStartupEpoch,
+  );
+  @override
+  Future<void> Function(Torrent)? get onStremioSourceCommitted =>
+      _s.widget.onStremioSourceCommitted;
+  @override
+  bool get isAndroid => VpS2Hooks.isAndroid;
 }
 
 class _VpIptvZapBannerHostAdapter implements VpIptvZapBannerHost {
@@ -11070,7 +10348,7 @@ class _VpIptvChannelSwitchHostAdapter implements VpIptvChannelSwitchHost {
   void hideIptvZapBanner({bool immediate = false}) =>
       _s._iptvBanner.hideIptvZapBanner(immediate: immediate);
   @override
-  void hideSourceSheet() => _s._hideSourceSheet();
+  void hideSourceSheet() => _s._sourceSwitch.hideSourceSheet();
   @override
   String? get iptvChannelKey => _s._iptvChannelKey;
   @override

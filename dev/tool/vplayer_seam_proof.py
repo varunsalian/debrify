@@ -7,6 +7,7 @@ from pathlib import Path
 
 from check_verbatim_moves import ROOT, parse, ensure_parser_package
 from check_dart_moves import check, run_manifest
+from vplayer_checkpoint_proof import run_current_manifest
 from dart_move_history import git_text, load_manifest
 from dart_move_partition import partition
 from check_settings_moves import tokens
@@ -43,7 +44,7 @@ def prove(package, self_test=False):
     sources = {p.relative_to(ROOT).as_posix(): p.read_text()
                for p in (ROOT / 'lib').rglob('*.dart')}
     owned = {path: sources[path] for path in [SOURCE, *manifest['destinations']]}
-    errors = run_manifest(active_path, package)
+    errors = run_current_manifest(active_path, package)
     errors += installation_errors(sources)
     patched = [r for r in seam_ledger['declarations'] if r['fate'] == 'patched']
     assert {r['original'] for r in patched} == {

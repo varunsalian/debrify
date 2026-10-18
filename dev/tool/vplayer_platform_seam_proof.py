@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""S2/S2b/S2c/S2d ownership, default/order and installation/reference guards."""
+"""S2/S2b/S2c/S2d/S2e ownership, default/order and installation/reference guards."""
 import argparse
 import json
 import re
@@ -8,6 +8,7 @@ from pathlib import Path
 from check_verbatim_moves import ROOT, parse, ensure_parser_package
 from check_dart_moves import run_manifest
 from check_settings_moves import tokens
+from vplayer_checkpoint_proof import run_current_manifest
 from dart_move_history import git_text, load_manifest
 from vplayer_source_reader import read
 
@@ -15,6 +16,7 @@ SOURCE = 'lib/screens/video_player_screen.dart'
 MANIFEST = 'dev/tool/dart_moves/vplayer_p8_seam.json'
 S2C_MANIFEST = 'dev/tool/dart_moves/vplayer_p10_seam.json'
 S2D_MANIFEST = 'dev/tool/dart_moves/vplayer_p13_seam.json'
+S2E_MANIFEST = 'dev/tool/dart_moves/vplayer_p16_seam.json'
 HOOK = 'VpS2Hooks'
 S2_SITES = {
     'initState': {'isIOS': 1, 'isAndroid': 1},
@@ -74,6 +76,44 @@ S2D_PATCHES = {
         after=['if', '(', *S2D_SUPPORT, '&&', '!', HOOK, '.', 'isIOS',
                '&&', '_recordingSupported', ')'], count=1),
 }
+
+S2E_SITES = ('_openStartupDebridDirect', '_tryOpenStartupVod')
+S2E_PATCH = dict(before=['Platform', '.', 'isAndroid'],
+                 after=[HOOK, '.', 'isAndroid'], count=1)
+S2E_CONDITION = [
+    'if', '(', 'AndroidRendererStartupFallback', '.', 'isRendererFailure',
+    '(', 'error', ')', '&&', 'AndroidRendererStartupFallback', '.', 'shouldArm',
+    '(', 'isAndroid', ':', HOOK, '.', 'isAndroid', ',',
+    'isAndroidTv', ':', 'PlatformUtil', '.', 'isAndroidTvCached', ',',
+    'mode', ':', '_androidVideoRendererMode', ',',
+    'alreadyValidated', ':', '_rendererValidatedForSession', ',',
+    'fallbackInProgress', ':', '_rendererFallbackInProgress', ',', ')', ')',
+]
+
+
+def candidate_site_errors(members):
+    """Exact short-circuit and argument order; one live predicate per site."""
+    return ['S2e candidate predicate default/count/order changed: ' + name
+            for name in S2E_SITES
+            if len(includes(members.get(name, []), S2E_CONDITION)) != 1
+            or members.get(name, []).count(HOOK) != 1]
+
+
+def candidate_projection_errors(members):
+    """Candidates read each predicate/renderer value live at its original site."""
+    expected = {
+        'isAndroid': ['@', 'override', 'bool', 'get', 'isAndroid', '=>',
+                      HOOK, '.', 'isAndroid', ';'],
+        'androidVideoRendererMode': [
+            '@', 'override', 'AndroidVideoRendererMode', 'get',
+            'androidVideoRendererMode', '=>', '_s', '.',
+            '_androidVideoRendererMode', ';'],
+        **{name: ['@', 'override', 'bool', 'get', name, '=>', '_s', '.',
+                  '_' + name, ';']
+           for name in ['rendererValidatedForSession', 'rendererFallbackInProgress']},
+    }
+    return ['S2e live Host projection changed: ' + name
+            for name, body in expected.items() if members.get(name) != body]
 
 
 def includes(body, seq):
@@ -206,13 +246,26 @@ def prove(package, self_test=False):
                                   for name, patch in S2D_PATCHES.items()}
     assert all(r['fate'] in {'retained', 'patched'} for r in recording['declarations'])
     assert recording['destinations'] == recording['scaffolding'] == {}
+    # Re-derived S2e exhaustively retains the accepted P15 facade.
+    assert recording == load_manifest(S2D_MANIFEST, '1099a0039dab6023aef8c95754e4595e862e9a67')
+    candidates = load_manifest(S2E_MANIFEST)
+    assert candidates['base'] == 'ed7c6717a' and candidates['checkpoint'] == 'S2e'
+    candidate_patches = {r['original']: r['patches'] for r in candidates['declarations']
+                         if r['fate'] == 'patched'}
+    assert candidate_patches == {'_VideoPlayerScreenState.' + n: [S2E_PATCH] for n in S2E_SITES}
+    accepted_candidates = load_manifest(S2E_MANIFEST, '574b2a85e')
+    assert candidate_patches == {
+        r['original']: r['patches'] for r in accepted_candidates['declarations']
+        if r['fate'] == 'patched'}
+    assert all(r['fate'] in {'retained', 'patched'} for r in candidates['declarations'])
+    assert candidates['destinations'] == candidates['scaffolding'] == {}
     applied = []
     for path in (ROOT / 'dev/tool/dart_moves').glob('*.json'):
         candidate = json.loads(path.read_text())
         if isinstance(candidate, dict) and candidate.get('series') == 'vplayer' and candidate.get('status') in {'applied', 'checkpoint'}:
             applied.append((path, candidate))
     active_path, active = max(applied, key=lambda item: (item[1]['phase'], item[1]['status'] == 'applied'))
-    errors = run_manifest(active_path, package)
+    errors = run_current_manifest(active_path, package)
     sources = {p.relative_to(ROOT).as_posix(): p.read_text() for p in (ROOT / 'lib').rglob('*.dart')}
     errors += source_errors(sources)
     unit = parse({SOURCE: sources[SOURCE]}, package, ownership=True)[SOURCE]
@@ -223,6 +276,34 @@ def prove(package, self_test=False):
     state = next(n for n in unit['declarations'] if n['name'] == '_VideoPlayerScreenState')
     renderer_members = {n['name']: [t['text'] for t in n['tokens'] if not t['comment']]
                         for n in state['members'] if n['name'] in {*S2B_SITES, S2C_SITE}}
+    candidate_members = {n['name']: [t['text'] for t in n['tokens'] if not t['comment']]
+                         for n in state['members']
+                         if n['name'] in S2E_SITES}
+    candidate_projection_members = None
+    if not candidate_members:
+        for name in S2E_SITES:
+            resolved = read('_VideoPlayerScreenState.' + name, package)
+            assert resolved['path'] == 'lib/features/video_player/presentation/legacy_video_player/vp_startup_candidates.dart'
+            moved = parse({'live': resolved['source']}, package, ownership=True)['live']['declarations'][0]
+            body = [t['text'] for t in moved['tokens'] if not t['comment']]
+            for member, after in [
+                ('isAndroid', [HOOK, '.', 'isAndroid']),
+                ('androidVideoRendererMode', ['_androidVideoRendererMode']),
+                ('rendererValidatedForSession', ['_rendererValidatedForSession']),
+                ('rendererFallbackInProgress', ['_rendererFallbackInProgress']),
+            ]:
+                before = ['_host', '.', member]
+                hits = includes(body, before)
+                assert len(hits) == 1, (name, member, hits)
+                at = hits[0]
+                body[at:at + len(before)] = after
+            candidate_members[name] = body
+        adapter = next(n for n in unit['declarations'] if n['name'] == '_VpStartupCandidatesHostAdapter')
+        candidate_projection_members = {
+            n['name']: [t['text'] for t in n['tokens'] if not t['comment']]
+            for n in adapter['members']}
+        errors += candidate_projection_errors(candidate_projection_members)
+    errors += candidate_site_errors(candidate_members)
     projection_members = None
     if S2C_SITE not in renderer_members:
         # Resolve and validate the LIVE owner before examining the relocated
@@ -274,6 +355,31 @@ def prove(package, self_test=False):
     negatives = []
     if self_test:
         import copy
+        if candidate_projection_members is not None:
+            for name, before, after in [
+                ('wrong predicate', [HOOK, '.', 'isAndroid'], [HOOK, '.', 'isIOS']),
+                ('override bypassed', [HOOK], ['Platform']),
+                ('cached predicate', [HOOK, '.', 'isAndroid'], ['_cachedAndroid']),
+                ('predicate twice', [HOOK, '.', 'isAndroid'],
+                 [HOOK, '.', 'isAndroid', '&&', HOOK, '.', 'isAndroid']),
+            ]:
+                mutated = copy.deepcopy(candidate_projection_members)
+                body = mutated['isAndroid']
+                hits = includes(body, before)
+                assert len(hits) == 1
+                at = hits[0]
+                body[at:at + len(before)] = after
+                assert candidate_projection_errors(mutated) == [
+                    'S2e live Host projection changed: isAndroid'], name
+                negatives.append('S2e projection: ' + name)
+            for member in ['androidVideoRendererMode', 'rendererValidatedForSession',
+                           'rendererFallbackInProgress']:
+                mutated = copy.deepcopy(candidate_projection_members)
+                body = mutated[member]
+                body[body.index('_s')] = '_cachedState'
+                assert candidate_projection_errors(mutated) == [
+                    'S2e live Host projection changed: ' + member], member
+                negatives.append('S2e projection: cached ' + member)
         for name, getter, old, new in [
             ('wrong iOS default', 'isIOS', 'isIOS', 'isAndroid'),
             ('wrong Android default', 'isAndroid', 'isAndroid', 'isIOS'),
@@ -409,13 +515,53 @@ def prove(package, self_test=False):
                 body[start:end] = condition
                 assert recording_site_errors(mutated), 'independent S2d site guard accepted ' + site + ': ' + name
                 negatives.append('S2d ' + site + ': ' + name)
+        valid_operand_swaps = {}
+        for site in S2E_SITES:
+            for name, before, after in [
+                ('wrong predicate', [HOOK, '.', 'isAndroid'], [HOOK, '.', 'isIOS']),
+                ('override bypassed', [HOOK], ['Platform']),
+                ('predicate twice', [HOOK, '.', 'isAndroid'],
+                 [HOOK, '.', 'isAndroid', '&&', HOOK, '.', 'isAndroid']),
+                ('short-circuit removed', ['error', ')', '&&'], ['error', ')', '&']),
+                # Swap complete boolean operands, preserving both calls and &&.
+                ('operand order', S2E_CONDITION[2:-1],
+                 [*S2E_CONDITION[9:-1], '&&', *S2E_CONDITION[2:8]]),
+                ('argument order', ['isAndroid', ':', HOOK, '.', 'isAndroid', ',',
+                                    'isAndroidTv', ':', 'PlatformUtil', '.', 'isAndroidTvCached'],
+                 ['isAndroidTv', ':', 'PlatformUtil', '.', 'isAndroidTvCached', ',',
+                  'isAndroid', ':', HOOK, '.', 'isAndroid']),
+                ('TV predicate changed', ['isAndroidTvCached'], ['isTelevision']),
+                ('renderer mode changed', ['_androidVideoRendererMode'], ['_cachedMode']),
+                ('validation snapshot changed', ['_rendererValidatedForSession'], ['true']),
+                ('fallback snapshot changed', ['_rendererFallbackInProgress'], ['false']),
+            ]:
+                mutated = copy.deepcopy(candidate_members)
+                body = mutated[site]
+                hits = includes(body, before)
+                assert len(hits) == 1, (site, name, hits)
+                at = hits[0]
+                body[at:at + len(before)] = after
+                assert candidate_site_errors(mutated) == [
+                    'S2e candidate predicate default/count/order changed: ' + site], name
+                if name == 'operand order':
+                    from collections import Counter
+                    assert Counter(before) == Counter(after), site
+                    valid_operand_swaps[site] = 'bool validSwap() => ' + ' '.join(after) + ';'
+                negatives.append('S2e ' + site + ': ' + name)
+        # The actual two swapped expressions must parse: rejection above is
+        # for changed evaluation order, never parser recovery/missing operands.
+        assert set(valid_operand_swaps) == set(S2E_SITES)
+        parse(valid_operand_swaps, package, ownership=True)
     return errors, dict(patched_declarations=len(patched), counted_patches=sum(len(r['patches']) for r in patched), predicate_occurrences=sum(sum(c.values()) for c in SITES.values()),
                         classified_spans=len(checkpoint['declarations']), active_phase=active['phase'], independent_negatives=negatives,
                         s2_declarations_preserved=len(accepted_patches), s2b_sites=len(S2B_SITES),
                         s2c_sites=1, s2c_classified_spans=len(extension['declarations']),
                         s2c_patched_declarations=1, s2c_predicate_occurrences=1,
                         s2d_sites=len(S2D_PATCHES), s2d_classified_spans=len(recording['declarations']),
-                        s2d_patched_declarations=len(recording_patches), s2d_predicate_occurrences=2)
+                        s2d_patched_declarations=len(recording_patches), s2d_predicate_occurrences=2,
+                        s2e_sites=2, s2e_classified_spans=len(candidates['declarations']),
+                        s2e_patched_declarations=2, s2e_predicate_occurrences=2,
+                        s2e_valid_operand_order_negatives=2 if self_test else 0)
 
 
 def main():

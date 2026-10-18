@@ -232,21 +232,19 @@ void main() {
   test(
     'Flutter explicit source picks validate only the selected candidate',
     () {
-      final selection = _between(
-        flutterPlayer,
-        'Future<void> _handleSourceSelected(',
-        'Future<bool> _switchToSourcePlaylist(',
+      final selection = vpSourceDeclaration(
+        '_VideoPlayerScreenState._handleSourceSelected',
       );
-      final directSwitch = _between(
-        flutterPlayer,
-        'Future<void> _switchToStremioSource(',
-        '// ─── Stremio TV Guide',
+      final directSwitch = vpSourceDeclaration(
+        '_VideoPlayerScreenState._switchToStremioSource',
       );
 
       expect(selection, contains('validateExplicitSelection: true'));
-      expect(directSwitch, contains('_tryOpenStartupVod('));
+      // P16 moved the switch into VpSourceSwitch; the candidate probe is
+      // reached through its facade Host.
+      expect(directSwitch, contains('_host.tryOpenStartupVod('));
       expect(directSwitch, contains('previous source restore failed'));
-      expect(directSwitch, isNot(contains('_tryStartupSourceFailover(')));
+      expect(directSwitch, isNot(contains('tryStartupSourceFailover(')));
       expect(
         directSwitch,
         contains('This source is unavailable. Choose another source.'),
@@ -283,22 +281,27 @@ void main() {
       lessThan(resumeBlocked.indexOf('${fields}isReady')),
     );
     expect(
-      flutterPlayer,
-      contains('void _resumeTrackingAfterValidationGate()'),
+      vpSourceDeclaration(
+        '_VideoPlayerScreenState._resumeTrackingAfterValidationGate',
+      ),
+      contains('void resumeTrackingAfterValidationGate()'),
     );
   });
 
   test('Flutter failed playlist picks restore an outgoing direct stream', () {
-    final playlistSwitch = _between(
-      flutterPlayer,
-      'Future<bool> _switchToSourcePlaylist(',
-      'Future<void> _switchToStremioSource(',
+    final playlistSwitch = vpSourceDeclaration(
+      '_VideoPlayerScreenState._switchToSourcePlaylist',
     );
 
     expect(playlistSwitch, contains('final outgoingDirectUrl'));
-    expect(playlistSwitch, contains('_activePlaylist = null'));
+    // P16 moved the playlist switch into VpSourcePlaylistSwitch; State-owned
+    // playback fields are reached through its facade Host.
+    expect(playlistSwitch, contains('_host.activePlaylist = null'));
     expect(playlistSwitch, contains('mk.Media(outgoingDirectUrl'));
-    expect(playlistSwitch, contains('_currentStreamUrl = outgoingDirectUrl'));
+    expect(
+      playlistSwitch,
+      contains('_host.currentStreamUrl = outgoingDirectUrl'),
+    );
   });
 
   test('PikPak keeps cold-storage retries but reports manual exhaustion', () {
@@ -381,17 +384,18 @@ void main() {
         '(requireExactStartupEpisode || host.manualSourceSwitchSnapshot != null)',
       ),
     );
-    expect(flutterPlayer, contains('containsRequestedEpisode = false'));
-    expect(flutterPlayer, contains('if (containsRequestedEpisode)'));
+    final playlistSwitch = vpSourceDeclaration(
+      '_VideoPlayerScreenState._switchToSourcePlaylist',
+    );
+    expect(playlistSwitch, contains('containsRequestedEpisode = false'));
+    expect(playlistSwitch, contains('if (containsRequestedEpisode)'));
   });
 
   test(
     'Flutter startup failures unpin the failed source and still recover',
     () {
-      final startup = _between(
-        flutterPlayer,
-        'Future<bool> _openInitialVodWithFailover(',
-        'Future<void> _commitValidatedStremioSource(',
+      final startup = vpSourceDeclaration(
+        '_VideoPlayerScreenState._openInitialVodWithFailover',
       );
       final directBinding = _between(
         boundPlaybackCode,
@@ -400,7 +404,10 @@ void main() {
       );
 
       expect(startup, isNot(contains('_reportRejectedStremioSource')));
-      expect(flutterPlayer, contains("'startupSourcesExhausted': true"));
+      expect(
+        vpSourceDeclaration('_VideoPlayerScreenState._reportStartupFailure'),
+        contains("'startupSourcesExhausted': true"),
+      );
       expect(
         boundPlaybackCode,
         isNot(contains('_rejectedDirectSourceHandler')),
@@ -533,31 +540,31 @@ void main() {
   });
 
   test('delayed startup recovery waits for the exact player route', () {
+    final failure = vpSourceDeclaration(
+      '_VideoPlayerScreenState._reportStartupFailure',
+    );
+    // P16 moved the report into VpStartupGate; State context/mounted are the
+    // facade Host's live forwarders.
     expect(
-      flutterPlayer,
-      contains('final playerRoute = ModalRoute.of(context)'),
+      failure,
+      contains('final playerRoute = ModalRoute.of(_host.context)'),
     );
     // Mount/retirement checking moved into the local current() guard; follow
     // that indirection while still requiring this exact captured route.
-    final failure = _between(
-      flutterPlayer,
-      'Future<void> _reportStartupFailure(',
-      'void _bindPlayerInstanceSubscriptions(',
-    );
     expect(
       failure,
       matches(
         RegExp(
-          r'bool current\(\)\s*=>\s*mounted\s*&&\s*!_screenDisposed\s*&&\s*'
+          r'bool current\(\)\s*=>\s*_host\.mounted\s*&&\s*!_host\.screenDisposed\s*&&\s*'
           r'\(isCurrent\?\.call\(\)\s*\?\?\s*true\)\s*;',
         ),
       ),
     );
     expect(failure, contains('current() && playerRoute?.isActive == true'));
     expect(
-      flutterPlayer,
+      failure,
       contains(
-        'if (!mounted || !current() || playerRoute?.isCurrent != true) return;',
+        'if (!_host.mounted || !current() || playerRoute?.isCurrent != true) return;',
       ),
     );
   });

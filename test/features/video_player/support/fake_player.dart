@@ -31,10 +31,21 @@ class FakePlayer implements mk.Player {
   Duration framePosition = const Duration(milliseconds: 80);
   void Function()? onOpen;
 
-  Stream<T> channel<T>(String name) => events
-      .putIfAbsent(name, () => StreamController<T>.broadcast())
-      .stream
-      .cast<T>();
+  /// Test observer at the successful open Future exit, after state publication.
+  void Function()? onOpenAcknowledged;
+
+  /// Optional test-boundary observer; ordinary fixtures use the same streams.
+  Stream<dynamic> Function(String, Stream<dynamic>)? observeStream;
+
+  Stream<T> channel<T>(String name) {
+    final stream = events
+        .putIfAbsent(name, () => StreamController<T>.broadcast())
+        .stream
+        .cast<T>();
+    return observeStream == null
+        ? stream
+        : observeStream!(name, stream).cast<T>();
+  }
 
   void emit<T>(String name, T value) {
     channel<T>(name);
@@ -141,6 +152,7 @@ class FakePlayer implements mk.Player {
     emit('playing', play);
     emit('completed', false);
     onOpen?.call();
+    onOpenAcknowledged?.call();
   }
 
   @override
