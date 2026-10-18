@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:debrify/screens/video_player/widgets/player_menu_panel.dart';
 import 'package:debrify/screens/video_player/widgets/channel_guide.dart';
+import 'package:debrify/screens/video_player/widgets/debrify_tv_banner.dart';
 import 'package:debrify/screens/video_player/widgets/tv_controls.dart';
 import 'package:debrify/screens/video_player_screen.dart';
 import 'package:debrify/services/storage/video_progress_storage.dart';
@@ -16,6 +17,7 @@ import 'support/tv_episode_driver.dart';
 /// every TV channel switch, the switched stream becomes the resume identity,
 /// and a failed Debrify open still ends the TV transition.
 void main() {
+  nextMetadataCases();
   const a = 'https://player.test/a.mp4';
   const b = 'https://player.test/b.mp4';
 
@@ -162,6 +164,104 @@ void main() {
           await d.f.advance(t);
           expect(controls().isTransitioning, isFalse);
           expect(d.player.state.playlist.medias.single.uri, a);
+        } finally {
+          await d.close();
+          PlatformUtil.debugSetAndroidTvCached(false);
+        }
+      },
+    );
+  }
+}
+
+void nextMetadataCases() {
+  const b = 'https://player.test/b.mp4';
+  for (final field in ['channelId', 'channelNumber', 'channelName']) {
+    testWidgets(
+      'P17 Debrify next with only $field adopts exactly that channel metadata',
+      (t) async {
+        final d = TvEpisodeDriver(t);
+        await d.initialize();
+        try {
+          await d.mount(
+            screen: VideoPlayerScreen(
+              videoUrl: 'https://player.test/a.mp4',
+              title: 'Film A',
+              channelDirectory: tvDirectory,
+              showChannelName: true,
+              channelName: 'Alpha',
+              channelNumber: 7,
+              requestChannelById: (id) async => null,
+              requestNextChannel: () async => {
+                'url': b,
+                if (field == 'channelId') 'channelId': 'b',
+                if (field == 'channelNumber') 'channelNumber': 12,
+                if (field == 'channelName') 'channelName': 'Cinema',
+              },
+            ),
+          );
+          await d.nextChannel();
+          expect(d.opens.last.uri, b);
+          final g = await d.debrifyGuide();
+          expect(g.currentChannelId, field == 'channelId' ? 'b' : 'a');
+          expect(g.currentChannelNumber, field == 'channelNumber' ? 12 : 7);
+          final plate = t
+              .widgetList<DebrifyTvBanner>(find.byType(DebrifyTvBanner))
+              .first;
+          expect(
+            plate.channelName,
+            field == 'channelName' ? 'Cinema' : 'Alpha',
+          );
+          expect(plate.channelNumber, field == 'channelNumber' ? 12 : 7);
+          expect(d.errors, isEmpty);
+        } finally {
+          await d.close();
+        }
+      },
+    );
+  }
+  for (final payload in ['null', 'throw', 'empty url']) {
+    testWidgets(
+      'P17 Debrify next $payload provider result ends the TV transition',
+      (t) async {
+        final d = TvEpisodeDriver(t);
+        await d.initialize();
+        TvControls controls() => t.widget<TvControls>(find.byType(TvControls));
+        try {
+          PlatformUtil.debugSetAndroidTvCached(true);
+          await d.mount(
+            screen: VideoPlayerScreen(
+              videoUrl: 'https://player.test/a.mp4',
+              title: 'Film A',
+              channelDirectory: tvDirectory,
+              requestChannelById: (id) async => null,
+              requestNextChannel: () async {
+                if (payload == 'throw') throw StateError('next rejected');
+                if (payload == 'null') return null;
+                return {'url': '', 'channelId': 'b'};
+              },
+            ),
+          );
+          final pause = Completer<void>();
+          var entered = false;
+          d.player.beforeOperation = (name, value) async {
+            if (name == 'pause' && !entered) {
+              entered = true;
+              await pause.future;
+            }
+          };
+          final dynamic action = controls().onNextChannel!;
+          final task = d.observe<dynamic>(() => action()) as Future<dynamic>;
+          await d.f.until(t, () => entered);
+          await d.f.advance(t);
+          expect(controls().isTransitioning, isTrue);
+          pause.complete();
+          await d.f.finish(t, task);
+          await d.f.advance(t);
+          expect(controls().isTransitioning, isFalse);
+          expect(
+            d.player.state.playlist.medias.single.uri,
+            'https://player.test/a.mp4',
+          );
         } finally {
           await d.close();
           PlatformUtil.debugSetAndroidTvCached(false);
