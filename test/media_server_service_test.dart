@@ -1489,7 +1489,9 @@ void main() {
       final failover = vpSourceDeclaration(
         '_VideoPlayerScreenState._openInitialVodWithFailover',
       );
-      final candidate = failover.indexOf(': await _tryOpenStartupVod(');
+      // P16 moved the ladder into VpStartupFailover; the probe is reached
+      // through its facade Host.
+      final candidate = failover.indexOf(': await _host.tryOpenStartupVod(');
       expect(candidate, isNonNegative);
       final sourceArgument = failover.indexOf('source: source,', candidate);
       expect(sourceArgument, greaterThan(candidate));

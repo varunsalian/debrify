@@ -240,9 +240,11 @@ void main() {
       );
 
       expect(selection, contains('validateExplicitSelection: true'));
-      expect(directSwitch, contains('_tryOpenStartupVod('));
+      // P16 moved the switch into VpSourceSwitch; the candidate probe is
+      // reached through its facade Host.
+      expect(directSwitch, contains('_host.tryOpenStartupVod('));
       expect(directSwitch, contains('previous source restore failed'));
-      expect(directSwitch, isNot(contains('_tryStartupSourceFailover(')));
+      expect(directSwitch, isNot(contains('tryStartupSourceFailover(')));
       expect(
         directSwitch,
         contains('This source is unavailable. Choose another source.'),
@@ -282,7 +284,7 @@ void main() {
       vpSourceDeclaration(
         '_VideoPlayerScreenState._resumeTrackingAfterValidationGate',
       ),
-      contains('void _resumeTrackingAfterValidationGate()'),
+      contains('void resumeTrackingAfterValidationGate()'),
     );
   });
 
@@ -292,9 +294,14 @@ void main() {
     );
 
     expect(playlistSwitch, contains('final outgoingDirectUrl'));
-    expect(playlistSwitch, contains('_activePlaylist = null'));
+    // P16 moved the playlist switch into VpSourcePlaylistSwitch; State-owned
+    // playback fields are reached through its facade Host.
+    expect(playlistSwitch, contains('_host.activePlaylist = null'));
     expect(playlistSwitch, contains('mk.Media(outgoingDirectUrl'));
-    expect(playlistSwitch, contains('_currentStreamUrl = outgoingDirectUrl'));
+    expect(
+      playlistSwitch,
+      contains('_host.currentStreamUrl = outgoingDirectUrl'),
+    );
   });
 
   test('PikPak keeps cold-storage retries but reports manual exhaustion', () {
@@ -536,14 +543,19 @@ void main() {
     final failure = vpSourceDeclaration(
       '_VideoPlayerScreenState._reportStartupFailure',
     );
-    expect(failure, contains('final playerRoute = ModalRoute.of(context)'));
+    // P16 moved the report into VpStartupGate; State context/mounted are the
+    // facade Host's live forwarders.
+    expect(
+      failure,
+      contains('final playerRoute = ModalRoute.of(_host.context)'),
+    );
     // Mount/retirement checking moved into the local current() guard; follow
     // that indirection while still requiring this exact captured route.
     expect(
       failure,
       matches(
         RegExp(
-          r'bool current\(\)\s*=>\s*mounted\s*&&\s*!_screenDisposed\s*&&\s*'
+          r'bool current\(\)\s*=>\s*_host\.mounted\s*&&\s*!_host\.screenDisposed\s*&&\s*'
           r'\(isCurrent\?\.call\(\)\s*\?\?\s*true\)\s*;',
         ),
       ),
@@ -552,7 +564,7 @@ void main() {
     expect(
       failure,
       contains(
-        'if (!mounted || !current() || playerRoute?.isCurrent != true) return;',
+        'if (!_host.mounted || !current() || playerRoute?.isCurrent != true) return;',
       ),
     );
   });

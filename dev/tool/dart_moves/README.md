@@ -288,3 +288,15 @@ adds one separately observed original stale-ladder case to the unchanged origina
 2,278 outcomes; no old outcome or fixture is re-recorded. All seven theme paths
 are registered and the facade ratchet is 12,876 lines. The clean-tree reduced gate is complete; see Progress and
 `<git-common-dir>/refactor-evidence/vplayer/p15/gate/` for the final proof.
+
+P16 Step 1 applies the FINAL materialization re-derived on accepted P15
+`ed7c6717a` (plus the reviewed S2e seam): five startup/source collaborators
+(`vp_startup_candidates`, `vp_startup_failover`, `vp_startup_gate`,
+`vp_source_switch`, `vp_source_playlist_switch`), 18 moves, two moving fields,
+22 retained occurrences including the regenerated P15 owner adapter's
+`hideSourceSheet`. `draft_vplayer_startup_moves.py` writes the formatted sources
+beneath `refactor-evidence/vplayer/p16/`; Step 1 copies them unchanged. CI
+current/self-test and both analyzer arguments select P16; P1–P15 history adds
+P15 `ed7c6717a`. The P16 analyzer inventory records the receiver-probe identity
+additions (`use_build_context_synchronously` "unrelated mounted" variants on
+three moved members; two facade imports left unused). Facade ratchet 12,154.

@@ -47,7 +47,9 @@ void main() {
       final commit = vpSourceDeclaration(
         '_VideoPlayerScreenState._commitValidatedStremioSource',
       );
-      final watchCommit = commit.indexOf('_serverWatch.commit');
+      // P16 moved the commit into VpStartupCandidates; the State-owned watch
+      // controller is reached through its facade Host.
+      final watchCommit = commit.indexOf('_host.serverWatch.commit');
       final optionalCallback = commit.indexOf('commit == null');
       expect(watchCommit, isNonNegative);
       expect(optionalCallback, greaterThan(watchCommit));

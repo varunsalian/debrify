@@ -362,6 +362,11 @@ test/features/video_player/video_player_trakt_validation_test.dart
 test/features/video_player/video_player_wakelock_test.dart
 test/features/video_player/video_player_zap_categories_test.dart
 test/features/video_player/video_player_zap_test.dart
+test/iptv_channel_sheet_responsive_test.dart
+test/iptv_epg_service_test.dart
+test/iptv_live_recovery_test.dart
+test/iptv_player_paging_test.dart
+test/iptv_zap_banner_test.dart
 test/manual_source_validation_contract_test.dart
 test/media_server_client_test.dart
 test/media_server_library_client_test.dart
