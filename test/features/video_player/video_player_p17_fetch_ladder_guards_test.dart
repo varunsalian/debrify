@@ -662,4 +662,44 @@ void main() {
       }
     },
   );
+
+  testWidgets(
+    'P17 single resolved stream with an episode but no season is stamped and played',
+    (t) async {
+      final d = TvEpisodeDriver(t);
+      await d.initialize();
+      final found = episodeSource('Found.S01E02');
+      try {
+        await d.mount(
+          screen: VideoPlayerScreen(
+            videoUrl: 'https://player.test/a.mp4',
+            title: 'Show.S01E01.mkv',
+            contentType: 'series',
+            contentSeason: 1,
+            contentEpisode: 1,
+            seriesSourceFetcher: SeriesSourceFetcher(
+              season: 1,
+              episode: 1,
+              searchEpisodes: (s, e) async => [found],
+              searchPacks: (s, e) async => [],
+            ),
+            resolveSourceToPlaylist: (s, {canContinue}) async => [
+              PlaylistEntry(url: s.directUrl!, title: 'Show E02'),
+            ],
+          ),
+        );
+        final b = await d.browser();
+        await d.f.finish<dynamic>(
+          t,
+          d.observe<dynamic>(() => b.onEpisodeSelected(1, 2)),
+        );
+        await d.f.actions.settle(t);
+        expect(d.opens, hasLength(2));
+        expect(d.opens.last.uri, found.directUrl);
+        expect(d.errors, isEmpty);
+      } finally {
+        await d.close();
+      }
+    },
+  );
 }
