@@ -563,4 +563,64 @@ void main() {
       },
     );
   }
+
+  for (final stage in ['existing', 'episodes', 'packs']) {
+    testWidgets('P17 $stage stage stops at the first committed candidate', (
+      t,
+    ) async {
+      final d = TvEpisodeDriver(t);
+      await d.initialize();
+      final type = stage == 'packs' ? StreamType.torrent : StreamType.directUrl;
+      final winner = episodeSource('Winner.S01E02', type: type);
+      final spare = episodeSource('Spare.S01E02', type: type);
+      final allowed = <String>[];
+      try {
+        await d.mount(
+          screen: VideoPlayerScreen(
+            videoUrl: 'https://player.test/a.mp4',
+            title: 'Show.S01E01.mkv',
+            contentType: 'series',
+            contentSeason: 1,
+            contentEpisode: 1,
+            stremioSources: [
+              episodeSource('Original.S01E01'),
+              if (stage == 'existing') ...[winner, spare],
+            ],
+            seriesSourceFetcher: SeriesSourceFetcher(
+              season: 1,
+              episode: 1,
+              searchEpisodes: (s, e) async =>
+                  stage == 'episodes' ? [winner, spare] : [],
+              searchPacks: (s, e) async =>
+                  stage == 'packs' ? [winner, spare] : [],
+              validateCandidate: (source) async {
+                allowed.add(source.name);
+                return true;
+              },
+            ),
+            resolveSourceToPlaylist: (s, {canContinue}) async => [
+              PlaylistEntry(
+                url: s.directUrl!,
+                title: stage == 'packs' ? 'Unparseable' : s.displayTitle,
+              ),
+            ],
+          ),
+        );
+        allowed.clear();
+        final b = await d.browser();
+        await d.f.finish<dynamic>(
+          t,
+          d.observe<dynamic>(() => b.onEpisodeSelected(1, 2)),
+        );
+        await d.f.actions.settle(t);
+        await d.f.advance(t, const Duration(seconds: 1));
+        expect(allowed, [winner.name]);
+        expect(d.opens, hasLength(2));
+        expect(d.opens.last.uri, winner.directUrl);
+        expect(d.errors, isEmpty);
+      } finally {
+        await d.close();
+      }
+    });
+  }
 }
