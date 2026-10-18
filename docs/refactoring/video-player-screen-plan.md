@@ -8147,6 +8147,48 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
   physical incoming row), all passing in the full suite. Device checks remain on
   the end-of-series checklist.
 
+### 2026-10-19 — Phase 17 Step 0 complete after accepted-P16 rebase (executor: Claude)
+
+- Branch rebased onto accepted M3 `2ee7e94ac`; FINAL generator
+  (`draft_vplayer_tv_episode_moves.py`, `BASE=2ee7e94ac`) reports zero
+  comparison differences; only `_showChannelGuideOverlay` and
+  `_tryEpisodeCandidate` changed text since `be4cd78aa` (P16 receiver
+  rewrites). Production/pubspec unchanged against `2ee7e94ac`.
+- **Open-mutant closure.** The 296 Step-0 points still OPEN at the
+  `be4cd78aa` sweep were relocated onto the rebased original (UTF-16 →
+  char offsets, occurrence-index matching) and re-run serially
+  (`rebase/run_open.py`, family file groups): 295 relocated + `point_826`
+  (not textually relocatable: P16 rewrote the receiver inside the deleted
+  `final outcome = …` statement; deletion leaves `outcome` undefined →
+  compile-invalid, uncredited). Run: **201 killed, 28 compile-invalid
+  (uncredited; mostly null-promotion breaks), 66 survived**. Every survivor
+  is closed: **50** by new tests proved against the exact relocated mutant
+  (`prove.py`, scratch worktree, positive control first), **2** by existing
+  `video_player_p17_diagnostics_test.dart` outside the point's family group
+  (`point_848/849`), **14** documented equivalences
+  (`rebase/equivalences.json`), of which `point_822` is explicitly
+  **timing-only** (residual debounced-save tick inside the switch window;
+  not deterministic without a seam) and flagged to the independent reviewer.
+- New tests: `video_player_p17_channel_state_test.dart` (17: subtitle-sync
+  reset and checkpoint ownership per route, Debrify by-id/next failure plates
+  and transition ends, single-field channel metadata, banner re-raise/fade
+  unmount, random start waits for switched duration) and
+  `video_player_p17_fetch_ladder_guards_test.dart` (24: pinned/existing/
+  episodes/packs staleness and first-commit stops, post-search staleness,
+  short-list exhaustion, preferred-missing notice, navigation generation,
+  existing-stage start index, disposed blocked fetch, curtain drop,
+  partial-identity stamping, forced-series pack match incl. index 0,
+  early-guide metadata preload, stale auto-advance flag). Both pass alone;
+  format/analyze clean.
+- Frozen reduced-gate inventory `dev/tool/vplayer_p17_test_inventory.txt`
+  (438 files = P16 non-video-player entries + every
+  `test/features/video_player/**` suite + the two P17 readers). Baseline run
+  on the original pending in `p17/gate/original.jsonl`.
+- Evidence `refactor-evidence/vplayer/p17/rebase/` (`open-results.json`,
+  `prove-*.log`, `equivalences.json`, `point_826.json`,
+  `closure-summary.json`). Next: independent mutation sample (review agent),
+  Step 0b, Step 1.
+
 ## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
 
 Reviewed at `c5c8e3500` (facade byte-identical to `be4cd78aa`; split,
