@@ -436,3 +436,4 @@ test/source_sheet_test.dart
 test/stremio_tv_mediakit_startup_test.dart
 test/theme/source_guard_test.dart
 test/tracking_source_policy_test.dart
+test/features/video_player/video_player_p17_review_gaps_test.dart

@@ -4227,6 +4227,24 @@ Phone, Android TV (Flutter player), tvOS and desktop.
 - A guide-only Simkl/MDBList read can warm its snapshot even when policy masks
   that provider's progress. A later selected-provider resume can use that cached
   value after storage changes; cache freshness is separate follow-up work.
+- **Storage-boundary CI guard red since Phase 5 (series test debt; exit
+  Phase 21 CI step).** `dev/tool/check_storage_references.py` fails on
+  `refactor/codebase` (`2ee7e94ac`) and identically on P17: 51 findings, all
+  in `test/features/video_player/**` characterization suites/drivers, calling
+  the storage-internal `PlaybackStateStore.getPlaybackStateMap` /
+  `savePlaybackStateMap` to inspect or seed physical resume maps. First
+  introduced by the Phase-5 Step-0 Trakt suite (`1347a5ad8`, 2026-10-12);
+  unnoticed because GitHub Actions has run no job since billing stopped.
+  Production code is clean. Resolution must keep the physical-map assertions
+  (they are the profile-write evidence) — e.g. a test-only storage inspection
+  seam inside `lib/services/storage/` or a scoped, documented test exemption
+  in the guard — not deleting assertions or weakening the production rule.
+- **Phase-17 Step-0b production-equivalent survivors (recorded, not
+  tested):** G5 (`imdbId` argument of the episode sheet) and G6 (synthetic
+  guide built without `canFetch`) differ only for a hand-supplied upper-case
+  custom-series id, or for an in-place `VideoPlayerScreen` reconfiguration
+  that no production route performs. Arguments in
+  `refactor-evidence/vplayer/p17/step0b/dispositions.json`.
 
 
 ## Progress
@@ -8188,6 +8206,65 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
   `prove-*.log`, `equivalences.json`, `point_826.json`,
   `closure-summary.json`). Next: independent mutation sample (review agent),
   Step 0b, Step 1.
+
+### 2026-10-19 — Phase 17 Step 0b, Step 1 + reduced gate (executor: Claude)
+
+- **Independent mutation sample** (review agent, fresh context, original
+  `14bca18dd`, 48 own mutants across Debrify/Stremio channels, banner, fetch
+  ladder and guide): **40/48 killed (83.3%)**, none compile-invalid, control
+  337/337; "No P1s". Equivalence audit accepted 533, 538, 545, 703, 734, 776,
+  786, 823, 826, 838, 839, 887, 895; corrected 537's reason (it collapses to
+  538); **rejected 822** (testable with the fake player's held pause and the
+  6 s autosave tick).
+- **Step 0b closure.** New `video_player_p17_review_gaps_test.dart` (8 cases)
+  proved serially against the exact reviewer mutants in a scratch worktree,
+  positive control first (`step0b/prove-review-gaps.log`): D8 (first-seen
+  next-channel URL keeps the session headers — the existing assertion was
+  masked by media_kit's static `Media.cache` when an earlier case had opened
+  the same URI), B2 (next-channel landing under the open player menu raises no
+  floating banner; the control case raises it), S6 (Stremio pick without an
+  index resets a non-zero index to 0), E1 (existing stage never re-tries the
+  playing source), E10 (candidate stale during validation never reaches the
+  resolver), E11 (resolver `canContinue` reports the abandoned request), and
+  point_822 (debounced save cannot rewrite the outgoing episode while a guide
+  pick holds its pause) — **7/7 killed**. G5/G6 recorded as
+  production-equivalent with arguments (Follow-ups,
+  `step0b/dispositions.json`) for the post-gate reviewer. The new file passes
+  on the original and on Step 1; it joins the reduced-gate inventory (439) and
+  the CI behaviour list, together with the two Step-0 closure files.
+- **Step 1 (`36ec28e17`).** Before copying, the generator's per-file import
+  templates were corrected — sorted `dart:`/`package:` sections (P16 layout)
+  and `media_kit` dropped from `vp_episode_fetch` (unused) — and the FINAL
+  comparison re-run: zero differences, directives only. The FINAL output was
+  copied unchanged into `lib/`: `vp_debrify_tv_channels` 380,
+  `vp_debrify_tv_banner` 90, `vp_stremio_tv_channels` 304, `vp_episode_fetch`
+  426, `vp_episode_guide` 118; 25 moves, 36 retained references, 44 protected
+  earlier destinations. Facade **12,154 → 11,583** (ratchet). P17 checker
+  current/self-test and P16 history at `c094c864c`: exhaustive ownership,
+  0 differences. CI current/self-test + analyzer → P17. Theme/source-guard
+  lists gain the five files.
+- **Analyzer.** Allowlist: one facade import (`playlist_sheet.dart`) left
+  unused by the verbatim move (P15/P16 precedent; end-state cleanup). P17
+  inventory additions: that import, and `curly_braces_in_flow_control_structures`
+  on `_showPlaylistSheet` — the original single-line `if (...) return;` exceeds
+  80 columns after the `_host.` receiver rewrite, so the formatter wraps it and
+  the single-line exemption no longer applies. Comparator: 178 scoped,
+  0 additions.
+- **Reader retarget.** `android_tv_mdblist_progress_source_test.dart` now reads
+  `metadataReady: _host.episodeMetadataReady` from the moved guide plus the live
+  `_VpEpisodeGuideHostAdapter` forwarder (`_s._episodeMetadataReady`);
+  `player_auto_next_routing_test.dart` already switches on the manifest status.
+  Other readers unchanged and passing (the PiP startup-shield failure is the
+  pre-existing one).
+- **Reduced gate.** The frozen 438-suite inventory ran serially on the
+  original (`14bca18dd`) and on `36ec28e17`: all 438 suites loaded in both;
+  **3,008 cases, identical outcomes by (suite, name)** — 3,007 successes and
+  the single pre-existing PiP startup-shield source-text failure
+  (`p17/gate/compare.txt`). Mechanical: format, file sizes, storage keys,
+  search/vplayer architecture, seam and platform-seam proofs (incl. negatives)
+  pass. `check_storage_references.py` fails identically on `2ee7e94ac`
+  (series test debt since Phase 5 — Follow-ups). Next: independent post-gate
+  review, merge, then Phase 18 (M4 after it).
 
 ## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
 
