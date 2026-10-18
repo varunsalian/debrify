@@ -4229,11 +4229,15 @@ Phone, Android TV (Flutter player), tvOS and desktop.
   value after storage changes; cache freshness is separate follow-up work.
 - **Storage-boundary CI guard red since Phase 5 (series test debt; exit
   Phase 21 CI step).** `dev/tool/check_storage_references.py` fails on
-  `refactor/codebase` (`2ee7e94ac`) and identically on P17: 51 findings, all
-  in `test/features/video_player/**` characterization suites/drivers, calling
-  the storage-internal `PlaybackStateStore.getPlaybackStateMap` /
-  `savePlaybackStateMap` to inspect or seed physical resume maps. First
-  introduced by the Phase-5 Step-0 Trakt suite (`1347a5ad8`, 2026-10-12);
+  `refactor/codebase` (`2ee7e94ac`, 51 findings; identical after P17 Step 1)
+  and on the P17 gate head with 53 — the two extra are the P17 review-gaps
+  suite's `PlaybackStateStore.getPlaybackStateMap` reads. All findings are in
+  `test/features/video_player/**` characterization suites/drivers: 52 call the
+  storage-internal `PlaybackStateStore.getPlaybackStateMap` /
+  `savePlaybackStateMap` to inspect or seed physical resume maps, and one is
+  `PlaybackIdentityStorage.seriesProgressKey` in
+  `support/local_completion_driver.dart` (Phase 7). First introduced by the
+  Phase-5 Step-0 Trakt suite (`1347a5ad8`, 2026-10-12);
   unnoticed because GitHub Actions has run no job since billing stopped.
   Production code is clean. Resolution must keep the physical-map assertions
   (they are the profile-write evidence) — e.g. a test-only storage inspection
@@ -4243,7 +4247,8 @@ Phone, Android TV (Flutter player), tvOS and desktop.
   tested):** G5 (`imdbId` argument of the episode sheet) and G6 (synthetic
   guide built without `canFetch`) differ only for a hand-supplied upper-case
   custom-series id, or for an in-place `VideoPlayerScreen` reconfiguration
-  that no production route performs. Arguments in
+  that no production route performs (G6 also has a same-frame window after
+  the direct-launch rollback clears the playlist; see the addendum). Arguments in
   `refactor-evidence/vplayer/p17/step0b/dispositions.json`.
 
 
@@ -8265,6 +8270,28 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
   pass. `check_storage_references.py` fails identically on `2ee7e94ac`
   (series test debt since Phase 5 — Follow-ups). Next: independent post-gate
   review, merge, then Phase 18 (M4 after it).
+
+### 2026-10-19 — Phase 17 independent post-gate review (review agent) — "No P1s"
+
+- Range `2ee7e94ac..a1583e9c8`; report
+  `refactor-evidence/vplayer/p17/review/post-gate-review.md`. Reviewer re-ran
+  the P17 move checker (current, `--self-test`, P16 history at `c094c864c`;
+  0 differences), CI analyze + allowlist + vplayer comparator (178 scoped,
+  0 additions), format, sizes, the review-gaps suite (8/8 twice) and the
+  retargeted readers (24/24), diffed all 25 moved members and recounted the
+  gate (438 suites, 3,008 cases, identical).
+- **P2 (fixed):** the storage-guard Follow-up misstated the count and kind —
+  now 51 at base / 53 at the gate head, one finding is
+  `PlaybackIdentityStorage.seriesProgressKey`.
+- **P3 (folded):** G6 disposition gains the direct-launch rollback window;
+  point_822 asserts parsed `positionMs` values instead of JSON substrings
+  (re-proved: control survives, mutant killed —
+  `p17/step0b/prove-822-parsed.log`). Recorded only: `step1/mech.log` invoked
+  `theme_rendered_set.py` without arguments (a usage error, not a check — the
+  theme coverage is the source-guard/manifest lists, which pass);
+  `step1/readers.log` predates the reader retarget (passing run is in the
+  gate); the two Step-0 suites joined `ci_behavior_tests.txt` in the gate
+  commit rather than the commits that created them.
 
 ## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
 

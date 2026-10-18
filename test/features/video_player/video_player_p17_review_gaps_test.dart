@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:debrify/screens/video_player/widgets/player_menu_panel.dart';
 import 'package:debrify/screens/video_player/widgets/debrify_tv_banner.dart';
 import 'package:debrify/screens/video_player/widgets/sleep_timer_sheet.dart';
@@ -345,10 +344,10 @@ void main() {
         };
         final task = d.observe<dynamic>(() => b.onEpisodeSelected(1, 3));
         await d.f.until(t, () => entered);
-        final atHold = jsonEncode(
+        final atHold = _storedPositions(
           await d.f.finish(t, PlaybackStateStore.getPlaybackStateMap()),
         );
-        expect(atHold, contains('300000'));
+        expect(atHold, contains(300000));
         // The outgoing stream keeps reporting progress while the switch is
         // parked on its pause; the 6 s autosave tick fires inside the hold.
         d.player.state = d.player.state.copyWith(
@@ -356,11 +355,11 @@ void main() {
         );
         d.player.emit('position', d.player.state.position);
         await d.f.advance(t, const Duration(seconds: 7));
-        final afterTick = jsonEncode(
+        final afterTick = _storedPositions(
           await d.f.finish(t, PlaybackStateStore.getPlaybackStateMap()),
         );
-        expect(afterTick, isNot(contains('420000')));
-        expect(afterTick, contains('300000'));
+        expect(afterTick, isNot(contains(420000)));
+        expect(afterTick, contains(300000));
         pause.complete();
         await d.f.finish<dynamic>(t, task as Future<dynamic>);
         await d.f.actions.settle(t);
@@ -373,3 +372,13 @@ void main() {
     },
   );
 }
+
+/// Every `positionMs` stored anywhere in the physical resume map.
+List<Object?> _storedPositions(Object? node) => switch (node) {
+  Map() => [
+    if (node.containsKey('positionMs')) node['positionMs'],
+    for (final v in node.values) ..._storedPositions(v),
+  ],
+  List() => [for (final v in node) ..._storedPositions(v)],
+  _ => const [],
+};
