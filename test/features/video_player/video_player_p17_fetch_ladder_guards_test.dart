@@ -378,4 +378,74 @@ void main() {
       }
     },
   );
+
+  for (final stage in ['existing', 'episodes', 'packs']) {
+    testWidgets(
+      'P17 $stage stage stops after an unavailable candidate went stale',
+      (t) async {
+        final d = TvEpisodeDriver(t);
+        await d.initialize();
+        final type = stage == 'packs'
+            ? StreamType.torrent
+            : StreamType.directUrl;
+        final first = episodeSource('First.S01E02', type: type);
+        final second = episodeSource('Second.S01E02', type: type);
+        final gate = Completer<bool>();
+        final trace = <String>[];
+        try {
+          await d.mount(
+            screen: VideoPlayerScreen(
+              videoUrl: 'https://player.test/a.mp4',
+              title: 'Show.S01E01.mkv',
+              contentType: 'series',
+              contentSeason: 1,
+              contentEpisode: 1,
+              stremioSources: [
+                episodeSource('Original.S01E01'),
+                if (stage == 'existing') ...[first, second],
+              ],
+              seriesSourceFetcher: SeriesSourceFetcher(
+                season: 1,
+                episode: 1,
+                resolveAdjacentEpisode: (s, e, direction) async =>
+                    (season: 1, episode: 2),
+                searchEpisodes: (s, e) async {
+                  trace.add('episodes');
+                  return stage == 'episodes' ? [first, second] : [];
+                },
+                searchPacks: (s, e) async {
+                  trace.add('packs');
+                  return stage == 'packs' ? [first, second] : [];
+                },
+                validateCandidate: (source) {
+                  trace.add('allow:${source.name}');
+                  return source == first ? gate.future : Future.value(false);
+                },
+              ),
+              resolveSourceToPlaylist: (s, {canContinue}) async => [
+                PlaylistEntry(url: s.directUrl!, title: s.displayTitle),
+              ],
+            ),
+          );
+          trace.clear();
+          d.player.emit('completed', true);
+          await d.f.until(t, () => trace.contains('allow:${first.name}'));
+          await _expireSleep(t, d);
+          gate.complete(false);
+          await d.f.actions.settle(t);
+          await d.f.advance(t, const Duration(seconds: 1));
+          expect(trace, [
+            if (stage != 'existing') 'episodes',
+            if (stage == 'packs') 'packs',
+            'allow:${first.name}',
+          ]);
+          expect(d.opens, hasLength(1));
+          expect(d.errors, isEmpty);
+        } finally {
+          if (!gate.isCompleted) gate.complete(false);
+          await d.close();
+        }
+      },
+    );
+  }
 }
