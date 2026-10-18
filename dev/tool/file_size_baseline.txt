@@ -19,7 +19,8 @@
 # 2026-10-14 vplayer P10 Step 1: five frozen subtitle apply moves; facade ratchet lowered 16603 -> 16477; exit: remaining declared video-player phases (D6).
 # 2026-10-15: Phase 14 resume extraction; remaining player workflows exit in phases 15–21.
 # 2026-10-18: Phase 16 startup + source switching extraction; remaining player workflows exit in phases 17–21.
-12154 lib/screens/video_player_screen.dart
+# 2026-10-19: Phase 17 TV channels, Debrify TV banner, episode fetch + synthetic guide extraction; remaining player workflows exit in phases 18–21.
+11583 lib/screens/video_player_screen.dart
 6919 lib/services/profiles/profile_registry.dart
 6478 android/app/src/main/java/com/debrify/app/tv/TorboxTvPlayerActivity.java
 5475 lib/services/remote_control/remote_command_router.dart

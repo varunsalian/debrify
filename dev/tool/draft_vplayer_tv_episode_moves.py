@@ -52,9 +52,15 @@ IMPORTS={
  'VpDebrifyTvChannels': COMMON+"import 'package:debrify/screens/video_player/models/channel_entry.dart';\n",
  'VpDebrifyTvBanner':"import 'dart:async';\nimport 'package:flutter/foundation.dart';\nimport 'package:debrify/screens/video_player/constants/timing_constants.dart';\nimport 'package:debrify/screens/video_player/services/playback_ui_clock.dart';\n",
  'VpStremioTvChannels': COMMON,
- 'VpEpisodeFetch': COMMON+"import 'package:debrify/models/playlist_entry.dart';\nimport 'package:debrify/models/series_playlist.dart';\nimport 'package:debrify/models/source_playlist_resolver.dart';\nimport 'package:debrify/services/series_source_fetcher.dart';\nimport 'package:debrify/utils/series_parser.dart';\nimport 'package:debrify/services/source_selection_diagnostics.dart';\nimport 'package:debrify/features/video_player/application/vp_format.dart';\nimport 'package:debrify/features/video_player/models/vp_season_episode_selection.dart';\n",
+ 'VpEpisodeFetch': COMMON.replace("import 'package:media_kit/media_kit.dart' as mk;\n","")+"import 'package:debrify/models/playlist_entry.dart';\nimport 'package:debrify/models/series_playlist.dart';\nimport 'package:debrify/models/source_playlist_resolver.dart';\nimport 'package:debrify/services/series_source_fetcher.dart';\nimport 'package:debrify/utils/series_parser.dart';\nimport 'package:debrify/services/source_selection_diagnostics.dart';\nimport 'package:debrify/features/video_player/application/vp_format.dart';\nimport 'package:debrify/features/video_player/models/vp_season_episode_selection.dart';\n",
  'VpEpisodeGuide':"import 'package:flutter/material.dart';\nimport 'package:debrify/models/playlist_entry.dart';\nimport 'package:debrify/models/playlist_view_mode.dart';\nimport 'package:debrify/models/series_playlist.dart';\nimport 'package:debrify/models/torrent.dart';\nimport 'package:debrify/utils/episode_playback_request.dart';\nimport 'package:debrify/utils/series_parser.dart';\nimport 'package:debrify/screens/video_player/widgets/playlist_sheet.dart';\nimport 'package:debrify/features/video_player/application/vp_format.dart';\n",
 }
+
+def sorted_imports(block):
+ """P16 layout: dart: section, blank line, sorted package: section."""
+ lines=sorted(set(l for l in block.splitlines() if l))
+ dart=[l for l in lines if l.startswith("import 'dart:")];rest=[l for l in lines if l not in dart]
+ return '\n\n'.join('\n'.join(x) for x in (dart,rest) if x)+'\n'
 
 def build(package):
  original=git_text(BASE,SOURCE)
@@ -115,7 +121,7 @@ def build(package):
   elif not key.startswith(STATE+'.'):spec['span_order'].insert(spec['span_order'].index(STATE+':close')+1,key)
  bykey={r['original']:r for r in spec['declarations']};facade=''.join(scaff[k]+'\n' if k in scaff else edited_text(original,spans[k],bykey[k].get('substitutions',[])+bykey[k].get('patches',[])) for k in spec['span_order']);pu=parse({SOURCE:facade},package,ownership=True)[SOURCE];physical,orders,_=partition(pu,[STATE]);spec['facade_orders']=orders;spec['facade_directives']=pu['directives'];spec['scaffolding'][SOURCE]=frozen({k:physical[k] for k in scaff});sources={SOURCE:facade}
  for g in GROUPS:
-  c=g['name'];host=c+'Host';dest=IMPORTS[c]+'abstract interface class '+host+' {\n'+''.join('  '+f.split(' => ')[0]+';\n' for f in g['forwarders'])+'}\n\nclass '+c+' {\n  '+c+'(this._host);\n  final '+host+' _host;\n'
+  c=g['name'];host=c+'Host';dest=sorted_imports(IMPORTS[c])+'abstract interface class '+host+' {\n'+''.join('  '+f.split(' => ')[0]+';\n' for f in g['forwarders'])+'}\n\nclass '+c+' {\n  '+c+'(this._host);\n  final '+host+' _host;\n'
   for row in spec['declarations']:
    if row['fate']=='moved' and row['destination']==g['dest']:dest+=edited_text(original,spans[row['original']],row.get('substitutions',[]))
   dest+='\n}\n';sources[g['dest']]=dest;pu=parse({g['dest']:dest},package,ownership=True)[g['dest']];physical,orders,_=partition(pu,[c]);targets={r['target'] for r in spec['declarations'] if r['fate']=='moved' and r['destination']==g['dest']};spec['destinations'][g['dest']]=dict(directives=pu['directives'],orders=orders,span_order=list(physical),split_containers=[c]);spec['scaffolding'][g['dest']]=frozen({k:v for k,v in physical.items() if k not in targets})

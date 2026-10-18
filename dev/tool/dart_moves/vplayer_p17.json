@@ -2,7 +2,7 @@
   "schema": 1,
   "series": "vplayer",
   "phase": 17,
-  "status": "FINAL",
+  "status": "applied",
   "base": "2ee7e94ac",
   "source": "lib/screens/video_player_screen.dart",
   "feature": "lib/features/video_player",
@@ -922,11 +922,11 @@
     "lib/features/video_player/presentation/legacy_video_player/vp_debrify_tv_channels.dart": {
       "directives": [
         "import 'dart:async';",
-        "import 'package:flutter/material.dart';",
-        "import 'package:media_kit/media_kit.dart' as mk;",
-        "import 'package:debrify/utils/episode_playback_request.dart';",
         "import 'package:debrify/models/torrent.dart';",
-        "import 'package:debrify/screens/video_player/models/channel_entry.dart';"
+        "import 'package:debrify/screens/video_player/models/channel_entry.dart';",
+        "import 'package:debrify/utils/episode_playback_request.dart';",
+        "import 'package:flutter/material.dart';",
+        "import 'package:media_kit/media_kit.dart' as mk;"
       ],
       "orders": {
         "@directives": [
@@ -978,9 +978,9 @@
     "lib/features/video_player/presentation/legacy_video_player/vp_debrify_tv_banner.dart": {
       "directives": [
         "import 'dart:async';",
-        "import 'package:flutter/foundation.dart';",
         "import 'package:debrify/screens/video_player/constants/timing_constants.dart';",
-        "import 'package:debrify/screens/video_player/services/playback_ui_clock.dart';"
+        "import 'package:debrify/screens/video_player/services/playback_ui_clock.dart';",
+        "import 'package:flutter/foundation.dart';"
       ],
       "orders": {
         "@directives": [
@@ -1028,10 +1028,10 @@
     "lib/features/video_player/presentation/legacy_video_player/vp_stremio_tv_channels.dart": {
       "directives": [
         "import 'dart:async';",
-        "import 'package:flutter/material.dart';",
-        "import 'package:media_kit/media_kit.dart' as mk;",
+        "import 'package:debrify/models/torrent.dart';",
         "import 'package:debrify/utils/episode_playback_request.dart';",
-        "import 'package:debrify/models/torrent.dart';"
+        "import 'package:flutter/material.dart';",
+        "import 'package:media_kit/media_kit.dart' as mk;"
       ],
       "orders": {
         "@directives": [
@@ -1087,18 +1087,17 @@
     "lib/features/video_player/presentation/legacy_video_player/vp_episode_fetch.dart": {
       "directives": [
         "import 'dart:async';",
-        "import 'package:flutter/material.dart';",
-        "import 'package:media_kit/media_kit.dart' as mk;",
-        "import 'package:debrify/utils/episode_playback_request.dart';",
-        "import 'package:debrify/models/torrent.dart';",
+        "import 'package:debrify/features/video_player/application/vp_format.dart';",
+        "import 'package:debrify/features/video_player/models/vp_season_episode_selection.dart';",
         "import 'package:debrify/models/playlist_entry.dart';",
         "import 'package:debrify/models/series_playlist.dart';",
         "import 'package:debrify/models/source_playlist_resolver.dart';",
+        "import 'package:debrify/models/torrent.dart';",
         "import 'package:debrify/services/series_source_fetcher.dart';",
-        "import 'package:debrify/utils/series_parser.dart';",
         "import 'package:debrify/services/source_selection_diagnostics.dart';",
-        "import 'package:debrify/features/video_player/application/vp_format.dart';",
-        "import 'package:debrify/features/video_player/models/vp_season_episode_selection.dart';"
+        "import 'package:debrify/utils/episode_playback_request.dart';",
+        "import 'package:debrify/utils/series_parser.dart';",
+        "import 'package:flutter/material.dart';"
       ],
       "orders": {
         "@directives": [
@@ -1113,8 +1112,7 @@
           "@directive:8",
           "@directive:9",
           "@directive:10",
-          "@directive:11",
-          "@directive:12"
+          "@directive:11"
         ],
         "": [
           "VpEpisodeFetchHost",
@@ -1142,7 +1140,6 @@
         "@directive:9",
         "@directive:10",
         "@directive:11",
-        "@directive:12",
         "VpEpisodeFetchHost",
         "VpEpisodeFetch:header",
         "VpEpisodeFetch.VpEpisodeFetch",
@@ -1161,15 +1158,15 @@
     },
     "lib/features/video_player/presentation/legacy_video_player/vp_episode_guide.dart": {
       "directives": [
-        "import 'package:flutter/material.dart';",
+        "import 'package:debrify/features/video_player/application/vp_format.dart';",
         "import 'package:debrify/models/playlist_entry.dart';",
         "import 'package:debrify/models/playlist_view_mode.dart';",
         "import 'package:debrify/models/series_playlist.dart';",
         "import 'package:debrify/models/torrent.dart';",
+        "import 'package:debrify/screens/video_player/widgets/playlist_sheet.dart';",
         "import 'package:debrify/utils/episode_playback_request.dart';",
         "import 'package:debrify/utils/series_parser.dart';",
-        "import 'package:debrify/screens/video_player/widgets/playlist_sheet.dart';",
-        "import 'package:debrify/features/video_player/application/vp_format.dart';"
+        "import 'package:flutter/material.dart';"
       ],
       "orders": {
         "@directives": [
@@ -3823,14 +3820,12 @@
       ],
       "@directive:1": [
         "import",
-        "'package:flutter/material.dart'",
+        "'package:debrify/models/torrent.dart'",
         ";"
       ],
       "@directive:2": [
         "import",
-        "'package:media_kit/media_kit.dart'",
-        "as",
-        "mk",
+        "'package:debrify/screens/video_player/models/channel_entry.dart'",
         ";"
       ],
       "@directive:3": [
@@ -3840,12 +3835,14 @@
       ],
       "@directive:4": [
         "import",
-        "'package:debrify/models/torrent.dart'",
+        "'package:flutter/material.dart'",
         ";"
       ],
       "@directive:5": [
         "import",
-        "'package:debrify/screens/video_player/models/channel_entry.dart'",
+        "'package:media_kit/media_kit.dart'",
+        "as",
+        "mk",
         ";"
       ],
       "VpDebrifyTvChannelsHost": [
@@ -4242,17 +4239,17 @@
       ],
       "@directive:1": [
         "import",
-        "'package:flutter/foundation.dart'",
+        "'package:debrify/screens/video_player/constants/timing_constants.dart'",
         ";"
       ],
       "@directive:2": [
         "import",
-        "'package:debrify/screens/video_player/constants/timing_constants.dart'",
+        "'package:debrify/screens/video_player/services/playback_ui_clock.dart'",
         ";"
       ],
       "@directive:3": [
         "import",
-        "'package:debrify/screens/video_player/services/playback_ui_clock.dart'",
+        "'package:flutter/foundation.dart'",
         ";"
       ],
       "VpDebrifyTvBannerHost": [
@@ -4357,24 +4354,24 @@
       ],
       "@directive:1": [
         "import",
-        "'package:flutter/material.dart'",
+        "'package:debrify/models/torrent.dart'",
         ";"
       ],
       "@directive:2": [
         "import",
-        "'package:media_kit/media_kit.dart'",
-        "as",
-        "mk",
+        "'package:debrify/utils/episode_playback_request.dart'",
         ";"
       ],
       "@directive:3": [
         "import",
-        "'package:debrify/utils/episode_playback_request.dart'",
+        "'package:flutter/material.dart'",
         ";"
       ],
       "@directive:4": [
         "import",
-        "'package:debrify/models/torrent.dart'",
+        "'package:media_kit/media_kit.dart'",
+        "as",
+        "mk",
         ";"
       ],
       "VpStremioTvChannelsHost": [
@@ -4814,64 +4811,57 @@
       ],
       "@directive:1": [
         "import",
-        "'package:flutter/material.dart'",
+        "'package:debrify/features/video_player/application/vp_format.dart'",
         ";"
       ],
       "@directive:2": [
         "import",
-        "'package:media_kit/media_kit.dart'",
-        "as",
-        "mk",
+        "'package:debrify/features/video_player/models/vp_season_episode_selection.dart'",
         ";"
       ],
       "@directive:3": [
         "import",
-        "'package:debrify/utils/episode_playback_request.dart'",
+        "'package:debrify/models/playlist_entry.dart'",
         ";"
       ],
       "@directive:4": [
         "import",
-        "'package:debrify/models/torrent.dart'",
+        "'package:debrify/models/series_playlist.dart'",
         ";"
       ],
       "@directive:5": [
         "import",
-        "'package:debrify/models/playlist_entry.dart'",
+        "'package:debrify/models/source_playlist_resolver.dart'",
         ";"
       ],
       "@directive:6": [
         "import",
-        "'package:debrify/models/series_playlist.dart'",
+        "'package:debrify/models/torrent.dart'",
         ";"
       ],
       "@directive:7": [
         "import",
-        "'package:debrify/models/source_playlist_resolver.dart'",
+        "'package:debrify/services/series_source_fetcher.dart'",
         ";"
       ],
       "@directive:8": [
         "import",
-        "'package:debrify/services/series_source_fetcher.dart'",
+        "'package:debrify/services/source_selection_diagnostics.dart'",
         ";"
       ],
       "@directive:9": [
         "import",
-        "'package:debrify/utils/series_parser.dart'",
+        "'package:debrify/utils/episode_playback_request.dart'",
         ";"
       ],
       "@directive:10": [
         "import",
-        "'package:debrify/services/source_selection_diagnostics.dart'",
+        "'package:debrify/utils/series_parser.dart'",
         ";"
       ],
       "@directive:11": [
         "import",
-        "'package:debrify/features/video_player/application/vp_format.dart'",
-        ";"
-      ],
-      "@directive:12": [
-        "import",
-        "'package:debrify/features/video_player/models/vp_season_episode_selection.dart'",
+        "'package:flutter/material.dart'",
         ";"
       ],
       "VpEpisodeFetchHost": [
@@ -5099,7 +5089,7 @@
     "lib/features/video_player/presentation/legacy_video_player/vp_episode_guide.dart": {
       "@directive:0": [
         "import",
-        "'package:flutter/material.dart'",
+        "'package:debrify/features/video_player/application/vp_format.dart'",
         ";"
       ],
       "@directive:1": [
@@ -5124,22 +5114,22 @@
       ],
       "@directive:5": [
         "import",
-        "'package:debrify/utils/episode_playback_request.dart'",
+        "'package:debrify/screens/video_player/widgets/playlist_sheet.dart'",
         ";"
       ],
       "@directive:6": [
         "import",
-        "'package:debrify/utils/series_parser.dart'",
+        "'package:debrify/utils/episode_playback_request.dart'",
         ";"
       ],
       "@directive:7": [
         "import",
-        "'package:debrify/screens/video_player/widgets/playlist_sheet.dart'",
+        "'package:debrify/utils/series_parser.dart'",
         ";"
       ],
       "@directive:8": [
         "import",
-        "'package:debrify/features/video_player/application/vp_format.dart'",
+        "'package:flutter/material.dart'",
         ";"
       ],
       "VpEpisodeGuideHost": [

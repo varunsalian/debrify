@@ -206,7 +206,22 @@ void main() {
         ),
       );
     }
-    expect(player, contains('metadataReady: _episodeMetadataReady'));
+    // P17 moved the guide into VpEpisodeGuide; the shared preload future is
+    // still the State field, read through the live guide-host forwarder.
+    expect(
+      vpSourceDeclaration('_VideoPlayerScreenState._showPlaylistSheet'),
+      contains('metadataReady: _host.episodeMetadataReady'),
+    );
+    expect(
+      _between(
+        player,
+        'class _VpEpisodeGuideHostAdapter implements',
+        '\n}\n',
+      ).replaceAll(RegExp(r'\s+'), ' '),
+      contains(
+        'Future<void>? get episodeMetadataReady => _s._episodeMetadataReady;',
+      ),
+    );
 
     final resume = vpSourceDeclaration(
       '_VideoPlayerScreenState._maybeRestoreResume',
