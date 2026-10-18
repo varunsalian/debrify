@@ -8803,3 +8803,183 @@ forwards a moved member). Three P2s and two P3s, all adopted:
 Activation: final proofs on the accepted P15/P16 parents (refresh affected
 evidence, preserve M3 acceptance), current checker/analyzer CI → P17, P1–P16
 historical, step-T formatted prototypes establish ≤ 500.
+
+## Phase 18 design review resolution (review agent, 2026-10-19) — "No P1s"
+
+Reviewed at `d267c513f`. The facade is byte-identical to `249566376`. The
+reviewer confirmed:
+- 36 methods and six fields, 2,384 attached member lines;
+- the 14 adapter sites, the frozen field ownership, all five exclusions, and
+  `??=`/`.then` future identity through expression forwarders;
+- tear-off `==` and hazards 1, 4, 8 and 9;
+- every destination ≤ 500 lines on formatted prototypes.
+
+The report is `p18/review/design-review-r1.md`. Four P2s and twelve P3s, all
+adopted:
+
+1. **Source-text guards and frame holds (P2-1).** Five readers anchor moved
+   members. Step 1 retargets each one to equal-or-stronger checks at the
+   moved location, or to `vpSourceDeclaration`, with no assertion deleted:
+   - `manual_source_validation_contract_test.dart`: the 256–262 and 307–330
+     slices.
+   - `media_server_watch_player_wiring_test.dart:83–92`: now
+     `_host.observeServerWatch(completed: true)`.
+   - `playback_checkpoint_contract_test.dart:21–25`: the retained
+     `_togglePlay` slice gets a retained end marker.
+   - `player_auto_next_routing_test.dart:9–45`: moved `_host.`/public forms
+     through its manifest-status switch. The `Navigator.of(...).pop` negative
+     matches both the lexical and the `_host.context` spelling.
+   - The P17 frame hold `CompletionDelivery('_waitForVideoMetadata')` is
+     renamed to the suffix form `'waitForVideoMetadata'` at step 0. It passes
+     6/6 on the original and also matches `VpMediaWaits.waitForVideoMetadata`.
+
+   Step T re-scans every `readAsStringSync`/`vpSourceDeclaration`/
+   `CompletionDelivery` user. The scan at `249566376` finds exactly these five.
+   `video_player_navigation_test.dart` and the playlist-content bodies
+   JSON use same-named local helpers, not the facade.
+2. **The synchronous-prefix guarantee is restated (P2-2).**
+   `_loadPlaylistIndexAttempt` bumps `_episodeNavigationGeneration` only for
+   a request-less load (5164); shuffle always passes its request. What has to
+   hold is this: a request-less load (manual Next 4519 or Previous 5039, EOF
+   3702/3710, guide 8636, P16 switch 9166) bumps navigation before its first
+   `await`. An in-flight shuffle (wait loop 4217, `request.isCurrent`) or
+   `_fetchNextEpisodeInPlayer` `stale()` then sees the supersession at its
+   next check. The expression forwarders also preserve two unawaited
+   synchronous prefixes:
+   - 2343 `_loadPlaylistIndex(_currentIndex, autoplay: false)`: navigation
+     bump, scrub, resume epoch, sleep latch, tracker stops and
+     `updateMdblistPosition`, all before the 2345 autosave timer and the 2352
+     preload.
+   - 2572 `_onPlaybackEnded()`: validation gate, `observeServerWatch`,
+     live-IPTV `onEnded` and tracker stops, inside the `completed` listener.
+
+   Step 0 pins "manual Next during an in-flight show shuffle supersedes it".
+3. **The non-unified shuffle dialog is statically unreachable (P2-3).**
+   `kUnifiedPlayerMenuEnabled` is `const true`
+   (`player_menu_panel.dart:19`). The `showDialog` branch is kept verbatim
+   and verified only by the move checker's body comparison. No mutation proof
+   is attempted, since that would need a seam. Step 0 covers the reachable
+   unified path (`openPlayerMenuQuick(PlayerMenuSection.shuffle)`) and the
+   "No playlist items available" snackbar. Lexical contexts (P3-6): only
+   `ScaffoldMessenger.of(context)` (4093) and the `context: context` value
+   (4106) become `_host.context`. The `builder: (context)` parameter and its
+   two `Navigator.of(context).pop` calls stay lexical. The generator registers
+   exactly these two edits (`SHADOWED_CONTEXT`), and the move checker's
+   builder-context signature confirms them.
+4. **PikPak characterization under fake time (P2-4).** `_waitForVideoMetadata`
+   runs on a `dart:core` `Stopwatch`, which widget-test fake time does not
+   advance. The strategy needs no seam:
+   - Success, cancellation (token or request), and the display clearing when
+     the duration appears are driven inside the first 10 s window.
+   - One case drives the first failed attempt: about 10 s of real pumping,
+     tagged slow. It checks the "Reactivating video..." banner with
+     `_pikPakRetryCount` 1, the single re-open, and the "Monitoring attempt
+     2/6" / "monitoring during delay (4s)" log lines. These prove the
+     schedule's first steps without observing delays.
+   - Exhaustion (about 108 s of real time) is a harness limitation. This
+     covers the Debrify auto-skip vs the failure snackbar vs
+     `showFailure: false`. It is recorded on the end-of-series device
+     checklist and verified only by the body comparison.
+5. **Host get/set markings (P3-1)** are measured by the generator, which
+   emits a setter for every `=`/`++`/`--`/`??=`/`+=` site. The setters are:
+   - shuffle `isTransitioning` (get/set);
+   - `tvScrubGeneration` in next, adjacent and load;
+   - load `episodeNavigationGeneration`;
+   - load `currentIndex`, `currentStreamUrl`, `activeHttpHeaders`,
+     `activeOpenedMedia` and `activeMediaShouldPlay` (get/set).
+
+   State-owned objects use the existing getter convention
+   (`resumeWriteGuard`, `serverWatch`, `iptvLiveRecovery`, `player`,
+   `rainbowController`, `hideTimer`; then `_host.x.method()`), not named
+   chain forwarders. Collaborator members are flattened to one forwarder each
+   (P17 `CHAINS`), including the getter `sleepTimerMode`, the getter
+   `iosPipSession` and the setter `skipSegmentsMediaReady`.
+6. **Counts and evidence (P3-2, P3-3).** There are 36 methods and six fields.
+   The retained references are 30 State-side code references (29 lines) plus
+   14 adapter sites, 44 in all. The generator's `retained-sites.json` covers
+   code tokens only. The comment at 2164 (`_waitForVideoReady`) is unchanged.
+   `p18/members.txt` (1-based declaration and attached-comment starts) and
+   `p18/retained.txt` are regenerated.
+7. **Hazards corrected (P3-4, P3-5).**
+   - Hazard 3: `_episodeMetadataReady` has four writers. Startup 2352,
+     shuffle 4239 and the P17 guide `vp_episode_guide.dart:96` use `??=`.
+     The P16 switch `vp_source_playlist_switch.dart:191` reassigns it
+     unconditionally. "Once per identity" holds between switches.
+   - Hazard 5: the guards run once, before the IMDb write. The poster write
+     follows an `await` with no re-check. Both read-modify-write through
+     `PlaylistStorage.getPlaylistItemsRaw()`, which resolves the active
+     profile implicitly. This is the AGENTS "reject stale actions before an
+     implicitly-profile-resolving API" pattern. It is recorded as a
+     follow-up candidate, characterized and not fixed.
+   - Hazard 7: the P17 Debrify channel adapters (8809/8811, 8952/8954) also
+     reset the single-file IMDb pair.
+8. **New pre-existing hazards (P3-7, characterize, never fix):**
+   - Request-less loads have no supersession guard except `mounted`. Every
+     `request?.isCurrent == false` check is null-safe. So an older ordinary
+     load that resumes after a newer one still runs `maybeRestoreResume`,
+     `restoreTrackPreferences`, `isTransitioning = false` and
+     `_serverWatch.commit` (5355–5383).
+   - The Debrify Next random/percent seek after `_waitForVideoReady`
+     (4599–4609) has no token check.
+   - `setState(() => _dynamicTitle = title)` (4612) runs after awaits with no
+     `mounted` check, and throws into the `catch` after dispose.
+   - The unawaited `fetchMovieMetadataForIndex(index).catchError` (5282).
+   - Concurrent EOF ladders from repeated `completed` events. Only the series
+     pop is latched.
+9. **Analyzer identity (P3-8), measured on the provisional probe**
+   (`p18/prov/NOTES.md`, `probe-analyze.txt`):
+   - Four new `curly_braces_in_flow_control_structures` infos come from
+     formatter wraps of `if (_host.activePlaylist == null || …) return -1;`
+     in `findNextEpisodeIndex`/`findPreviousEpisodeIndex`. That is the P17
+     `_showPlaylistSheet` precedent.
+   - The facade gains newly unused imports, whose last users moved. These are
+     deferred to the phase-21 import cleanup, with allowlist lines like P17.
+   - **Contrary to the reviewer's expectation, the probe measures 11
+     `use_build_context_synchronously` infos** in the new files ("guarded by
+     an unrelated 'mounted' check"). The State's own `mounted` guard is now
+     `_host.mounted`, which the lint does not recognize. Earlier phases show
+     the same identity in their collaborators (e.g. P13 recording, P16
+     switch). All 11 are registered at step T as receiver-probe additions
+     with this reason. The static guard for those sites is lost, and their
+     ordering is pinned by the move checker's context checks.
+
+   All of these are step-T registrations, not gate surprises.
+10. **Size headroom (P3-9).** The provisional probe formats load at 440 lines,
+    the largest, and the facade at 10,077. If step T's final prototype for
+    load exceeds 500, the fallback is to move `_setManualSelectionMode` and
+    its timer into `vp_episode_adjacent.dart`.
+11. **`_getMainGroupIndices` stays a routed member (P3-10).** No new shape is
+    introduced during a move. Making it a top-level pure function is recorded
+    as an optional follow-up.
+12. **Step-0 additions (P3-11).**
+    - The manual-selection window: expiry after
+      `manualSelectionResetDuration`, re-arm cancelling the old timer, and the
+      dispose cancel. Step T checks how much
+      `video_player_resume_manual_window_test.dart` already pins.
+    - Whether the resolve fakes can reach
+      `PikPakApiService.instance.getFileDetails` without a seam (the
+      singleton holds auth state). Otherwise that branch is recorded as a
+      harness limitation.
+13. **Verbatim oddities kept (P3-12).** The `_getMainGroupIndices` doc says
+    "≥ 70 %" while the code uses 0.40; the plan's 40 % is right. The
+    duplicated PikPak exhaustion branches are kept (follow-up).
+14. **Open questions resolved:**
+    - One generated step-1 commit under one gate; the diff and evidence are
+      ordered per destination.
+    - Separate files for EOF and manual Next, with "manual Next racing EOF
+      pops once" pinned at step 0.
+    - The generic waits move now, with a header note on post-dispose polling.
+    - Title info becomes its own reader now.
+    - No exclusion moves into P18.
+
+**Tooling found by the provisional probe** (adopted for step T, each with
+self-tests or negatives):
+- `check_settings_moves.normalize` collapses `${_host.x}` back to `$_x` for a
+  registered host-property binding (the context-prefix comparison in
+  PikPak). The settings self-test gains a positive case and three negatives.
+- `occurrence_field_bindings` gains an opt-in `adapter_state_prefixes`
+  (`['_s']`). This is the first phase whose moved members are reached by
+  earlier phases' adapters, so `_s._member` → `_s._collab.member` is checked
+  exactly: receiver path, new name and role.
+- The formatter-only named-record comma in `_getCurrentEpisodeTitleInfo` is
+  declared as an explicit count-1 edit.

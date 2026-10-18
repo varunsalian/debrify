@@ -70,7 +70,7 @@ void main() {
         final d = TvEpisodeDriver(t);
         await d.initialize();
         final delivery = CompletionDelivery(
-          '_waitForVideoMetadata',
+          'waitForVideoMetadata',
           (v) => v == null,
         );
         delivery.multiple = true;
