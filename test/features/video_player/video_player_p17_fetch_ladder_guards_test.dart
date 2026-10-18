@@ -709,4 +709,51 @@ void main() {
       }
     },
   );
+
+  testWidgets(
+    'P17 multi-entry pack is matched as a forced series without season tags',
+    (t) async {
+      final d = TvEpisodeDriver(t);
+      await d.initialize();
+      final pack = episodeSource('Pack', type: StreamType.torrent);
+      try {
+        await d.mount(
+          screen: VideoPlayerScreen(
+            videoUrl: 'https://player.test/a.mp4',
+            title: 'Show.S01E01.mkv',
+            contentType: 'series',
+            contentSeason: 1,
+            contentEpisode: 1,
+            seriesSourceFetcher: SeriesSourceFetcher(
+              season: 1,
+              episode: 1,
+              searchEpisodes: (s, e) async => [],
+              searchPacks: (s, e) async => [pack],
+            ),
+            resolveSourceToPlaylist: (s, {canContinue}) async => const [
+              PlaylistEntry(
+                url: 'https://player.test/pack-01.mp4',
+                title: 'Show - 01.mkv',
+              ),
+              PlaylistEntry(
+                url: 'https://player.test/pack-02.mp4',
+                title: 'Show - 02.mkv',
+              ),
+            ],
+          ),
+        );
+        final b = await d.browser();
+        await d.f.finish<dynamic>(
+          t,
+          d.observe<dynamic>(() => b.onEpisodeSelected(1, 2)),
+        );
+        await d.f.actions.settle(t);
+        expect(d.opens, hasLength(2));
+        expect(d.opens.last.uri, 'https://player.test/pack-02.mp4');
+        expect(d.errors, isEmpty);
+      } finally {
+        await d.close();
+      }
+    },
+  );
 }
