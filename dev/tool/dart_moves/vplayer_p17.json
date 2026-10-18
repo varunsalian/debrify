@@ -2,8 +2,8 @@
   "schema": 1,
   "series": "vplayer",
   "phase": 17,
-  "status": "draft",
-  "base": "be4cd78aa",
+  "status": "FINAL",
+  "base": "2ee7e94ac",
   "source": "lib/screens/video_player_screen.dart",
   "feature": "lib/features/video_player",
   "split_containers": [
@@ -200,6 +200,18 @@
     "import '../features/video_player/presentation/legacy_video_player/vp_resume_keys.dart';",
     "import '../features/video_player/presentation/legacy_video_player/vp_resume_restore.dart';",
     "import '../features/video_player/presentation/legacy_video_player/vp_resume_save.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_iptv_zap_ring.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_iptv_zap_ladder.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_iptv_guide_catchup.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_iptv_channel_switch.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_iptv_live_sources.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_iptv_watch_memory.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_iptv_zap_banner.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_startup_candidates.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_startup_failover.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_startup_gate.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_source_switch.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_source_playlist_switch.dart';",
     "import '../features/video_player/presentation/legacy_video_player/vp_debrify_tv_channels.dart';",
     "import '../features/video_player/presentation/legacy_video_player/vp_debrify_tv_banner.dart';",
     "import '../features/video_player/presentation/legacy_video_player/vp_stremio_tv_channels.dart';",
@@ -402,7 +414,19 @@
       "@directive:191",
       "@directive:192",
       "@directive:193",
-      "@directive:194"
+      "@directive:194",
+      "@directive:195",
+      "@directive:196",
+      "@directive:197",
+      "@directive:198",
+      "@directive:199",
+      "@directive:200",
+      "@directive:201",
+      "@directive:202",
+      "@directive:203",
+      "@directive:204",
+      "@directive:205",
+      "@directive:206"
     ],
     "": [
       "VideoPlayerScreen",
@@ -412,6 +436,18 @@
       "_VpStremioTvChannelsHostAdapter",
       "_VpDebrifyTvBannerHostAdapter",
       "_VpDebrifyTvChannelsHostAdapter",
+      "_VpSourcePlaylistSwitchHostAdapter",
+      "_VpSourceSwitchHostAdapter",
+      "_VpStartupGateHostAdapter",
+      "_VpStartupFailoverHostAdapter",
+      "_VpStartupCandidatesHostAdapter",
+      "_VpIptvZapBannerHostAdapter",
+      "_VpIptvWatchMemoryHostAdapter",
+      "_VpIptvLiveSourcesHostAdapter",
+      "_VpIptvChannelSwitchHostAdapter",
+      "_VpIptvGuideCatchupHostAdapter",
+      "_VpIptvZapLadderHostAdapter",
+      "_VpIptvZapRingHostAdapter",
       "_VpResumeSaveHostAdapter",
       "_VpResumeRestoreHostAdapter",
       "_VpResumeKeysHostAdapter",
@@ -512,9 +548,6 @@
       "_VideoPlayerScreenState._iptvZapEpg",
       "_VideoPlayerScreenState._iptvZapEpgLoading",
       "_VideoPlayerScreenState._iptvZapClock",
-      "_VideoPlayerScreenState._iptvZapHideTimer",
-      "_VideoPlayerScreenState._iptvZapTicker",
-      "_VideoPlayerScreenState._iptvZapEpgTicket",
       "_VideoPlayerScreenState._ripple",
       "_VideoPlayerScreenState._panIgnore",
       "_VideoPlayerScreenState._currentIndex",
@@ -541,20 +574,11 @@
       "_VideoPlayerScreenState._iptvDiag",
       "_VideoPlayerScreenState._iptvReconnectText",
       "_VideoPlayerScreenState._iptvLiveRecovery",
-      "_VideoPlayerScreenState._iptvRecoveryEligible",
-      "_VideoPlayerScreenState._performIptvLiveRetune",
       "_VideoPlayerScreenState._iptvChannelsOverride",
       "_VideoPlayerScreenState._iptvGuideContextOverride",
-      "_VideoPlayerScreenState._iptvCatchupRequests",
       "_VideoPlayerScreenState._iptvStartOverActive",
       "_VideoPlayerScreenState._iptvStartOverLoading",
       "_VideoPlayerScreenState._iptvStartOverTimelineRequested",
-      "_VideoPlayerScreenState._iptvStartOverTimelineVisible",
-      "_VideoPlayerScreenState._toggleIptvStartOverTimeline",
-      "_VideoPlayerScreenState._canStartOverCurrentIptv",
-      "_VideoPlayerScreenState._iptvLiveEdgeAction",
-      "_VideoPlayerScreenState._toggleIptvStartOver",
-      "_VideoPlayerScreenState._startIptvProgrammeFromBeginning",
       "_VideoPlayerScreenState._effectiveIptvChannels",
       "_VideoPlayerScreenState._iptvZapBannerOwnsIdentity",
       "_VideoPlayerScreenState._playerGuideStyle",
@@ -589,19 +613,11 @@
       "_VideoPlayerScreenState._desktopRecordingRevisionListener",
       "_VideoPlayerScreenState._recordingStartGen",
       "_VideoPlayerScreenState._iptvGuideContextGeneration",
-      "_VideoPlayerScreenState._persistIptvGuideContext",
-      "_VideoPlayerScreenState._anchorIptvGuideCategory",
-      "_VideoPlayerScreenState._applyIptvGuideCategory",
-      "_VideoPlayerScreenState._cancelPendingIptvCatchup",
-      "_VideoPlayerScreenState._beginIptvCatchupRequest",
-      "_VideoPlayerScreenState._isCurrentIptvCatchupRequest",
       "_VideoPlayerScreenState._showSourceSheet",
       "_VideoPlayerScreenState._currentSourceIndex",
       "_VideoPlayerScreenState._serverWatch",
       "_VideoPlayerScreenState._openedWatchSource",
       "_VideoPlayerScreenState._watchOpenEpoch",
-      "_VideoPlayerScreenState._pendingSourcePlaylist",
-      "_VideoPlayerScreenState._sourcePlaylistResolution",
       "_VideoPlayerScreenState._stremioSourcesOverride",
       "_VideoPlayerScreenState._resolveStremioSourceOverride",
       "_VideoPlayerScreenState._augmentedSources",
@@ -664,6 +680,18 @@
       "_VideoPlayerScreenState._resumeKeys",
       "_VideoPlayerScreenState._resumeRestore",
       "_VideoPlayerScreenState._resumeSave",
+      "_VideoPlayerScreenState._zapRing",
+      "_VideoPlayerScreenState._zapLadder",
+      "_VideoPlayerScreenState._iptvGuide",
+      "_VideoPlayerScreenState._iptvSwitch",
+      "_VideoPlayerScreenState._iptvSources",
+      "_VideoPlayerScreenState._iptvMemory",
+      "_VideoPlayerScreenState._iptvBanner",
+      "_VideoPlayerScreenState._startupCandidates",
+      "_VideoPlayerScreenState._startupFailover",
+      "_VideoPlayerScreenState._startupGate",
+      "_VideoPlayerScreenState._sourceSwitch",
+      "_VideoPlayerScreenState._sourcePlaylistSwitch",
       "_VideoPlayerScreenState._debrifyChannels",
       "_VideoPlayerScreenState._debrifyBanner",
       "_VideoPlayerScreenState._stremioTv",
@@ -743,7 +771,6 @@
       "_VideoPlayerScreenState._persistablePosition",
       "_VideoPlayerScreenState._traktSeasonEpisode",
       "_VideoPlayerScreenState._startAnalyticsHeartbeat",
-      "_VideoPlayerScreenState._resumeTrackingAfterValidationGate",
       "_VideoPlayerScreenState._bindEpisodeTrackerProgressIdentity",
       "_VideoPlayerScreenState._setExternalAudioTrack",
       "_VideoPlayerScreenState._attachAudioEffectSession",
@@ -761,8 +788,6 @@
       "_VideoPlayerScreenState._installTvosDecodeRemedy",
       "_VideoPlayerScreenState._onPlayerInstanceReady",
       "_VideoPlayerScreenState._initializePlayer",
-      "_VideoPlayerScreenState._watchStremioTvStartup",
-      "_VideoPlayerScreenState._reportStartupFailure",
       "_VideoPlayerScreenState._bindPlayerInstanceSubscriptions",
       "_VideoPlayerScreenState._cancelPlayerInstanceSubscriptions",
       "_VideoPlayerScreenState._mediaServerFrameGeneration",
@@ -815,81 +840,23 @@
       "_VideoPlayerScreenState._loadDockPrefs",
       "_VideoPlayerScreenState._loadPlayerDefaults",
       "_VideoPlayerScreenState._tvReleaseFocusForOverlay",
-      "_VideoPlayerScreenState._showIptvChannelSheetOverlay",
-      "_VideoPlayerScreenState._hideIptvChannelSheet",
-      "_VideoPlayerScreenState._switchToIptvGuideChannel",
-      "_VideoPlayerScreenState._reanchorIptvRingToCategory",
       "_VideoPlayerScreenState._kIptvZapPageSize",
-      "_VideoPlayerScreenState._kIptvZapEdgeMargin",
       "_VideoPlayerScreenState._iptvZapWindowOffset",
       "_VideoPlayerScreenState._iptvZapCategoryTotal",
       "_VideoPlayerScreenState._iptvZapPagingActive",
-      "_VideoPlayerScreenState._iptvZapSourceId",
       "_VideoPlayerScreenState._iptvZapCategory",
       "_VideoPlayerScreenState._iptvZapCategories",
-      "_VideoPlayerScreenState._iptvZapRequestTicket",
       "_VideoPlayerScreenState._iptvZapRequestInFlight",
       "_VideoPlayerScreenState._iptvZapPendingInputs",
-      "_VideoPlayerScreenState._iptvZapDrainingInputs",
-      "_VideoPlayerScreenState._iptvZapCachedOriginCategory",
-      "_VideoPlayerScreenState._iptvZapCachedDirection",
-      "_VideoPlayerScreenState._iptvZapCachedPage",
-      "_VideoPlayerScreenState._canZapIptvChannel",
-      "_VideoPlayerScreenState._clearIptvZapBoundaryCache",
-      "_VideoPlayerScreenState._resetIptvZapPaging",
-      "_VideoPlayerScreenState._iptvZapArmingPaging",
-      "_VideoPlayerScreenState._ensureIptvZapPagingArmed",
-      "_VideoPlayerScreenState._zapIptvChannel",
-      "_VideoPlayerScreenState._requestIptvZapPage",
-      "_VideoPlayerScreenState._parseIptvZapPage",
-      "_VideoPlayerScreenState._installIptvZapWindow",
-      "_VideoPlayerScreenState._mergeIptvZapPage",
-      "_VideoPlayerScreenState._prefetchIptvZapPage",
-      "_VideoPlayerScreenState._adjacentIptvCategory",
-      "_VideoPlayerScreenState._prefetchAdjacentIptvCategory",
-      "_VideoPlayerScreenState._consumeCachedAdjacentIptvCategory",
-      "_VideoPlayerScreenState._enterIptvZapCategory",
-      "_VideoPlayerScreenState._requestAdjacentIptvCategory",
-      "_VideoPlayerScreenState._queuePendingIptvZapInput",
-      "_VideoPlayerScreenState._drainPendingIptvZapInputs",
-      "_VideoPlayerScreenState._playIptvCatchup",
       "_VideoPlayerScreenState._iptvSwitchTicket",
       "_VideoPlayerScreenState._iptvChannelKey",
       "_VideoPlayerScreenState._iptvErrorsMuted",
       "_VideoPlayerScreenState._lastIptvErrorShown",
-      "_VideoPlayerScreenState._onIptvStreamError",
-      "_VideoPlayerScreenState._setIptvSources",
-      "_VideoPlayerScreenState._initIptvStremioSources",
       "_VideoPlayerScreenState._currentIptvChannel",
-      "_VideoPlayerScreenState._lastLiveChannelTimer",
-      "_VideoPlayerScreenState._lastLiveChannelArmedUrl",
-      "_VideoPlayerScreenState._lastLiveChannelSettle",
-      "_VideoPlayerScreenState._noteLiveChannelPlaying",
       "_VideoPlayerScreenState._hasIptvNext",
       "_VideoPlayerScreenState._hasIptvPrevious",
       "_VideoPlayerScreenState._isIptvSeriesContext",
-      "_VideoPlayerScreenState._preferredIptvAudioLanguage",
-      "_VideoPlayerScreenState._iptvSeriesAudioKey",
-      "_VideoPlayerScreenState._captureIptvAudioLanguage",
-      "_VideoPlayerScreenState._applyIptvAudioPreference",
-      "_VideoPlayerScreenState._recordIptvWatchForChannel",
-      "_VideoPlayerScreenState._switchToIptvChannel",
-      "_VideoPlayerScreenState._tryOpenLiveStream",
-      "_VideoPlayerScreenState._openStartupDebridDirect",
-      "_VideoPlayerScreenState._tryOpenStartupVod",
-      "_VideoPlayerScreenState._openInitialVodWithFailover",
-      "_VideoPlayerScreenState._commitValidatedStremioSource",
-      "_VideoPlayerScreenState._startupSourceFields",
-      "_VideoPlayerScreenState._setStartupGateActive",
-      "_VideoPlayerScreenState._setStartupGateMessage",
-      "_VideoPlayerScreenState._showSourceSheetOverlay",
-      "_VideoPlayerScreenState._hideSourceSheet",
-      "_VideoPlayerScreenState._buildSourceSheetResolver",
-      "_VideoPlayerScreenState._handleSourceSelected",
-      "_VideoPlayerScreenState._switchToIptvSource",
-      "_VideoPlayerScreenState._switchToSourcePlaylist",
       "_VideoPlayerScreenState._activeHttpHeaders",
-      "_VideoPlayerScreenState._switchToStremioSource",
       "_VideoPlayerScreenState._hasStremioTvGuide",
       "_VideoPlayerScreenState._hasStremioTvNext",
       "_VideoPlayerScreenState._hasAnyNext",
@@ -925,14 +892,7 @@
       "_VideoPlayerScreenState._openTvGuide",
       "_VideoPlayerScreenState._handleTvKey",
       "_VideoPlayerScreenState._toggleControls",
-      "_VideoPlayerScreenState._prepareIptvBannerData",
-      "_VideoPlayerScreenState._raiseIptvZapBanner",
       "_VideoPlayerScreenState._onControlsVisibilityChanged",
-      "_VideoPlayerScreenState._hideIptvZapBanner",
-      "_VideoPlayerScreenState._syncIptvBannerTicker",
-      "_VideoPlayerScreenState._iptvArchiveRetryAt",
-      "_VideoPlayerScreenState._refreshIptvBannerEpgIfEnded",
-      "_VideoPlayerScreenState._loadIptvZapBannerEpg",
       "_VideoPlayerScreenState._handleDoubleTap",
       "_VideoPlayerScreenState._onPanStart",
       "_VideoPlayerScreenState._onPanUpdate",
@@ -1263,7 +1223,7 @@
   },
   "scaffolding": {
     "lib/screens/video_player_screen.dart": {
-      "@directive:190": [
+      "@directive:202": [
         "import",
         "'../features/video_player/presentation/legacy_video_player/vp_debrify_tv_channels.dart'",
         ";"
@@ -1793,28 +1753,6 @@
         "@",
         "override",
         "void",
-        "hideIptvZapBanner",
-        "(",
-        "{",
-        "bool",
-        "immediate",
-        "=",
-        "false",
-        "}",
-        ")",
-        "=>",
-        "_s",
-        ".",
-        "_hideIptvZapBanner",
-        "(",
-        "immediate",
-        ":",
-        "immediate",
-        ")",
-        ";",
-        "@",
-        "override",
-        "void",
         "raiseDebrifyBanner",
         "(",
         ")",
@@ -1952,6 +1890,30 @@
         ";",
         "@",
         "override",
+        "void",
+        "hideIptvZapBanner",
+        "(",
+        "{",
+        "bool",
+        "immediate",
+        "=",
+        "false",
+        "}",
+        ")",
+        "=>",
+        "_s",
+        ".",
+        "_iptvBanner",
+        ".",
+        "hideIptvZapBanner",
+        "(",
+        "immediate",
+        ":",
+        "immediate",
+        ")",
+        ";",
+        "@",
+        "override",
         "Future",
         "<",
         "bool",
@@ -1996,7 +1958,7 @@
         ";",
         "}"
       ],
-      "@directive:191": [
+      "@directive:203": [
         "import",
         "'../features/video_player/presentation/legacy_video_player/vp_debrify_tv_banner.dart'",
         ";"
@@ -2168,7 +2130,7 @@
         ";",
         "}"
       ],
-      "@directive:192": [
+      "@directive:204": [
         "import",
         "'../features/video_player/presentation/legacy_video_player/vp_stremio_tv_channels.dart'",
         ";"
@@ -2987,7 +2949,7 @@
         ";",
         "}"
       ],
-      "@directive:193": [
+      "@directive:205": [
         "import",
         "'../features/video_player/presentation/legacy_video_player/vp_episode_fetch.dart'",
         ";"
@@ -3268,77 +3230,6 @@
         ";",
         "@",
         "override",
-        "Future",
-        "<",
-        "bool",
-        ">",
-        "switchToSourcePlaylist",
-        "(",
-        "int",
-        "sourceIndex",
-        ",",
-        "List",
-        "<",
-        "PlaylistEntry",
-        ">",
-        "newPlaylist",
-        ",",
-        "{",
-        "int",
-        "?",
-        "targetSeason",
-        ",",
-        "int",
-        "?",
-        "targetEpisode",
-        ",",
-        "bool",
-        "validateExplicitSelection",
-        "=",
-        "false",
-        ",",
-        "bool",
-        "suppressResume",
-        "=",
-        "false",
-        ",",
-        "EpisodePlaybackRequest",
-        "?",
-        "request",
-        "}",
-        ")",
-        "=>",
-        "_s",
-        ".",
-        "_switchToSourcePlaylist",
-        "(",
-        "sourceIndex",
-        ",",
-        "newPlaylist",
-        ",",
-        "targetSeason",
-        ":",
-        "targetSeason",
-        ",",
-        "targetEpisode",
-        ":",
-        "targetEpisode",
-        ",",
-        "validateExplicitSelection",
-        ":",
-        "validateExplicitSelection",
-        ",",
-        "suppressResume",
-        ":",
-        "suppressResume",
-        ",",
-        "request",
-        ":",
-        "request",
-        ")",
-        ";",
-        "@",
-        "override",
         "bool",
         "get",
         "mounted",
@@ -3413,6 +3304,79 @@
         ";",
         "@",
         "override",
+        "Future",
+        "<",
+        "bool",
+        ">",
+        "switchToSourcePlaylist",
+        "(",
+        "int",
+        "sourceIndex",
+        ",",
+        "List",
+        "<",
+        "PlaylistEntry",
+        ">",
+        "newPlaylist",
+        ",",
+        "{",
+        "int",
+        "?",
+        "targetSeason",
+        ",",
+        "int",
+        "?",
+        "targetEpisode",
+        ",",
+        "bool",
+        "validateExplicitSelection",
+        "=",
+        "false",
+        ",",
+        "bool",
+        "suppressResume",
+        "=",
+        "false",
+        ",",
+        "EpisodePlaybackRequest",
+        "?",
+        "request",
+        "}",
+        ")",
+        "=>",
+        "_s",
+        ".",
+        "_sourcePlaylistSwitch",
+        ".",
+        "switchToSourcePlaylist",
+        "(",
+        "sourceIndex",
+        ",",
+        "newPlaylist",
+        ",",
+        "targetSeason",
+        ":",
+        "targetSeason",
+        ",",
+        "targetEpisode",
+        ":",
+        "targetEpisode",
+        ",",
+        "validateExplicitSelection",
+        ":",
+        "validateExplicitSelection",
+        ",",
+        "suppressResume",
+        ":",
+        "suppressResume",
+        ",",
+        "request",
+        ":",
+        "request",
+        ")",
+        ";",
+        "@",
+        "override",
         "VpSeasonEpisodeSelection",
         "?",
         "currentSeasonEpisodeForIdentity",
@@ -3429,7 +3393,7 @@
         ";",
         "}"
       ],
-      "@directive:194": [
+      "@directive:206": [
         "import",
         "'../features/video_player/presentation/legacy_video_player/vp_episode_guide.dart'",
         ";"
@@ -4134,17 +4098,6 @@
         ")",
         ";",
         "void",
-        "hideIptvZapBanner",
-        "(",
-        "{",
-        "bool",
-        "immediate",
-        "=",
-        "false",
-        "}",
-        ")",
-        ";",
-        "void",
         "raiseDebrifyBanner",
         "(",
         ")",
@@ -4216,6 +4169,17 @@
         "?",
         "get",
         "startAtPercent",
+        ";",
+        "void",
+        "hideIptvZapBanner",
+        "(",
+        "{",
+        "bool",
+        "immediate",
+        "=",
+        "false",
+        "}",
+        ")",
         ";",
         "Future",
         "<",
@@ -5029,6 +4993,35 @@
         "}",
         ")",
         ";",
+        "bool",
+        "get",
+        "mounted",
+        ";",
+        "BuildContext",
+        "get",
+        "context",
+        ";",
+        "void",
+        "setState",
+        "(",
+        "VoidCallback",
+        "fn",
+        ")",
+        ";",
+        "SeriesSourceFetcher",
+        "?",
+        "get",
+        "seriesSourceFetcher",
+        ";",
+        "SourcePlaylistResolve",
+        "?",
+        "get",
+        "resolveSourceToPlaylist",
+        ";",
+        "String",
+        "get",
+        "title",
+        ";",
         "Future",
         "<",
         "bool",
@@ -5068,35 +5061,6 @@
         "request",
         "}",
         ")",
-        ";",
-        "bool",
-        "get",
-        "mounted",
-        ";",
-        "BuildContext",
-        "get",
-        "context",
-        ";",
-        "void",
-        "setState",
-        "(",
-        "VoidCallback",
-        "fn",
-        ")",
-        ";",
-        "SeriesSourceFetcher",
-        "?",
-        "get",
-        "seriesSourceFetcher",
-        ";",
-        "SourcePlaylistResolve",
-        "?",
-        "get",
-        "resolveSourceToPlaylist",
-        ";",
-        "String",
-        "get",
-        "title",
         ";",
         "VpSeasonEpisodeSelection",
         "?",
@@ -6172,6 +6136,54 @@
       "fate": "retained"
     },
     {
+      "original": "@directive:190",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:191",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:192",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:193",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:194",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:195",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:196",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:197",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:198",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:199",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:200",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:201",
+      "fate": "retained"
+    },
+    {
       "original": "VideoPlayerScreen",
       "fate": "retained"
     },
@@ -6182,7 +6194,7 @@
     {
       "original": "_VideoPlayerScreenState._VideoPlayerScreenState",
       "fate": "patched",
-      "reason": "PROVISIONAL P17 inert assignments after P14; regenerate after accepted P16.",
+      "reason": "Five inert eager assignments after all five accepted P16 collaborators.",
       "test": "dev/tool/test_dart_tv_episode_moves.py",
       "patches": [
         {
@@ -6558,18 +6570,6 @@
       "fate": "retained"
     },
     {
-      "original": "_VideoPlayerScreenState._iptvZapHideTimer",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._iptvZapTicker",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._iptvZapEpgTicket",
-      "fate": "retained"
-    },
-    {
       "original": "_VideoPlayerScreenState._ripple",
       "fate": "retained"
     },
@@ -6674,23 +6674,11 @@
       "fate": "retained"
     },
     {
-      "original": "_VideoPlayerScreenState._iptvRecoveryEligible",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._performIptvLiveRetune",
-      "fate": "retained"
-    },
-    {
       "original": "_VideoPlayerScreenState._iptvChannelsOverride",
       "fate": "retained"
     },
     {
       "original": "_VideoPlayerScreenState._iptvGuideContextOverride",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._iptvCatchupRequests",
       "fate": "retained"
     },
     {
@@ -6703,30 +6691,6 @@
     },
     {
       "original": "_VideoPlayerScreenState._iptvStartOverTimelineRequested",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._iptvStartOverTimelineVisible",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._toggleIptvStartOverTimeline",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._canStartOverCurrentIptv",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._iptvLiveEdgeAction",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._toggleIptvStartOver",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._startIptvProgrammeFromBeginning",
       "fate": "retained"
     },
     {
@@ -6866,30 +6830,6 @@
       "fate": "retained"
     },
     {
-      "original": "_VideoPlayerScreenState._persistIptvGuideContext",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._anchorIptvGuideCategory",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._applyIptvGuideCategory",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._cancelPendingIptvCatchup",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._beginIptvCatchupRequest",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._isCurrentIptvCatchupRequest",
-      "fate": "retained"
-    },
-    {
       "original": "_VideoPlayerScreenState._showSourceSheet",
       "fate": "retained"
     },
@@ -6907,14 +6847,6 @@
     },
     {
       "original": "_VideoPlayerScreenState._watchOpenEpoch",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._pendingSourcePlaylist",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._sourcePlaylistResolution",
       "fate": "retained"
     },
     {
@@ -7163,6 +7095,54 @@
     },
     {
       "original": "_VideoPlayerScreenState._resumeSave",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._zapRing",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._zapLadder",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._iptvGuide",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._iptvSwitch",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._iptvSources",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._iptvMemory",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._iptvBanner",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._startupCandidates",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._startupFailover",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._startupGate",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._sourceSwitch",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._sourcePlaylistSwitch",
       "fate": "retained"
     },
     {
@@ -7486,10 +7466,6 @@
       "fate": "retained"
     },
     {
-      "original": "_VideoPlayerScreenState._resumeTrackingAfterValidationGate",
-      "fate": "retained"
-    },
-    {
       "original": "_VideoPlayerScreenState._bindEpisodeTrackerProgressIdentity",
       "fate": "retained"
     },
@@ -7568,14 +7544,6 @@
     },
     {
       "original": "_VideoPlayerScreenState._initializePlayer",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._watchStremioTvStartup",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._reportStartupFailure",
       "fate": "retained"
     },
     {
@@ -7955,7 +7923,9 @@
         },
         {
           "before": [
-            "_hideIptvZapBanner"
+            "_iptvBanner",
+            ".",
+            "hideIptvZapBanner"
           ],
           "after": [
             "_host",
@@ -8037,27 +8007,7 @@
       ]
     },
     {
-      "original": "_VideoPlayerScreenState._showIptvChannelSheetOverlay",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._hideIptvChannelSheet",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._switchToIptvGuideChannel",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._reanchorIptvRingToCategory",
-      "fate": "retained"
-    },
-    {
       "original": "_VideoPlayerScreenState._kIptvZapPageSize",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._kIptvZapEdgeMargin",
       "fate": "retained"
     },
     {
@@ -8073,10 +8023,6 @@
       "fate": "retained"
     },
     {
-      "original": "_VideoPlayerScreenState._iptvZapSourceId",
-      "fate": "retained"
-    },
-    {
       "original": "_VideoPlayerScreenState._iptvZapCategory",
       "fate": "retained"
     },
@@ -8085,107 +8031,11 @@
       "fate": "retained"
     },
     {
-      "original": "_VideoPlayerScreenState._iptvZapRequestTicket",
-      "fate": "retained"
-    },
-    {
       "original": "_VideoPlayerScreenState._iptvZapRequestInFlight",
       "fate": "retained"
     },
     {
       "original": "_VideoPlayerScreenState._iptvZapPendingInputs",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._iptvZapDrainingInputs",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._iptvZapCachedOriginCategory",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._iptvZapCachedDirection",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._iptvZapCachedPage",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._canZapIptvChannel",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._clearIptvZapBoundaryCache",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._resetIptvZapPaging",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._iptvZapArmingPaging",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._ensureIptvZapPagingArmed",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._zapIptvChannel",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._requestIptvZapPage",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._parseIptvZapPage",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._installIptvZapWindow",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._mergeIptvZapPage",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._prefetchIptvZapPage",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._adjacentIptvCategory",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._prefetchAdjacentIptvCategory",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._consumeCachedAdjacentIptvCategory",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._enterIptvZapCategory",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._requestAdjacentIptvCategory",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._queuePendingIptvZapInput",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._drainPendingIptvZapInputs",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._playIptvCatchup",
       "fate": "retained"
     },
     {
@@ -8205,35 +8055,7 @@
       "fate": "retained"
     },
     {
-      "original": "_VideoPlayerScreenState._onIptvStreamError",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._setIptvSources",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._initIptvStremioSources",
-      "fate": "retained"
-    },
-    {
       "original": "_VideoPlayerScreenState._currentIptvChannel",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._lastLiveChannelTimer",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._lastLiveChannelArmedUrl",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._lastLiveChannelSettle",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._noteLiveChannelPlaying",
       "fate": "retained"
     },
     {
@@ -8249,91 +8071,7 @@
       "fate": "retained"
     },
     {
-      "original": "_VideoPlayerScreenState._preferredIptvAudioLanguage",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._iptvSeriesAudioKey",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._captureIptvAudioLanguage",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._applyIptvAudioPreference",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._recordIptvWatchForChannel",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._switchToIptvChannel",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._tryOpenLiveStream",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._openStartupDebridDirect",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._tryOpenStartupVod",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._openInitialVodWithFailover",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._commitValidatedStremioSource",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._startupSourceFields",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._setStartupGateActive",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._setStartupGateMessage",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._showSourceSheetOverlay",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._hideSourceSheet",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._buildSourceSheetResolver",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._handleSourceSelected",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._switchToIptvSource",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._switchToSourcePlaylist",
-      "fate": "retained"
-    },
-    {
       "original": "_VideoPlayerScreenState._activeHttpHeaders",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._switchToStremioSource",
       "fate": "retained"
     },
     {
@@ -10018,14 +9756,6 @@
       "fate": "retained"
     },
     {
-      "original": "_VideoPlayerScreenState._prepareIptvBannerData",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._raiseIptvZapBanner",
-      "fate": "retained"
-    },
-    {
       "original": "_VideoPlayerScreenState._onControlsVisibilityChanged",
       "fate": "retained",
       "substitutions": [
@@ -10052,26 +9782,6 @@
           "count": 1
         }
       ]
-    },
-    {
-      "original": "_VideoPlayerScreenState._hideIptvZapBanner",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._syncIptvBannerTicker",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._iptvArchiveRetryAt",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._refreshIptvBannerEpgIfEnded",
-      "fate": "retained"
-    },
-    {
-      "original": "_VideoPlayerScreenState._loadIptvZapBannerEpg",
-      "fate": "retained"
     },
     {
       "original": "_VideoPlayerScreenState._handleDoubleTap",
@@ -10854,7 +10564,9 @@
         },
         {
           "before": [
-            "_switchToSourcePlaylist"
+            "_sourcePlaylistSwitch",
+            ".",
+            "switchToSourcePlaylist"
           ],
           "after": [
             "_host",
@@ -11353,6 +11065,54 @@
       "fate": "retained"
     },
     {
+      "original": "_VpSourcePlaylistSwitchHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpSourceSwitchHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpStartupGateHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpStartupFailoverHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpStartupCandidatesHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpIptvZapBannerHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpIptvWatchMemoryHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpIptvLiveSourcesHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpIptvChannelSwitchHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpIptvGuideCatchupHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpIptvZapLadderHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpIptvZapRingHostAdapter",
+      "fate": "retained"
+    },
+    {
       "original": "_VpResumeSaveHostAdapter",
       "fate": "retained"
     },
@@ -11649,6 +11409,18 @@
     "@directive:192",
     "@directive:193",
     "@directive:194",
+    "@directive:195",
+    "@directive:196",
+    "@directive:197",
+    "@directive:198",
+    "@directive:199",
+    "@directive:200",
+    "@directive:201",
+    "@directive:202",
+    "@directive:203",
+    "@directive:204",
+    "@directive:205",
+    "@directive:206",
     "VideoPlayerScreen",
     "_VideoPlayerScreenState:header",
     "_VideoPlayerScreenState._VideoPlayerScreenState",
@@ -11725,9 +11497,6 @@
     "_VideoPlayerScreenState._iptvZapEpg",
     "_VideoPlayerScreenState._iptvZapEpgLoading",
     "_VideoPlayerScreenState._iptvZapClock",
-    "_VideoPlayerScreenState._iptvZapHideTimer",
-    "_VideoPlayerScreenState._iptvZapTicker",
-    "_VideoPlayerScreenState._iptvZapEpgTicket",
     "_VideoPlayerScreenState._ripple",
     "_VideoPlayerScreenState._panIgnore",
     "_VideoPlayerScreenState._currentIndex",
@@ -11754,20 +11523,11 @@
     "_VideoPlayerScreenState._iptvDiag",
     "_VideoPlayerScreenState._iptvReconnectText",
     "_VideoPlayerScreenState._iptvLiveRecovery",
-    "_VideoPlayerScreenState._iptvRecoveryEligible",
-    "_VideoPlayerScreenState._performIptvLiveRetune",
     "_VideoPlayerScreenState._iptvChannelsOverride",
     "_VideoPlayerScreenState._iptvGuideContextOverride",
-    "_VideoPlayerScreenState._iptvCatchupRequests",
     "_VideoPlayerScreenState._iptvStartOverActive",
     "_VideoPlayerScreenState._iptvStartOverLoading",
     "_VideoPlayerScreenState._iptvStartOverTimelineRequested",
-    "_VideoPlayerScreenState._iptvStartOverTimelineVisible",
-    "_VideoPlayerScreenState._toggleIptvStartOverTimeline",
-    "_VideoPlayerScreenState._canStartOverCurrentIptv",
-    "_VideoPlayerScreenState._iptvLiveEdgeAction",
-    "_VideoPlayerScreenState._toggleIptvStartOver",
-    "_VideoPlayerScreenState._startIptvProgrammeFromBeginning",
     "_VideoPlayerScreenState._effectiveIptvChannels",
     "_VideoPlayerScreenState._iptvZapBannerOwnsIdentity",
     "_VideoPlayerScreenState._playerGuideStyle",
@@ -11802,19 +11562,11 @@
     "_VideoPlayerScreenState._desktopRecordingRevisionListener",
     "_VideoPlayerScreenState._recordingStartGen",
     "_VideoPlayerScreenState._iptvGuideContextGeneration",
-    "_VideoPlayerScreenState._persistIptvGuideContext",
-    "_VideoPlayerScreenState._anchorIptvGuideCategory",
-    "_VideoPlayerScreenState._applyIptvGuideCategory",
-    "_VideoPlayerScreenState._cancelPendingIptvCatchup",
-    "_VideoPlayerScreenState._beginIptvCatchupRequest",
-    "_VideoPlayerScreenState._isCurrentIptvCatchupRequest",
     "_VideoPlayerScreenState._showSourceSheet",
     "_VideoPlayerScreenState._currentSourceIndex",
     "_VideoPlayerScreenState._serverWatch",
     "_VideoPlayerScreenState._openedWatchSource",
     "_VideoPlayerScreenState._watchOpenEpoch",
-    "_VideoPlayerScreenState._pendingSourcePlaylist",
-    "_VideoPlayerScreenState._sourcePlaylistResolution",
     "_VideoPlayerScreenState._stremioSourcesOverride",
     "_VideoPlayerScreenState._resolveStremioSourceOverride",
     "_VideoPlayerScreenState._augmentedSources",
@@ -11877,6 +11629,18 @@
     "_VideoPlayerScreenState._resumeKeys",
     "_VideoPlayerScreenState._resumeRestore",
     "_VideoPlayerScreenState._resumeSave",
+    "_VideoPlayerScreenState._zapRing",
+    "_VideoPlayerScreenState._zapLadder",
+    "_VideoPlayerScreenState._iptvGuide",
+    "_VideoPlayerScreenState._iptvSwitch",
+    "_VideoPlayerScreenState._iptvSources",
+    "_VideoPlayerScreenState._iptvMemory",
+    "_VideoPlayerScreenState._iptvBanner",
+    "_VideoPlayerScreenState._startupCandidates",
+    "_VideoPlayerScreenState._startupFailover",
+    "_VideoPlayerScreenState._startupGate",
+    "_VideoPlayerScreenState._sourceSwitch",
+    "_VideoPlayerScreenState._sourcePlaylistSwitch",
     "_VideoPlayerScreenState._debrifyChannels",
     "_VideoPlayerScreenState._debrifyBanner",
     "_VideoPlayerScreenState._stremioTv",
@@ -11956,7 +11720,6 @@
     "_VideoPlayerScreenState._persistablePosition",
     "_VideoPlayerScreenState._traktSeasonEpisode",
     "_VideoPlayerScreenState._startAnalyticsHeartbeat",
-    "_VideoPlayerScreenState._resumeTrackingAfterValidationGate",
     "_VideoPlayerScreenState._bindEpisodeTrackerProgressIdentity",
     "_VideoPlayerScreenState._setExternalAudioTrack",
     "_VideoPlayerScreenState._attachAudioEffectSession",
@@ -11974,8 +11737,6 @@
     "_VideoPlayerScreenState._installTvosDecodeRemedy",
     "_VideoPlayerScreenState._onPlayerInstanceReady",
     "_VideoPlayerScreenState._initializePlayer",
-    "_VideoPlayerScreenState._watchStremioTvStartup",
-    "_VideoPlayerScreenState._reportStartupFailure",
     "_VideoPlayerScreenState._bindPlayerInstanceSubscriptions",
     "_VideoPlayerScreenState._cancelPlayerInstanceSubscriptions",
     "_VideoPlayerScreenState._mediaServerFrameGeneration",
@@ -12028,81 +11789,23 @@
     "_VideoPlayerScreenState._loadDockPrefs",
     "_VideoPlayerScreenState._loadPlayerDefaults",
     "_VideoPlayerScreenState._tvReleaseFocusForOverlay",
-    "_VideoPlayerScreenState._showIptvChannelSheetOverlay",
-    "_VideoPlayerScreenState._hideIptvChannelSheet",
-    "_VideoPlayerScreenState._switchToIptvGuideChannel",
-    "_VideoPlayerScreenState._reanchorIptvRingToCategory",
     "_VideoPlayerScreenState._kIptvZapPageSize",
-    "_VideoPlayerScreenState._kIptvZapEdgeMargin",
     "_VideoPlayerScreenState._iptvZapWindowOffset",
     "_VideoPlayerScreenState._iptvZapCategoryTotal",
     "_VideoPlayerScreenState._iptvZapPagingActive",
-    "_VideoPlayerScreenState._iptvZapSourceId",
     "_VideoPlayerScreenState._iptvZapCategory",
     "_VideoPlayerScreenState._iptvZapCategories",
-    "_VideoPlayerScreenState._iptvZapRequestTicket",
     "_VideoPlayerScreenState._iptvZapRequestInFlight",
     "_VideoPlayerScreenState._iptvZapPendingInputs",
-    "_VideoPlayerScreenState._iptvZapDrainingInputs",
-    "_VideoPlayerScreenState._iptvZapCachedOriginCategory",
-    "_VideoPlayerScreenState._iptvZapCachedDirection",
-    "_VideoPlayerScreenState._iptvZapCachedPage",
-    "_VideoPlayerScreenState._canZapIptvChannel",
-    "_VideoPlayerScreenState._clearIptvZapBoundaryCache",
-    "_VideoPlayerScreenState._resetIptvZapPaging",
-    "_VideoPlayerScreenState._iptvZapArmingPaging",
-    "_VideoPlayerScreenState._ensureIptvZapPagingArmed",
-    "_VideoPlayerScreenState._zapIptvChannel",
-    "_VideoPlayerScreenState._requestIptvZapPage",
-    "_VideoPlayerScreenState._parseIptvZapPage",
-    "_VideoPlayerScreenState._installIptvZapWindow",
-    "_VideoPlayerScreenState._mergeIptvZapPage",
-    "_VideoPlayerScreenState._prefetchIptvZapPage",
-    "_VideoPlayerScreenState._adjacentIptvCategory",
-    "_VideoPlayerScreenState._prefetchAdjacentIptvCategory",
-    "_VideoPlayerScreenState._consumeCachedAdjacentIptvCategory",
-    "_VideoPlayerScreenState._enterIptvZapCategory",
-    "_VideoPlayerScreenState._requestAdjacentIptvCategory",
-    "_VideoPlayerScreenState._queuePendingIptvZapInput",
-    "_VideoPlayerScreenState._drainPendingIptvZapInputs",
-    "_VideoPlayerScreenState._playIptvCatchup",
     "_VideoPlayerScreenState._iptvSwitchTicket",
     "_VideoPlayerScreenState._iptvChannelKey",
     "_VideoPlayerScreenState._iptvErrorsMuted",
     "_VideoPlayerScreenState._lastIptvErrorShown",
-    "_VideoPlayerScreenState._onIptvStreamError",
-    "_VideoPlayerScreenState._setIptvSources",
-    "_VideoPlayerScreenState._initIptvStremioSources",
     "_VideoPlayerScreenState._currentIptvChannel",
-    "_VideoPlayerScreenState._lastLiveChannelTimer",
-    "_VideoPlayerScreenState._lastLiveChannelArmedUrl",
-    "_VideoPlayerScreenState._lastLiveChannelSettle",
-    "_VideoPlayerScreenState._noteLiveChannelPlaying",
     "_VideoPlayerScreenState._hasIptvNext",
     "_VideoPlayerScreenState._hasIptvPrevious",
     "_VideoPlayerScreenState._isIptvSeriesContext",
-    "_VideoPlayerScreenState._preferredIptvAudioLanguage",
-    "_VideoPlayerScreenState._iptvSeriesAudioKey",
-    "_VideoPlayerScreenState._captureIptvAudioLanguage",
-    "_VideoPlayerScreenState._applyIptvAudioPreference",
-    "_VideoPlayerScreenState._recordIptvWatchForChannel",
-    "_VideoPlayerScreenState._switchToIptvChannel",
-    "_VideoPlayerScreenState._tryOpenLiveStream",
-    "_VideoPlayerScreenState._openStartupDebridDirect",
-    "_VideoPlayerScreenState._tryOpenStartupVod",
-    "_VideoPlayerScreenState._openInitialVodWithFailover",
-    "_VideoPlayerScreenState._commitValidatedStremioSource",
-    "_VideoPlayerScreenState._startupSourceFields",
-    "_VideoPlayerScreenState._setStartupGateActive",
-    "_VideoPlayerScreenState._setStartupGateMessage",
-    "_VideoPlayerScreenState._showSourceSheetOverlay",
-    "_VideoPlayerScreenState._hideSourceSheet",
-    "_VideoPlayerScreenState._buildSourceSheetResolver",
-    "_VideoPlayerScreenState._handleSourceSelected",
-    "_VideoPlayerScreenState._switchToIptvSource",
-    "_VideoPlayerScreenState._switchToSourcePlaylist",
     "_VideoPlayerScreenState._activeHttpHeaders",
-    "_VideoPlayerScreenState._switchToStremioSource",
     "_VideoPlayerScreenState._hasStremioTvGuide",
     "_VideoPlayerScreenState._hasStremioTvNext",
     "_VideoPlayerScreenState._hasAnyNext",
@@ -12138,14 +11841,7 @@
     "_VideoPlayerScreenState._openTvGuide",
     "_VideoPlayerScreenState._handleTvKey",
     "_VideoPlayerScreenState._toggleControls",
-    "_VideoPlayerScreenState._prepareIptvBannerData",
-    "_VideoPlayerScreenState._raiseIptvZapBanner",
     "_VideoPlayerScreenState._onControlsVisibilityChanged",
-    "_VideoPlayerScreenState._hideIptvZapBanner",
-    "_VideoPlayerScreenState._syncIptvBannerTicker",
-    "_VideoPlayerScreenState._iptvArchiveRetryAt",
-    "_VideoPlayerScreenState._refreshIptvBannerEpgIfEnded",
-    "_VideoPlayerScreenState._loadIptvZapBannerEpg",
     "_VideoPlayerScreenState._handleDoubleTap",
     "_VideoPlayerScreenState._onPanStart",
     "_VideoPlayerScreenState._onPanUpdate",
@@ -12176,6 +11872,18 @@
     "_VpStremioTvChannelsHostAdapter",
     "_VpDebrifyTvBannerHostAdapter",
     "_VpDebrifyTvChannelsHostAdapter",
+    "_VpSourcePlaylistSwitchHostAdapter",
+    "_VpSourceSwitchHostAdapter",
+    "_VpStartupGateHostAdapter",
+    "_VpStartupFailoverHostAdapter",
+    "_VpStartupCandidatesHostAdapter",
+    "_VpIptvZapBannerHostAdapter",
+    "_VpIptvWatchMemoryHostAdapter",
+    "_VpIptvLiveSourcesHostAdapter",
+    "_VpIptvChannelSwitchHostAdapter",
+    "_VpIptvGuideCatchupHostAdapter",
+    "_VpIptvZapLadderHostAdapter",
+    "_VpIptvZapRingHostAdapter",
     "_VpResumeSaveHostAdapter",
     "_VpResumeRestoreHostAdapter",
     "_VpResumeKeysHostAdapter",
@@ -12202,14 +11910,16 @@
     "VpS2Hooks",
     ":tail"
   ],
-  "provisional": {
-    "label": "PROVISIONAL",
+  "finalization": {
+    "label": "FINAL",
     "preparation_base": "be4cd78aa",
-    "pending": [
-      "accepted P15 merge",
-      "accepted P16 merge",
-      "final materialization, history, analyzer and mutation refresh"
-    ],
+    "accepted_p16": "2ee7e94ac",
+    "history": "All sixteen applied phases; every earlier destination derived without a whitelist."
+  },
+  "provisional": {
+    "label": "FINAL",
+    "preparation_base": "2ee7e94ac",
+    "pending": [],
     "host_contracts": {
       "VpDebrifyTvChannels": [
         "Map<String, String>? get activeHttpHeaders => _s._activeHttpHeaders;",
@@ -12242,7 +11952,6 @@
         "Future<void> waitForVideoReady() => _s._waitForVideoReady();",
         "Duration? randomStartOffset(Duration total) => _s._randomStartOffset(total);",
         "Duration? percentStartOffset(Duration total) => _s._percentStartOffset(total);",
-        "void hideIptvZapBanner({bool immediate = false}) => _s._hideIptvZapBanner(immediate: immediate);",
         "void raiseDebrifyBanner() => _s._debrifyBanner.raiseDebrifyBanner();",
         "bool get mounted => _s.mounted;",
         "void setState(VoidCallback fn) => _s._vpSetState(fn);",
@@ -12251,6 +11960,7 @@
         "Future<Map<String, dynamic>?> Function()? get requestNextChannel => _s.widget.requestNextChannel;",
         "bool get startFromRandom => _s.widget.startFromRandom;",
         "double? get startAtPercent => _s.widget.startAtPercent;",
+        "void hideIptvZapBanner({bool immediate = false}) => _s._iptvBanner.hideIptvZapBanner(immediate: immediate);",
         "Future<bool> setSubtitleTrackWithDiagnostics(mk.SubtitleTrack track, {required String source, bool Function()? isCurrent}) => _s._subtitleApply.setSubtitleTrackWithDiagnostics(track, source: source, isCurrent: isCurrent);"
       ],
       "VpDebrifyTvBanner": [
@@ -12337,13 +12047,13 @@
         "bool get sleepStopLatched => _s._sleepStopLatched;",
         "bool get validationGateActive => _s._validationGateActive;",
         "void setManualSelectionMode({bool allowResume = false}) => _s._setManualSelectionMode(allowResume: allowResume);",
-        "Future<bool> switchToSourcePlaylist(int sourceIndex, List<PlaylistEntry> newPlaylist, {int? targetSeason, int? targetEpisode, bool validateExplicitSelection = false, bool suppressResume = false, EpisodePlaybackRequest? request}) => _s._switchToSourcePlaylist(sourceIndex, newPlaylist, targetSeason: targetSeason, targetEpisode: targetEpisode, validateExplicitSelection: validateExplicitSelection, suppressResume: suppressResume, request: request);",
         "bool get mounted => _s.mounted;",
         "BuildContext get context => _s.context;",
         "void setState(VoidCallback fn) => _s._vpSetState(fn);",
         "SeriesSourceFetcher? get seriesSourceFetcher => _s.widget.seriesSourceFetcher;",
         "SourcePlaylistResolve? get resolveSourceToPlaylist => _s.widget.resolveSourceToPlaylist;",
         "String get title => _s.widget.title;",
+        "Future<bool> switchToSourcePlaylist(int sourceIndex, List<PlaylistEntry> newPlaylist, {int? targetSeason, int? targetEpisode, bool validateExplicitSelection = false, bool suppressResume = false, EpisodePlaybackRequest? request}) => _s._sourcePlaylistSwitch.switchToSourcePlaylist(sourceIndex, newPlaylist, targetSeason: targetSeason, targetEpisode: targetEpisode, validateExplicitSelection: validateExplicitSelection, suppressResume: suppressResume, request: request);",
         "VpSeasonEpisodeSelection? currentSeasonEpisodeForIdentity() => _s._identify.currentSeasonEpisodeForIdentity();"
       ],
       "VpEpisodeGuide": [
@@ -12488,7 +12198,6 @@
       "_host.waitForVideoReady": "_VideoPlayerScreenState._waitForVideoReady",
       "_host.randomStartOffset": "_VideoPlayerScreenState._randomStartOffset",
       "_host.percentStartOffset": "_VideoPlayerScreenState._percentStartOffset",
-      "_host.hideIptvZapBanner": "_VideoPlayerScreenState._hideIptvZapBanner",
       "_host.raiseDebrifyBanner": "_VideoPlayerScreenState._raiseDebrifyBanner",
       "_host.anyPlayerOverlayOpen": "_VideoPlayerScreenState._anyPlayerOverlayOpen",
       "_host.debrifyBannerFloatingMounted": "_VideoPlayerScreenState._debrifyBannerFloatingMounted",
@@ -12529,7 +12238,6 @@
       "_host.sleepStopLatched": "_VideoPlayerScreenState._sleepStopLatched",
       "_host.validationGateActive": "_VideoPlayerScreenState._validationGateActive",
       "_host.setManualSelectionMode": "_VideoPlayerScreenState._setManualSelectionMode",
-      "_host.switchToSourcePlaylist": "_VideoPlayerScreenState._switchToSourcePlaylist",
       "_host.activePlaylist": "_VideoPlayerScreenState._activePlaylist",
       "_host.currentIndex": "_VideoPlayerScreenState._currentIndex",
       "_host.currentSeriesImdbId": "_VideoPlayerScreenState._currentSeriesImdbId",
@@ -12739,6 +12447,34 @@
         ],
         "binding": "unbound",
         "role_change": "live widget selector"
+      },
+      {
+        "before": [
+          "_iptvBanner",
+          ".",
+          "hideIptvZapBanner"
+        ],
+        "after": [
+          "_host",
+          ".",
+          "hideIptvZapBanner"
+        ],
+        "binding": "unbound",
+        "role_change": "Complete live collaborator chain via facade routing"
+      },
+      {
+        "before": [
+          "_sourcePlaylistSwitch",
+          ".",
+          "switchToSourcePlaylist"
+        ],
+        "after": [
+          "_host",
+          ".",
+          "switchToSourcePlaylist"
+        ],
+        "binding": "unbound",
+        "role_change": "Complete live collaborator chain via facade routing"
       },
       {
         "before": [

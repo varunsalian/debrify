@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PROVISIONAL P17 evidence-only materialization on P14; never writes lib/."""
+"""FINAL P17 evidence-only materialization on accepted P16 (2ee7e94ac); never writes lib/."""
 import argparse
 import json
 import re
@@ -15,7 +15,7 @@ from draft_vplayer_resume_moves import occurrences, name_edits
 SOURCE='lib/screens/video_player_screen.dart'
 FEATURE='lib/features/video_player'
 STATE='_VideoPlayerScreenState'
-BASE='be4cd78aa'
+BASE='2ee7e94ac'
 GROUPS=[
  dict(name='VpDebrifyTvChannels',receiver='_debrifyChannels',file='vp_debrify_tv_channels.dart',names=['_parseChannelDirectory','_showChannelGuideOverlay','_hideChannelGuideOverlay','_goToChannelById','_goToNextChannel']),
  dict(name='VpDebrifyTvBanner',receiver='_debrifyBanner',file='vp_debrify_tv_banner.dart',names=['_debrifyBannerTimer','_syncPlaybackClockVisibility','_raiseDebrifyBanner','_armDebrifyBannerTimer','_hideDebrifyBanner']),
@@ -36,13 +36,12 @@ ACTIONS={
  '_openMedia':('Future<void> openMedia(mk.Media media, {required bool play, bool? desiredPlay, bool liveStream = false, EpisodePlaybackRequest? request, bool Function()? beforeOpen, Torrent? source, int? preserveStartupEpoch})','(media, play: play, desiredPlay: desiredPlay, liveStream: liveStream, request: request, beforeOpen: beforeOpen, source: source, preserveStartupEpoch: preserveStartupEpoch)'),
  '_waitForVideoReady':('Future<void> waitForVideoReady()','()'), '_randomStartOffset':('Duration? randomStartOffset(Duration total)','(total)'), '_percentStartOffset':('Duration? percentStartOffset(Duration total)','(total)'), '_hideIptvZapBanner':('void hideIptvZapBanner({bool immediate = false})','(immediate: immediate)'), '_raiseDebrifyBanner':('void raiseDebrifyBanner()','()'),
  '_setManualSelectionMode':('void setManualSelectionMode({bool allowResume = false})','(allowResume: allowResume)'),
- '_switchToSourcePlaylist':('Future<bool> switchToSourcePlaylist(int sourceIndex, List<PlaylistEntry> newPlaylist, {int? targetSeason, int? targetEpisode, bool validateExplicitSelection = false, bool suppressResume = false, EpisodePlaybackRequest? request})','(sourceIndex, newPlaylist, targetSeason: targetSeason, targetEpisode: targetEpisode, validateExplicitSelection: validateExplicitSelection, suppressResume: suppressResume, request: request)'),
  '_traktSeasonEpisode':('({int? season, int? episode}) traktSeasonEpisode()','()'), '_preloadEpisodeInfo':('Future<void> preloadEpisodeInfo()','()'), '_constructPlaylistItemData':('Map<String, dynamic>? constructPlaylistItemData()','()'),
  '_loadPlaylistIndex':('Future<bool> loadPlaylistIndex(int index, {bool autoplay = false, EpisodePlaybackRequest? request, bool skipInitialSave = false, bool preferLocalResume = false, bool suppressResume = false, Torrent? manualValidationSource, int? manualValidationSourceIndex})','(index, autoplay: autoplay, request: request, skipInitialSave: skipInitialSave, preferLocalResume: preferLocalResume, suppressResume: suppressResume, manualValidationSource: manualValidationSource, manualValidationSourceIndex: manualValidationSourceIndex)'),
  '_fetchAndPlayEpisode':('Future<EpisodePlaybackOutcome> fetchAndPlayEpisode(int season, int episode, {int? shuffleGeneration, bool autoAdvance = false, EpisodePlaybackRequest? request})','(season, episode, shuffleGeneration: shuffleGeneration, autoAdvance: autoAdvance, request: request)'),
 }
 WIDGET={'channelDirectory':'List<Map<String, dynamic>>?', 'requestChannelById':'Future<Map<String, dynamic>?> Function(String)?', 'requestNextChannel':'Future<Map<String, dynamic>?> Function()?', 'startFromRandom':'bool', 'startAtPercent':'double?', 'hideSeekbar':'bool', 'stremioTvCurrentChannelId':'String?', 'stremioTvNextProvider':'Future<Map<String, dynamic>?> Function(String)?', 'seriesSourceFetcher':'SeriesSourceFetcher?', 'resolveSourceToPlaylist':'SourcePlaylistResolve?', 'title':'String', 'videoUrl':'String', 'contentTitle':'String?', 'viewMode':'PlaylistViewMode?'}
-CHAINS=[dict(before=['_subtitleApply','.','setSubtitleTrackWithDiagnostics'],name='setSubtitleTrackWithDiagnostics',signature='Future<bool> setSubtitleTrackWithDiagnostics(mk.SubtitleTrack track, {required String source, bool Function()? isCurrent})',args='(track, source: source, isCurrent: isCurrent)'),dict(before=['_completion','.','resetLocalCompletionState'],name='resetLocalCompletionState',signature='void resetLocalCompletionState()',args='()'),dict(before=['_identify','.','currentSeasonEpisodeForIdentity'],name='currentSeasonEpisodeForIdentity',signature='VpSeasonEpisodeSelection? currentSeasonEpisodeForIdentity()',args='()')]
+CHAINS=[dict(before=['_iptvBanner','.','hideIptvZapBanner'],name='hideIptvZapBanner',signature='void hideIptvZapBanner({bool immediate = false})',args='(immediate: immediate)'),dict(before=['_sourcePlaylistSwitch','.','switchToSourcePlaylist'],name='switchToSourcePlaylist',signature='Future<bool> switchToSourcePlaylist(int sourceIndex, List<PlaylistEntry> newPlaylist, {int? targetSeason, int? targetEpisode, bool validateExplicitSelection = false, bool suppressResume = false, EpisodePlaybackRequest? request})',args='(sourceIndex, newPlaylist, targetSeason: targetSeason, targetEpisode: targetEpisode, validateExplicitSelection: validateExplicitSelection, suppressResume: suppressResume, request: request)'),dict(before=['_subtitleApply','.','setSubtitleTrackWithDiagnostics'],name='setSubtitleTrackWithDiagnostics',signature='Future<bool> setSubtitleTrackWithDiagnostics(mk.SubtitleTrack track, {required String source, bool Function()? isCurrent})',args='(track, source: source, isCurrent: isCurrent)'),dict(before=['_completion','.','resetLocalCompletionState'],name='resetLocalCompletionState',signature='void resetLocalCompletionState()',args='()'),dict(before=['_identify','.','currentSeasonEpisodeForIdentity'],name='currentSeasonEpisodeForIdentity',signature='VpSeasonEpisodeSelection? currentSeasonEpisodeForIdentity()',args='()')]
 COMMON="""import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart' as mk;
@@ -83,7 +82,7 @@ def build(package):
    if occurrences(vals,['widget','.',name]):g['forwarders'].append(typ+' get '+name+' => _s.widget.'+name+';')
   for c in CHAINS:
    if occurrences(vals,c['before']):g['forwarders'].append(c['signature']+' => _s.'+''.join(c['before'])+c['args']+';')
- spec.update(phase=17,status='draft',span_order=list(spans),provisional=dict(label='PROVISIONAL',preparation_base=BASE,pending=['accepted P15 merge','accepted P16 merge','final materialization, history, analyzer and mutation refresh'],host_contracts={g['name']:g['forwarders'] for g in GROUPS},future_routing={'hideIptvZapBanner':'_s._iptvBanner.hideIptvZapBanner(immediate: immediate)','switchToSourcePlaylist':'_s._sourcePlaylistSwitch.switchToSourcePlaylist(sourceIndex, newPlaylist, targetSeason: targetSeason, targetEpisode: targetEpisode, validateExplicitSelection: validateExplicitSelection, suppressResume: suppressResume, request: request)'},construction='Preparation follows P14; final assignments must follow all five P16 collaborators.'))
+ spec.update(phase=17,status='FINAL',span_order=list(spans),finalization=dict(label='FINAL',preparation_base='be4cd78aa',accepted_p16='2ee7e94ac',history='All sixteen applied phases; every earlier destination derived without a whitelist.'),provisional=dict(label='FINAL',preparation_base=BASE,pending=[],host_contracts={g['name']:g['forwarders'] for g in GROUPS},future_routing={'hideIptvZapBanner':'_s._iptvBanner.hideIptvZapBanner(immediate: immediate)','switchToSourcePlaylist':'_s._sourcePlaylistSwitch.switchToSourcePlaylist(sourceIndex, newPlaylist, targetSeason: targetSeason, targetEpisode: targetEpisode, validateExplicitSelection: validateExplicitSelection, suppressResume: suppressResume, request: request)'},construction='Preparation follows P14; final assignments must follow all five P16 collaborators.'))
  registrations=[dict(before=['widget','.',n],after=['_host','.',n],binding='unbound',role_change='live widget selector') for n in WIDGET]+[dict(before=c['before'],after=['_host','.',c['name']],binding='unbound',role_change='Complete live collaborator chain via facade routing') for c in CHAINS]
  spec['guards']=dict(occurrence_field_bindings=dict(owners=[STATE],state_classes=[STATE],mandatory_qualification=True,owner_scoped_bare_fields={STATE+'.'+n:byname[n]['name'] for n in FIELDS}),record_owners=[STATE],record_fields={STATE:FIELDS},receiver_owners={g['receiver']:g['name'] for g in GROUPS},receiver_paths={g['receiver']:g['name'] for g in GROUPS},receiver_members={g['name']:[n[1:] for n in g['names']] for g in GROUPS},receivers=['_host',*[g['receiver'] for g in GROUPS]],live_state_receivers=['_host'],require_live_state_callbacks=True,host_property_bindings=hostbindings,registered_occurrence_substitutions=registrations)
  retained_sites=[]
@@ -106,9 +105,9 @@ def build(package):
   if key==STATE+'.'+STATE:
    append=[]
    for g2 in GROUPS:append += [g2['receiver'],'=',g2['name'],'(','_'+g2['name']+'HostAdapter','(','this',')',')',';']
-   row.update(fate='patched',reason='PROVISIONAL P17 inert assignments after P14; regenerate after accepted P16.',test='dev/tool/test_dart_tv_episode_moves.py',patches=[dict(before=[';','}'],after=[';',*append,'}'],count=1)])
+   row.update(fate='patched',reason='Five inert eager assignments after all five accepted P16 collaborators.',test='dev/tool/test_dart_tv_episode_moves.py',patches=[dict(before=[';','}'],after=[';',*append,'}'],count=1)])
  assert len(retained_sites)==36,len(retained_sites)
- retained={r['original'] for r in spec['declarations'] if r['fate']!='moved'};spec['span_order']=[k for k in spans if k in retained];scaff={};previous=STATE+'._resumeSave'
+ retained={r['original'] for r in spec['declarations'] if r['fate']!='moved'};spec['span_order']=[k for k in spans if k in retained];scaff={};previous=STATE+'._sourcePlaylistSwitch'
  for i,g in enumerate(GROUPS):
   host=g['name']+'Host';adapter='_'+host+'Adapter';key=STATE+'.'+g['receiver'];scaff['@directive:'+str(len(u['directives'])+i)]="import '../"+g['dest'][4:]+"';";scaff[key]='late final '+g['name']+' '+g['receiver']+';';scaff[adapter]='class '+adapter+' implements '+host+' {\n  '+adapter+'(this._s);\n  final _VideoPlayerScreenState _s;\n'+''.join('  @override\n  '+f+'\n' for f in g['forwarders'])+'}\n';at=spec['span_order'].index(previous)+1;spec['span_order'].insert(at,key);previous=key
  for key in scaff:
@@ -134,6 +133,9 @@ def main():
   GROUPS[3]['names'].remove('_prepareNextDirectEpisode');GROUPS[4]['names'].append('_prepareNextDirectEpisode');IMPORTS['VpEpisodeGuide']+="import 'dart:async';\nimport 'package:debrify/services/series_source_fetcher.dart';\nimport 'package:debrify/features/video_player/models/vp_season_episode_selection.dart';\n";return main()
  assert all(v<=500 for v in sizes.values()),sizes
  (R/'dev/tool/dart_moves/vplayer_p17.json').write_text(json.dumps(spec,indent=2)+'\n')
- for file,value in [('membership.json',measured),('retained-sites.json',sites),('hosts.json',spec['provisional']['host_contracts']),('result.json',dict(label='PROVISIONAL',comparison_errors=errors,sizes=sizes,moved=25,retained_references=len(sites),history='Not claimed; final P15/P16 refresh required'))]: (a.probe/file).write_text(json.dumps(value,indent=2)+'\n')
- print('PROVISIONAL zero comparison differences',sizes,'retained',len(sites))
+ from dart_move_history import earlier_sources,check_earlier
+ history_errors=check_earlier(spec,a.parser_package);assert not history_errors,history_errors
+ protected=len(earlier_sources(spec))
+ for file,value in [('membership.json',measured),('retained-sites.json',sites),('hosts.json',spec['provisional']['host_contracts']),('result.json',dict(label='FINAL',comparison_errors=errors,sizes=sizes,moved=25,retained_references=len(sites),protected_earlier_destinations=protected,history='All sixteen applied phases protected'))]: (a.probe/file).write_text(json.dumps(value,indent=2)+'\n')
+ print('FINAL zero comparison differences',sizes,'retained',len(sites),'protected earlier destinations',protected)
 if __name__=='__main__':main()
