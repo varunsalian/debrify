@@ -13089,3 +13089,403 @@ Twenty standalone original suites preserve all 201 Step-0b outcomes.
 The reduced inventory expands from 278 to 392 for every P15 player suite.
 Analyzer probes, changed-input mutation refresh and complete reduced comparison
 remain pending. Completed receipts: `p16/rebase/`, parent `commands.jsonl`.
+## Phase 17 provisional Step T — TV channels, banners and episode fetch (2026-10-17)
+
+Preparation application **be4cd78aa**; manifest status `draft`, explicitly **PROVISIONAL**. No application, dependency, production CI or history change. Final proofs wait for accepted P15/P16 parents; no placeholder manifests or history relaxation.
+
+| Destination / Host | Formatted lines | Distinct names / declarations |
+|---|---:|---:|
+| `vp_debrify_tv_channels.dart` / `VpDebrifyTvChannelsHost` | 379 | 36 / 40 |
+| `vp_debrify_tv_banner.dart` / `VpDebrifyTvBannerHost` | 89 | 10 / 12 |
+| `vp_stremio_tv_channels.dart` / `VpStremioTvChannelsHost` | 303 | 41 / 47 |
+| `vp_episode_fetch.dart` / `VpEpisodeFetchHost` | 426 | 24 / 28 |
+| `vp_episode_guide.dart` / `VpEpisodeGuideHost` | 118 | 18 / 20 |
+
+Stremio has 41 names / 47 declarations (six get/set pairs); the design estimate of approximately 46 declarations adds no Host name.
+
+All 25 moved declarations (23 methods, two inert nullable fields), complete original facade fates, imports, relative orders, receiver edits, eager inert assignments and adapter scaffolding compare with zero differences. Both `episodeNavigationGeneration` accessors are frozen. Preparation adapters route P15/P16 calls to their still-retained facade methods; the manifest records exact final routes and requires regeneration after rebase. No earlier adapter is patched at this base.
+
+VpDebrifyTvChannelsHost (live facade projections, exact signatures/access modes):
+
+```dart
+Map<String, String>? get activeHttpHeaders => _s._activeHttpHeaders;
+List<ChannelEntry> get channelEntries => _s._channelEntries;
+set channelEntries(List<ChannelEntry> v) => _s._channelEntries = v;
+ValueNotifier<bool> get controlsVisible => _s._controlsVisible;
+String? get currentChannelId => _s._currentChannelId;
+set currentChannelId(String? v) => _s._currentChannelId = v;
+set currentChannelName(String? v) => _s._currentChannelName = v;
+set currentChannelNumber(int? v) => _s._currentChannelNumber = v;
+set currentStreamUrl(String? v) => _s._currentStreamUrl = v;
+Duration get duration => _s._duration;
+set dynamicTitle(String v) => _s._dynamicTitle = v;
+set isTransitioning(bool v) => _s._isTransitioning = v;
+int get pikPakRetryId => _s._pikPakRetryId;
+set pikPakRetryId(int v) => _s._pikPakRetryId = v;
+mk.Player get player => _s._player;
+set showChannelGuide(bool v) => _s._showChannelGuide = v;
+set singleFileImdbFetched(bool v) => _s._singleFileImdbFetched = v;
+set singleFileImdbId(String? v) => _s._singleFileImdbId = v;
+int get tvScrubGeneration => _s._tvScrubGeneration;
+set tvScrubGeneration(int v) => _s._tvScrubGeneration = v;
+set tvStaticMessage(String v) => _s._tvStaticMessage = v;
+set tvStaticSubtext(String v) => _s._tvStaticSubtext = v;
+void tvAbandonScrub() => _s._tvAbandonScrub();
+void clearBufferingIndicator() => _s._clearBufferingIndicator();
+void startTransitionOverlay() => _s._startTransitionOverlay();
+void resetSubtitleState() => _s._resetSubtitleState();
+Future<void> openMedia(mk.Media media, {required bool play, bool? desiredPlay, bool liveStream = false, EpisodePlaybackRequest? request, bool Function()? beforeOpen, Torrent? source, int? preserveStartupEpoch}) => _s._openMedia(media, play: play, desiredPlay: desiredPlay, liveStream: liveStream, request: request, beforeOpen: beforeOpen, source: source, preserveStartupEpoch: preserveStartupEpoch);
+Future<void> waitForVideoReady() => _s._waitForVideoReady();
+Duration? randomStartOffset(Duration total) => _s._randomStartOffset(total);
+Duration? percentStartOffset(Duration total) => _s._percentStartOffset(total);
+void hideIptvZapBanner({bool immediate = false}) => _s._hideIptvZapBanner(immediate: immediate);
+void raiseDebrifyBanner() => _s._debrifyBanner.raiseDebrifyBanner();
+bool get mounted => _s.mounted;
+void setState(VoidCallback fn) => _s._vpSetState(fn);
+List<Map<String, dynamic>>? get channelDirectory => _s.widget.channelDirectory;
+Future<Map<String, dynamic>?> Function(String)? get requestChannelById => _s.widget.requestChannelById;
+Future<Map<String, dynamic>?> Function()? get requestNextChannel => _s.widget.requestNextChannel;
+bool get startFromRandom => _s.widget.startFromRandom;
+double? get startAtPercent => _s.widget.startAtPercent;
+Future<bool> setSubtitleTrackWithDiagnostics(mk.SubtitleTrack track, {required String source, bool Function()? isCurrent}) => _s._subtitleApply.setSubtitleTrackWithDiagnostics(track, source: source, isCurrent: isCurrent);
+```
+
+VpDebrifyTvBannerHost (live facade projections, exact signatures/access modes):
+
+```dart
+bool get anyPlayerOverlayOpen => _s._anyPlayerOverlayOpen;
+ValueNotifier<bool> get controlsVisible => _s._controlsVisible;
+bool get debrifyBannerFloatingMounted => _s._debrifyBannerFloatingMounted;
+set debrifyBannerFloatingMounted(bool v) => _s._debrifyBannerFloatingMounted = v;
+bool get debrifyTvOwnsIdentity => _s._debrifyTvOwnsIdentity;
+bool get isTransitioning => _s._isTransitioning;
+PlaybackUiClockController get playbackUiClock => _s._playbackUiClock;
+bool get showDebrifyBanner => _s._showDebrifyBanner;
+set showDebrifyBanner(bool v) => _s._showDebrifyBanner = v;
+bool get mounted => _s.mounted;
+void setState(VoidCallback fn) => _s._vpSetState(fn);
+bool get hideSeekbar => _s.widget.hideSeekbar;
+```
+
+VpStremioTvChannelsHost (live facade projections, exact signatures/access modes):
+
+```dart
+ValueNotifier<bool> get controlsVisible => _s._controlsVisible;
+set currentSourceIndex(int v) => _s._currentSourceIndex = v;
+set currentStreamUrl(String? v) => _s._currentStreamUrl = v;
+String? get currentStremioTvChannelId => _s._currentStremioTvChannelId;
+set currentStremioTvChannelId(String? v) => _s._currentStremioTvChannelId = v;
+set currentStremioTvContentEpisode(int? v) => _s._currentStremioTvContentEpisode = v;
+set currentStremioTvContentImdbId(String? v) => _s._currentStremioTvContentImdbId = v;
+set currentStremioTvContentSeason(int? v) => _s._currentStremioTvContentSeason = v;
+set currentStremioTvContentTitle(String? v) => _s._currentStremioTvContentTitle = v;
+set currentStremioTvContentType(String? v) => _s._currentStremioTvContentType = v;
+String get dynamicTitle => _s._dynamicTitle;
+set dynamicTitle(String v) => _s._dynamicTitle = v;
+List<Map<String, dynamic>>? get effectiveStremioTvChannels => _s._effectiveStremioTvChannels;
+bool get hasStremioTvGuide => _s._hasStremioTvGuide;
+set isTransitioning(bool v) => _s._isTransitioning = v;
+int get pikPakRetryId => _s._pikPakRetryId;
+set pikPakRetryId(int v) => _s._pikPakRetryId = v;
+mk.Player get player => _s._player;
+set rainbowActive(bool v) => _s._rainbowActive = v;
+AnimationController get rainbowController => _s._rainbowController;
+set resolveStremioSourceOverride(Future<String?> Function(Torrent)? v) => _s._resolveStremioSourceOverride = v;
+set showStremioTvGuide(bool v) => _s._showStremioTvGuide = v;
+bool get showStremioTvNextLoading => _s._showStremioTvNextLoading;
+set showStremioTvNextLoading(bool v) => _s._showStremioTvNextLoading = v;
+set singleFileImdbFetched(bool v) => _s._singleFileImdbFetched = v;
+set singleFileImdbId(String? v) => _s._singleFileImdbId = v;
+set stremioSourcesOverride(List<Torrent>? v) => _s._stremioSourcesOverride = v;
+set stremioTvChannelsOverride(List<Map<String, dynamic>>? v) => _s._stremioTvChannelsOverride = v;
+set transitionPhase(int v) => _s._transitionPhase = v;
+set transitionPhase2Started(DateTime? v) => _s._transitionPhase2Started = v;
+Timer? get transitionPhaseTimer => _s._transitionPhaseTimer;
+set transitionRunning(bool v) => _s._transitionRunning = v;
+Timer? get transitionStopTimer => _s._transitionStopTimer;
+set transitionStopTimer(Timer? v) => _s._transitionStopTimer = v;
+int get tvScrubGeneration => _s._tvScrubGeneration;
+set tvScrubGeneration(int v) => _s._tvScrubGeneration = v;
+void tvAbandonScrub() => _s._tvAbandonScrub();
+void clearBufferingIndicator() => _s._clearBufferingIndicator();
+void startTransitionOverlay() => _s._startTransitionOverlay();
+void resetSubtitleState() => _s._resetSubtitleState();
+Future<void> openMedia(mk.Media media, {required bool play, bool? desiredPlay, bool liveStream = false, EpisodePlaybackRequest? request, bool Function()? beforeOpen, Torrent? source, int? preserveStartupEpoch}) => _s._openMedia(media, play: play, desiredPlay: desiredPlay, liveStream: liveStream, request: request, beforeOpen: beforeOpen, source: source, preserveStartupEpoch: preserveStartupEpoch);
+bool get mounted => _s.mounted;
+void setState(VoidCallback fn) => _s._vpSetState(fn);
+String? get stremioTvCurrentChannelId => _s.widget.stremioTvCurrentChannelId;
+Future<Map<String, dynamic>?> Function(String)? get stremioTvNextProvider => _s.widget.stremioTvNextProvider;
+Future<bool> setSubtitleTrackWithDiagnostics(mk.SubtitleTrack track, {required String source, bool Function()? isCurrent}) => _s._subtitleApply.setSubtitleTrackWithDiagnostics(track, source: source, isCurrent: isCurrent);
+void resetLocalCompletionState() => _s._completion.resetLocalCompletionState();
+```
+
+VpEpisodeFetchHost (live facade projections, exact signatures/access modes):
+
+```dart
+set augmentedSources(List<Torrent>? v) => _s._augmentedSources = v;
+bool get canFetchEpisodes => _s._canFetchEpisodes;
+int get currentSourceIndex => _s._currentSourceIndex;
+set currentSourceIndex(int v) => _s._currentSourceIndex = v;
+Duration get duration => _s._duration;
+List<Torrent>? get effectiveSources => _s._effectiveSources;
+bool get episodeFetchInProgress => _s._episodeFetchInProgress;
+set episodeFetchInProgress(bool v) => _s._episodeFetchInProgress = v;
+int get episodeNavigationGeneration => _s._episodeNavigationGeneration;
+set episodeNavigationGeneration(int v) => _s._episodeNavigationGeneration = v;
+set isAutoAdvancing(bool v) => _s._isAutoAdvancing = v;
+bool get isPlaying => _s._isPlaying;
+bool get isTransitioning => _s._isTransitioning;
+set isTransitioning(bool v) => _s._isTransitioning = v;
+int get playlistIdentityToken => _s._playlistIdentityToken;
+Duration get position => _s._position;
+int get showShuffleGeneration => _s._showShuffleGeneration;
+bool get sleepStopLatched => _s._sleepStopLatched;
+bool get validationGateActive => _s._validationGateActive;
+void setManualSelectionMode({bool allowResume = false}) => _s._setManualSelectionMode(allowResume: allowResume);
+Future<bool> switchToSourcePlaylist(int sourceIndex, List<PlaylistEntry> newPlaylist, {int? targetSeason, int? targetEpisode, bool validateExplicitSelection = false, bool suppressResume = false, EpisodePlaybackRequest? request}) => _s._switchToSourcePlaylist(sourceIndex, newPlaylist, targetSeason: targetSeason, targetEpisode: targetEpisode, validateExplicitSelection: validateExplicitSelection, suppressResume: suppressResume, request: request);
+bool get mounted => _s.mounted;
+BuildContext get context => _s.context;
+void setState(VoidCallback fn) => _s._vpSetState(fn);
+SeriesSourceFetcher? get seriesSourceFetcher => _s.widget.seriesSourceFetcher;
+SourcePlaylistResolve? get resolveSourceToPlaylist => _s.widget.resolveSourceToPlaylist;
+String get title => _s.widget.title;
+VpSeasonEpisodeSelection? currentSeasonEpisodeForIdentity() => _s._identify.currentSeasonEpisodeForIdentity();
+```
+
+VpEpisodeGuideHost (live facade projections, exact signatures/access modes):
+
+```dart
+List<PlaylistEntry>? get activePlaylist => _s._activePlaylist;
+bool get canFetchEpisodes => _s._canFetchEpisodes;
+int get currentIndex => _s._currentIndex;
+String? get currentSeriesImdbId => _s._currentSeriesImdbId;
+Future<void>? get episodeMetadataReady => _s._episodeMetadataReady;
+set episodeMetadataReady(Future<void>? v) => _s._episodeMetadataReady = v;
+bool get seriesImdbKnownAtLaunch => _s._seriesImdbKnownAtLaunch;
+SeriesPlaylist? get seriesPlaylist => _s._seriesPlaylist;
+SeriesPlaylist? get syntheticGuidePlaylist => _s._syntheticGuidePlaylist;
+set syntheticGuidePlaylist(SeriesPlaylist? v) => _s._syntheticGuidePlaylist = v;
+void setManualSelectionMode({bool allowResume = false}) => _s._setManualSelectionMode(allowResume: allowResume);
+({int? season, int? episode}) traktSeasonEpisode() => _s._traktSeasonEpisode();
+Future<void> preloadEpisodeInfo() => _s._preloadEpisodeInfo();
+Map<String, dynamic>? constructPlaylistItemData() => _s._constructPlaylistItemData();
+Future<bool> loadPlaylistIndex(int index, {bool autoplay = false, EpisodePlaybackRequest? request, bool skipInitialSave = false, bool preferLocalResume = false, bool suppressResume = false, Torrent? manualValidationSource, int? manualValidationSourceIndex}) => _s._loadPlaylistIndex(index, autoplay: autoplay, request: request, skipInitialSave: skipInitialSave, preferLocalResume: preferLocalResume, suppressResume: suppressResume, manualValidationSource: manualValidationSource, manualValidationSourceIndex: manualValidationSourceIndex);
+Future<EpisodePlaybackOutcome> fetchAndPlayEpisode(int season, int episode, {int? shuffleGeneration, bool autoAdvance = false, EpisodePlaybackRequest? request}) => _s._episodeFetch.fetchAndPlayEpisode(season, episode, shuffleGeneration: shuffleGeneration, autoAdvance: autoAdvance, request: request);
+String get title => _s.widget.title;
+String get videoUrl => _s.widget.videoUrl;
+String? get contentTitle => _s.widget.contentTitle;
+PlaylistViewMode? get viewMode => _s.widget.viewMode;
+```
+
+The evidence scanner records **36** retained references in `p17/stepT/retained-sites.json`. The shared `// ─── Stremio TV Guide` comment attaches to `_findInitialStremioTvChannelId` and moves. P16 already prepares declaration-reader retargeting; P17 removes the same raw end-marker dependency and must re-scan its accepted parent.
+
+Original self-comparison and the complete normally formatted split pass; 12 independent real-manifest negatives reject. Root/strict/prototype diagnostic counts: 159/235/175; no compiler errors. The receiver probe is provisional evidence, not a current/history acceptance. Commands, prototypes, Hosts, scanner and diagnostic identities: `<git-common-dir>/refactor-evidence/vplayer/p17/stepT/`.
+
+## Phase 17 Step 0 — original behavior receipts (in progress)
+
+Application and dependency bytes remain **be4cd78aa**. This section records
+completed positives; the systematic mutation ledger and reduced comparison
+are still pending. It does not authorize the production extraction.
+
+The original reduced baseline loads all **257** frozen files: **1,818
+successful outcomes and one failure**. The failure is
+`playback_startup_view_test.dart::startup shield remains opaque and noninteractive in PiP`:
+the source test looks for a one-line `AbsorbPointer` spelling while the original
+application uses the formatted multiline spelling. Neither input nor outcome is
+changed. `suite_evidence.py` returns its own success after recording a failing
+Flutter run; the raw baseline Flutter exit is **1**, as clarified in
+`p17/step0/baseline-exit-clarification.json`. The comparison must preserve the
+observed failing identity, independently of historical allowlists.
+
+The first characterization checkpoint has **184 cases /17 files**, all passing
+on the detached original, and all **17 files pass alone**. Their combined run
+has 184 non-hidden successful case outcomes plus 17 hidden successful suite
+loads (Flutter exit 0). Existing
+feature-boundary suites remain in the frozen preparation baseline.
+
+| New suite suffix (`video_player_p17_…_test.dart`) | Cases | Observed boundary |
+|---|---:|---|
+| `debrify_channels` | 31 | Directory/guide availability, payload precedence and type filtering, pause/open failures, headers/autoplay, next versus by-id offsets, overlapping providers and stale static state |
+| `stremio_channels` | 23 | Initial id, guide gates, every outer-map replacement and nested identity, fixed-length list, source parsing/coercion, live resolver, provider-window dedupe, overlaps and unawaited duration subscription |
+| `banner` | 6 | Ownership, 400 ms resolving polls, complete display window, controls/clock visibility and a newer transition during an armed full-window timer |
+| `episode_fetch` | 19 | Pinned/existing/episode/pack order and caps, external filtering, singleton/pack validation, latch boundaries, preferred-missing feedback and successful pruning |
+| `episode_guide` | 20 | Synthetic cache/entry identity and title stamping, no-op selection, unknown episode gate, pack-coverage table and real position-driven direct prefetch |
+| `async_boundaries` | 14 | Provider disposal, candidate validation/resolver/player holds, newer navigation/disposal, late live-player seek and held `request.attempt` completion before synchronous retention |
+| `profiles` | 15 | Real captured `SourcePlayerLaunch` resolver/committer and physical bindings/resume rows across candidate/fetch/resolver delivery and A→B/ABA/deletion/disposal |
+| `tv_provider_profiles` | 20 | Facade callback invocation scope before/after real pause/provider holds, physical resume rows in both profiles and route closure; feature-owned callback persistence is covered separately |
+| `tracker_identity` | 2 | Launch A→channel B, with/without launch identity; B must actually open and tracker traffic must grow after the switch before payload/target assertions |
+| `channel_metadata` | 3 | Next/by-id/Stremio pick clear discovered single-file IMDb and enable a new lookup through the existing metadata/menu transport |
+| `retry_cancellation` | 6 | Real outgoing PikPak metadata await, token advance before each channel open, including adjacent retry-token collision |
+| `renderer_duration` | 1 | A listener attached to the old instance seeks the live replacement player after a Stremio pick |
+| `fetch_callers` | 5 | Retained next/EOF/previous/shuffle dispatch, synthetic shuffle and discovered IMDb propagation |
+| `fetch_cancellation` | 4 | Sleep expiry during default automatic request; guide resume versus EOF/shuffle suppression of a physical saved point |
+| `fetch_failures` | 4 | Validator exception remains eligible, escaping pinned error releases the latch, episode/pack search exceptions preserve fallback order |
+| `tv_callers` | 10 | TV dock callbacks, stable tear-offs, Back, desktop G/Up/PageUp and hidden-TV-bar Up with feature precedence |
+| `early_windows` | 1 | Guide before first ready, launch banner/hidden controls and disposal cancellation of the owned timer |
+
+No private State access, asynchronous `retainForEpisode` seam or new production
+hook is used. The retention tests hold real validation/resolver/player awaits
+and the existing future-delivery fixture at `EpisodePlaybackRequest.attempt`;
+retention itself stays synchronous. Passive captured-error markers prevent
+runtime errors from being credited as assertion kills. The original adaptation
+controls execute all selected bodies: **18 graphs /462 body executions /zero
+skips**, including separate original controls for renderer and legacy tracker
+fixtures whose singleton transport ownership prevents mixing them into other
+cohorts. This separation changes neither assertion nor selected-case inventory.
+
+### Verified as-is observations and limits
+
+| Candidate / guard recheck | Original observation / disposition |
+|---|---|
+| Channel overlaps: Debrify checks `mounted` after its provider, Stremio next dedupes only until the provider returns, and neither uses a switch ticket | Older next payload opens last; an older Debrify failure paints failed static while a newer provider is held; a delayed Stremio guide pause can open its older URI with newer visible identity. Preserve. |
+| Debrify null/empty/failed open returns do not resume the paused player | Failure/static behavior and next/by-id identity differences are asserted. Preserve; no recovery policy is added. |
+| Next-channel offset follows `_waitForVideoReady` without a mounted/identity recheck; Stremio duration `.then` checks mounted, reads the live player and has no error handler | Older tails seek the newer channel; a held Debrify ready-wait can dispatch seek to a disposed fake. Closing the Stremio duration stream before a positive value reports `StateError` to its zone. Native disposal effects remain device-pending. |
+| By-id has no random/percent tail | Next-only start-offset asymmetry is observed, including random precedence. Preserve. |
+| Fetch latch remains true until `finally`; request currentness includes mounted and navigation identity | A newer guide fetch is refused during old validation/fetch/resolver awaits. Old results cannot publish or prune after supersession/disposal. The proposed stale-after-dispose fetch `setState` defect is **not asserted**. |
+| Tracker adapters read launch `contentImdbId` and launch/playlist coordinates; channel switch does not call `switchMdblistTarget` | After actual B traffic, Trakt/Simkl payloads still identify launch A; MDBList target stays at launch identity. Absent launch identity remains absent. Effective skip/progress policy identity is a separate contract. This confirms resolution finding 1; no tracker retargeting is introduced. |
+| `SourcePlayerLaunch` resolver/committer capture profile ownership; facade TV provider callbacks belong to other features | Captured binding writes reject invalidated sessions, including ABA/deleted profiles. Forced profile changes with synthetic TV callbacks characterize facade invocation/resume timing only; they do **not** prove a cross-profile defect in the real TV feature's handoff. |
+| Debrify open-failure catch calls `setState` before its final mounted guard; Stremio catch only logs before returning at its mounted guard | A held Debrify open failing after disposal reaches the existing Flutter error path; the Stremio counterpart does not. This is distinct from the guarded fetch-publication path. Preserve. |
+| `prepareFromProgress` catches its own errors | No unhandled-prefetch-future claim. |
+
+Raw receipts and exact input hashes: `p17/step0/base*`, `original*`,
+`alone-*`, `controls-final.json`, `control-fixture-note.json` and
+`control-transport-note.json`. Rejected exploratory pilots/controls are archived
+separately and earn no acceptance or mutation credit. Two original source-guard
+suites pass through the unmodified validating reader; their direct removal/reorder
+negatives remain pending. Provisional initializer negatives now number **14**,
+including non-inert timer/list probes. Current checker/history ownership stays
+P14, with no history relaxation.
+
+The separate closure additions also pass **alone on detached be4cd78aa**:
+`directory_order` (2), `candidate_publication` (3), `banner_lifecycle` (3)
+and `diagnostics` (9). They add first-flagged-directory ordering, explicit
+guide capability, newly published source lists, identity-before-key selection,
+source-key fallback after retention, owned-timer cancellation, controls-only
+clock visibility, IPTV-banner precedence and exact original failure/selection
+diagnostic context. Total so far: **201 cases /21 new files**, every file
+passing alone. The frozen preparation inventory is now **257 +21 =278**;
+the original baseline list is unchanged. Proofs for these additions are queued;
+the earlier controlled graphs retain identical test/support bytes.
+
+All **six** direct source removal/reorder negatives complete with Flutter exit
+1 and fail the validating reader's exit-code assertion on a non-verbatim
+declaration. These are **structural reader rejections**, not behavioral kills;
+the generic replay runner's narrower print-only assertion parser records them
+as uncredited. `sourceguard-classifications.json` preserves both classifications
+and the actual rejection messages. The reader, original source assertions and
+historical comparison policy are not relaxed.
+
+Count correction: the initial prose subtracted hidden loading events from the
+already non-hidden outcome count, reporting 167 instead of 184. Raw receipts
+are unchanged. All **19** closure mutation runs now assertion-fail: each of the
+17 added cases has its own selected-case witness, and two replays replace the
+initial directory runtime/survivor gaps with clean assertions. Four matching
+adapted control graphs pass with every selected body executed and zero skips.
+The broad sweep and remaining original-case witnesses are still pending.
+
+Two further separate suites pass alone on detached original application code:
+`guide_guards` (3) and `parser_publication` (4). The former observes the clock
+at explicit controls/guide transitions: the public Down key reveals controls,
+opening either guide hides them, and closing the guide keeps them hidden. An
+emptied published directory refuses reopening without hiding already visible
+controls. The first exploratory draft incorrectly assumed initial/close
+visibility; its failed run is archived under `pilots/guide-clock-assumption`
+and receives no acceptance credit. The corrected test follows the original
+callbacks and does not change application behavior.
+
+Source-publication cases assert capability before dispatch, for non-list,
+mixed, maps-only and empty payloads. Their original parsing behavior is the
+same as the first checkpoint; the additional assertions avoid fixture
+null-dereferences hiding a missing publication. All **10** targeted original
+mutation runs assertion-fail, after two complete positive adapted controls.
+The preparation inventory is **257 baseline +23 new files =280** with
+**208 new cases**, every new file passing alone. Receipts:
+`alone-more-*`, `controls-more/`, `mutations-more/`.
+
+Mutation batch headroom now reflects completed control durations (120 seconds
+per candidate; the widget timeout stays 30 seconds). SDK-lock waiting is
+excluded, and partial/invalid-selector outputs must replay. No assertion,
+selected-case list or candidate is removed. Exact runner versions, including
+the earlier 45-second-per-candidate version, are archived by their recorded
+SHA-256 under `tool-versions/`; `runtime-budget-note.json` records the observed
+cohort and change. No timeout receives kill credit.
+
+`transition_timer` adds four standalone positives on the preparation worktree's
+byte-identical **be4cd78aa application** (format/analyze clean): next/by-id/
+Stremio real pause holds observe the outgoing texture hidden under the
+transition and the incoming texture restored after open. They pump one frame
+while pause remains held; the rejected no-frame draft is archived separately
+under `pilots/transition-held-before-render`. The fourth case observes the
+Stremio switch canceling the playback listener's phase/3-second timers,
+retaining its full 1,500 ms window, stopping the public animation controller,
+removing the overlay, and refusing to rearm on a duplicate playing event.
+This file's detached replay and mutation proofs remain pending.
+
+Current new characterization: **212 cases /24 files**; frozen preparation
+inventory **257 +24 =281**. Every new file passes alone against the unchanged
+original application bytes; 23 also have detached standalone receipts. These
+counts do not mark the still-running broad sweep or final comparison complete.
+
+
+The by-ID TV-provider matrix adds ten standalone positives at actual pause
+and provider boundaries, including physical resume rows for both profiles.
+The current accepted positive total is **222 cases /24 files**. Eight detached
+standalone files pass with explicit P17 routing (`alone-routed-receipts.json`),
+superseding six direct replay receipts whose 24 fixture directories used an
+old harness default. Exact event ownership, relocation and unchanged recursive
+hashes are recorded in `routing-remediation.json`; unrelated evidence was
+untouched. Both SDK wrappers now enforce P17 routing. Remaining guard drafts,
+systematic/retained closure, per-case proofs and final gate remain pending.
+
+
+Four further suites pass alone against the unchanged application on both
+preparation and detached original code: progress/startup preparation guards
+(9), movie/ordinary/synthetic sheet contracts (4), public TV scrub/buffering
+preludes (3), and channel offset/title/resolver/diagnostic/dedupe contracts (8).
+Current positives: **246 cases /28 files**, every file with a detached
+standalone receipt (`alone-guards-receipts.json` supplements the earlier
+receipts). Preparation inventory: **257 +28 =285**. The passive-error adapter's
+inferred-field narrowing was rejected by original controls and corrected to
+preserve `List<Object>`; those failed controls are archived and receive no
+proof credit. Fixed controls and remaining mutation/gate closure are pending.
+
+
+Current standalone positives are **260 cases /31 files** on both unchanged
+preparation and detached original application code. Eligibility (9), a real
+older-shuffle generation race (1), and channel signal/next-slot guide publication
+(4) supplement the earlier suites. The channel contract suite's explicit guide
+close assertion also has a fresh detached receipt. Preparation inventory:
+**257 +31 =288**. Two input-hash-invalidated replay attempts are archived and
+superseded by fixed-input successes. The nine corrected focused controls and
+two narrowed Debrify controls all pass with every selected body and zero skips.
+At the 210-candidate checkpoint only mutation selection narrows: all 829 source
+fault edits and 36 retained sites remain required. Final affected analysis
+preserves P14 diagnostics; changed test/prototype formatting passes. Complete
+mutation accounting, per-case closure and reduced-gate comparison remain pending.
+
+
+Preparation publication checkpoint: **287 positives /37 new files**, each
+passing alone on unchanged original application bytes in this worktree.
+The six latest detached standalone replays remain queued; the previous
+**260 /31** have detached receipts. Frozen preparation inventory:
+**257 +37 =294**. All 66 exact selected-boundary witnesses assertion-fail;
+complete systematic/retained/case accounting and the final gate are pending.
+No production move, dependency change or P17 checker activation.
+
+
+Sweep checkpoint: **296 cases /39 files**, all passing individually in both
+worktrees, with **296 frozen suites (257 baseline +39 additions)**. All 829
+canonical edits ran; the strict audit corrects the clean retained count to
+**35/36** pending guide-dispatch cleanup/replay.
+Completed survivors and runtime outcomes remain uncredited and are not
+asserted equivalent. The 16 completed-close/banner/stage-budget exact replays
+all assertion-fail. A timed-out publication control needs an unchanged
+isolated retry; final per-case proofs, tables and reduced gate are pending.
+
+
+The guide-dispatch cleanup now awaits its owned future directly, preserving
+the original missing-provider assertion before any orphan-guide layout can
+replace it. Both cases pass alone again in both worktrees. The latest routed
+receipt supersedes the old hash explicitly; old logs remain archived. The
+publication transition control passes unchanged in isolation, and all 74
+publication replays complete. Remaining case proofs and the gate are pending.

@@ -210,6 +210,11 @@ import '../features/video_player/presentation/legacy_video_player/vp_startup_fai
 import '../features/video_player/presentation/legacy_video_player/vp_startup_gate.dart';
 import '../features/video_player/presentation/legacy_video_player/vp_source_switch.dart';
 import '../features/video_player/presentation/legacy_video_player/vp_source_playlist_switch.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_debrify_tv_channels.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_debrify_tv_banner.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_stremio_tv_channels.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_episode_fetch.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_episode_guide.dart';
 
 /// A full-featured video player screen with playlist support and navigation controls.
 ///
@@ -458,6 +463,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _sourcePlaylistSwitch = VpSourcePlaylistSwitch(
       _VpSourcePlaylistSwitchHostAdapter(this),
     );
+    _debrifyChannels = VpDebrifyTvChannels(
+      _VpDebrifyTvChannelsHostAdapter(this),
+    );
+    _debrifyBanner = VpDebrifyTvBanner(_VpDebrifyTvBannerHostAdapter(this));
+    _stremioTv = VpStremioTvChannels(_VpStremioTvChannelsHostAdapter(this));
+    _episodeFetch = VpEpisodeFetch(_VpEpisodeFetchHostAdapter(this));
+    _episodeGuide = VpEpisodeGuide(_VpEpisodeGuideHostAdapter(this));
   }
   void _vpSetState(VoidCallback fn) => setState(fn);
 
@@ -665,7 +677,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // Debrify TV lower-third (replaces the two legacy corner badges).
   bool _showDebrifyBanner = false;
   bool _debrifyBannerFloatingMounted = false;
-  Timer? _debrifyBannerTimer;
 
   // IPTV zap banner (live channels) — the broadcast lower third.
   //
@@ -1122,6 +1133,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   late final VpStartupGate _startupGate;
   late final VpSourceSwitch _sourceSwitch;
   late final VpSourcePlaylistSwitch _sourcePlaylistSwitch;
+  late final VpDebrifyTvChannels _debrifyChannels;
+  late final VpDebrifyTvBanner _debrifyBanner;
+  late final VpStremioTvChannels _stremioTv;
+  late final VpEpisodeFetch _episodeFetch;
+  late final VpEpisodeGuide _episodeGuide;
 
   // The quiet bottom-right auto-sync surface: a 5s announce line, then
   // nothing until a real event — statuses during passes, word-only results.
@@ -1403,8 +1419,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _currentIptvIndex = widget.iptvStartIndex ?? 0;
     _currentSourceIndex = widget.stremioCurrentSourceIndex ?? 0;
     _iptvSources.initIptvStremioSources();
-    _currentStremioTvChannelId = _findInitialStremioTvChannelId();
-    _parseChannelDirectory();
+    _currentStremioTvChannelId = _stremioTv.findInitialStremioTvChannelId();
+    _debrifyChannels.parseChannelDirectory();
     // The sync offset is per-subtitle and session-scoped, but it lives in a
     // process-wide singleton — clear it at the start of every player session so
     // a previous video's offset can't leak in (mirrors the TV side's onCreate).
@@ -1882,7 +1898,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _iptvGuide.anchorIptvGuideCategory(iptvChannel);
       _zapRing.ensureIptvZapPagingArmed();
     } else {
-      _raiseDebrifyBanner();
+      _debrifyBanner.raiseDebrifyBanner();
     }
   }
 
@@ -2421,7 +2437,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
       _position = d;
       _resumeSave.observeServerWatch();
-      _prepareNextDirectEpisode();
+      _episodeFetch.prepareNextDirectEpisode();
       _mdblist.updateMdblistPosition();
       _playbackUiClock.updatePosition(d);
       _skip.syncSkipSegmentsForCurrentContent();
@@ -3696,7 +3712,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
 
     if (_hasStremioTvNext) {
-      final handled = await _goToNextStremioTvSlot(
+      final handled = await _stremioTv.goToNextStremioTvSlot(
         resumeCurrentOnFailure: false,
       );
       if (handled) return;
@@ -4223,7 +4239,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         await (_episodeMetadataReady ??= _preloadEpisodeInfo());
         if (!request.isCurrent) return true;
         if (_seriesPlaylist == null) {
-          final synthetic = _buildSyntheticGuide();
+          final synthetic = _episodeGuide.buildSyntheticGuide();
           if (synthetic != null && synthetic.$1.fullTvmazeEpisodes.isEmpty) {
             await synthetic.$1.fetchEpisodeInfo(
               playlistItem: _constructPlaylistItemData(),
@@ -4278,7 +4294,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           // A pack entry can have an unavailable URL. Try another source for
           // this episode before moving on to the next random candidate.
         }
-        final outcome = await _fetchAndPlayEpisode(
+        final outcome = await _episodeFetch.fetchAndPlayEpisode(
           target.$1,
           target.$2,
           shuffleGeneration: generation,
@@ -4505,7 +4521,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
 
     if (_hasStremioTvNext) {
-      final handled = await _goToNextStremioTvSlot();
+      final handled = await _stremioTv.goToNextStremioTvSlot();
       if (handled) return;
     }
 
@@ -4657,7 +4673,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     debugPrint(
       'Player: Next episode S${next.$1}E${next.$2} in-player autoAdvance=$autoAdvance',
     );
-    await _fetchAndPlayEpisode(next.$1, next.$2, autoAdvance: autoAdvance);
+    await _episodeFetch.fetchAndPlayEpisode(
+      next.$1,
+      next.$2,
+      autoAdvance: autoAdvance,
+    );
     return true;
   }
 
@@ -4739,25 +4759,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       Navigator.of(context).pop(result);
     }
     return true;
-  }
-
-  /// Parse channel directory from widget params into ChannelEntry list
-  void _parseChannelDirectory() {
-    final directory = widget.channelDirectory;
-    if (directory == null || directory.isEmpty) {
-      _channelEntries = [];
-      return;
-    }
-
-    _channelEntries = directory.asMap().entries.map((e) {
-      final entry = ChannelEntry.fromMap(e.value, order: e.key);
-      // Check if this is the current channel
-      if (entry.isCurrent && _currentChannelId == null) {
-        _currentChannelId = entry.id;
-        if (entry.number != null) _currentChannelNumber = entry.number;
-      }
-      return entry;
-    }).toList();
   }
 
   /// Load default player settings (aspect)
@@ -4902,26 +4903,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     FocusManager.instance.primaryFocus?.unfocus();
   }
 
-  /// Show channel guide overlay
-  void _showChannelGuideOverlay() {
-    if (_channelEntries.isEmpty) {
-      debugPrint('Player: No channels available for guide');
-      return;
-    }
-    _iptvBanner.hideIptvZapBanner();
-    setState(() {
-      _showChannelGuide = true;
-      _controlsVisible.value = false;
-    });
-  }
-
-  /// Hide channel guide overlay
-  void _hideChannelGuideOverlay() {
-    setState(() {
-      _showChannelGuide = false;
-    });
-  }
-
   // ── Live channel zapping ─────────────────────────────────────────────────
   //
   // Port of the native player's zap ladder (`zapIptvChannel`): step inside the
@@ -5029,16 +5010,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   Map<String, String>? _activeHttpHeaders;
 
-  // ─── Stremio TV Guide ─────────────────────────────────────────────
-
-  String? _findInitialStremioTvChannelId() {
-    // Use explicitly provided current channel ID
-    if (widget.stremioTvCurrentChannelId != null) {
-      return widget.stremioTvCurrentChannelId;
-    }
-    return null;
-  }
-
   bool get _hasStremioTvGuide =>
       _effectiveStremioTvChannels != null &&
       _effectiveStremioTvChannels!.isNotEmpty &&
@@ -5050,497 +5021,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   bool get _hasAnyNext =>
       _hasNextEpisode() || widget.requestMagicNext != null || _hasStremioTvNext;
-
-  void _showStremioTvGuideOverlay() {
-    if (!_hasStremioTvGuide) return;
-    setState(() {
-      _showStremioTvGuide = true;
-      _controlsVisible.value = false;
-    });
-  }
-
-  void _hideStremioTvGuide() {
-    setState(() {
-      _showStremioTvGuide = false;
-    });
-  }
-
-  void _setStremioTvNextLoading(bool loading) {
-    if (!mounted || _showStremioTvNextLoading == loading) return;
-    setState(() {
-      _showStremioTvNextLoading = loading;
-    });
-  }
-
-  void _applyStremioTvGuidePlaybackData(
-    String channelId, {
-    Map<String, dynamic>? nowPlaying,
-    Map<String, dynamic>? nextUp,
-  }) {
-    final current = _effectiveStremioTvChannels;
-    if (current == null || current.isEmpty) return;
-
-    _stremioTvChannelsOverride = current
-        .map((entry) {
-          final copy = Map<String, dynamic>.from(entry);
-          if (copy['id'] == channelId) {
-            if (nowPlaying != null) {
-              copy['nowPlaying'] = Map<String, dynamic>.from(nowPlaying);
-            }
-            if (nextUp != null) {
-              copy['nextUp'] = Map<String, dynamic>.from(nextUp);
-            }
-          }
-          return copy;
-        })
-        .toList(growable: false);
-  }
-
-  List<Torrent>? _parseStremioTvSources(dynamic rawSources) {
-    if (rawSources is! List) return null;
-    return rawSources
-        .map(
-          (s) =>
-              s is Map ? Torrent.fromJson(Map<String, dynamic>.from(s)) : null,
-        )
-        .whereType<Torrent>()
-        .toList();
-  }
-
-  Future<void> _switchToStremioTvChannel(
-    String channelId,
-    String url,
-    String title, {
-    String? contentImdbId,
-    String? contentType,
-    int? contentSeason,
-    int? contentEpisode,
-    Map<String, dynamic>? nowPlaying,
-    Map<String, dynamic>? nextUp,
-    double? startAtPercent,
-    List<Torrent>? newSources,
-    int? newSourceIndex,
-    Future<String?> Function(Torrent)? sourceResolver,
-  }) async {
-    _hideStremioTvGuide();
-    _clearBufferingIndicator();
-    setState(() {
-      _isTransitioning = true;
-      _tvScrubGeneration++;
-      _tvAbandonScrub();
-      _currentStremioTvChannelId = channelId;
-      _dynamicTitle = title;
-      _currentStremioTvContentImdbId = contentImdbId;
-      _currentStremioTvContentType = contentType;
-      _currentStremioTvContentSeason = contentSeason;
-      _currentStremioTvContentEpisode = contentEpisode;
-      _currentStremioTvContentTitle = title;
-      _applyStremioTvGuidePlaybackData(
-        channelId,
-        nowPlaying: nowPlaying,
-        nextUp: nextUp,
-      );
-      if (newSources != null) {
-        _stremioSourcesOverride = newSources;
-        _currentSourceIndex = newSourceIndex ?? 0;
-      }
-      if (sourceResolver != null) {
-        _resolveStremioSourceOverride = sourceResolver;
-      }
-    });
-    _startTransitionOverlay();
-
-    try {
-      await _player.pause();
-    } catch (_) {}
-
-    _resetSubtitleState();
-    _singleFileImdbId = null;
-    _singleFileImdbFetched = false;
-    _completion.resetLocalCompletionState();
-
-    try {
-      _pikPakRetryId++;
-      await _openMedia(mk.Media(url), play: true);
-      _currentStreamUrl = url;
-      await _subtitleApply.setSubtitleTrackWithDiagnostics(
-        mk.SubtitleTrack.no(),
-        source: 'stremio-tv-switch-disable-auto',
-      );
-      if (startAtPercent != null && startAtPercent > 0) {
-        // Apply start position once duration is known
-        _player.stream.duration.firstWhere((d) => d > Duration.zero).then((d) {
-          if (mounted) {
-            final seekTo = Duration(
-              milliseconds: (d.inMilliseconds * startAtPercent).round(),
-            );
-            _player.seek(seekTo);
-          }
-        });
-      }
-    } catch (e) {
-      debugPrint('Player: Stremio TV channel switch failed: $e');
-    }
-
-    if (!mounted) return;
-
-    // End transition
-    _transitionStopTimer?.cancel();
-    _transitionPhaseTimer?.cancel();
-    _transitionPhase = 2;
-    _transitionPhase2Started = DateTime.now();
-    setState(() {
-      _isTransitioning = false;
-    });
-    _transitionStopTimer = Timer(const Duration(milliseconds: 1500), () {
-      _rainbowController.stop();
-      _transitionRunning = false;
-      _rainbowActive = false;
-      if (mounted) setState(() {});
-    });
-  }
-
-  Future<bool> _goToNextStremioTvSlot({
-    bool resumeCurrentOnFailure = true,
-  }) async {
-    final requestNext = widget.stremioTvNextProvider;
-    final channelId = _currentStremioTvChannelId;
-    if (requestNext == null || channelId == null || channelId.isEmpty) {
-      return false;
-    }
-    if (_showStremioTvNextLoading) {
-      return true;
-    }
-
-    Map<String, dynamic>? result;
-    _setStremioTvNextLoading(true);
-    try {
-      result = await requestNext(channelId);
-    } catch (e) {
-      debugPrint('Player: Stremio TV next failed: $e');
-    }
-
-    if (!mounted) return true;
-    _setStremioTvNextLoading(false);
-
-    if (result == null) {
-      setState(() => _isTransitioning = false);
-      if (!resumeCurrentOnFailure) return false;
-      try {
-        await _player.play();
-      } catch (_) {}
-      return true;
-    }
-
-    final url = result['url'] as String?;
-    final title = result['title'] as String? ?? _dynamicTitle;
-    if (url == null || url.isEmpty) {
-      setState(() => _isTransitioning = false);
-      if (!resumeCurrentOnFailure) return false;
-      try {
-        await _player.play();
-      } catch (_) {}
-      return true;
-    }
-
-    final newSources = _parseStremioTvSources(result['stremioSources']);
-    final sourceResolver =
-        result['sourceResolver'] as Future<String?> Function(Torrent)?;
-
-    await _switchToStremioTvChannel(
-      result['channelId'] as String? ?? channelId,
-      url,
-      title,
-      contentImdbId: result['contentImdbId'] as String?,
-      contentType: result['contentType'] as String?,
-      contentSeason: (result['contentSeason'] as num?)?.toInt(),
-      contentEpisode: (result['contentEpisode'] as num?)?.toInt(),
-      nowPlaying: result['nowPlaying'] is Map
-          ? Map<String, dynamic>.from(result['nowPlaying'] as Map)
-          : null,
-      nextUp: result['nextUp'] is Map
-          ? Map<String, dynamic>.from(result['nextUp'] as Map)
-          : null,
-      startAtPercent: (result['startAtPercent'] as num?)?.toDouble(),
-      newSources: newSources,
-      newSourceIndex: (result['stremioCurrentSourceIndex'] as num?)?.toInt(),
-      sourceResolver: sourceResolver,
-    );
-    return true;
-  }
-
-  /// Switch to a specific channel by ID (from channel guide)
-  Future<void> _goToChannelById(ChannelEntry channel) async {
-    _hideChannelGuideOverlay();
-
-    final request = widget.requestChannelById;
-    if (request == null) {
-      debugPrint('Player: requestChannelById not provided');
-      return;
-    }
-
-    _clearBufferingIndicator();
-    setState(() {
-      _isTransitioning = true;
-      _tvScrubGeneration++;
-      _tvAbandonScrub();
-      _currentChannelId = channel.id;
-      _currentChannelName = channel.name;
-      if (channel.number != null) {
-        _currentChannelNumber = channel.number;
-      }
-    });
-    _startTransitionOverlay();
-
-    try {
-      await _player.pause();
-    } catch (_) {}
-
-    Map<String, dynamic>? payload;
-    try {
-      payload = await request(channel.id);
-    } catch (e) {
-      debugPrint('Player: Channel switch by ID failed: $e');
-    }
-
-    if (!mounted) return;
-
-    if (payload == null) {
-      setState(() {
-        _tvStaticMessage = '⚠ CHANNEL SWITCH FAILED';
-        _tvStaticSubtext = '';
-        _isTransitioning = false;
-      });
-      return;
-    }
-
-    final dynamic rawUrl = payload['firstUrl'] ?? payload['url'];
-    final dynamic rawTitle = payload['firstTitle'] ?? payload['title'];
-    final String nextUrl = rawUrl is String ? rawUrl : '';
-    final String nextTitle = rawTitle is String ? rawTitle : '';
-
-    // Update channel metadata from payload if provided
-    final String? payloadChannelName = payload['channelName'] is String
-        ? (payload['channelName'] as String)
-        : null;
-    final String? payloadChannelId = payload['channelId'] is String
-        ? (payload['channelId'] as String)
-        : null;
-    final dynamic channelNumberRaw = payload['channelNumber'];
-    int? payloadChannelNumber;
-    if (channelNumberRaw is int) {
-      payloadChannelNumber = channelNumberRaw;
-    } else if (channelNumberRaw is String) {
-      payloadChannelNumber = int.tryParse(channelNumberRaw);
-    }
-
-    setState(() {
-      if (payloadChannelId != null) _currentChannelId = payloadChannelId;
-      if (payloadChannelName != null && payloadChannelName.trim().isNotEmpty) {
-        _currentChannelName = payloadChannelName;
-      }
-      if (payloadChannelNumber != null) {
-        _currentChannelNumber = payloadChannelNumber;
-      }
-    });
-
-    _raiseDebrifyBanner();
-
-    if (nextUrl.isEmpty) {
-      setState(() {
-        _tvStaticMessage = '⚠ CHANNEL HAS NO STREAMS';
-        _tvStaticSubtext = '';
-        _isTransitioning = false;
-      });
-      return;
-    }
-
-    if (nextTitle.isNotEmpty) {
-      setState(() {
-        _tvStaticMessage = '📺 SIGNAL ACQUIRED';
-        _tvStaticSubtext = '▶ ${nextTitle.toUpperCase()}';
-      });
-    }
-
-    // Clear subtitle and IMDB state when switching channels
-    _resetSubtitleState();
-    _singleFileImdbId = null;
-    _singleFileImdbFetched = false;
-
-    try {
-      _pikPakRetryId++;
-      await _openMedia(
-        mk.Media(nextUrl, httpHeaders: _activeHttpHeaders),
-        play: true,
-      );
-      _currentStreamUrl = nextUrl;
-      // Disable auto-enabled embedded subtitles to prevent duplicates
-      await _subtitleApply.setSubtitleTrackWithDiagnostics(
-        mk.SubtitleTrack.no(),
-        source: 'channel-switch-disable-auto',
-      );
-    } catch (e) {
-      debugPrint('Player: Failed to open channel stream: $e');
-      setState(() {
-        _tvStaticMessage = '⚠ CHANNEL SWITCH FAILED';
-        _tvStaticSubtext = '';
-        _isTransitioning = false;
-      });
-      return;
-    }
-
-    if (mounted) {
-      setState(() {
-        _isTransitioning = false;
-        if (nextTitle.isNotEmpty) {
-          _dynamicTitle = nextTitle;
-        }
-      });
-    }
-  }
-
-  /// Switch to the next Debrify TV channel (MediaKit fallback)
-  Future<void> _goToNextChannel() async {
-    final request = widget.requestNextChannel;
-    if (request == null) {
-      return;
-    }
-
-    _clearBufferingIndicator();
-    setState(() {
-      _isTransitioning = true;
-      _tvScrubGeneration++;
-      _tvAbandonScrub();
-    });
-    _startTransitionOverlay();
-
-    try {
-      await _player.pause();
-    } catch (_) {}
-
-    Map<String, dynamic>? payload;
-    try {
-      payload = await request();
-    } catch (e) {
-      debugPrint('Player: Next channel request failed: $e');
-    }
-
-    if (!mounted) {
-      return;
-    }
-
-    if (payload == null) {
-      setState(() {
-        _tvStaticMessage = '⚠ CHANNEL SWITCH FAILED';
-        _tvStaticSubtext = '';
-        _isTransitioning = false;
-      });
-      return;
-    }
-
-    final dynamic rawUrl = payload['firstUrl'] ?? payload['url'];
-    final dynamic rawTitle = payload['firstTitle'] ?? payload['title'];
-    final String nextUrl = rawUrl is String ? rawUrl : '';
-    final String nextTitle = rawTitle is String ? rawTitle : '';
-
-    final String? channelName = payload['channelName'] is String
-        ? (payload['channelName'] as String)
-        : null;
-    final String? channelId = payload['channelId'] is String
-        ? (payload['channelId'] as String)
-        : null;
-    final dynamic channelNumberRaw = payload['channelNumber'];
-    int? channelNumber;
-    if (channelNumberRaw is int) {
-      channelNumber = channelNumberRaw;
-    } else if (channelNumberRaw is String) {
-      channelNumber = int.tryParse(channelNumberRaw);
-    }
-
-    if ((channelName != null && channelName.trim().isNotEmpty) ||
-        channelNumber != null ||
-        channelId != null) {
-      setState(() {
-        if (channelId != null) {
-          _currentChannelId = channelId;
-        }
-        if (channelName != null && channelName.trim().isNotEmpty) {
-          _currentChannelName = channelName;
-        }
-        if (channelNumber != null) {
-          _currentChannelNumber = channelNumber;
-        }
-      });
-      _raiseDebrifyBanner();
-    }
-
-    if (nextUrl.isEmpty) {
-      setState(() {
-        _tvStaticMessage = '⚠ CHANNEL HAS NO STREAMS';
-        _tvStaticSubtext = '';
-        _isTransitioning = false;
-      });
-      return;
-    }
-
-    if (nextTitle.isNotEmpty) {
-      setState(() {
-        _tvStaticMessage = '📺 SIGNAL ACQUIRED';
-        _tvStaticSubtext = '▶ ${nextTitle.toUpperCase()}';
-      });
-    }
-
-    // Clear subtitle and IMDB state when switching channels
-    _resetSubtitleState();
-    _singleFileImdbId = null;
-    _singleFileImdbFetched = false;
-
-    try {
-      // Cancel any ongoing PikPak retry when switching channels
-      _pikPakRetryId++;
-      await _openMedia(
-        mk.Media(nextUrl, httpHeaders: _activeHttpHeaders),
-        play: true,
-      );
-      _currentStreamUrl = nextUrl;
-      // Disable auto-enabled embedded subtitles to prevent duplicates
-      await _subtitleApply.setSubtitleTrackWithDiagnostics(
-        mk.SubtitleTrack.no(),
-        source: 'next-channel-disable-auto',
-      );
-    } catch (e) {
-      debugPrint('Player: Failed to open next channel stream: $e');
-      setState(() {
-        _tvStaticMessage = '⚠ CHANNEL SWITCH FAILED';
-        _tvStaticSubtext = '';
-        _isTransitioning = false;
-      });
-      return;
-    }
-
-    if (widget.startFromRandom) {
-      await _waitForVideoReady();
-      final offset = _randomStartOffset(_duration);
-      if (offset != null) {
-        await _player.seek(offset);
-      }
-    } else if (widget.startAtPercent != null) {
-      await _waitForVideoReady();
-      final offset = _percentStartOffset(_duration);
-      if (offset != null) {
-        await _player.seek(offset);
-      }
-    }
-
-    if (mounted) {
-      setState(() {
-        if (nextTitle.isNotEmpty) {
-          _dynamicTitle = nextTitle;
-        }
-        _isTransitioning = false;
-      });
-    }
-  }
 
   /// Navigate to previous episode
   Future<void> _goToPreviousEpisode() async {
@@ -5573,7 +5053,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           if (resolved != null) prev = (resolved.season, resolved.episode);
         }
         if (prev != null) {
-          await _fetchAndPlayEpisode(prev.$1, prev.$2);
+          await _episodeFetch.fetchAndPlayEpisode(prev.$1, prev.$2);
           return;
         }
       }
@@ -6853,7 +6333,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _hideTimer?.cancel();
     _autosaveTimer?.cancel();
     _manualSelectionResetTimer?.cancel();
-    _debrifyBannerTimer?.cancel();
+    _debrifyBanner.debrifyBannerTimer?.cancel();
     _iptvBanner.iptvZapHideTimer?.cancel();
     _iptvBanner.iptvZapTicker?.cancel();
     _tvScrubGeneration++; // invalidate any scrub still in flight
@@ -7215,12 +6695,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                   ? () => _zapLadder.zapIptvChannel(-1)
                   : (_hasPreviousEpisode() ? _goToPreviousEpisode : null),
               onNextChannel: widget.requestNextChannel != null
-                  ? _goToNextChannel
+                  ? _debrifyChannels.goToNextChannel
                   : null,
               onShowPlaylist:
                   (_activePlaylist != null && _activePlaylist!.isNotEmpty) ||
                       _canFetchEpisodes
-                  ? () => _showPlaylistSheet(context)
+                  ? () => _episodeGuide.showPlaylistSheet(context)
                   : null,
               onRandom:
                   _effectiveIptvChannels == null &&
@@ -7234,8 +6714,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               onShowGuide: hasGuide
                   ? (_channelEntries.isNotEmpty &&
                             widget.requestChannelById != null
-                        ? _showChannelGuideOverlay
-                        : _showStremioTvGuideOverlay)
+                        ? _debrifyChannels.showChannelGuideOverlay
+                        : _stremioTv.showStremioTvGuideOverlay)
                   : null,
               onShowIptvChannels: _effectiveIptvChannels?.isNotEmpty == true
                   ? _iptvGuide.showIptvChannelSheetOverlay
@@ -7298,7 +6778,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     } else if (_showSyncOverlay) {
       _subtitleSync.hideSyncOverlay();
     } else if (_showChannelGuide) {
-      _hideChannelGuideOverlay();
+      _debrifyChannels.hideChannelGuideOverlay();
     } else if (_showIptvChannelSheet) {
       // Delegate: the guide's own back walks schedule -> channels first, and
       // its close restores a search-interrupted category.
@@ -7311,7 +6791,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     } else if (_showSourceSheet) {
       _sourceSwitch.hideSourceSheet();
     } else if (_showStremioTvGuide) {
-      _hideStremioTvGuide();
+      _stremioTv.hideStremioTvGuide();
     } else {
       return;
     }
@@ -7323,11 +6803,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// to raising the transport bar.
   bool _openTvGuide() {
     if (_channelEntries.isNotEmpty && widget.requestChannelById != null) {
-      _showChannelGuideOverlay();
+      _debrifyChannels.showChannelGuideOverlay();
       return true;
     }
     if (_hasStremioTvGuide) {
-      _showStremioTvGuideOverlay();
+      _stremioTv.showStremioTvGuideOverlay();
       return true;
     }
     if (_effectiveIptvChannels?.isNotEmpty == true) {
@@ -7468,13 +6948,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   void _onControlsVisibilityChanged() {
-    _syncPlaybackClockVisibility();
+    _debrifyBanner.syncPlaybackClockVisibility();
     // The dock carries its own copy of the panel, so the floating one goes the
     // instant the dock opens. Fading it would cross-dissolve two copies of the
     // same panel at two different heights.
     if (_controlsVisible.value) {
       _iptvBanner.hideIptvZapBanner(immediate: true);
-      _hideDebrifyBanner(immediate: true);
+      _debrifyBanner.hideDebrifyBanner(immediate: true);
       // The Record button is about to be looked at — make sure it reflects
       // engine captures stopped from the notification (which this screen
       // otherwise never hears about).
@@ -7783,66 +7263,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     );
   }
 
-  /// The clock is an optimization gate — it only publishes while something
-  /// on screen reads it. That used to mean "the bar"; the floating Debrify
-  /// banner's progress row reads it too (only when the session shows
-  /// progress at all).
-  void _syncPlaybackClockVisibility() {
-    _playbackUiClock.setVisible(
-      _controlsVisible.value ||
-          (_showDebrifyBanner && _debrifyTvOwnsIdentity && !widget.hideSeekbar),
-    );
-  }
-
-  /// Raises the floating lower-third (tune, zap, launch). The hide timer
-  /// re-arms while a channel switch is still resolving — the old corner
-  /// badges timed out DURING the resolve, which is why tvOS never saw them.
-  void _raiseDebrifyBanner() {
-    if (!_debrifyTvOwnsIdentity) return;
-    if (_anyPlayerOverlayOpen || _controlsVisible.value) return;
-    _debrifyBannerTimer?.cancel();
-    setState(() {
-      _showDebrifyBanner = true;
-      _debrifyBannerFloatingMounted = true;
-    });
-    _syncPlaybackClockVisibility();
-    _armDebrifyBannerTimer();
-  }
-
-  void _armDebrifyBannerTimer() {
-    // While resolving, poll fast — so the FULL display window is granted
-    // from (roughly) the moment the new stream lands, not from zap start.
-    final resolving = _isTransitioning;
-    _debrifyBannerTimer = Timer(
-      resolving
-          ? const Duration(milliseconds: 400)
-          : VideoPlayerTimingConstants.badgeDisplayDuration,
-      () {
-        if (!mounted) return;
-        if (resolving || _isTransitioning) {
-          // Either this was a resolve-poll, or a new switch began
-          // mid-window: keep the identity up and re-evaluate.
-          _armDebrifyBannerTimer();
-          return;
-        }
-        setState(() => _showDebrifyBanner = false);
-        _syncPlaybackClockVisibility();
-      },
-    );
-  }
-
-  void _hideDebrifyBanner({bool immediate = false}) {
-    _debrifyBannerTimer?.cancel();
-    if (!_showDebrifyBanner && !(immediate && _debrifyBannerFloatingMounted)) {
-      return;
-    }
-    setState(() {
-      _showDebrifyBanner = false;
-      if (immediate) _debrifyBannerFloatingMounted = false;
-    });
-    _syncPlaybackClockVisibility();
-  }
-
   Widget? _buildIptvInfoPanel({required bool flush}) {
     final channel = _iptvZapChannel;
     if (channel == null || !_iptvZapBannerOwnsIdentity) return null;
@@ -7878,376 +7298,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // Synthetic 1-entry guide backing for single-stream launches (no playlist):
   // lets the episode guide open and offer the show's full episode list.
   SeriesPlaylist? _syntheticGuidePlaylist;
-  List<PlaylistEntry>? _syntheticGuideEntries;
-
-  (SeriesPlaylist, List<PlaylistEntry>)? _buildSyntheticGuide() {
-    final existingSp = _syntheticGuidePlaylist;
-    final existingEntries = _syntheticGuideEntries;
-    if (existingSp != null && existingEntries != null) {
-      return (existingSp, existingEntries);
-    }
-    final se = _traktSeasonEpisode();
-    if (se.season == null || se.episode == null) return null;
-    var title = widget.title;
-    final info = SeriesParser.parseFilename(title);
-    if (info.season == null || info.episode == null) {
-      // Stamp the playing episode's identity so the guide groups it right.
-      title = 'S${vpPad2(se.season!)}E${vpPad2(se.episode!)} $title';
-    }
-    final entries = [PlaylistEntry(url: widget.videoUrl, title: title)];
-    final sp = SeriesPlaylist.fromPlaylistEntries(
-      entries,
-      collectionTitle: widget.contentTitle ?? widget.title,
-      forceSeries: true,
-    );
-    sp.imdbId = _currentSeriesImdbId;
-    _syntheticGuidePlaylist = sp;
-    _syntheticGuideEntries = entries;
-    return (sp, entries);
-  }
-
-  bool _packCoversSeason(Torrent t, int season) {
-    switch (t.coverageType) {
-      case 'completeSeries':
-        final start = t.startSeason;
-        final end = t.endSeason;
-        if (start == null && end == null) return true;
-        return season >= (start ?? 1) && season <= (end ?? season);
-      case 'multiSeasonPack':
-        final start = t.startSeason;
-        final end = t.endSeason;
-        return start != null && end != null && season >= start && season <= end;
-      case 'seasonPack':
-        return t.seasonNumber == season;
-      default:
-        return false;
-    }
-  }
-
-  /// Quick-play an episode that isn't in the current playlist, WITHOUT
-  /// leaving the player: try packs already in the source list, then an
-  /// episode-targeted fetch, then a fresh pack search — switching to the
-  /// first candidate that resolves and actually contains the episode.
-  Future<EpisodePlaybackOutcome> _fetchAndPlayEpisode(
-    int season,
-    int episode, {
-    int? shuffleGeneration,
-    bool autoAdvance = false,
-    EpisodePlaybackRequest? request,
-  }) async {
-    if (!_canFetchEpisodes || _episodeFetchInProgress) {
-      // A next/prev press may have raised the transition curtain already;
-      // never leave it up when the request can't run.
-      if (mounted && _isTransitioning) {
-        setState(() => _isTransitioning = false);
-      }
-      return EpisodePlaybackOutcome.cancelled;
-    }
-    if (request == null) _episodeNavigationGeneration++;
-    request ??= EpisodePlaybackRequest(
-      currentIdentity: () => _playlistIdentityToken,
-      currentNavigation: () => _episodeNavigationGeneration,
-      isActive: () =>
-          mounted &&
-          (!autoAdvance || !_sleepStopLatched) &&
-          (shuffleGeneration == null ||
-              shuffleGeneration == _showShuffleGeneration),
-    );
-    final fetcher = widget.seriesSourceFetcher!;
-    _episodeFetchInProgress = true;
-    final messenger = ScaffoldMessenger.of(context);
-    final label = 'S${vpPad2(season)}E${vpPad2(episode)}';
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text('Fetching $label…'),
-        duration: const Duration(seconds: 2),
-      ),
-    );
-    try {
-      final pinned = fetcher.pinnedDirectCandidates;
-      if (pinned != null) {
-        await for (final candidate in pinned(
-          season,
-          episode,
-          onPreferredMissing: () {
-            if (!request!.isCurrent || !mounted) return;
-            messenger.showSnackBar(
-              const SnackBar(
-                content: Text(
-                  'Your previous source is unavailable for this episode. Trying other sources.',
-                ),
-              ),
-            );
-          },
-        )) {
-          if (!request.isCurrent) {
-            return EpisodePlaybackOutcome.cancelled;
-          }
-          final sources = List<Torrent>.of(_effectiveSources ?? const []);
-          final index = sources.length;
-          sources.add(candidate);
-          setState(() => _augmentedSources = sources);
-          final outcome = await _tryEpisodeCandidate(
-            index,
-            candidate,
-            season,
-            episode,
-            request,
-            shuffleGeneration: shuffleGeneration,
-            autoAdvance: autoAdvance,
-          );
-          if (outcome != EpisodePlaybackOutcome.unavailable) return outcome;
-          if (!request.isCurrent) {
-            return EpisodePlaybackOutcome.cancelled;
-          }
-        }
-      }
-
-      // 1. Try what's already in the source list: exact-episode singles and
-      // packs covering the season (often already unlocked on the account).
-      final existing = List<Torrent>.of(_effectiveSources ?? const <Torrent>[]);
-      var attempts = 0;
-      for (var i = 0; i < existing.length && attempts < 4; i++) {
-        if (i == _currentSourceIndex) continue;
-        final t = existing[i];
-        if (t.streamType == StreamType.externalUrl) continue;
-        final info = SeriesParser.parseFilename(t.displayTitle);
-        final matchesEpisode = info.season == season && info.episode == episode;
-        final coversAsPack =
-            t.streamType == StreamType.torrent && _packCoversSeason(t, season);
-        if (!matchesEpisode && !coversAsPack) continue;
-        attempts++;
-        final outcome = await _tryEpisodeCandidate(
-          i,
-          t,
-          season,
-          episode,
-          request,
-          shuffleGeneration: shuffleGeneration,
-          autoAdvance: autoAdvance,
-        );
-        if (outcome != EpisodePlaybackOutcome.unavailable) return outcome;
-        if (!request.isCurrent) {
-          return EpisodePlaybackOutcome.cancelled;
-        }
-      }
-
-      // 2. Episode-targeted fetch (direct links resolve instantly).
-      List<Torrent>? fetched;
-      try {
-        fetched = await fetcher.fetch(
-          SeriesSourceFetcher.modeEpisodes,
-          season: season,
-          episode: episode,
-        );
-      } catch (_) {
-        fetched = null;
-      }
-      if (!request.isCurrent) {
-        return EpisodePlaybackOutcome.cancelled;
-      }
-      if (fetched != null && fetched.isNotEmpty) {
-        final base = _effectiveSources ?? const <Torrent>[];
-        final merged = SeriesSourceFetcher.mergeSources(base, fetched);
-        setState(() => _augmentedSources = merged);
-        attempts = 0;
-        for (var i = base.length; i < merged.length && attempts < 5; i++) {
-          final t = merged[i];
-          if (t.streamType == StreamType.externalUrl) continue;
-          attempts++;
-          final outcome = await _tryEpisodeCandidate(
-            i,
-            t,
-            season,
-            episode,
-            request,
-            shuffleGeneration: shuffleGeneration,
-            autoAdvance: autoAdvance,
-          );
-          if (outcome != EpisodePlaybackOutcome.unavailable) return outcome;
-          if (!request.isCurrent) {
-            return EpisodePlaybackOutcome.cancelled;
-          }
-        }
-      }
-
-      // 3. Last resort: a fresh pack search for that season.
-      List<Torrent>? packs;
-      try {
-        packs = await fetcher.fetch(
-          SeriesSourceFetcher.modePacks,
-          season: season,
-          episode: episode,
-        );
-      } catch (_) {
-        packs = null;
-      }
-      if (!request.isCurrent) {
-        return EpisodePlaybackOutcome.cancelled;
-      }
-      if (packs != null && packs.isNotEmpty) {
-        final base = _effectiveSources ?? const <Torrent>[];
-        final merged = SeriesSourceFetcher.mergeSources(base, packs);
-        setState(() => _augmentedSources = merged);
-        attempts = 0;
-        for (var i = base.length; i < merged.length && attempts < 3; i++) {
-          final t = merged[i];
-          if (t.streamType != StreamType.torrent) continue;
-          // Pack-search results are season-targeted; only skip ones whose
-          // detected coverage positively excludes the season.
-          if (t.coverageType != null && !_packCoversSeason(t, season)) {
-            continue;
-          }
-          attempts++;
-          final outcome = await _tryEpisodeCandidate(
-            i,
-            t,
-            season,
-            episode,
-            request,
-            shuffleGeneration: shuffleGeneration,
-            autoAdvance: autoAdvance,
-          );
-          if (outcome != EpisodePlaybackOutcome.unavailable) return outcome;
-          if (!request.isCurrent) {
-            return EpisodePlaybackOutcome.cancelled;
-          }
-        }
-      }
-
-      if (request.isCurrent) {
-        // A next/prev press raised the transition curtain before calling in
-        // here — drop it, or a failed fetch leaves the screen black.
-        if (_isTransitioning) {
-          setState(() => _isTransitioning = false);
-        }
-        messenger.showSnackBar(
-          SnackBar(content: Text('No playable source found for $label')),
-        );
-      }
-      return EpisodePlaybackOutcome.unavailable;
-    } finally {
-      _episodeFetchInProgress = false;
-    }
-  }
-
-  /// Resolve one candidate and switch to it when it actually contains the
-  /// target episode, reporting failure independently of playlist replacement.
-  Future<EpisodePlaybackOutcome> _tryEpisodeCandidate(
-    int sourceIndex,
-    Torrent t,
-    int season,
-    int episode,
-    EpisodePlaybackRequest request, {
-    int? shuffleGeneration,
-    bool autoAdvance = false,
-  }) async {
-    logSourceSelection(
-      'next_episode_candidate',
-      source: t,
-      index: sourceIndex,
-      season: season,
-      episode: episode,
-      player: 'mpv',
-    );
-    if (!await widget.seriesSourceFetcher!.allowsCandidate(t)) {
-      return EpisodePlaybackOutcome.unavailable;
-    }
-    if (!request.isCurrent) return EpisodePlaybackOutcome.cancelled;
-    List<PlaylistEntry>? playlist;
-    try {
-      playlist = await widget.resolveSourceToPlaylist!(
-        t,
-        canContinue: () => request.isCurrent,
-      );
-    } catch (_) {
-      playlist = null;
-    }
-    if (!request.isCurrent) return EpisodePlaybackOutcome.cancelled;
-    if (playlist == null || playlist.isEmpty) {
-      logSourceSelection(
-        'next_episode_candidate_rejected',
-        source: t,
-        index: sourceIndex,
-        season: season,
-        episode: episode,
-        player: 'mpv',
-        reason: 'no_playlist',
-      );
-      return EpisodePlaybackOutcome.unavailable;
-    }
-    if (playlist.length == 1) {
-      final info = SeriesParser.parseFilename(playlist.first.title);
-      if (info.season == null || info.episode == null) {
-        // Unparseable single stream: stamp the target identity into the
-        // title so parsing (titles, scrobbling, the guide) stays coherent.
-        playlist = [
-          playlist.first.copyWithTitle(
-            'S${vpPad2(season)}E${vpPad2(episode)} ${playlist.first.title}',
-          ),
-        ];
-      } else if (info.season != season || info.episode != episode) {
-        return EpisodePlaybackOutcome
-            .unavailable; // resolves to a DIFFERENT episode — wrong result
-      }
-    } else {
-      final sp = SeriesPlaylist.fromPlaylistEntries(
-        playlist,
-        collectionTitle: widget.title,
-        forceSeries: true,
-      );
-      if (sp.findOriginalIndexBySeasonEpisode(season, episode) < 0) {
-        return EpisodePlaybackOutcome
-            .unavailable; // pack without the target — try the next candidate
-      }
-    }
-    _setManualSelectionMode(allowResume: true);
-    _isAutoAdvancing = autoAdvance;
-    final resolvedPlaylist = playlist;
-    final outcome = await request.attempt(
-      () => _sourcePlaylistSwitch.switchToSourcePlaylist(
-        sourceIndex,
-        resolvedPlaylist,
-        targetSeason: season,
-        targetEpisode: episode,
-        suppressResume: autoAdvance || shuffleGeneration != null,
-        request: request,
-      ),
-    );
-    if (outcome == EpisodePlaybackOutcome.committed &&
-        mounted &&
-        request.isCurrent) {
-      final retained = SeriesSourceFetcher.retainForEpisode(
-        _effectiveSources ?? const <Torrent>[],
-        season,
-        episode,
-      );
-      var retainedIndex = retained.indexWhere((source) => identical(source, t));
-      retainedIndex = retainedIndex >= 0
-          ? retainedIndex
-          : retained.indexWhere(
-              (source) =>
-                  SeriesSourceFetcher.sourceKey(source) ==
-                  SeriesSourceFetcher.sourceKey(t),
-            );
-      if (retainedIndex >= 0) {
-        setState(() {
-          _augmentedSources = retained;
-          _currentSourceIndex = retainedIndex;
-        });
-      }
-    }
-    logSourceSelection(
-      'next_episode_candidate_outcome',
-      source: t,
-      index: sourceIndex,
-      season: season,
-      episode: episode,
-      player: 'mpv',
-      reason: outcome.name,
-    );
-    return outcome;
-  }
 
   /// Resolve with the origin first; only an unavailable guide permits fallback.
   Future<({int season, int episode})?> _resolveAdjacentWithCachedGuide(
@@ -8292,67 +7342,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     return target == null ? null : (target.season, target.episode);
   }
 
-  void _prepareNextDirectEpisode() {
-    final fetcher = widget.seriesSourceFetcher;
-    final sources = _effectiveSources;
-    if (fetcher == null ||
-        _validationGateActive ||
-        !_isPlaying ||
-        _isTransitioning ||
-        sources == null ||
-        _currentSourceIndex < 0 ||
-        _currentSourceIndex >= sources.length)
-      return;
-    final current = _identify.currentSeasonEpisodeForIdentity();
-    if (current == null) return;
-    unawaited(
-      fetcher.prepareFromProgress(
-        source: sources[_currentSourceIndex],
-        season: current.season,
-        episode: current.episode,
-        positionMs: _position.inMilliseconds,
-        durationMs: _duration.inMilliseconds,
-      ),
-    );
-  }
-
-  Future<void> _showPlaylistSheet(BuildContext context) async {
-    var playlist = _activePlaylist ?? const <PlaylistEntry>[];
-    var seriesPlaylist = _seriesPlaylist;
-    var currentIndex = _currentIndex;
-    final canFetch = _canFetchEpisodes;
-    if (playlist.isEmpty && canFetch) {
-      // Single stream without a playlist: back the guide with a synthetic
-      // 1-entry playlist so the full episode list can render.
-      final synthetic = _buildSyntheticGuide();
-      if (synthetic == null) return;
-      seriesPlaylist = synthetic.$1;
-      playlist = synthetic.$2;
-      currentIndex = 0;
-    }
-    if (seriesPlaylist != null && seriesPlaylist.isSeries) {
-      _episodeMetadataReady ??= _preloadEpisodeInfo();
-    }
-    await PlaylistSheet.show(
-      context,
-      playlist: playlist,
-      currentIndex: currentIndex,
-      seriesPlaylist: seriesPlaylist,
-      playlistItemData: _constructPlaylistItemData(),
-      imdbId: seriesPlaylist?.imdbId ?? _currentSeriesImdbId,
-      imdbKnownAtLaunch: _seriesImdbKnownAtLaunch,
-      metadataReady: _episodeMetadataReady,
-      viewMode: widget.viewMode,
-      onSelect: (index, {bool allowResume = false}) async {
-        // Synthetic guide: its only playlist row IS the playing stream.
-        if (_activePlaylist == null || _activePlaylist!.isEmpty) return;
-        _setManualSelectionMode(allowResume: allowResume);
-        await _loadPlaylistIndex(index, autoplay: true);
-      },
-      onFetchEpisode: canFetch ? _fetchAndPlayEpisode : null,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final isReady = _isReady;
@@ -8395,7 +7384,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             if (_showChannelGuide) {
               if (key == LogicalKeyboardKey.escape ||
                   key == LogicalKeyboardKey.goBack) {
-                _hideChannelGuideOverlay();
+                _debrifyChannels.hideChannelGuideOverlay();
                 return KeyEventResult.handled;
               }
               // Let channel guide handle other keys
@@ -8427,7 +7416,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             if (_showStremioTvGuide) {
               if (key == LogicalKeyboardKey.escape ||
                   key == LogicalKeyboardKey.goBack) {
-                _hideStremioTvGuide();
+                _stremioTv.hideStremioTvGuide();
                 return KeyEventResult.handled;
               }
               // Let guide sheet handle other keys
@@ -8455,11 +7444,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             if (key == LogicalKeyboardKey.keyG) {
               if (_channelEntries.isNotEmpty &&
                   widget.requestChannelById != null) {
-                _showChannelGuideOverlay();
+                _debrifyChannels.showChannelGuideOverlay();
                 return KeyEventResult.handled;
               }
               if (_hasStremioTvGuide) {
-                _showStremioTvGuideOverlay();
+                _stremioTv.showStremioTvGuideOverlay();
                 return KeyEventResult.handled;
               }
               if (_effectiveIptvChannels?.isNotEmpty == true) {
@@ -8498,12 +7487,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               // If channels are available, show channel guide
               if (_channelEntries.isNotEmpty &&
                   widget.requestChannelById != null) {
-                _showChannelGuideOverlay();
+                _debrifyChannels.showChannelGuideOverlay();
                 return KeyEventResult.handled;
               }
               // Stremio TV guide
               if (_hasStremioTvGuide) {
-                _showStremioTvGuideOverlay();
+                _stremioTv.showStremioTvGuideOverlay();
                 return KeyEventResult.handled;
               }
 
@@ -8692,7 +7681,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 return KeyEventResult.handled;
               }
               if (widget.requestNextChannel != null) {
-                _goToNextChannel();
+                _debrifyChannels.goToNextChannel();
                 return KeyEventResult.handled;
               }
             }
@@ -9119,7 +8108,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                           _activePlaylist!.isNotEmpty) ||
                                       _canFetchEpisodes,
                                   onShowPlaylist: () =>
-                                      _showPlaylistSheet(context),
+                                      _episodeGuide.showPlaylistSheet(context),
                                   onShowTracks: () =>
                                       _menuUi.showTracksSheet(context),
                                   onSeekBarChangedStart: () {
@@ -9176,7 +8165,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                       : (_hasAnyNext ? _goToNextEpisode : null),
                                   onNextChannel:
                                       widget.requestNextChannel != null
-                                      ? _goToNextChannel
+                                      ? _debrifyChannels.goToNextChannel
                                       : null,
                                   onPrevious: _hasIptvPrevious
                                       ? () => _iptvSwitch.switchToIptvChannel(
@@ -9200,9 +8189,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                   onShowGuide:
                                       _channelEntries.isNotEmpty &&
                                           widget.requestChannelById != null
-                                      ? _showChannelGuideOverlay
+                                      ? _debrifyChannels.showChannelGuideOverlay
                                       : _hasStremioTvGuide
-                                      ? _showStremioTvGuideOverlay
+                                      ? _stremioTv.showStremioTvGuideOverlay
                                       : null,
                                   hasPrevious:
                                       _hasPreviousEpisode() ||
@@ -9417,8 +8406,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                       channels: _channelEntries,
                       currentChannelId: _currentChannelId,
                       currentChannelNumber: _currentChannelNumber,
-                      onChannelSelected: _goToChannelById,
-                      onClose: _hideChannelGuideOverlay,
+                      onChannelSelected: _debrifyChannels.goToChannelById,
+                      onClose: _debrifyChannels.hideChannelGuideOverlay,
                     ),
                   ),
                 // IPTV channel sheet overlay
@@ -9501,8 +8490,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                       guideDataProvider: widget.stremioTvGuideDataProvider,
                       channelSwitchProvider:
                           widget.stremioTvChannelSwitchProvider!,
-                      onChannelSwitched: _switchToStremioTvChannel,
-                      onClose: _hideStremioTvGuide,
+                      onChannelSwitched: _stremioTv.switchToStremioTvChannel,
+                      onClose: _stremioTv.hideStremioTvGuide,
                     ),
                   ),
                 // Unified player menu (Spotlight panel)
@@ -9597,6 +8586,446 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
     return null;
   }
+}
+
+class _VpEpisodeGuideHostAdapter implements VpEpisodeGuideHost {
+  _VpEpisodeGuideHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  List<PlaylistEntry>? get activePlaylist => _s._activePlaylist;
+  @override
+  bool get canFetchEpisodes => _s._canFetchEpisodes;
+  @override
+  int get currentIndex => _s._currentIndex;
+  @override
+  String? get currentSeriesImdbId => _s._currentSeriesImdbId;
+  @override
+  Future<void>? get episodeMetadataReady => _s._episodeMetadataReady;
+  @override
+  set episodeMetadataReady(Future<void>? v) => _s._episodeMetadataReady = v;
+  @override
+  bool get seriesImdbKnownAtLaunch => _s._seriesImdbKnownAtLaunch;
+  @override
+  SeriesPlaylist? get seriesPlaylist => _s._seriesPlaylist;
+  @override
+  SeriesPlaylist? get syntheticGuidePlaylist => _s._syntheticGuidePlaylist;
+  @override
+  set syntheticGuidePlaylist(SeriesPlaylist? v) =>
+      _s._syntheticGuidePlaylist = v;
+  @override
+  void setManualSelectionMode({bool allowResume = false}) =>
+      _s._setManualSelectionMode(allowResume: allowResume);
+  @override
+  ({int? season, int? episode}) traktSeasonEpisode() =>
+      _s._traktSeasonEpisode();
+  @override
+  Future<void> preloadEpisodeInfo() => _s._preloadEpisodeInfo();
+  @override
+  Map<String, dynamic>? constructPlaylistItemData() =>
+      _s._constructPlaylistItemData();
+  @override
+  Future<bool> loadPlaylistIndex(
+    int index, {
+    bool autoplay = false,
+    EpisodePlaybackRequest? request,
+    bool skipInitialSave = false,
+    bool preferLocalResume = false,
+    bool suppressResume = false,
+    Torrent? manualValidationSource,
+    int? manualValidationSourceIndex,
+  }) => _s._loadPlaylistIndex(
+    index,
+    autoplay: autoplay,
+    request: request,
+    skipInitialSave: skipInitialSave,
+    preferLocalResume: preferLocalResume,
+    suppressResume: suppressResume,
+    manualValidationSource: manualValidationSource,
+    manualValidationSourceIndex: manualValidationSourceIndex,
+  );
+  @override
+  Future<EpisodePlaybackOutcome> fetchAndPlayEpisode(
+    int season,
+    int episode, {
+    int? shuffleGeneration,
+    bool autoAdvance = false,
+    EpisodePlaybackRequest? request,
+  }) => _s._episodeFetch.fetchAndPlayEpisode(
+    season,
+    episode,
+    shuffleGeneration: shuffleGeneration,
+    autoAdvance: autoAdvance,
+    request: request,
+  );
+  @override
+  String get title => _s.widget.title;
+  @override
+  String get videoUrl => _s.widget.videoUrl;
+  @override
+  String? get contentTitle => _s.widget.contentTitle;
+  @override
+  PlaylistViewMode? get viewMode => _s.widget.viewMode;
+}
+
+class _VpEpisodeFetchHostAdapter implements VpEpisodeFetchHost {
+  _VpEpisodeFetchHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  set augmentedSources(List<Torrent>? v) => _s._augmentedSources = v;
+  @override
+  bool get canFetchEpisodes => _s._canFetchEpisodes;
+  @override
+  int get currentSourceIndex => _s._currentSourceIndex;
+  @override
+  set currentSourceIndex(int v) => _s._currentSourceIndex = v;
+  @override
+  Duration get duration => _s._duration;
+  @override
+  List<Torrent>? get effectiveSources => _s._effectiveSources;
+  @override
+  bool get episodeFetchInProgress => _s._episodeFetchInProgress;
+  @override
+  set episodeFetchInProgress(bool v) => _s._episodeFetchInProgress = v;
+  @override
+  int get episodeNavigationGeneration => _s._episodeNavigationGeneration;
+  @override
+  set episodeNavigationGeneration(int v) => _s._episodeNavigationGeneration = v;
+  @override
+  set isAutoAdvancing(bool v) => _s._isAutoAdvancing = v;
+  @override
+  bool get isPlaying => _s._isPlaying;
+  @override
+  bool get isTransitioning => _s._isTransitioning;
+  @override
+  set isTransitioning(bool v) => _s._isTransitioning = v;
+  @override
+  int get playlistIdentityToken => _s._playlistIdentityToken;
+  @override
+  Duration get position => _s._position;
+  @override
+  int get showShuffleGeneration => _s._showShuffleGeneration;
+  @override
+  bool get sleepStopLatched => _s._sleepStopLatched;
+  @override
+  bool get validationGateActive => _s._validationGateActive;
+  @override
+  void setManualSelectionMode({bool allowResume = false}) =>
+      _s._setManualSelectionMode(allowResume: allowResume);
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  BuildContext get context => _s.context;
+  @override
+  void setState(VoidCallback fn) => _s._vpSetState(fn);
+  @override
+  SeriesSourceFetcher? get seriesSourceFetcher => _s.widget.seriesSourceFetcher;
+  @override
+  SourcePlaylistResolve? get resolveSourceToPlaylist =>
+      _s.widget.resolveSourceToPlaylist;
+  @override
+  String get title => _s.widget.title;
+  @override
+  Future<bool> switchToSourcePlaylist(
+    int sourceIndex,
+    List<PlaylistEntry> newPlaylist, {
+    int? targetSeason,
+    int? targetEpisode,
+    bool validateExplicitSelection = false,
+    bool suppressResume = false,
+    EpisodePlaybackRequest? request,
+  }) => _s._sourcePlaylistSwitch.switchToSourcePlaylist(
+    sourceIndex,
+    newPlaylist,
+    targetSeason: targetSeason,
+    targetEpisode: targetEpisode,
+    validateExplicitSelection: validateExplicitSelection,
+    suppressResume: suppressResume,
+    request: request,
+  );
+  @override
+  VpSeasonEpisodeSelection? currentSeasonEpisodeForIdentity() =>
+      _s._identify.currentSeasonEpisodeForIdentity();
+}
+
+class _VpStremioTvChannelsHostAdapter implements VpStremioTvChannelsHost {
+  _VpStremioTvChannelsHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  ValueNotifier<bool> get controlsVisible => _s._controlsVisible;
+  @override
+  set currentSourceIndex(int v) => _s._currentSourceIndex = v;
+  @override
+  set currentStreamUrl(String? v) => _s._currentStreamUrl = v;
+  @override
+  String? get currentStremioTvChannelId => _s._currentStremioTvChannelId;
+  @override
+  set currentStremioTvChannelId(String? v) => _s._currentStremioTvChannelId = v;
+  @override
+  set currentStremioTvContentEpisode(int? v) =>
+      _s._currentStremioTvContentEpisode = v;
+  @override
+  set currentStremioTvContentImdbId(String? v) =>
+      _s._currentStremioTvContentImdbId = v;
+  @override
+  set currentStremioTvContentSeason(int? v) =>
+      _s._currentStremioTvContentSeason = v;
+  @override
+  set currentStremioTvContentTitle(String? v) =>
+      _s._currentStremioTvContentTitle = v;
+  @override
+  set currentStremioTvContentType(String? v) =>
+      _s._currentStremioTvContentType = v;
+  @override
+  String get dynamicTitle => _s._dynamicTitle;
+  @override
+  set dynamicTitle(String v) => _s._dynamicTitle = v;
+  @override
+  List<Map<String, dynamic>>? get effectiveStremioTvChannels =>
+      _s._effectiveStremioTvChannels;
+  @override
+  bool get hasStremioTvGuide => _s._hasStremioTvGuide;
+  @override
+  set isTransitioning(bool v) => _s._isTransitioning = v;
+  @override
+  int get pikPakRetryId => _s._pikPakRetryId;
+  @override
+  set pikPakRetryId(int v) => _s._pikPakRetryId = v;
+  @override
+  mk.Player get player => _s._player;
+  @override
+  set rainbowActive(bool v) => _s._rainbowActive = v;
+  @override
+  AnimationController get rainbowController => _s._rainbowController;
+  @override
+  set resolveStremioSourceOverride(Future<String?> Function(Torrent)? v) =>
+      _s._resolveStremioSourceOverride = v;
+  @override
+  set showStremioTvGuide(bool v) => _s._showStremioTvGuide = v;
+  @override
+  bool get showStremioTvNextLoading => _s._showStremioTvNextLoading;
+  @override
+  set showStremioTvNextLoading(bool v) => _s._showStremioTvNextLoading = v;
+  @override
+  set singleFileImdbFetched(bool v) => _s._singleFileImdbFetched = v;
+  @override
+  set singleFileImdbId(String? v) => _s._singleFileImdbId = v;
+  @override
+  set stremioSourcesOverride(List<Torrent>? v) =>
+      _s._stremioSourcesOverride = v;
+  @override
+  set stremioTvChannelsOverride(List<Map<String, dynamic>>? v) =>
+      _s._stremioTvChannelsOverride = v;
+  @override
+  set transitionPhase(int v) => _s._transitionPhase = v;
+  @override
+  set transitionPhase2Started(DateTime? v) => _s._transitionPhase2Started = v;
+  @override
+  Timer? get transitionPhaseTimer => _s._transitionPhaseTimer;
+  @override
+  set transitionRunning(bool v) => _s._transitionRunning = v;
+  @override
+  Timer? get transitionStopTimer => _s._transitionStopTimer;
+  @override
+  set transitionStopTimer(Timer? v) => _s._transitionStopTimer = v;
+  @override
+  int get tvScrubGeneration => _s._tvScrubGeneration;
+  @override
+  set tvScrubGeneration(int v) => _s._tvScrubGeneration = v;
+  @override
+  void tvAbandonScrub() => _s._tvAbandonScrub();
+  @override
+  void clearBufferingIndicator() => _s._clearBufferingIndicator();
+  @override
+  void startTransitionOverlay() => _s._startTransitionOverlay();
+  @override
+  void resetSubtitleState() => _s._resetSubtitleState();
+  @override
+  Future<void> openMedia(
+    mk.Media media, {
+    required bool play,
+    bool? desiredPlay,
+    bool liveStream = false,
+    EpisodePlaybackRequest? request,
+    bool Function()? beforeOpen,
+    Torrent? source,
+    int? preserveStartupEpoch,
+  }) => _s._openMedia(
+    media,
+    play: play,
+    desiredPlay: desiredPlay,
+    liveStream: liveStream,
+    request: request,
+    beforeOpen: beforeOpen,
+    source: source,
+    preserveStartupEpoch: preserveStartupEpoch,
+  );
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  void setState(VoidCallback fn) => _s._vpSetState(fn);
+  @override
+  String? get stremioTvCurrentChannelId => _s.widget.stremioTvCurrentChannelId;
+  @override
+  Future<Map<String, dynamic>?> Function(String)? get stremioTvNextProvider =>
+      _s.widget.stremioTvNextProvider;
+  @override
+  Future<bool> setSubtitleTrackWithDiagnostics(
+    mk.SubtitleTrack track, {
+    required String source,
+    bool Function()? isCurrent,
+  }) => _s._subtitleApply.setSubtitleTrackWithDiagnostics(
+    track,
+    source: source,
+    isCurrent: isCurrent,
+  );
+  @override
+  void resetLocalCompletionState() =>
+      _s._completion.resetLocalCompletionState();
+}
+
+class _VpDebrifyTvBannerHostAdapter implements VpDebrifyTvBannerHost {
+  _VpDebrifyTvBannerHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  bool get anyPlayerOverlayOpen => _s._anyPlayerOverlayOpen;
+  @override
+  ValueNotifier<bool> get controlsVisible => _s._controlsVisible;
+  @override
+  bool get debrifyBannerFloatingMounted => _s._debrifyBannerFloatingMounted;
+  @override
+  set debrifyBannerFloatingMounted(bool v) =>
+      _s._debrifyBannerFloatingMounted = v;
+  @override
+  bool get debrifyTvOwnsIdentity => _s._debrifyTvOwnsIdentity;
+  @override
+  bool get isTransitioning => _s._isTransitioning;
+  @override
+  PlaybackUiClockController get playbackUiClock => _s._playbackUiClock;
+  @override
+  bool get showDebrifyBanner => _s._showDebrifyBanner;
+  @override
+  set showDebrifyBanner(bool v) => _s._showDebrifyBanner = v;
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  void setState(VoidCallback fn) => _s._vpSetState(fn);
+  @override
+  bool get hideSeekbar => _s.widget.hideSeekbar;
+}
+
+class _VpDebrifyTvChannelsHostAdapter implements VpDebrifyTvChannelsHost {
+  _VpDebrifyTvChannelsHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  Map<String, String>? get activeHttpHeaders => _s._activeHttpHeaders;
+  @override
+  List<ChannelEntry> get channelEntries => _s._channelEntries;
+  @override
+  set channelEntries(List<ChannelEntry> v) => _s._channelEntries = v;
+  @override
+  ValueNotifier<bool> get controlsVisible => _s._controlsVisible;
+  @override
+  String? get currentChannelId => _s._currentChannelId;
+  @override
+  set currentChannelId(String? v) => _s._currentChannelId = v;
+  @override
+  set currentChannelName(String? v) => _s._currentChannelName = v;
+  @override
+  set currentChannelNumber(int? v) => _s._currentChannelNumber = v;
+  @override
+  set currentStreamUrl(String? v) => _s._currentStreamUrl = v;
+  @override
+  Duration get duration => _s._duration;
+  @override
+  set dynamicTitle(String v) => _s._dynamicTitle = v;
+  @override
+  set isTransitioning(bool v) => _s._isTransitioning = v;
+  @override
+  int get pikPakRetryId => _s._pikPakRetryId;
+  @override
+  set pikPakRetryId(int v) => _s._pikPakRetryId = v;
+  @override
+  mk.Player get player => _s._player;
+  @override
+  set showChannelGuide(bool v) => _s._showChannelGuide = v;
+  @override
+  set singleFileImdbFetched(bool v) => _s._singleFileImdbFetched = v;
+  @override
+  set singleFileImdbId(String? v) => _s._singleFileImdbId = v;
+  @override
+  int get tvScrubGeneration => _s._tvScrubGeneration;
+  @override
+  set tvScrubGeneration(int v) => _s._tvScrubGeneration = v;
+  @override
+  set tvStaticMessage(String v) => _s._tvStaticMessage = v;
+  @override
+  set tvStaticSubtext(String v) => _s._tvStaticSubtext = v;
+  @override
+  void tvAbandonScrub() => _s._tvAbandonScrub();
+  @override
+  void clearBufferingIndicator() => _s._clearBufferingIndicator();
+  @override
+  void startTransitionOverlay() => _s._startTransitionOverlay();
+  @override
+  void resetSubtitleState() => _s._resetSubtitleState();
+  @override
+  Future<void> openMedia(
+    mk.Media media, {
+    required bool play,
+    bool? desiredPlay,
+    bool liveStream = false,
+    EpisodePlaybackRequest? request,
+    bool Function()? beforeOpen,
+    Torrent? source,
+    int? preserveStartupEpoch,
+  }) => _s._openMedia(
+    media,
+    play: play,
+    desiredPlay: desiredPlay,
+    liveStream: liveStream,
+    request: request,
+    beforeOpen: beforeOpen,
+    source: source,
+    preserveStartupEpoch: preserveStartupEpoch,
+  );
+  @override
+  Future<void> waitForVideoReady() => _s._waitForVideoReady();
+  @override
+  Duration? randomStartOffset(Duration total) => _s._randomStartOffset(total);
+  @override
+  Duration? percentStartOffset(Duration total) => _s._percentStartOffset(total);
+  @override
+  void raiseDebrifyBanner() => _s._debrifyBanner.raiseDebrifyBanner();
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  void setState(VoidCallback fn) => _s._vpSetState(fn);
+  @override
+  List<Map<String, dynamic>>? get channelDirectory =>
+      _s.widget.channelDirectory;
+  @override
+  Future<Map<String, dynamic>?> Function(String)? get requestChannelById =>
+      _s.widget.requestChannelById;
+  @override
+  Future<Map<String, dynamic>?> Function()? get requestNextChannel =>
+      _s.widget.requestNextChannel;
+  @override
+  bool get startFromRandom => _s.widget.startFromRandom;
+  @override
+  double? get startAtPercent => _s.widget.startAtPercent;
+  @override
+  void hideIptvZapBanner({bool immediate = false}) =>
+      _s._iptvBanner.hideIptvZapBanner(immediate: immediate);
+  @override
+  Future<bool> setSubtitleTrackWithDiagnostics(
+    mk.SubtitleTrack track, {
+    required String source,
+    bool Function()? isCurrent,
+  }) => _s._subtitleApply.setSubtitleTrackWithDiagnostics(
+    track,
+    source: source,
+    isCurrent: isCurrent,
+  );
 }
 
 class _VpSourcePlaylistSwitchHostAdapter implements VpSourcePlaylistSwitchHost {

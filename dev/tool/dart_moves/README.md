@@ -300,3 +300,18 @@ current/self-test and both analyzer arguments select P16; P1–P15 history adds
 P15 `ed7c6717a`. The P16 analyzer inventory records the receiver-probe identity
 additions (`use_build_context_synchronously` "unrelated mounted" variants on
 three moved members; two facade imports left unused). Facade ratchet 12,154.
+
+P17 Step 1 applies the FINAL materialization re-derived on accepted P16
+`2ee7e94ac`: five TV-channel/episode collaborators (`vp_debrify_tv_channels`,
+`vp_debrify_tv_banner`, `vp_stremio_tv_channels`, `vp_episode_fetch`,
+`vp_episode_guide`), 25 moves, 36 retained references, 44 protected earlier
+destinations. `draft_vplayer_tv_episode_moves.py` writes the formatted sources
+beneath `refactor-evidence/vplayer/p17/`; Step 1 copies them unchanged. Before
+copying, the generator's per-file import templates were corrected (sorted
+`dart:`/`package:` sections; `media_kit` dropped from `vp_episode_fetch`, which
+never uses it) and the FINAL comparison re-run: zero differences, directives
+only. CI current/self-test and both analyzer arguments select P17; P1–P16
+history adds P16 `c094c864c`. The P17 analyzer inventory records two
+receiver-probe identity additions (`_showPlaylistSheet` single-line `if` now
+wrapped by the longer `_host.` receiver; one facade import left unused).
+Facade ratchet 11,583.
