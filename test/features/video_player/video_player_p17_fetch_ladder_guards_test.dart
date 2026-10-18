@@ -6,6 +6,7 @@ import 'package:debrify/services/series_source_fetcher.dart';
 import 'package:debrify/widgets/series_browser.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:media_kit_video/media_kit_video.dart' as mkv;
 import 'support/player_actions.dart';
 import 'support/sleep_timer_driver.dart';
 import 'support/tv_episode_driver.dart';
@@ -623,4 +624,42 @@ void main() {
       }
     });
   }
+
+  testWidgets(
+    'P17 failed previous-episode fetch drops the transition curtain it raised',
+    (t) async {
+      final d = TvEpisodeDriver(t);
+      await d.initialize();
+      try {
+        await d.mount(
+          screen: VideoPlayerScreen(
+            videoUrl: 'https://player.test/a.mp4',
+            title: 'Show.S01E02.mkv',
+            contentType: 'series',
+            contentSeason: 1,
+            contentEpisode: 2,
+            seriesSourceFetcher: SeriesSourceFetcher(
+              season: 1,
+              episode: 2,
+              resolveAdjacentEpisode: (s, e, direction) async =>
+                  (season: 1, episode: 1),
+              searchEpisodes: (s, e) async => [],
+              searchPacks: (s, e) async => [],
+            ),
+            resolveSourceToPlaylist: (s, {canContinue}) async => [],
+          ),
+        );
+        expect(find.byType(mkv.Video), findsOneWidget);
+        final dynamic previous = playerControls(t).onPrevious!;
+        await d.f.finish<dynamic>(t, d.observe<dynamic>(() => previous()));
+        await waitSleepToast(t, d.f, 'No playable source found for S01E01');
+        await d.f.advance(t);
+        expect(find.byType(mkv.Video), findsOneWidget);
+        expect(d.opens, hasLength(1));
+        expect(d.errors, isEmpty);
+      } finally {
+        await d.close();
+      }
+    },
+  );
 }
