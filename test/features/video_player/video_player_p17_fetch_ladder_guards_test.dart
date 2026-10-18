@@ -696,6 +696,13 @@ void main() {
         await d.f.actions.settle(t);
         expect(d.opens, hasLength(2));
         expect(d.opens.last.uri, found.directUrl);
+        Navigator.of(t.element(find.byType(SeriesBrowser))).pop();
+        await d.f.until(t, () => find.byType(SeriesBrowser).evaluate().isEmpty);
+        final guide = await d.browser();
+        expect(
+          guide.seriesPlaylist.allEpisodes.single.filename,
+          'S01E02 Show E02',
+        );
         expect(d.errors, isEmpty);
       } finally {
         await d.close();
