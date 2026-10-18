@@ -8,6 +8,8 @@ import 'package:debrify/services/storage/video_progress_storage.dart';
 import 'package:debrify/utils/platform_util.dart';
 import 'package:debrify/screens/video_player/services/subtitle_settings_service.dart';
 import 'package:flutter/widgets.dart';
+import 'package:debrify/screens/video_player/constants/timing_constants.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'support/player_actions.dart';
 import 'support/tv_episode_driver.dart';
@@ -18,6 +20,7 @@ import 'support/tv_episode_driver.dart';
 /// and a failed Debrify open still ends the TV transition.
 void main() {
   nextMetadataCases();
+  bannerAndRandomCases();
   const a = 'https://player.test/a.mp4';
   const b = 'https://player.test/b.mp4';
 
@@ -269,6 +272,122 @@ void nextMetadataCases() {
       },
     );
   }
+}
+
+void bannerAndRandomCases() {
+  const b = 'https://player.test/b.mp4';
+  Iterable<DebrifyTvBanner> floating(WidgetTester t) => t
+      .widgetList<DebrifyTvBanner>(find.byType(DebrifyTvBanner))
+      .where((v) => !v.flush);
+  VideoPlayerScreen screen() => VideoPlayerScreen(
+    videoUrl: 'https://player.test/a.mp4',
+    title: 'Film A',
+    showChannelName: true,
+    channelName: 'Alpha',
+    requestNextChannel: () async => {'url': b, 'channelName': 'Beta'},
+  );
+  testWidgets(
+    'P17 Debrify next with channel metadata raises the floating banner again after the launch banner faded',
+    (t) async {
+      final d = TvEpisodeDriver(t);
+      await d.initialize();
+      try {
+        await d.mount(screen: screen());
+        await d.f.advance(t, const Duration(seconds: 8));
+        expect(floating(t), isEmpty);
+        await d.nextChannel();
+        expect(floating(t).map((v) => v.channelName), ['Beta']);
+        expect(d.errors, isEmpty);
+      } finally {
+        await d.close();
+      }
+    },
+  );
+  testWidgets(
+    'P17 controls opening during the banner fade unmount the floating copy at once',
+    (t) async {
+      final d = TvEpisodeDriver(t);
+      await d.initialize();
+      try {
+        await d.mount(screen: screen());
+        await d.f.advance(t, const Duration(seconds: 8));
+        await d.nextChannel();
+        expect(floating(t), hasLength(1));
+        // Let the display window lapse: the banner starts its 350 ms fade but
+        // stays mounted until the fade ends.
+        double opacity() => t
+            .widget<AnimatedOpacity>(
+              find
+                  .ancestor(
+                    of: find.byWidgetPredicate(
+                      (w) => w is DebrifyTvBanner && !w.flush,
+                    ),
+                    matching: find.byType(AnimatedOpacity),
+                  )
+                  .first,
+            )
+            .opacity;
+        await d.f.advance(t, VideoPlayerTimingConstants.badgeDisplayDuration);
+        await d.f.until(t, () => opacity() == 0);
+        expect(floating(t), hasLength(1));
+        // One frame, well inside the fade: the floating copy must already be
+        // gone rather than left to finish fading under the dock.
+        await t.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+        await t.pump(const Duration(milliseconds: 16));
+        expect(floating(t), isEmpty);
+        expect(d.errors, isEmpty);
+      } finally {
+        await d.close();
+      }
+    },
+  );
+  testWidgets(
+    'P17 Debrify next random start waits for the switched stream duration before seeking',
+    (t) async {
+      var opens = 0;
+      late final dynamic fake;
+      final d = TvEpisodeDriver(
+        t,
+        configurePlayer: (player) {
+          fake = player;
+          player.onOpen = () {
+            opens++;
+            // Launch media never publishes a duration; the switched stream's
+            // duration arrives only after its open returns.
+            if (opens == 1) player.publishFrame(duration: Duration.zero);
+          };
+        },
+      );
+      await d.initialize();
+      try {
+        await d.mount(
+          screen: VideoPlayerScreen(
+            videoUrl: 'https://player.test/a.mp4',
+            title: 'Film A',
+            startFromRandom: true,
+            randomStartMaxPercent: 50,
+            requestNextChannel: () async => {'url': b},
+          ),
+          // No launch duration, so the autosave timer never starts.
+          settleInitialization: false,
+        );
+        await d.f.advance(t, const Duration(seconds: 1));
+        final before = d.seeks.length;
+        final task = d.beginNextChannel();
+        await d.f.until(t, () => opens == 2);
+        await d.f.advance(t, const Duration(milliseconds: 300));
+        expect(d.seeks.skip(before), isEmpty);
+        fake.publishFrame(duration: const Duration(minutes: 40));
+        await d.f.finish<dynamic>(t, task);
+        final seeks = d.seeks.skip(before).toList();
+        expect(seeks, hasLength(1));
+        expect(seeks.single.inMilliseconds, inInclusiveRange(1, 1200000));
+        expect(d.errors, isEmpty);
+      } finally {
+        await d.close();
+      }
+    },
+  );
 }
 
 /// Holds a rendered Debrify guide so its selection callback can be invoked
