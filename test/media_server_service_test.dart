@@ -42,13 +42,12 @@ import 'package:debrify/utils/filter_ladder.dart';
 import 'package:debrify/utils/torrent_filter_matcher.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'features/video_player/support/vp_source_reader.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'features/video_player/support/vp_source_reader.dart';
 import 'support/stremio_tv_source.dart';
 
 void main() {

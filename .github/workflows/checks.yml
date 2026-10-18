@@ -74,7 +74,7 @@ jobs:
       - run: python3 dev/tool/vplayer_architecture_test.py
       # First production video_player files: exhaustive ownership/history and
       # frozen scaffolding checks use separate tool-only parser packages.
-      # Phase 15 owns IPTV workflow; all accepted seam patches stay frozen.
+      # Phase 16 owns startup and source switching; all accepted seam patches stay frozen.
       - run: python3 dev/tool/check_dart_moves.py --manifest dev/tool/dart_moves/vplayer_p16.json --self-test --parser-package .dart_tool/vplayer_parser/ci_moves_self/.dart_tool/package_config.json
       - run: python3 dev/tool/check_dart_moves.py --manifest dev/tool/dart_moves/vplayer_p16.json --parser-package .dart_tool/vplayer_parser/ci_moves_current/.dart_tool/package_config.json
       - run: python3 dev/tool/check_dart_moves.py --manifest dev/tool/dart_moves/vplayer_p1.json --at 31a347ad2 --parser-package .dart_tool/vplayer_parser/ci_moves_p1_history/.dart_tool/package_config.json

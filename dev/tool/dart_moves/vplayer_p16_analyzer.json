@@ -794,7 +794,7 @@
       "maximum": 1
     }
   ],
-  "procedure": "P1-P14 mappings preserved. Original root, strict feature config, final formatted P15 receiver/rename probe.",
+  "procedure": "P1-P15 mappings preserved. Original root, strict feature config, final formatted P16 receiver/rename probe.",
   "runs": {
     "root": {
       "count": 159,
@@ -2989,7 +2989,7 @@
       "symbol": "_VideoPlayerScreenState._switchToSourcePlaylist",
       "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
       "maximum": 1,
-      "reason": "P16 receiver rewrite: _host.context/_host.mounted is not recognised as the State mounted guard, or facade import left unused by the verbatim move"
+      "reason": "P16 receiver rewrite: _host.context/_host.mounted is not recognised as the State mounted guard (P12 precedent)"
     },
     {
       "severity": "info",
@@ -2997,7 +2997,7 @@
       "symbol": "_VideoPlayerScreenState._switchToStremioSource",
       "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
       "maximum": 1,
-      "reason": "P16 receiver rewrite: _host.context/_host.mounted is not recognised as the State mounted guard, or facade import left unused by the verbatim move"
+      "reason": "P16 receiver rewrite: _host.context/_host.mounted is not recognised as the State mounted guard (P12 precedent)"
     },
     {
       "severity": "info",
@@ -3005,7 +3005,7 @@
       "symbol": "_VideoPlayerScreenState._reportStartupFailure",
       "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
       "maximum": 2,
-      "reason": "P16 receiver rewrite: _host.context/_host.mounted is not recognised as the State mounted guard, or facade import left unused by the verbatim move"
+      "reason": "P16 receiver rewrite: _host.context/_host.mounted is not recognised as the State mounted guard (P12 precedent)"
     },
     {
       "severity": "warning",
@@ -3013,7 +3013,7 @@
       "symbol": "@directives",
       "message": "Unused import: 'package:debrify/services/storage/quick_play_storage.dart'. Try removing the import directive",
       "maximum": 1,
-      "reason": "P16 receiver rewrite: _host.context/_host.mounted is not recognised as the State mounted guard, or facade import left unused by the verbatim move"
+      "reason": "Facade import left unused by the verbatim P16 move (P15 precedent); removal deferred to the end-state import cleanup"
     },
     {
       "severity": "warning",
@@ -3021,7 +3021,8 @@
       "symbol": "@directives",
       "message": "Unused import: '../features/video_player/models/vp_manual_source_validation_failure.dart'. Try removing the import directive",
       "maximum": 1,
-      "reason": "P16 receiver rewrite: _host.context/_host.mounted is not recognised as the State mounted guard, or facade import left unused by the verbatim move"
+      "reason": "Facade import left unused by the verbatim P16 move (P15 precedent); removal deferred to the end-state import cleanup"
     }
-  ]
+  ],
+  "p16_receiver_probe_additions_note": "Documentation only \u2014 the comparator reads `entries`, where these maxima are included."
 }

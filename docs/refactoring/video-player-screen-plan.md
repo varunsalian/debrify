@@ -7212,6 +7212,21 @@ P13 menu UI and menu controller (`captureIptvAudioLanguage`,
   seam proofs (S–S2e incl. 82 negatives) pass. Full suite + release builds
   (milestone M3) follow the independent review.
 
+### 2026-10-18 — Phase 16 independent post-gate review (review agent) — "No P1s"
+
+Independent review agent (fresh context, read-only): no P1/P2. It re-ran the
+P16 current checker (0 differences), diffed all 16 moved bodies against
+`fdd2f84ac` (only receiver rewrites, incl. the required `${_host.…}`
+interpolations), re-ran the analyzer comparator (176 scoped, 0 additions),
+format, architecture and the three retargeted suites (79/79), recounted the
+gate JSONL (397/397 suites, 2,671 identical cases). P3s adopted: CI comment
+corrected; analyzer inventory `procedure`/reasons split (documentation-only
+key noted); gate comparator now counts loading events and fails on
+added/load-error cases (re-run: 397 suites loaded both sides, IDENTICAL);
+`media_server_service_test.dart` import order fixed. P3 deferred: the two
+facade imports left unused by the verbatim move stay allowlisted (P15
+precedent) — removal milestone: the end-state import cleanup in phase 21.
+
 ## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
 
 Reviewed at `c5c8e3500` (facade byte-identical to `be4cd78aa`; split,
