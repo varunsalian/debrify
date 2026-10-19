@@ -13489,3 +13489,338 @@ replace it. Both cases pass alone again in both worktrees. The latest routed
 receipt supersedes the old hash explicitly; old logs remain archived. The
 publication transition control passes unchanged in isolation, and all 74
 publication replays complete. Remaining case proofs and the gate are pending.
+
+## Phase 18 Step T — navigation, shuffle, title info, playlist load, PikPak, preload (2026-10-19)
+
+Base **249566376** (phase-17 merge). Manifest `dev/tool/dart_moves/vplayer_p18.json` is status `draft` (**PROVISIONAL** until step 1); the generator is `dev/tool/draft_vplayer_navigation_moves.py`. Facade 11,583 → 10093 formatted lines; 43 retained references (29 State-side code references + 14 retained adapter sites).
+
+| Destination / Host | Formatted lines | Distinct names / declarations |
+|---|---:|---:|
+| `vp_playback_ended.dart` / `VpPlaybackEndedHost` | 161 | 32 / 32 |
+| `vp_episode_next.dart` / `VpEpisodeNextHost` | 334 | 50 / 53 |
+| `vp_episode_adjacent.dart` / `VpEpisodeAdjacentHost` | 386 | 25 / 26 |
+| `vp_shuffle.dart` / `VpShuffleHost` | 370 | 32 / 36 |
+| `vp_episode_title_info.dart` / `VpEpisodeTitleInfoHost` | 263 | 14 / 14 |
+| `vp_playlist_load.dart` / `VpPlaylistLoadHost` | 440 | 50 / 63 |
+| `vp_playlist_entry_resolve.dart` / `VpPlaylistEntryResolveHost` | 197 | 1 / 1 |
+| `vp_media_waits.dart` / `VpMediaWaitsHost` | 152 | 9 / 9 |
+| `vp_pikpak_retry.dart` / `VpPikPakRetryHost` | 377 | 13 / 14 |
+| `vp_metadata_preload.dart` / `VpMetadataPreloadHost` | 247 | 16 / 17 |
+
+Exact Host contracts (live facade projections, expression-bodied forwarders):
+
+VpPlaybackEndedHost:
+
+```dart
+set activeMediaShouldPlay(bool v) => _s._activeMediaShouldPlay = v;
+List<PlaylistEntry>? get activePlaylist => _s._activePlaylist;
+bool get continuousShuffleEnabled => _s._continuousShuffleEnabled;
+IptvChannel? get currentIptvChannel => _s._currentIptvChannel;
+int get currentIptvIndex => _s._currentIptvIndex;
+bool get hasIptvNext => _s._hasIptvNext;
+bool get hasStremioTvNext => _s._hasStremioTvNext;
+IptvLiveRecovery get iptvLiveRecovery => _s._iptvLiveRecovery;
+set isAutoAdvancing(bool v) => _s._isAutoAdvancing = v;
+set sleepStopLatched(bool v) => _s._sleepStopLatched = v;
+bool get validationGateActive => _s._validationGateActive;
+Future<bool> playShowShuffle({bool autoAdvance = false}) => _s._shuffle.playShowShuffle(autoAdvance: autoAdvance);
+int? pickShuffleIndex() => _s._shuffle.pickShuffleIndex();
+Future<bool> loadPlaylistIndex(int index, {bool autoplay = false, EpisodePlaybackRequest? request, bool skipInitialSave = false, bool preferLocalResume = false, bool suppressResume = false, Torrent? manualValidationSource, int? manualValidationSourceIndex}) => _s._playlistLoad.loadPlaylistIndex(index, autoplay: autoplay, request: request, skipInitialSave: skipInitialSave, preferLocalResume: preferLocalResume, suppressResume: suppressResume, manualValidationSource: manualValidationSource, manualValidationSourceIndex: manualValidationSourceIndex);
+int findNextEpisodeIndex() => _s._episodeAdjacent.findNextEpisodeIndex();
+Future<void> goToNextEpisode() => _s._episodeNext.goToNextEpisode();
+Future<bool> fetchNextEpisodeInPlayer({bool autoAdvance = false}) => _s._episodeAdjacent.fetchNextEpisodeInPlayer(autoAdvance: autoAdvance);
+Future<bool> handleSeriesNextEpisode() => _s._episodeNext.handleSeriesNextEpisode();
+Future<Map<String, String>?> Function()? get requestMagicNext => _s.widget.requestMagicNext;
+void observeServerWatch({bool completed = false}) => _s._resumeSave.observeServerWatch(completed: completed);
+void stopTraktHeartbeat() => _s._trakt.stopTraktHeartbeat();
+void traktScrobble(String action) => _s._trakt.traktScrobble(action);
+void stopSimklHeartbeat() => _s._simkl.stopSimklHeartbeat();
+void simklScrobble(String action) => _s._simkl.simklScrobble(action);
+void mdblistStop({bool complete = false}) => _s._mdblist.mdblistStop(complete: complete);
+Future<void> markCurrentEpisodeAsFinished() => _s._completion.markCurrentEpisodeAsFinished();
+Future<void> markCurrentMovieAsFinished() => _s._completion.markCurrentMovieAsFinished();
+SleepTimerMode get sleepTimerMode => _s._sleep.sleepTimerMode;
+void cancelSleepTimer() => _s._sleep.cancelSleepTimer();
+void showSleepTimerToast(String message) => _s._sleep.showSleepTimerToast(message);
+Future<void> switchToIptvChannel(int index, {bool quietRecovery = false}) => _s._iptvSwitch.switchToIptvChannel(index, quietRecovery: quietRecovery);
+Future<bool> goToNextStremioTvSlot({bool resumeCurrentOnFailure = true}) => _s._stremioTv.goToNextStremioTvSlot(resumeCurrentOnFailure: resumeCurrentOnFailure);
+```
+
+VpEpisodeNextHost:
+
+```dart
+Map<String, String>? get activeHttpHeaders => _s._activeHttpHeaders;
+List<PlaylistEntry>? get activePlaylist => _s._activePlaylist;
+bool get continuousShuffleEnabled => _s._continuousShuffleEnabled;
+int get currentIndex => _s._currentIndex;
+set currentStreamUrl(String? v) => _s._currentStreamUrl = v;
+Duration get duration => _s._duration;
+set dynamicTitle(String v) => _s._dynamicTitle = v;
+bool get hasStremioTvNext => _s._hasStremioTvNext;
+set isTransitioning(bool v) => _s._isTransitioning = v;
+int get pikPakRetryId => _s._pikPakRetryId;
+set pikPakRetryId(int v) => _s._pikPakRetryId = v;
+mk.Player get player => _s._player;
+bool get seriesNextDispatched => _s._seriesNextDispatched;
+set seriesNextDispatched(bool v) => _s._seriesNextDispatched = v;
+SeriesPlaylist? get seriesPlaylist => _s._seriesPlaylist;
+set singleFileImdbFetched(bool v) => _s._singleFileImdbFetched = v;
+set singleFileImdbId(String? v) => _s._singleFileImdbId = v;
+int get tvScrubGeneration => _s._tvScrubGeneration;
+set tvScrubGeneration(int v) => _s._tvScrubGeneration = v;
+set tvStaticMessage(String v) => _s._tvStaticMessage = v;
+set tvStaticSubtext(String v) => _s._tvStaticSubtext = v;
+void clearBufferingIndicator() => _s._clearBufferingIndicator();
+void startTransitionOverlay() => _s._startTransitionOverlay();
+void tvAbandonScrub() => _s._tvAbandonScrub();
+void resetSubtitleState() => _s._resetSubtitleState();
+Future<void> openMedia(mk.Media media, {required bool play, bool? desiredPlay, bool liveStream = false, EpisodePlaybackRequest? request, bool Function()? beforeOpen, Torrent? source, int? preserveStartupEpoch}) => _s._openMedia(media, play: play, desiredPlay: desiredPlay, liveStream: liveStream, request: request, beforeOpen: beforeOpen, source: source, preserveStartupEpoch: preserveStartupEpoch);
+Duration? randomStartOffset(Duration total) => _s._randomStartOffset(total);
+Duration? percentStartOffset(Duration total) => _s._percentStartOffset(total);
+Future<bool> playShowShuffle({bool autoAdvance = false}) => _s._shuffle.playShowShuffle(autoAdvance: autoAdvance);
+int? pickShuffleIndex() => _s._shuffle.pickShuffleIndex();
+Future<bool> loadPlaylistIndex(int index, {bool autoplay = false, EpisodePlaybackRequest? request, bool skipInitialSave = false, bool preferLocalResume = false, bool suppressResume = false, Torrent? manualValidationSource, int? manualValidationSourceIndex}) => _s._playlistLoad.loadPlaylistIndex(index, autoplay: autoplay, request: request, skipInitialSave: skipInitialSave, preferLocalResume: preferLocalResume, suppressResume: suppressResume, manualValidationSource: manualValidationSource, manualValidationSourceIndex: manualValidationSourceIndex);
+int findNextEpisodeIndex() => _s._episodeAdjacent.findNextEpisodeIndex();
+Future<bool> fetchNextEpisodeInPlayer({bool autoAdvance = false}) => _s._episodeAdjacent.fetchNextEpisodeInPlayer(autoAdvance: autoAdvance);
+void setManualSelectionMode({bool allowResume = false}) => _s._playlistLoad.setManualSelectionMode(allowResume: allowResume);
+Future<bool> playPikPakVideoWithRetry(String videoUrl, {String? overrideProvider, String? overridePikPakFileId, bool isDebrifyTV = false, bool showFailure = true, EpisodePlaybackRequest? request}) => _s._pikPakRetry.playPikPakVideoWithRetry(videoUrl, overrideProvider: overrideProvider, overridePikPakFileId: overridePikPakFileId, isDebrifyTV: isDebrifyTV, showFailure: showFailure, request: request);
+Future<void> waitForVideoReady() => _s._mediaWaits.waitForVideoReady();
+bool get mounted => _s.mounted;
+BuildContext get context => _s.context;
+void setState(VoidCallback fn) => _s._vpSetState(fn);
+Future<Map<String, String>?> Function()? get requestMagicNext => _s.widget.requestMagicNext;
+bool get startFromRandom => _s.widget.startFromRandom;
+double? get startAtPercent => _s.widget.startAtPercent;
+String? get contentType => _s.widget.contentType;
+String? get contentImdbId => _s.widget.contentImdbId;
+int? get contentSeason => _s.widget.contentSeason;
+int? get contentEpisode => _s.widget.contentEpisode;
+String? get contentTitle => _s.widget.contentTitle;
+String get title => _s.widget.title;
+SeriesSourceFetcher? get seriesSourceFetcher => _s.widget.seriesSourceFetcher;
+void resetLocalCompletionState() => _s._completion.resetLocalCompletionState();
+Future<bool> goToNextStremioTvSlot({bool resumeCurrentOnFailure = true}) => _s._stremioTv.goToNextStremioTvSlot(resumeCurrentOnFailure: resumeCurrentOnFailure);
+Future<bool> setSubtitleTrackWithDiagnostics(mk.SubtitleTrack track, {required String source, bool Function()? isCurrent}) => _s._subtitleApply.setSubtitleTrackWithDiagnostics(track, source: source, isCurrent: isCurrent);
+PlayerPipSession? get iosPipSession => _s._pip.iosPipSession;
+```
+
+VpEpisodeAdjacentHost:
+
+```dart
+List<PlaylistEntry>? get activePlaylist => _s._activePlaylist;
+bool get canFetchEpisodes => _s._canFetchEpisodes;
+int get currentIndex => _s._currentIndex;
+bool get episodeFetchInProgress => _s._episodeFetchInProgress;
+int get episodeNavigationGeneration => _s._episodeNavigationGeneration;
+set isTransitioning(bool v) => _s._isTransitioning = v;
+int get playlistIdentityToken => _s._playlistIdentityToken;
+SeriesPlaylist? get seriesPlaylist => _s._seriesPlaylist;
+bool get sleepStopLatched => _s._sleepStopLatched;
+SeriesPlaylist? get syntheticGuidePlaylist => _s._syntheticGuidePlaylist;
+int get tvScrubGeneration => _s._tvScrubGeneration;
+set tvScrubGeneration(int v) => _s._tvScrubGeneration = v;
+void clearBufferingIndicator() => _s._clearBufferingIndicator();
+void tvAbandonScrub() => _s._tvAbandonScrub();
+({int? season, int? episode}) traktSeasonEpisode() => _s._traktSeasonEpisode();
+Future<bool> loadPlaylistIndex(int index, {bool autoplay = false, EpisodePlaybackRequest? request, bool skipInitialSave = false, bool preferLocalResume = false, bool suppressResume = false, Torrent? manualValidationSource, int? manualValidationSourceIndex}) => _s._playlistLoad.loadPlaylistIndex(index, autoplay: autoplay, request: request, skipInitialSave: skipInitialSave, preferLocalResume: preferLocalResume, suppressResume: suppressResume, manualValidationSource: manualValidationSource, manualValidationSourceIndex: manualValidationSourceIndex);
+void setManualSelectionMode({bool allowResume = false}) => _s._playlistLoad.setManualSelectionMode(allowResume: allowResume);
+bool get mounted => _s.mounted;
+void setState(VoidCallback fn) => _s._vpSetState(fn);
+Future<Map<String, String>?> Function()? get requestMagicNext => _s.widget.requestMagicNext;
+String? get contentType => _s.widget.contentType;
+String? get contentImdbId => _s.widget.contentImdbId;
+int? get contentSeason => _s.widget.contentSeason;
+SeriesSourceFetcher? get seriesSourceFetcher => _s.widget.seriesSourceFetcher;
+PlaylistViewMode? get viewMode => _s.widget.viewMode;
+Future<EpisodePlaybackOutcome> fetchAndPlayEpisode(int season, int episode, {int? shuffleGeneration, bool autoAdvance = false, EpisodePlaybackRequest? request}) => _s._episodeFetch.fetchAndPlayEpisode(season, episode, shuffleGeneration: shuffleGeneration, autoAdvance: autoAdvance, request: request);
+```
+
+VpShuffleHost:
+
+```dart
+List<PlaylistEntry>? get activePlaylist => _s._activePlaylist;
+bool get canFetchEpisodes => _s._canFetchEpisodes;
+bool get continuousShuffleEnabled => _s._continuousShuffleEnabled;
+set continuousShuffleEnabled(bool v) => _s._continuousShuffleEnabled = v;
+int get currentIndex => _s._currentIndex;
+String? get currentSeriesImdbId => _s._currentSeriesImdbId;
+bool get episodeFetchInProgress => _s._episodeFetchInProgress;
+Future<void>? get episodeMetadataReady => _s._episodeMetadataReady;
+set episodeMetadataReady(Future<void>? v) => _s._episodeMetadataReady = v;
+int get episodeNavigationGeneration => _s._episodeNavigationGeneration;
+Timer? get hideTimer => _s._hideTimer;
+set isAutoAdvancing(bool v) => _s._isAutoAdvancing = v;
+bool get isTransitioning => _s._isTransitioning;
+set isTransitioning(bool v) => _s._isTransitioning = v;
+int get playlistIdentityToken => _s._playlistIdentityToken;
+math.Random get random => _s._random;
+SeriesPlaylist? get seriesPlaylist => _s._seriesPlaylist;
+int get showShuffleGeneration => _s._showShuffleGeneration;
+set showShuffleGeneration(int v) => _s._showShuffleGeneration = v;
+bool get sleepStopLatched => _s._sleepStopLatched;
+SeriesPlaylist? get syntheticGuidePlaylist => _s._syntheticGuidePlaylist;
+void scheduleAutoHide() => _s._scheduleAutoHide();
+({int? season, int? episode}) traktSeasonEpisode() => _s._traktSeasonEpisode();
+Map<String, dynamic>? constructPlaylistItemData() => _s._constructPlaylistItemData();
+Future<bool> loadPlaylistIndex(int index, {bool autoplay = false, EpisodePlaybackRequest? request, bool skipInitialSave = false, bool preferLocalResume = false, bool suppressResume = false, Torrent? manualValidationSource, int? manualValidationSourceIndex}) => _s._playlistLoad.loadPlaylistIndex(index, autoplay: autoplay, request: request, skipInitialSave: skipInitialSave, preferLocalResume: preferLocalResume, suppressResume: suppressResume, manualValidationSource: manualValidationSource, manualValidationSourceIndex: manualValidationSourceIndex);
+void setManualSelectionMode({bool allowResume = false}) => _s._playlistLoad.setManualSelectionMode(allowResume: allowResume);
+List<int> getMainGroupIndices(List<PlaylistEntry> entries) => _s._episodeAdjacent.getMainGroupIndices(entries);
+Future<void> preloadEpisodeInfo() => _s._metadataPreload.preloadEpisodeInfo();
+bool get mounted => _s.mounted;
+BuildContext get context => _s.context;
+void setState(VoidCallback fn) => _s._vpSetState(fn);
+SeriesSourceFetcher? get seriesSourceFetcher => _s.widget.seriesSourceFetcher;
+PlaylistViewMode? get viewMode => _s.widget.viewMode;
+void openPlayerMenuQuick(PlayerMenuSection section) => _s._menu.openPlayerMenuQuick(section);
+(SeriesPlaylist, List<PlaylistEntry>)? buildSyntheticGuide() => _s._episodeGuide.buildSyntheticGuide();
+Future<EpisodePlaybackOutcome> fetchAndPlayEpisode(int season, int episode, {int? shuffleGeneration, bool autoAdvance = false, EpisodePlaybackRequest? request}) => _s._episodeFetch.fetchAndPlayEpisode(season, episode, shuffleGeneration: shuffleGeneration, autoAdvance: autoAdvance, request: request);
+```
+
+VpEpisodeTitleInfoHost:
+
+```dart
+List<PlaylistEntry>? get activePlaylist => _s._activePlaylist;
+int get currentIndex => _s._currentIndex;
+int get currentIptvIndex => _s._currentIptvIndex;
+String get dynamicTitle => _s._dynamicTitle;
+int? get effectiveContentEpisode => _s._effectiveContentEpisode;
+int? get effectiveContentSeason => _s._effectiveContentSeason;
+String? get effectiveContentTitle => _s._effectiveContentTitle;
+List<IptvChannel>? get effectiveIptvChannels => _s._effectiveIptvChannels;
+List<Map<String, dynamic>>? get effectiveStremioTvChannels => _s._effectiveStremioTvChannels;
+bool get hasStremioTvGuide => _s._hasStremioTvGuide;
+SeriesPlaylist? get seriesPlaylist => _s._seriesPlaylist;
+Future<Map<String, String>?> Function()? get requestMagicNext => _s.widget.requestMagicNext;
+String get title => _s.widget.title;
+String? get subtitle => _s.widget.subtitle;
+```
+
+VpPlaylistLoadHost:
+
+```dart
+Map<String, String>? get activeHttpHeaders => _s._activeHttpHeaders;
+set activeHttpHeaders(Map<String, String>? v) => _s._activeHttpHeaders = v;
+bool get activeMediaShouldPlay => _s._activeMediaShouldPlay;
+set activeMediaShouldPlay(bool v) => _s._activeMediaShouldPlay = v;
+bool get activeMediaUserPaused => _s._activeMediaUserPaused;
+set activeMediaUserPaused(bool v) => _s._activeMediaUserPaused = v;
+mk.Media? get activeOpenedMedia => _s._activeOpenedMedia;
+set activeOpenedMedia(mk.Media? v) => _s._activeOpenedMedia = v;
+List<PlaylistEntry>? get activePlaylist => _s._activePlaylist;
+set allowResumeForManualSelection(bool v) => _s._allowResumeForManualSelection = v;
+int get currentIndex => _s._currentIndex;
+set currentIndex(int v) => _s._currentIndex = v;
+String? get currentStreamUrl => _s._currentStreamUrl;
+set currentStreamUrl(String? v) => _s._currentStreamUrl = v;
+int get episodeNavigationGeneration => _s._episodeNavigationGeneration;
+set episodeNavigationGeneration(int v) => _s._episodeNavigationGeneration = v;
+bool get isAutoAdvancing => _s._isAutoAdvancing;
+set isAutoAdvancing(bool v) => _s._isAutoAdvancing = v;
+set isManualEpisodeSelection(bool v) => _s._isManualEpisodeSelection = v;
+set isTransitioning(bool v) => _s._isTransitioning = v;
+Timer? get manualSelectionResetTimer => _s._manualSelectionResetTimer;
+set manualSelectionResetTimer(Timer? v) => _s._manualSelectionResetTimer = v;
+Torrent? get openedWatchSource => _s._openedWatchSource;
+bool get pausedByLifecycle => _s._pausedByLifecycle;
+int get pikPakRetryId => _s._pikPakRetryId;
+set pikPakRetryId(int v) => _s._pikPakRetryId = v;
+mk.Player get player => _s._player;
+set rainbowActive(bool v) => _s._rainbowActive = v;
+AnimationController get rainbowController => _s._rainbowController;
+int get resumeVerifyEpoch => _s._resumeVerifyEpoch;
+set resumeVerifyEpoch(int v) => _s._resumeVerifyEpoch = v;
+ResumeWriteGuard get resumeWriteGuard => _s._resumeWriteGuard;
+SeriesPlaylist? get seriesPlaylist => _s._seriesPlaylist;
+MediaServerWatchController get serverWatch => _s._serverWatch;
+bool get sleepStopLatched => _s._sleepStopLatched;
+set sleepStopLatched(bool v) => _s._sleepStopLatched = v;
+Timer? get transitionPhaseTimer => _s._transitionPhaseTimer;
+set transitionRunning(bool v) => _s._transitionRunning = v;
+Timer? get transitionStopTimer => _s._transitionStopTimer;
+int get tvScrubGeneration => _s._tvScrubGeneration;
+set tvScrubGeneration(int v) => _s._tvScrubGeneration = v;
+void tvAbandonScrub() => _s._tvAbandonScrub();
+void resetSubtitleState() => _s._resetSubtitleState();
+Future<void> openMedia(mk.Media media, {required bool play, bool? desiredPlay, bool liveStream = false, EpisodePlaybackRequest? request, bool Function()? beforeOpen, Torrent? source, int? preserveStartupEpoch}) => _s._openMedia(media, play: play, desiredPlay: desiredPlay, liveStream: liveStream, request: request, beforeOpen: beforeOpen, source: source, preserveStartupEpoch: preserveStartupEpoch);
+Future<bool> playPikPakVideoWithRetry(String videoUrl, {String? overrideProvider, String? overridePikPakFileId, bool isDebrifyTV = false, bool showFailure = true, EpisodePlaybackRequest? request}) => _s._pikPakRetry.playPikPakVideoWithRetry(videoUrl, overrideProvider: overrideProvider, overridePikPakFileId: overridePikPakFileId, isDebrifyTV: isDebrifyTV, showFailure: showFailure, request: request);
+Future<void> waitForVideoReady() => _s._mediaWaits.waitForVideoReady();
+Future<String> resolvePlaylistEntryUrl(int index) => _s._playlistEntryResolve.resolvePlaylistEntryUrl(index);
+bool get mounted => _s.mounted;
+BuildContext get context => _s.context;
+void setState(VoidCallback fn) => _s._vpSetState(fn);
+Future<void> saveResume() => _s._resumeSave.saveResume();
+Future<void> maybeRestoreResume({bool preferLocalResume = false, bool verifyLanding = false}) => _s._resumeRestore.maybeRestoreResume(preferLocalResume: preferLocalResume, verifyLanding: verifyLanding);
+void stopTraktHeartbeat() => _s._trakt.stopTraktHeartbeat();
+void traktScrobble(String action) => _s._trakt.traktScrobble(action);
+void stopSimklHeartbeat() => _s._simkl.stopSimklHeartbeat();
+void simklScrobble(String action) => _s._simkl.simklScrobble(action);
+void updateMdblistPosition() => _s._mdblist.updateMdblistPosition();
+Future<void> switchMdblistTarget() => _s._mdblist.switchMdblistTarget();
+void resetLocalCompletionState() => _s._completion.resetLocalCompletionState();
+set skipSegmentsMediaReady(bool v) => _s._skip.skipSegmentsMediaReady = v;
+void resetSkipSegmentState() => _s._skip.resetSkipSegmentState();
+Future<bool> tryOpenStartupVod(String url, {Duration timeout = const Duration(seconds: 12), Map<String, String>? httpHeaders, Torrent? source, int? sourceIndex, int attempt = 1, int maxAttempts = 1}) => _s._startupCandidates.tryOpenStartupVod(url, timeout: timeout, httpHeaders: httpHeaders, source: source, sourceIndex: sourceIndex, attempt: attempt, maxAttempts: maxAttempts);
+Future<void> restoreTrackPreferences() => _s._trackPreferences.restoreTrackPreferences();
+```
+
+VpPlaylistEntryResolveHost:
+
+```dart
+List<PlaylistEntry>? get activePlaylist => _s._activePlaylist;
+```
+
+VpMediaWaitsHost:
+
+```dart
+Duration get duration => _s._duration;
+set isPikPakRetrying(bool v) => _s._isPikPakRetrying = v;
+bool get isPlaying => _s._isPlaying;
+set pikPakRetryCount(int v) => _s._pikPakRetryCount = v;
+int get pikPakRetryId => _s._pikPakRetryId;
+set pikPakRetryMessage(String? v) => _s._pikPakRetryMessage = v;
+mk.Player get player => _s._player;
+bool get mounted => _s.mounted;
+void setState(VoidCallback fn) => _s._vpSetState(fn);
+```
+
+VpPikPakRetryHost:
+
+```dart
+Map<String, String>? get activeHttpHeaders => _s._activeHttpHeaders;
+List<PlaylistEntry>? get activePlaylist => _s._activePlaylist;
+int get currentIndex => _s._currentIndex;
+set isPikPakRetrying(bool v) => _s._isPikPakRetrying = v;
+set pikPakRetryCount(int v) => _s._pikPakRetryCount = v;
+int get pikPakRetryId => _s._pikPakRetryId;
+set pikPakRetryId(int v) => _s._pikPakRetryId = v;
+set pikPakRetryMessage(String? v) => _s._pikPakRetryMessage = v;
+Future<void> openMedia(mk.Media media, {required bool play, bool? desiredPlay, bool liveStream = false, EpisodePlaybackRequest? request, bool Function()? beforeOpen, Torrent? source, int? preserveStartupEpoch}) => _s._openMedia(media, play: play, desiredPlay: desiredPlay, liveStream: liveStream, request: request, beforeOpen: beforeOpen, source: source, preserveStartupEpoch: preserveStartupEpoch);
+Future<void> goToNextEpisode() => _s._episodeNext.goToNextEpisode();
+Future<bool> waitForVideoMetadata({int timeoutSeconds = 15, required int retryId, int additionalMonitoringSeconds = 0}) => _s._mediaWaits.waitForVideoMetadata(timeoutSeconds: timeoutSeconds, retryId: retryId, additionalMonitoringSeconds: additionalMonitoringSeconds);
+bool get mounted => _s.mounted;
+BuildContext get context => _s.context;
+void setState(VoidCallback fn) => _s._vpSetState(fn);
+```
+
+VpMetadataPreloadHost:
+
+```dart
+int get currentIndex => _s._currentIndex;
+String get dynamicTitle => _s._dynamicTitle;
+int get playlistIdentityToken => _s._playlistIdentityToken;
+SeriesPlaylist? get seriesPlaylist => _s._seriesPlaylist;
+bool get singleFileImdbFetched => _s._singleFileImdbFetched;
+set singleFileImdbFetched(bool v) => _s._singleFileImdbFetched = v;
+set singleFileImdbId(String? v) => _s._singleFileImdbId = v;
+bool get trackPreferencesReadyForAddonSubtitles => _s._trackPreferencesReadyForAddonSubtitles;
+Map<String, dynamic>? constructPlaylistItemData() => _s._constructPlaylistItemData();
+bool get mounted => _s.mounted;
+void setState(VoidCallback fn) => _s._vpSetState(fn);
+String? get contentImdbId => _s.widget.contentImdbId;
+String get title => _s.widget.title;
+String? get rdTorrentId => _s.widget.rdTorrentId;
+String? get torboxTorrentId => _s.widget.torboxTorrentId;
+String? get pikpakCollectionId => _s.widget.pikpakCollectionId;
+Future<void> fetchAndMaybeAutoSelectAddonSubtitle() => _s._addonSubtitles.fetchAndMaybeAutoSelectAddonSubtitle();
+```
+

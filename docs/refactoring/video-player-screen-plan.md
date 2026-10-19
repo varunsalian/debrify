@@ -8699,6 +8699,56 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
   gate); the two Step-0 suites joined `ci_behavior_tests.txt` in the gate
   commit rather than the commits that created them.
 
+### 2026-10-19 — Phase 17 merge and Phase 18 design + Step T (executor: Claude)
+
+- **Phase 17 merged.** It merged as `249566376` (`merge --no-ff`) after the
+  post-gate review fold `c89377758`. Merge checks on `refactor/codebase`:
+  - format: 2,784 files, 0 changed;
+  - architecture/size/storage-keys checks pass;
+  - P17 current move check and P16 history at `c094c864c`: 0 differences;
+  - CI analyze + allowlist: nothing new; vplayer comparator: 178 scoped, 0
+    additions.
+
+  Pushed to `private` (`refactor/codebase`, `refactor/vplayer-p17`).
+- **Phase 18 design** (`d267c513f`) was reviewed by a review agent: "No P1s",
+  4 P2s and 12 P3s, all folded (`dc57b31f7`, resolution at the end of this
+  file).
+- **Step T** (manifest `vplayer_p18.json` status `draft`, PROVISIONAL):
+  - 40 moved declarations (36 methods, four shuffle fields) into ten files;
+    43 retained references (29 State-side code references + 14 retained
+    adapter sites).
+  - Zero comparison differences.
+  - Formatted sizes 161 / 334 / 386 / 370 / 263 / 440 / 197 / 152 / 377 /
+    247, all ≤ 500. Facade 11,583 → 10,093.
+  - The Host contracts are frozen in the deps file.
+  - The original self-comparison, the materialization and 18 real-config
+    negatives pass (`p18/stepT/negatives.log`), including three
+    retained-adapter negatives anchored inside the P16/P17 adapters.
+- **Design adjustment at step T.** `_seriesNextDispatched` and
+  `_manualSelectionResetTimer` stay **State-owned** behind live Host
+  getter/setter pairs, so `dispose` 6335 is unchanged. The scanner partition
+  gives each same-line `//` comment to the next member. Relocating either
+  field would carry the neighbour's comment (`// Show black screen during
+  transitions`, `// Allow resuming for manual selections with progress`) and
+  strand its own. The latch's check-and-set stays in one synchronous block
+  through the live accessors, which the `latch-recheck`/`latch-set`
+  negatives pin.
+- **Prototype analyzer** (CI command, `p18/stepT/probe-analyze.txt`): 0
+  errors; 604 issues vs 573 at base. The +31 are 16 newly unused facade
+  imports (deferred to phase 21 as allowlist lines), 4
+  `curly_braces_in_flow_control_structures` formatter wraps and 11
+  `use_build_context_synchronously` from `_host.mounted` guards. These are
+  registered as receiver-probe additions at step 1.
+- **Tooling** (self-tests or negatives):
+  - Host-interpolation canonicalization in `check_settings_moves.normalize`;
+    the settings self-test passes, with a positive and three negatives.
+  - Opt-in `adapter_state_prefixes` in `occurrence_field_bindings`.
+  - The declared named-record formatter comma.
+  - Two exact `SHADOWED_CONTEXT` edits for the shuffle dialog.
+- **Original baseline:** the frozen P17 inventory run at `dc57b31f7` is in
+  progress (`p18/step0/base.jsonl`). Step 0 follows: characterization suites
+  for the gaps in the resolution, with per-test mutation proofs.
+
 ## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
 
 Reviewed at `c5c8e3500` (facade byte-identical to `be4cd78aa`; split,
