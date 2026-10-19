@@ -8749,6 +8749,55 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
   progress (`p18/step0/base.jsonl`). Step 0 follows: characterization suites
   for the gaps in the resolution, with per-test mutation proofs.
 
+### 2026-10-20 — Phase 18 Step 0 complete (executor: Claude)
+
+- **Systematic sweep** on the original `249566376`
+  (`p18/step0/mutation_batches.py`, `systematic.json`, serial, batch 6):
+  all 1,848 points across the 40 moved declarations, recorded in
+  `mutations-systematic/`.
+- **Closure.** Every survivor and runtime/timeout outcome was rerun with its
+  selection widened by the P18 triage suites and the legacy suites that pin the
+  same behaviour (`closure_plan.py`). Each file set first passed a control
+  run on the original (18/18). The dead legacy shuffle dialog (`point_473`–`503`,
+  unreachable while `kUnifiedPlayerMenuEnabled` is `const true`) is
+  equivalent and was not rerun.
+  - Part 1 stopped at a harness budget defect: widened selections
+    (~145 cases per mutant) hit the 720 s batch cap with every case passed.
+    `mutation_batches.py` gained `--point-seconds` (default 120, the sweep's
+    behaviour); parts 2–5 use 300.
+  - Part 3 reran the part-2 budget cuts one mutant per batch, isolating the
+    one hanging mutant (`point_560`).
+  - Part 4 widened the two moved methods without a kill
+    (`_fetchSingleFileMovieMetadata` + `menu_single_metadata`;
+    `_adjacentEpisode` + the P17 fetch suites). Its first control failed
+    unmutated (two P16 MDBList rollback cases beside the P17 fetch suites), so
+    `source_playlist_request` was dropped and the part rerun.
+  - Part 5 ran `_adjacentEpisode` against the new guide-adjacency suite.
+- **Accounting** (`closure-summary.json`, `dispositions.json`; P17
+  accounting policy): **710 killed, 578 survived, 72 runtime/timeout, 457
+  compile-invalid, 31 equivalent** (52.2% of the valid non-equivalent points).
+  Survivors stay explicitly uncredited; equivalence is claimed only for the
+  dead dialog. Harness limitations recorded: unseeded shuffle randomness,
+  Stopwatch-bounded PikPak windows, the hanging `point_560`, and the
+  unreachable screen-side `tt` guard (`point_1945`; `SeriesPlaylist` adopts
+  only `tt` ids from TVMaze, and the vacuous case pinning it was removed).
+- **Moved methods.** Every moved method with mutation points has at least one
+  kill. The three shuffle fields and the one-expression
+  `_getCurrentEpisodeTitle` delegate carry no points.
+- **Per-test proofs** (`proofs.py`). All 88 P18 test declarations are the
+  first clean assertion kill of at least one mutant. Ten cases needed
+  targeted single-case witnesses (`generate_witness_proofs.py`, controls
+  first).
+- **New suites** (14 files, 109 cases, all passing on the original; format
+  and analyze clean): `video_player_p18_{adjacency, ended_ladder,
+  entry_failures, entry_resolve, guide_adjacency, media_waits,
+  metadata_preload, next_ended, next_paths, pikpak_retry, shuffle,
+  shuffle_paths, title_branches, title_info}_test.dart`. They are listed in
+  the reduced-gate inventory `dev/tool/vplayer_p18_test_inventory.txt`
+  (453 files) and the CI behaviour list.
+- Next: an independent mutation sample by a review agent, then Step 0b and
+  Step 1.
+
 ## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
 
 Reviewed at `c5c8e3500` (facade byte-identical to `be4cd78aa`; split,
