@@ -378,4 +378,50 @@ void main() {
       },
     );
   }
+
+  testWidgets('P19 tvOS the container rate wins over the estimated rate', (
+    t,
+  ) async {
+    final d = await _mount(t, {
+      'container-fps': '23.976',
+      'estimated-vf-fps': '24',
+      'video-codec': 'hevc',
+    });
+    try {
+      expect(_applies(d), hasLength(1));
+      expect(_applies(d).single['refreshRate'], 23.976);
+    } finally {
+      await d.close();
+    }
+  });
+
+  testWidgets(
+    'P19 tvOS new params replace an in-flight request without a boundary',
+    (t) async {
+      final gate = Completer<void>();
+      final d = await _mount(t);
+      try {
+        final native = d.native;
+        native.beforeOperation = (name, value) =>
+            name == 'getProperty' &&
+                value == 'container-fps' &&
+                !gate.isCompleted
+            ? gate.future
+            : null;
+        d.player.emit('videoParams', const mk.VideoParams(w: 3840, h: 2160));
+        await d.f.until(
+          t,
+          () => native.calls.where((c) => c.$2 == 'container-fps').length == 2,
+        );
+        d.player.emit('videoParams', const mk.VideoParams(w: 1920, h: 1080));
+        await d.f.advance(t, const Duration(milliseconds: 300));
+        gate.complete();
+        await d.f.advance(t, const Duration(seconds: 1));
+        expect(_applies(d).map((a) => a['width']), [1280, 1920]);
+      } finally {
+        if (!gate.isCompleted) gate.complete();
+        await d.close();
+      }
+    },
+  );
 }

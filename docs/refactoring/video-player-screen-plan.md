@@ -9512,6 +9512,70 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
 - Next: an independent mutation sample by a review agent (≥75%), then
   Step 0b and Step 1.
 
+### 2026-10-21 — Phase 19 Step 0b complete (executor: Claude)
+
+- **Independent sample** (review agent, worktree `vp19-mut` at `0cf24cfac`;
+  `p19/step0b/independent-sample.md`): 203 multi-site semantic mutants, all
+  compilable. 17 were excluded with reasons (`excluded.json`). **140/186
+  valid = 75.3%** from the P19 files, or 80.1% with the five legacy renderer
+  suites of the gate inventory. By group: renderer fallback 46% (62.5% with
+  the legacy suites), renderer validation 62%, all other groups ≥88%.
+  - Verdict: three P1s:
+    - F11, the held resume target across a rebuild, is unpinned;
+    - F35, navigation during the rebuild winning, is unpinned;
+    - the fallback group is weakly pinned.
+  - Disposition audit: all 50 equivalents and all 39 device-pending points
+    accepted. Two P3 notes stay records only: `point_107` is unreachable in
+    production rather than device-pending, and the inventory's 27 `null`
+    literals are outside the 650 points.
+- **New cases** (10, all passing on the original). Each was proved by a
+  witness run of the sample's own mutant against the new case alone, and
+  every one is a first-failure `Expected:` kill
+  (`p19/step0b-witness/results*.jsonl`):
+  - `video_player_p19_fallback_review_test.dart` (7 cases):
+    - an unlanded startup resume seek reopens at the promised target (F11);
+    - the rebuilt player re-arms the write guard, so an autosave after a
+      restart artifact still files the carried position (F47);
+    - Next while the old player is disposing wins over the rebuild (F35);
+    - backgrounding during the rebuild reopens paused and never plays (F50);
+    - a failed renderer-setting write still rebuilds on Automatic (F29);
+    - the rebuilt player restores track preferences (F48);
+    - a failed `current-vo` read gets the rest of the window, then falls
+      back (V17).
+  - `video_player_p19_fallback_watch_test.dart` (1 case): a failed rebuild
+    of a pending Stremio TV start cancels its slot seek (F56).
+  - `video_player_p19_tvos_gaps_test.dart` (2 cases): the container rate
+    wins over the estimated rate (R14, R16); new params replace an in-flight
+    display-match request without a boundary (R26).
+  - All 14 P19 files (116 cases) pass together on the original, with
+    fallback-teardown first. Both new files are in the reduced-gate
+    inventory (469 files) and the CI behaviour list.
+- **Not closed, with reasons** (P2 records):
+  - F02, the stale-media guard after the final validation delay. Every
+    reachable open in that 250 ms window runs inside a transition (Next,
+    source switch, zap), so `!_isTransitioning` rejects first. The only
+    untransitioned opens are the quiet IPTV recovery and the startup ladder,
+    and neither runs during validation in the host fixture.
+  - F03/F04, falling back while recording or while IPTV errors are muted.
+    Recording needs the real-server RecordingDriver. Outside the quiet
+    recovery, the mute window coincides with the transition flag.
+  - F21/F18, a pair that masks each other: the generation bump makes every
+    old-subscription callback a no-op. F18 is killed by the legacy suites.
+  - F22/F23: the host fixture never installs subtitle auto-sync (it is
+    experimental and off), and the external-subtitle path is read only by
+    auto-sync.
+  - F54/F55, the stale-epoch and already-failed Stremio watch guards on the
+    failure path.
+  - L07 is disputed as equivalent. `VideoOutputLease.acquire` serialises
+    waiters, so a second late grant can only follow the release of the
+    first, and in production that release happens only at dispose, when
+    `_screenDisposed` already rejects it.
+- **Step 1 gate note:** the fallback kills still lean on the legacy renderer
+  and P16 startup-watch suites. They are in the 469-file reduced-gate
+  inventory and must stay there.
+- Next: a review agent reruns the sample's survivors against the 14 P19
+  files, then Step 1.
+
 ## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
 
 Reviewed at `c5c8e3500` (facade byte-identical to `be4cd78aa`; split,
