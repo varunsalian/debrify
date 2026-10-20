@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""P19 evidence-only materialization on the reviewed S2f checkpoint; never writes lib/.
+"""FINAL P19 evidence-only materialization on the reviewed S2f checkpoint; never writes lib/.
 
 Engine I: audio output, video-output lease, tvOS decode remedy/display match,
 decoder probe and renderer fallback. Protects all eighteen applied phases.
@@ -128,7 +128,7 @@ def build(package):
   g['host_names']=[host_name(f) for f in g['forwarders']]
   assert len(g['forwarders'])==len(set(g['forwarders'])),g['name']
   if EXPECTED_HOSTS is not None:assert (len(set(g['host_names'])),len(g['host_names']))==EXPECTED_HOSTS[g['name']],(g['name'],g['host_names'])
- spec.update(phase=19,status='FINAL',span_order=list(spans),patched_class_projection=PATCHED,finalization=dict(label='FINAL',preparation_base=BASE,accepted_p18='46bc00ce7',seam_original=BASE,history='All eighteen applied phases; every earlier destination derived without a whitelist.'),provisional=dict(label='FINAL',preparation_base=BASE,pending=[],host_contracts={g['name']:g['forwarders'] for g in GROUPS},construction='Final assignments follow all ten P18 collaborators.'))
+ spec.update(phase=19,status='applied',span_order=list(spans),patched_class_projection=PATCHED,finalization=dict(label='FINAL',preparation_base=BASE,accepted_p18='46bc00ce7',seam_original=BASE,history='All eighteen applied phases; every earlier destination derived without a whitelist.'),provisional=dict(label='FINAL',preparation_base=BASE,pending=[],host_contracts={g['name']:g['forwarders'] for g in GROUPS},construction='Final assignments follow all ten P18 collaborators.'))
  registrations=[dict(before=['widget','.',n],after=['_host','.',n],binding='unbound',role_change='live widget selector') for n in WIDGET]+[dict(before=c['before'],after=['_host','.',c['name']],binding='unbound',role_change='Live S2b/S2f projection' if c['before'][0]=='VpS2Hooks' else 'Complete live collaborator chain via facade routing') for c in CHAINS]
  spec['guards']=dict(occurrence_field_bindings=dict(owners=[STATE],state_classes=[STATE],mandatory_qualification=True,owner_scoped_bare_fields={STATE+'.'+n:byname[n]['name'] for n in FIELDS}),record_owners=[STATE],record_fields={STATE:FIELDS},receiver_owners={g['receiver']:g['name'] for g in GROUPS},receiver_paths={g['receiver']:g['name'] for g in GROUPS},receiver_members={g['name']:[n[1:] for n in g['names']] for g in GROUPS},receivers=['_host',*[g['receiver'] for g in GROUPS]],live_state_receivers=['_host'],adapter_state_prefixes=['_s'],require_live_state_callbacks=True,host_property_bindings=hostbindings,registered_occurrence_substitutions=registrations)
  retained_sites=[];patched=[]
