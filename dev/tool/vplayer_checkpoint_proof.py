@@ -11,7 +11,6 @@ from check_verbatim_moves import ROOT
 from check_dart_moves import check, run_manifest
 from dart_move_history import load_manifest, git_text, earlier_sources, check_earlier
 
-S2E = 'dev/tool/dart_moves/vplayer_p16_seam.json'
 
 
 CHECKPOINTS = {

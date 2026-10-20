@@ -4603,7 +4603,9 @@ The renderer startup validation chain is Android-only behind two raw
 `_canFallbackExplicitRenderer` already uses `VpS2Hooks.isAndroid` (S2b).
 Without them, the `current-vo` polling validation, its two-matching-reads
 rule, the 12×250 ms window and the `requested_output_not_ready` fallback
-are untestable off-device. Proposal: replace both reads with the existing
+are untestable off-device. (Superseded by resolution P1-2: as built, both
+reads use the dedicated `VpS2Hooks.isAndroidRendererValidation` predicate,
+not `isAndroid`.) Original proposal: replace both reads with the existing
 `VpS2Hooks.isAndroid` predicate (default evaluation identical; installer
 unchanged), proven by `vplayer_platform_seam_proof.py` S2f
 (wrong-predicate / override-bypassed / predicate-twice / operand-order
@@ -4785,6 +4787,11 @@ sweep and the independent sample (≥ 75 %). Known gaps:
    display match rather than with the probe.
 
 ## Follow-ups
+
+- P19 S2f: `lib/screens/video_player_screen.dart` comment above
+  `_installDecoderObservers` says the fallback is "gated on
+  `Platform.isAndroid`". It now reads `VpS2Hooks.isAndroidRendererValidation`,
+  which defaults to that. Update the comment in a non-move change.
 
 - **Phase 16 original startup/source windows (characterized; no fixes):**
   renderer listener ordering can reject an old probe and stop the live
@@ -9308,7 +9315,9 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
   `_scheduleRendererStartupValidation` (`isAndroid:` argument). `VpS2Hooks`
   gains the `androidRendererValidation` callback, field and getter. The getter
   defaults to `Platform.isAndroid` and never reads the `android` callback, so
-  the 17 Android-override suites keep their current path.
+  the 17 Android-override suites keep their current path (lists in
+  `p19/seam/android-override-suites.txt` (17) and
+  `android-override-explicit-mode-suites.txt` (13); all are in the inventory).
 - `vplayer_p19_seam.json` (checkpoint, base `46bc00ce7`, owner P18) classifies
   all **685** facade spans with three patched declarations and
   `patched_class_projection` for `VpS2Hooks`. `vplayer_checkpoint_proof.py`
@@ -9340,7 +9349,23 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
     baseline (pre-existing).
   - Evidence: `refactor-evidence/vplayer/p19/seam/` (`after.jsonl`,
     `compare.txt`, proofs, analyzer logs).
+  The run used the then-uncommitted S2f tree on `c3be82656` (meta records
+  that head); every lib/test/proof file was final before it started, and only
+  the plan and size baseline changed before commit `c8c8a6ffc`.
 - Next: S2f independent review (review agent), then Step T.
+
+### 2026-10-20 — S2f independent review (review agent) — "No P1s"
+
+- Commit `c8c8a6ffc`; no P1s or P2s. The reviewer reran the platform seam
+  proof, size and architecture checks, and fed three wrong edits through
+  `prove()` in memory. All three were rejected: observer gate using
+  `isAndroid`, getter default reading the android callback, and an extra
+  rewrite at `requested_renderer`.
+- P3s adopted: superseded wording in the S2f design marked; override-suite
+  evidence cited; run provenance noted; unused `S2E` constant removed. The
+  stale facade comment at 2815 ("gated on `Platform.isAndroid`") is recorded
+  as a follow-up. A comment edit would change the proven facade tokens.
+- Next: Phase 19 Step T.
 
 ## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
 
