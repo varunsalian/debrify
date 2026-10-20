@@ -23,9 +23,17 @@ Future<void> _press(TvEpisodeDriver d, dynamic callback) async {
   await d.f.advance(d.t, const Duration(milliseconds: 200));
 }
 
-Future<void> _next(TvEpisodeDriver d) => _press(d, playerControls(d.t).onNext!);
-Future<void> _previous(TvEpisodeDriver d) =>
-    _press(d, playerControls(d.t).onPrevious!);
+Future<void> _next(TvEpisodeDriver d) {
+  final next = playerControls(d.t).onNext;
+  expect(next, isNotNull, reason: 'Next is offered');
+  return _press(d, next);
+}
+
+Future<void> _previous(TvEpisodeDriver d) {
+  final previous = playerControls(d.t).onPrevious;
+  expect(previous, isNotNull, reason: 'Previous is offered');
+  return _press(d, previous);
+}
 
 SeriesSourceFetcher _fetcher({
   required int season,

@@ -16,13 +16,15 @@ final _live = IptvChannel(
 void _silent(FakePlayer player) => player.onOpen = () {};
 
 /// A wait's first 100 ms poll marks its start (t0).
-DateTime _waitStart(TvEpisodeDriver d, String wait) => d.timers
-    .firstWhere(
-      (x) =>
-          x.duration == const Duration(milliseconds: 100) &&
-          x.stack.contains(wait),
-    )
-    .at;
+DateTime _waitStart(TvEpisodeDriver d, String wait) {
+  final polls = d.timers.where(
+    (x) =>
+        x.duration == const Duration(milliseconds: 100) &&
+        x.stack.contains(wait),
+  );
+  expect(polls, isNotEmpty, reason: '$wait polls every 100 ms');
+  return polls.first.at;
+}
 
 Future<void> _publishAt(
   TvEpisodeDriver d,

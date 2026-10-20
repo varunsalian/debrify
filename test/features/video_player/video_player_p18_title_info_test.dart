@@ -140,6 +140,7 @@ void main() {
           'plot',
         });
         expect(meta['runtime'], 42);
+        expect(meta['rating'], 8.5);
       } finally {
         await f.close(t);
       }

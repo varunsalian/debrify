@@ -8798,6 +8798,50 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
 - Next: an independent mutation sample by a review agent, then Step 0b and
   Step 1.
 
+### 2026-10-20 — Phase 18 independent sample and Step 0b (executor: Claude)
+
+- **Independent sample** (review agent, `p18/step0b/independent-sample.md`,
+  worktree `vp18-mut` at `672c138f3`). The agent designed 99 compilable
+  mutants from the source; M11 is equivalent, which leaves 98 valid. The P18
+  files killed **61/98 = 62.2%**, below 75%. Four P1s: the rate itself,
+  plus A04 (in-player Next through the cached guide), L04 (the outgoing
+  resume checkpoint on Next) and L10 (the sleep-latch manual override).
+  Disposition audit: the dead dialog, Stopwatch and `point_560` entries were
+  accepted. `point_689`/`692`/`701`/`704` were found to be equivalent rather
+  than random, `point_690`/`691` deterministic, and `point_1945`
+  compile-invalid as catalogued.
+- **Step 0b tests**:
+  - new `video_player_p18_review_gaps_test.dart` (9 cases): resume
+    checkpoint, manual window, sleep override, guide Next, two-episode
+    shuffle, no-guide fallback, EOF show-shuffle start at zero, pack title,
+    entry headers;
+  - new `video_player_p18_review_handoff_test.dart` (5 cases):
+    season-finale hand-off, custom-resolver guard, cached-guide fallback,
+    movie EOF completion, single-file lookup;
+  - the `title_info` rating is now asserted;
+  - the `adjacency` and `media_waits` helpers assert instead of throwing.
+- **Proofs**:
+  - A control on the unmutated code passed (35/35, `control_0b.txt`).
+  - The exact reviewer mutants (`mutants_0b.json` via `mut.py`,
+    `proofs_0b.jsonl`) were **18/19 killed**: N04 W03 T11 L04 N07 L11 L10
+    A04 S18 S07 T03 L14 N18 N19 A01 A03 N16 M07.
+  - With the executor harness, `point_690`/`691` were killed against the
+    two-episode shuffle case (`witness-0b-*`, control passed).
+- **Rate after Step 0b: 79/98 = 80.6%.** S09 remains an argued survivor:
+  `suppressResume` is masked by the auto-advance and manual-window resume
+  skips unless a lazy entry's resolution outlasts the 30 s window. These are
+  still open and recorded in `dispositions.json` (`step0b`):
+  - N20, N23, S11, S16, L02, L06, L13;
+  - the PikPak per-attempt mutants W02/W04/W05/W07/W09–W12;
+  - M04.
+
+  An overlay-gone assertion for N23 fails on the original as well, because
+  the transition overlay outlives a failed Debrify TV Next, so it was not
+  added.
+- All 16 P18 files: 123 passed. Format and analyze are clean. The inventory
+  is now 455 files and the CI list +2.
+- Next: Step 1 production moves.
+
 ## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
 
 Reviewed at `c5c8e3500` (facade byte-identical to `be4cd78aa`; split,

@@ -861,6 +861,8 @@ test/features/video_player/video_player_p18_metadata_preload_test.dart
 test/features/video_player/video_player_p18_next_ended_test.dart
 test/features/video_player/video_player_p18_next_paths_test.dart
 test/features/video_player/video_player_p18_pikpak_retry_test.dart
+test/features/video_player/video_player_p18_review_gaps_test.dart
+test/features/video_player/video_player_p18_review_handoff_test.dart
 test/features/video_player/video_player_p18_shuffle_paths_test.dart
 test/features/video_player/video_player_p18_shuffle_test.dart
 test/features/video_player/video_player_p18_title_branches_test.dart
