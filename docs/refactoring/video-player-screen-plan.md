@@ -8842,6 +8842,49 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
   is now 455 files and the CI list +2.
 - Next: Step 1 production moves.
 
+### 2026-10-20 — Phase 18 Step 1 + reduced gate (executor: Claude)
+
+- **Step 1 (`d328da2c4`).** The generator was flipped from PROVISIONAL to
+  FINAL and run on `249566376` (`p18/final/`): zero differences, and sizes
+  equal the Step T prototypes (161 / 334 / 386 / 370 / 263 / 440 / 197 / 152 /
+  377 / 247). The output was copied unchanged into `lib/`. The manifest
+  status is `applied`. Facade **11,583 → 10,093** (ratchet).
+- **Move checks** (`p18/step1/move-checks.log`): P18 current and
+  `--self-test`, and P17 history at `249566376`, all report exhaustive
+  ownership with 0 differences. CI now selects P18 for both runs and adds the
+  P17 history line.
+- **Analyzer.** CI analyze: 604 issues, as in the Step T prototype. The
+  allowlist gains the 16 newly unused facade imports (phase 21 cleanup). The
+  P18 inventory records the 22 receiver-probe identities (31 diagnostics:
+  16 unused imports, four formatter `if` wraps on
+  `_findNextEpisodeIndex`/`_findPreviousEpisodeIndex`, and eleven
+  unrelated-`mounted` guards on `_handleSeriesNextEpisode`,
+  `_playPikPakVideoWithRetry`, `_loadPlaylistIndexAttempt` and
+  `_playShowShuffle`). The comparator reports 209 scoped diagnostics and 0
+  additions.
+- **Reader retargets** (P2-1). Each change is equal or stronger:
+  - `player_auto_next_routing_test`: a P18 manifest-status switch, plus
+    non-negative marker checks and a `.pop(` negative.
+  - `playback_checkpoint_contract_test`: `_togglePlay` is read as its
+    declaration.
+  - `media_server_watch_player_wiring_test`: the EOF declaration;
+    `observeServerWatch(completed: true)` must precede the live-IPTV branch,
+    and three spellings of the commit negative are checked.
+  - `manual_source_validation_contract_test`: the EOF, load-attempt and PikPak
+    declarations; the validation gate must precede the watch observation.
+
+  All 27 cases pass on Step 1.
+- **Reduced gate** (`p18/gate/compare.txt`). The frozen 455-file inventory
+  ran serially on the original (Step 0b head `d75189c4f`) and on
+  `d328da2c4`. All 455 suites loaded in both runs. **3,139 cases, identical
+  outcomes by (suite, name)**: 3,138 successes plus the single pre-existing PiP
+  startup-shield source-text failure.
+- **Mechanical checks.** Format (0 changed), file sizes, storage keys,
+  search/vplayer architecture and the theme/source-guard lists pass.
+  `check_storage_references.py` fails identically on `249566376` (53
+  findings, the Follow-up series test debt).
+- Next: independent post-gate review, merge, then M4.
+
 ## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
 
 Reviewed at `c5c8e3500` (facade byte-identical to `be4cd78aa`; split,
