@@ -8920,6 +8920,35 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
     missing files; neither occurred (3,139 unique names, 455 files).
 - Next: merge, then M4.
 
+### 2026-10-20 — Milestone M4 (after phase 18) — PASS
+
+- Phase 18 merged `6ec328f27` and pushed; all merge checks pass.
+- **Full suite** on `6ec328f27` (`suite_evidence.py run vplayer/m4/gate/flutter-gate
+  --no-pub --dart-define=DEBRIFY_VP_TEST_HOOKS=true --concurrency=1`), compared
+  by identity against M3's `m3/gate/flutter-gate.jsonl`: **PASS**.
+  - 15,410 successes, with 0 new failures, 0 missing tests and 0 newly skipped
+    tests.
+  - The 13 failures and 28 errors are the same set as M3.
+  - 468 identities were added (the tests from phases 17 and 18).
+- **Release builds** (no install or run):
+  - `flutter build apk --release --no-pub` exited 0 (67 s, Android Studio JBR).
+  - `flutter build macos --release --no-pub` exited 0 (56 s).
+  - Evidence is in `refactor-evidence/vplayer/m4/gate/`: `compare.txt`,
+    `builds.sh`, `builds.txt` and the build logs.
+- **M4 scenarios** cover guide, episode, tracker and subtitle identity. They
+  are covered by the phase 17 Step 0 cases, and all of them pass in the full
+  suite:
+  - tracker identity after a Stremio TV channel switch
+    (`video_player_p17_tracker_identity_test.dart`);
+  - channel subtitle and skip state (`p17_stremio_channels`,
+    `p17_channel_contracts`);
+  - fetched-episode commits and the synthetic guide (`p17_fetch_callers`,
+    `p17_episode_guide`);
+  - the Debrify TV banner across next and by-id switches (`p17_banner*`).
+
+  Device checks stay on the end-of-series checklist.
+- Next: Phase 19 design, then a review agent's review.
+
 ## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
 
 Reviewed at `c5c8e3500` (facade byte-identical to `be4cd78aa`; split,
