@@ -1,7 +1,6 @@
 import 'package:debrify/models/android_video_renderer_mode.dart';
 import 'package:debrify/screens/video_player_screen.dart';
 import 'package:debrify/services/storage/player_settings_storage.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/startup_driver.dart';
