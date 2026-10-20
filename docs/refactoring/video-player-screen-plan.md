@@ -9584,3 +9584,142 @@ self-tests or negatives):
   exactly: receiver path, new name and role.
 - The formatter-only named-record comma in `_getCurrentEpisodeTitleInfo` is
   declared as an explicit count-1 edit.
+
+## Phase 19 design review resolution (review agent, 2026-10-20)
+
+Reviewed at `565516956` (docs only on `46bc00ce7`); the report is
+`refactor-evidence/vplayer/p19/review/design-review.md`. The reviewer
+confirmed the member spans, the seven single-owner fields, the retained
+sites, the three patched adapters, the exclusions, the forwarder ordering,
+the dispose tear-off and the `static final` laziness. Its findings were two
+P1s, five P2s and six P3s. All are adopted as follows.
+
+1. **P1-1: S2b relocation and Host `isAndroid`.**
+   - The fallback Host and the probe Host each gain
+     `bool get isAndroid => VpS2Hooks.isAndroid;`, a live projection that is
+     never cached. The existing projections at 8097, 9564 and 9650 are the
+     precedent.
+   - The moved `_canFallbackExplicitRenderer` reads `isAndroid:
+     _host.isAndroid`. No file other than the facade contains `VpS2Hooks`
+     (proof `:200–202`).
+   - `vplayer_platform_seam_proof.py` gains a relocated-owner branch for S2b
+     `_canFallbackExplicitRenderer`, modelled on S2c/S2e (`:282–327`):
+     - the live owner resolves through `read()`;
+     - the destination path is asserted;
+     - `_host.isAndroid` is substituted exactly once;
+     - the `_VpRendererFallbackHostAdapter` projection is checked;
+     - projection negatives cover a bypassed override, a cached predicate, a
+       duplicated predicate and a wrong default.
+   - The two S2f sites get the same branch. Their owners are the probe and
+     fallback collaborators, through a projection of the S2f predicate (item
+     2).
+   - `video_player_platform_seam_guard_test.dart` gains the `s2f_sites` count
+     and the new negative labels.
+   - Step T freezes the Host names with these projections included.
+2. **P1-2: S2f must not reroute existing suites.**
+   - Seeding `current-vo` in the shared fake is rejected. It would mark the
+     session validated after two reads, and `_canFallbackExplicitRenderer`
+     would then refuse the error-driven fallback that `RendererFixture.fallback`
+     emits after advancing time. Existing suites would silently lose their
+     path.
+   - Instead, S2f adds a **dedicated** hook predicate. `VpS2Hooks` gains an
+     optional `androidRendererValidation` callback and
+     `static bool get isAndroidRendererValidation =>
+     _installed?.androidRendererValidation?.call() ?? Platform.isAndroid;`.
+   - The two feeders read that predicate instead of raw `Platform.isAndroid`:
+     `_installDecoderObservers` 2825 and `_scheduleRendererStartupValidation`
+     2849.
+   - The production default is identical: the predicate falls back to
+     `Platform.isAndroid`, and install is gated by release/profile mode, the
+     dart-define and `assert`.
+   - Existing suites install only `ios`/`android`, so they keep evaluating
+     `Platform.isAndroid` (false on the host). They therefore take exactly
+     today's path **by construction**.
+   - The S2f proof checks:
+     - the default (`?? Platform.isAndroid`);
+     - one predicate per site;
+     - the operand position (after the `NativePlayer` check, and as the first
+       `shouldArm` argument);
+     - wrong-predicate, override-bypassed, predicate-twice and operand-order
+       negatives.
+   - Evidence: an inventory of the suites installing an Android override with
+     a non-automatic mode. The full `test/features/video_player/**`
+     directory, plus the source readers, is run before and after the S2f
+     commit and compared by identity. Both are recorded in the S2f Progress
+     entry.
+   - After the move, the probe and fallback Hosts project
+     `bool get isAndroidRendererValidation =>
+     VpS2Hooks.isAndroidRendererValidation;`.
+3. **P2-1: lease release in dispose, and a pre-existing leak.**
+   - Hazard 3 and the step-0 lease bullet now read: dispose releases the slot
+     only when a player exists (`whenComplete` after native disposal) or an
+     auto-sync controller is still installed (4117–4119). Otherwise it relies
+     on an in-flight claim self-releasing on `_screenDisposed`.
+   - New Follow-up candidate: **a dispose during the renderer-fallback
+     teardown strands the video-output lease.** This is the window after
+     `disposeSubtitleAutoSync` (2997) and before `_createPlayerInstance`
+     (3030), where `_playerCreated` is false and the lease is still held.
+   - Step 0 characterizes it with the environment's teardown
+     `VideoOutputLease.isHeld == false` expectation made explicit in that test.
+     It is not fixed.
+4. **P2-2: the live passthrough flip is device-pending.**
+   - The menu gates it on raw `Platform.isAndroid` (`vp_player_menu_ui.dart:248–253`,
+     `321–326`), and `_loadPlayerDefaults` loads the setting only on Android.
+     No host test of the original reaches it.
+   - Option (a) is adopted: it is verified by the verbatim-move checker
+     (bodies token-identical apart from receivers) plus the device
+     checklist's AVR double toggle.
+   - No S2g seam is added. The passthrough items are removed from the step-0
+     gap list.
+5. **P2-3: the mixed platform world under S2f is stated.**
+   - In S2f tests, the fallback's `renderer_startup_failed` and
+     `status=failed` lines are asserted through a `print` zone capture
+     (desktop branch).
+   - The rebuilt player's audio list is the desktop list, and
+     `_attachAudioEffectSession` returns early.
+   - The probe reports `requested_renderer=platform_default`.
+   - The Android channel payload (`{'message': fields}` without the prefix,
+     3575), the effects session and the Android audio list stay on the device
+     checklist. Those raw reads (1618, 1835, 3231, 3569 and the menu gate) are
+     not seamed.
+6. **P2-4: when the timeout is sampled.**
+   - `_outputLeaseTimeout` is sampled on the **first contended claim** in the
+     isolate (1702–1711).
+   - The tvOS 10 s characterization sets `debugSetTvOS(true)` before that
+     file's first contended claim, and lives in its own test file. Flutter
+     runs one isolate per test file.
+7. **P2-5: explicit step-0 inventory.**
+   - New suites mock `TvosDisplayMatchService` and `AudioEffectSessionService`
+     through `TestDefaultBinaryMessengerBinding` handlers.
+   - The tvOS-override fixture registers `debrify/tvlog`
+     `outputChannelCount` and the display-match `clear`, and asserts that the
+     dispose clear is skipped when `replacedPip`.
+   - The probe line, the `current-vo` validation and display matching are
+     entirely new coverage. Each test gets its own mutation proof on the
+     original.
+8. **P3s:**
+   - 28 members move: 21 methods and 7 fields, including the two statics.
+   - Host estimates: audio about 10 names, with no `mounted`; lease 1
+     (`screenDisposed`). Step T measures them.
+   - `members.txt` column 1 is relabelled "span start" (the first own line
+     after the previous member), and `members.py` prints that label. The
+     design's field table uses declaration lines, labelled as such.
+   - Line references corrected: channel routing 3569, adapters 7853–7854
+     and 9162–9163.
+   - `// ignore: avoid_print` moves attached to the `print`.
+   - Moved dartdoc bracket references to private names become prose
+     backticks in the moved files only, and only where the target is no
+     longer in scope. This is cosmetic, since `comment_references` is
+     disabled. Step T decides between that and leaving them verbatim; the
+     move checker treats comments as tokens, so the default is **verbatim**.
+   - The audio rationale says "audio on a live player", with the external
+     track as an input track.
+9. **Grouping (open question 5).** The tvOS remedy install stays with
+   display match. It is the tvOS per-instance decode/display setup, and its
+   only behavioural link to the probe is the routed `onStateChanged` and
+   `evaluate`. Moving it into the probe would remove one routed edge but
+   push the probe to about 400 lines. `_tvosDecodeRemedy` itself stays
+   State-owned (`_openMedia` 3491, dispose).
+
+Sequence: re-review of the items above, then S2f (seam commit, proof and
+before/after evidence, separately reviewed), then Step T, then Step 0.
