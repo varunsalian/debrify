@@ -9723,3 +9723,46 @@ P1s, five P2s and six P3s. All are adopted as follows.
 
 Sequence: re-review of the items above, then S2f (seam commit, proof and
 before/after evidence, separately reviewed), then Step T, then Step 0.
+
+**Re-review (resolution `bfe593179`): "No P1s".** The reviewer confirmed that
+the dedicated predicate is neutral in both settings:
+- **Production:** with no hooks installed, the new getter falls back to
+  `Platform.isAndroid` (facade 10073–10087).
+- **Existing tests:** the new field is an optional `final`, so the
+  constructor stays `const`. Every existing install passes only
+  `ios`/`android`.
+
+The remaining items are adopted:
+
+- **R1, the S2f ledger.** `dev/tool/dart_moves/vplayer_p19_seam.json`
+  (checkpoint `S2f`, base `46bc00ce7`) records:
+  - the two site patches;
+  - the `VpS2Hooks` patch, which makes exactly three insertions: the
+    constructor parameter, the `final` field and the getter.
+
+  The platform proof's frozen-hook assertion becomes:
+
+  > the `866cbaf03` tokens plus exactly the S2f insertions
+
+  `default_errors` covers `isAndroidRendererValidation` (wrong-callback and
+  wrong-default negatives). `vplayer_checkpoint_proof.run_current_manifest`
+  validates the S2f checkpoint against base `46bc00ce7`, plus the applied
+  P18 ledger overlaid with those patches, as it does for S2e.
+
+  The seam guard test adds three cases:
+  - with no hooks installed, the new predicate equals `Platform.isAndroid`;
+  - an `android`-only install leaves the new predicate at its default;
+  - a `androidRendererValidation`-only install leaves `isAndroid` at its
+    default.
+- **R2, wrong-hook negatives.** A "wrong hook predicate" negative
+  (`isAndroidRendererValidation` → `isAndroid`) is added at both S2f sites
+  and both post-move projections. The mirror case
+  (`isAndroid` → `isAndroidRendererValidation`) is added at
+  `_canFallbackExplicitRenderer` and its projection.
+- **P3s.**
+  - The probe Host projects only `isAndroidRendererValidation`; the
+    fallback Host projects both predicates.
+  - S2f characterization installs `android` **and**
+    `androidRendererValidation`. A validation-on/android-off install
+    appears only in a test labelled as the independence proof.
+  - The field is listed as `final` in the ledger.
