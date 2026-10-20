@@ -1460,13 +1460,9 @@ void main() {
   test(
     'Flutter startup passes source identity through the final player-open barrier',
     () {
-      final code = File(
-        'lib/screens/video_player_screen.dart',
-      ).readAsStringSync();
-      final open = code.substring(
-        code.indexOf('Future<void> _openMedia('),
-        code.indexOf('void _releasePlayerDiagnostic('),
-      );
+      // P19: the whole live _openMedia declaration (validated move reader),
+      // not a slice ending at a member that moves to the decoder probe.
+      final open = vpSourceDeclaration('_VideoPlayerScreenState._openMedia');
       expect(
         open,
         contains(

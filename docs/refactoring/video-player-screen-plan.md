@@ -9433,6 +9433,85 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
 - Next: Step 0 characterization of the gaps listed in the design, with
   per-test mutation proofs.
 
+### 2026-10-20 — Phase 19 Step 0 complete (executor: Claude)
+
+- **Systematic sweep** on the original `4c97c4687`
+  (`p19/step0/mutation_batches.py`, `systematic.json`, serial): all 650
+  points across the moved declarations, recorded in `mutations-systematic/`.
+- **Closure.** Every open outcome was rerun with a widened selection. Each
+  file set first passed a control run on the original.
+  - Part 1 (`closure_plan.py`, 131 points) widened by the P19 gap suites and
+    the legacy renderer suites. `resume_renderer_capture`,
+    `resume_renderer_guard` and `p17_renderer_duration` were dropped: in one
+    isolate with the others they stall on the shared wakelock cursor
+    (`closure-controls-run1`).
+  - Part 2 (`closure_part2.py`, 62 points) ran the round-2 suites. The
+    harness credits only a first failure carrying `Expected:`. Round 2
+    therefore makes the P19 suites fail through expectations, not through
+    `.single`/`.first`/`fail()`: `elapsedUntil`, the tvOS single-request
+    reads, the fallback call lookups. It also adds the fallback-teardown
+    suite and the new tvOS gap cases. The teardown suite runs first in its
+    sets because of the same wakelock stall (`closure2-controls-run1`).
+  - Part 3 (`point_41`/`362`/`363`) reran two kills that test order had
+    masked. The free-slot timing case now runs first. The stranded-lease
+    case parks a second disposal, so its dispose count fails before the fake
+    double-completes.
+  - Part 4 ran the remedy-field and first-frame literals against the
+    exact-field checks: every decoder/source field must be one key=value
+    token.
+- **Accounting** (`closure-summary.json`, `dispositions.json`; P17 policy):
+  **390 killed, 20 survived, 2 runtime/timeout, 149 compile-invalid,
+  50 equivalent, 39 device-pending** (94.7% of the valid points that are
+  neither equivalent nor device-pending).
+  - The equivalents are argued per point:
+    - probe-local initial values and signature-only literals;
+    - sentinels;
+    - unreachable or idempotent lease paths;
+    - the display-match timer guard (every token bump cancels the timer);
+    - the validation token/instance guards (each instance bump also bumps
+      the token);
+    - the tvOS size guard;
+    - stale timer cancels;
+    - the empty-versus-null codec.
+  - Device-pending: the Android diagnostic channel, the effects session, the
+    passthrough flip and the real-clock lease label.
+  - **Open:** `point_305` (the validation delay removed hangs the mount
+    fixture); `344` (should-play needs a playlist opened without autoplay);
+    `366`/`367` (`_isPlaying` behind the not-ready controls); `371`–`373`
+    (subscription cancel, auto-sync dispose, external-subtitle reset); `388`;
+    `397`/`398` (setState and the unmount guard after the rebuild); `429`;
+    `444`; `451`; `454`/`455` (the in-progress reset); `506`/`507`/`510`/
+    `541`/`544`/`557` (probe guards that each mask the others); `599`
+    (remedy `pending`). These are Step 0b candidates.
+  - No-kill declarations hold only device-pending, compile-invalid or
+    equivalent points: the passthrough flip, the effects session, the
+    diagnostic channel and the first-frame sentinel.
+- **Per-test proofs** (`proofs.py`). All 98 P19 test declarations are the
+  first clean assertion kill of at least one mutant. 27 needed single-case
+  witnesses (`generate_witness_proofs.py`, controls first). Where two guards
+  protect one behaviour, the witness rewrites a statement point spanning
+  both. "The automatic renderer is never validated" was removed: arming and
+  the fallback both gate on the mode, so no single fault reaches it, and
+  each gate's own mutants are killed elsewhere.
+- **New suites** (12 files, 106 cases, all passing on the original; format
+  and analyze clean): `video_player_p19_{audio_output, decoder_probe,
+  fallback_gaps, fallback_teardown, probe_gaps, renderer_fallback,
+  renderer_validation, server_frame, tvos_gaps, tvos_lease_timeout,
+  tvos_video, video_output_lease}_test.dart`. Support files:
+  `support/engine_driver.dart` and `support/lease_steps.dart`. They are
+  listed in the reduced-gate inventory `dev/tool/vplayer_p19_test_inventory.txt`
+  (467 files) and the CI behaviour list. `test/media_server_service_test.dart`
+  is retargeted from the moved names to
+  `vpSourceDeclaration('_VideoPlayerScreenState._openMedia')`.
+  `dev/tool/vplayer_platform_seam_proof.py` gains the relocated-owner
+  branches that run at Step 1.
+- **Follow-ups** recorded, not fixed (no bug fixes during moves):
+  - closing during the old player's disposal strands the video-output slot
+    (pinned by the stranded-lease case);
+  - the media-server first-frame log had no coverage before this step.
+- Next: an independent mutation sample by a review agent (≥75%), then
+  Step 0b and Step 1.
+
 ## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
 
 Reviewed at `c5c8e3500` (facade byte-identical to `be4cd78aa`; split,
