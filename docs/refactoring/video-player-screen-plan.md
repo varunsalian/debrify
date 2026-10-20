@@ -4027,6 +4027,412 @@ Phone, Android TV (Flutter player), tvOS and desktop.
    pending, treating all proofs as provisional until the P16 merge (two
    rebases), or wait for P15's merge first?
 
+## Phase 18 — episode navigation, shuffle, title info, playlist load/resolve, media waits, PikPak retry and metadata preload
+
+> **Read with the Phase 18 design review resolution at the end of this
+> file** — it supersedes this section where they differ.
+
+Branch `refactor/vplayer-p18` (worktree `../debrify-wt/vplayer-p18`), based
+on the phase-17 merge `249566376`. It is not pipelined, because phase 17 has
+merged. Evidence `refactor-evidence/vplayer/p18/`. Line numbers are at
+`249566376` (facade 11,583 lines). The member inventory is in
+`p18/members.txt` and the retained-reference scan in `p18/retained.txt`.
+**M4** follows this phase.
+
+≈ 2,385 moved member lines (37 methods, 6 fields) into ten files. Spans
+include attached doc/section comments. The file estimates add the Host
+(P16/P17 ratio: about 2 formatted lines per Host name plus about 20 of
+scaffold). Step T proves the formatted prototypes are ≤ 500 lines each
+(`check_search_architecture.py:104`).
+
+| Destination | Members (decl line, span incl. attached comments) | ≈ file |
+|---|---|---|
+| `vp_playback_ended.dart`: the EOF ladder | `_onPlaybackEnded` 3643 (103) | ≈ 190 |
+| `vp_episode_next.dart`: manual Next (incl. Debrify TV `requestMagicNext`) + legacy pop-for-Quick-Play | field `_seriesNextDispatched` 1197; `_goToNextEpisode` 4485 (153), `_handleSeriesNextEpisode` 4685 (80) | ≈ 330 |
+| `vp_episode_adjacent.dart`: playlist index adjacency, has-next/has-previous, Previous, in-player next beyond the pack, guide adjacency | `_findNextEpisodeIndex` 3996 (64), `_getMainGroupIndices` 4060 (31), `_findPreviousEpisodeIndex` 4382 (64), `_hasNextEpisode` 4446 (18), `_hasPreviousEpisode` 4464 (16), `_fetchNextEpisodeInPlayer` 4639 (47), `_goToPreviousEpisode` 5026 (44), `_resolveAdjacentWithCachedGuide` 7303 (25), `_adjacentEpisode` 7327 (18) | ≈ 400 |
+| `vp_shuffle.dart`: shuffle menu, continuous toggle, random once, show-wide shuffle, shuffle bag | fields `_shuffleBag` 711, `_showShuffle` 712, `_showShuffleInProgress` 713, `_activeShowShuffleGeneration` 714; `_showRandomPlaybackMenu` 4090 (65), `_toggleContinuousShuffle` 4155 (25), `_playRandomOnce` 4180 (23), `_playShowShuffle` 4205 (130), `_shuffleEligibleIndices` 4333 (27), `_pickShuffleIndex` 4360 (21) | ≈ 380 |
+| `vp_episode_title_info.dart`: dock/OTT title, subtitle, enhanced metadata | `_getCurrentEpisodeTitle` 3766 (2), `_getCurrentEpisodeTitleInfo` 3772 (106), `_getCurrentEpisodeSubtitle` 3875 (82), `_getEnhancedMetadata` 3957 (39) | ≈ 280 |
+| `vp_playlist_load.dart`: load one playlist index (request restore + attempt), failure teardown, manual-selection window | field `_manualSelectionResetTimer` 709; `_setManualSelectionMode` 7133 (14), `_clearTransitionOnFailure` 5075 (25), `_loadPlaylistIndex` 5094 (58), `_loadPlaylistIndexAttempt` 5152 (236) | ≈ 450 |
+| `vp_playlist_entry_resolve.dart`: lazy provider link resolution (Torbox torrent/web download, PikPak, Premiumize item/hash, Real-Debrid, AllDebrid) | `_resolvePlaylistEntryUrl` 5388 (176) | ≈ 210 |
+| `vp_media_waits.dart`: duration/ready polling and the PikPak metadata wait | `_waitForVideoReady` 3588 (11), `_waitForDuration` 3599 (11), `_waitForVideoMetadata` 5570 (109) | ≈ 175 |
+| `vp_pikpak_retry.dart`: cold-storage open/monitor/reopen loop | `_playPikPakVideoWithRetry` 5674 (335) | ≈ 385 |
+| `vp_metadata_preload.dart`: episode/movie metadata preload, addon-subtitle retry, single-file IMDb lookup, playlist IMDb/poster write-back | `_preloadEpisodeInfo` 6009 (60), `_retryAddonSubtitleFetchAfterSeriesMetadata` 6068 (24), `_fetchSingleFileMovieMetadata` 6093 (57), `_saveImdbIdToPlaylist` 6149 (13), `_saveSeriesPosterToPlaylist` 6163 (60) | ≈ 260 |
+
+Grouping rationale:
+- **EOF vs manual Next.** `_onPlaybackEnded` and `_goToNextEpisode` share
+  their ladder shape (shuffle → playlist next → Stremio TV → fetch → series
+  next), but they differ in order, flags (`_isAutoAdvancing` vs
+  `_setManualSelectionMode`) and failure semantics (EOF never relaunches
+  Stremio TV's current slot). Together they would be about 520 lines with
+  the Host. `_handleSeriesNextEpisode` goes with manual Next because its
+  only other caller is the EOF ladder's last rung, and it owns the
+  dispatch latch `_seriesNextDispatched`.
+- **Adjacency.** Every index/adjacency reader sits in one file:
+  `_hasNextEpisode` (read by the retained `_hasAnyNext`),
+  `_hasPreviousEpisode` (build, `_buildTvControls`), `_goToPreviousEpisode`
+  and `_fetchNextEpisodeInPlayer` (the shared "beyond the pack" rung for
+  EOF and manual Next). `_getMainGroupIndices` is shared with shuffle and
+  `_initializePlayer` (2018) through routing. P17 deferred
+  `_resolveAdjacentWithCachedGuide`/`_adjacentEpisode` here, carrying the
+  P14-inventory `curly_braces…` info on `_adjacentEpisode`.
+- **Shuffle** is one workflow: menu → once/continuous → show-wide shuffle →
+  bag fallback. Its four private fields have no other reader.
+- **Title info** is read-only derivation consumed by build,
+  `_buildTvControls` and `_buildDebrifyTvInfoPanel` (phase 21 retained
+  code). It moves as a pure reader collaborator. It is not a builder: it
+  returns strings and records, not widgets (contrast P17's deferral of
+  `_buildDebrifyTvInfoPanel`).
+- **Load / resolve / waits / PikPak / preload.** These are the playlist
+  plan's "playlist load/resolve, metadata wait, PikPak retry, metadata
+  preload". Load + resolve would be about 600 lines, and PikPak + its
+  metadata wait about 520, so each pair splits. `_waitForVideoMetadata`
+  joins the two generic waits; it shares their polling idiom and
+  `_duration` reader, and its only caller is PikPak, through routing.
+
+**Not in this phase (with evidence):**
+- **State-owned transition/buffering actions → phase 21 with the
+  overlay:** `_startTransitionOverlay` 3746 (callers: `_goToNextEpisode`
+  plus the P15/P16/P17 adapters 8839, 8968, 9146, 9337, 9870) and
+  `_clearBufferingIndicator` 4479 (5 adapters plus P18 next/previous). Both
+  write build-owned overlay/indicator state, so moved P18 code calls them
+  through Host forwarders, as P15–P17 do.
+- **`_getLastPlayedEpisode` 3610 → phase 20.** Its only caller is
+  `_initializePlayer` 1960 (startup series resume), and it is a
+  storage read used only at startup.
+- **`_findSeriesEpisodeForCurrentIndex` 8575 stays State-owned.** It is a
+  pure helper read only by the P11/P12/P14 adapters (10768, 10868, 11442),
+  not by any P18 member.
+- **State-owned derived getters (P17 precedent):** `_hasAnyNext` 5022
+  (build/controls/P8 adapter 11154). Its body is rewritten in place to
+  `_episodeAdjacent.hasNextEpisode() || …`. `_canFetchEpisodes` 7287,
+  `_hasStremioTvNext` 5016, `_hasStremioTvGuide` 5011, `_hasIptvNext`,
+  `_currentIptvChannel`, `_effectiveContent*`, `_effectiveStremioTvChannels`
+  and `_effectiveIptvChannels` stay where they are.
+- **Engine/startup (phases 19/20) keep their call sites; only the
+  receivers are rewritten:**
+  - `_initializePlayer`: 2018 `_getMainGroupIndices`, 2047
+    `_resolvePlaylistEntryUrl`, 2179 the unawaited
+    `_playPikPakVideoWithRetry(...).then(`, 2191/2277 `_waitForVideoReady`,
+    2343 `_loadPlaylistIndex`, 2352 `_episodeMetadataReady ??=
+    _preloadEpisodeInfo()`.
+  - `_bindPlayerInstanceSubscriptions` 2572 `_onPlaybackEnded()`.
+  - `_fallbackExplicitRendererToAutomatic` 3028 `_waitForVideoReady`.
+- **Build/controls → phase 21 (call-site rewrites only):**
+  - `_buildTvControls`: 6654/6659 title info; tear-offs 6691
+    `_goToNextEpisode` and 6696 `_goToPreviousEpisode`; 6709
+    `_showRandomPlaybackMenu`.
+  - `_buildDebrifyTvInfoPanel` 7248.
+  - build: 7618/7667 `_goToNextEpisode()`, 7672–7673, tear-offs 8165/8177,
+    8197, 8030/8035/8092 title info, 8221 shuffle menu.
+
+### Frozen field ownership
+
+Principle (P15 resolution 1, P16, P17): a field moves only to its **single
+writing collaborator**, and only when no retained code, build, lifecycle
+step, adapter or other collaborator reads it. Everything else stays
+State-owned behind narrow live accessors. Every relocated initializer is
+inert.
+
+| Field | Fate | Reason / inertness |
+|---|---|---|
+| `_seriesNextDispatched` 1197 | **next** | read/written only by `_handleSeriesNextEpisode` (4688, 4746–4747); `= false` |
+| `_shuffleBag` 711, `_showShuffle` 712 | **shuffle** | only shuffle members (`_toggleContinuousShuffle`, `_playRandomOnce`, `_pickShuffleIndex`, `_playShowShuffle`); `final … = []` / `= ShowShuffle()` (constructor allocates only, no Host read) |
+| `_showShuffleInProgress` 713, `_activeShowShuffleGeneration` 714 | **shuffle** | only `_playShowShuffle`; `false` / implicit `null` |
+| `_manualSelectionResetTimer` 709 | **load** | writer `_setManualSelectionMode`; the only other reader is `dispose` 6335, rewritten in place to `_playlistLoad.manualSelectionResetTimer?.cancel()` at the same position (P17 `_debrifyBannerTimer` precedent). The trailing `// Timer to reset…` comment moves with the field. |
+| `_continuousShuffleEnabled` 710 | State | initState, EOF, next, P13 menu-UI adapter 10563 |
+| `_showShuffleGeneration` | State | P17 episode-fetch adapter 8706 |
+| `_random` 535 | State | shared with `_randomStartOffset` 1305 |
+| `_isManualEpisodeSelection`, `_allowResumeForManualSelection` | State | P14/P16 adapters 9044, 9072, 10170, 10226, 10236 |
+| `_isPikPakRetrying`, `_pikPakRetryMessage`, `_pikPakRetryCount` | State | build, dispose, `_bindPlayerInstanceSubscriptions`; written by waits + PikPak |
+| `_pikPakRetryId` | State | the cancellation token is written by next, load, PikPak, P17 adapters 8790/8792/8944/8946 and dispose; read by the waits |
+| `_singleFileImdbId/_Fetched` | State | P13/P17 adapters 8809–8954, 10486, 10656–10658, 10886 |
+| `_trackPreferencesReadyForAddonSubtitles` | State | `_resetSubtitleState`, P11 adapters |
+| `_episodeMetadataReady`, `_episodeFetchInProgress`, `_isAutoAdvancing`, `_sleepStopLatched`, `_syntheticGuidePlaylist`, `_episodeNavigationGeneration`, `_playlistIdentityToken`, transition block, `_currentIndex`, `_currentStreamUrl`, `_activeHttpHeaders`, `_activeOpenedMedia`, `_activeMediaShouldPlay/UserPaused`, `_dynamicTitle`, `_tvStatic*`, `_isTransitioning`, `_tvScrubGeneration` | State | shared rule "Shared state that stays State-owned", plus P14–P17 frozen ownership |
+
+**Scaffolding:** ten collaborators are assigned eagerly in the State
+constructor after phase 17's five. The order is `_playbackEnded`,
+`_episodeNext`, `_episodeAdjacent`, `_shuffle`, `_episodeTitleInfo`,
+`_playlistLoad`, `_playlistEntryResolve`, `_mediaWaits`, `_pikPakRetry`,
+`_metadataPreload`. Constructors are inert, and no constructor or field
+initializer reads a Host. Tear-offs handed to widgets become tear-offs of
+long-lived collaborators, so `==` still holds across rebuilds:
+`TvControls.onNext/onPrevious` 6691/6696 and the phone controls 8165/8177.
+
+### Hosts (names frozen at step T)
+
+Facade routing between siblings, with no sibling imports. Every
+cross-collaborator method forwarder is a plain, non-`async` expression
+(`=> _s._x.m(...)`), so the callee's synchronous prefix runs before the
+caller's next statement. In particular:
+- `_loadPlaylistIndexAttempt`'s `_episodeNavigationGeneration++` (5164)
+  must happen before `_playShowShuffle`'s `request.attempt` continuation.
+- `_pikPakRetryId++` in PikPak must happen before the first `await`.
+- `_episodeMetadataReady ??= preloadEpisodeInfo()` (shuffle 4239,
+  `_initializePlayer` 2352) must store the callee's own `Future`.
+
+All widget reads are **live selectors**. `setState` is forwarded via
+`_vpSetState`. Collaborator chains (`_trakt.…`, `_simkl.…`, `_mdblist.…`,
+`_completion.…`, `_sleep.…`, `_resumeSave.…`, `_resumeRestore.…`,
+`_resumeWriteGuard.clear`, `_trackPreferences.…`, `_serverWatch.commit`,
+`_skip.…`, `_startupCandidates.tryOpenStartupVod`, `_subtitleApply.…`,
+`_iptvSwitch.…`, `_iptvLiveRecovery.onEnded`, `_stremioTv.…`,
+`_episodeFetch.…`, `_episodeGuide.…`, `_menu.…`, `_addonSubtitles.…`,
+`_pip.iosPipSession`) become one Host forwarder per used member, with the
+callee's defaults (P17 `CHAINS`). Generator-measured name counts are
+frozen at step T. The scan estimates are:
+
+- **ended (≈ 30):** `validationGateActive`, `currentIptvChannel`,
+  `hasIptvNext`, `currentIptvIndex`, `continuousShuffleEnabled`,
+  `isAutoAdvancing` (set), `sleepStopLatched` (set), `activeMediaShouldPlay`
+  (set), `hasStremioTvNext`, `activePlaylist`, widget `requestMagicNext`;
+  chains `observeServerWatch`, `onEnded` (IPTV live recovery), the
+  Trakt/Simkl/MDBList stop set, `markCurrentEpisodeAsFinished`,
+  `markCurrentMovieAsFinished`, `sleepTimerMode`, `cancelSleepTimer`,
+  `showSleepTimerToast`, `switchToIptvChannel`, `goToNextStremioTvSlot`;
+  routed `playShowShuffle`, `pickShuffleIndex`, `loadPlaylistIndex`,
+  `findNextEpisodeIndex`, `goToNextEpisode`, `fetchNextEpisodeInPlayer`,
+  `handleSeriesNextEpisode`.
+- **next (≈ 45):** `mounted`, `setState`, `context`;
+  `clearBufferingIndicator`, `startTransitionOverlay`, `tvAbandonScrub`,
+  `isTransitioning`/`tvScrubGeneration` (set), `player`,
+  `continuousShuffleEnabled`, `hasStremioTvNext`, `resetSubtitleState`,
+  `singleFileImdbId`/`singleFileImdbFetched` (set), `tvStaticMessage`/
+  `tvStaticSubtext` (set), `pikPakRetryId` (get/set), `openMedia`,
+  `activeHttpHeaders`, `currentStreamUrl` (set), `randomStartOffset`,
+  `percentStartOffset`, `duration`, `dynamicTitle` (set), `seriesPlaylist`,
+  `activePlaylist`, `currentIndex`; widget `requestMagicNext`,
+  `startFromRandom`, `startAtPercent`, `contentType`, `contentImdbId`,
+  `seriesSourceFetcher`, `contentSeason`, `contentEpisode`, `contentTitle`,
+  `title`; chains `resetLocalCompletionState`,
+  `setSubtitleTrackWithDiagnostics`, `goToNextStremioTvSlot`,
+  `iosPipSession`; routed `playShowShuffle`, `pickShuffleIndex`,
+  `setManualSelectionMode`, `loadPlaylistIndex`, `findNextEpisodeIndex`,
+  `fetchNextEpisodeInPlayer`, `playPikPakVideoWithRetry`,
+  `waitForVideoReady`.
+- **adjacent (≈ 26):** `mounted`, `setState`; `seriesPlaylist`,
+  `activePlaylist`, `currentIndex`, `canFetchEpisodes`,
+  `traktSeasonEpisode`, `clearBufferingIndicator`, `tvAbandonScrub`,
+  `isTransitioning`/`tvScrubGeneration` (set), `episodeFetchInProgress`,
+  `playlistIdentityToken`, `episodeNavigationGeneration`,
+  `sleepStopLatched`, `syntheticGuidePlaylist`; widget `viewMode`,
+  `requestMagicNext`, `contentType`, `contentImdbId`, `contentSeason`,
+  `seriesSourceFetcher`; chain `fetchAndPlayEpisode`; routed
+  `setManualSelectionMode`, `loadPlaylistIndex`.
+- **shuffle (≈ 30):** `mounted`, `setState`, `context`; `activePlaylist`,
+  `canFetchEpisodes`, `hideTimer`, `scheduleAutoHide`,
+  `continuousShuffleEnabled` (get/set), `showShuffleGeneration` (get/set),
+  `episodeNavigationGeneration`, `episodeFetchInProgress`,
+  `sleepStopLatched`, `playlistIdentityToken`, `episodeMetadataReady`
+  (get/set), `seriesPlaylist`, `constructPlaylistItemData`,
+  `currentSeriesImdbId`, `syntheticGuidePlaylist`, `traktSeasonEpisode`,
+  `isAutoAdvancing` (set), `isTransitioning` (set), `currentIndex`,
+  `random`; widget `seriesSourceFetcher`, `viewMode`; chains
+  `openPlayerMenuQuick`, `buildSyntheticGuide`, `fetchAndPlayEpisode`;
+  routed `getMainGroupIndices`, `loadPlaylistIndex`,
+  `setManualSelectionMode`, `preloadEpisodeInfo`.
+- **title info (≈ 14):** `seriesPlaylist`, `activePlaylist`,
+  `currentIndex`, `effectiveContentTitle`, `effectiveContentSeason`,
+  `effectiveContentEpisode`, `effectiveStremioTvChannels`,
+  `hasStremioTvGuide`, `dynamicTitle`, `effectiveIptvChannels`,
+  `currentIptvIndex`; widget `requestMagicNext`, `subtitle`, `title`.
+- **load (≈ 45):** `mounted`, `setState`, `context`;
+  `isManualEpisodeSelection`/`allowResumeForManualSelection` (set),
+  `transitionStopTimer`, `transitionPhaseTimer`, `rainbowController`,
+  `transitionRunning`/`rainbowActive` (set), `isTransitioning` (set),
+  `currentIndex`, `currentStreamUrl`, `activeHttpHeaders`,
+  `activeOpenedMedia`, `activeMediaShouldPlay`, `activeMediaUserPaused`
+  (get/set), `isAutoAdvancing` (get/set), `episodeNavigationGeneration`,
+  `tvScrubGeneration`, `resumeVerifyEpoch` (get/set), `tvAbandonScrub`,
+  `activePlaylist`, `sleepStopLatched` (get/set), `resetSubtitleState`,
+  `seriesPlaylist`, `player`, `pikPakRetryId` (get/set), `openMedia`,
+  `pausedByLifecycle`, `openedWatchSource`; chains
+  `skipSegmentsMediaReady` (set), `resetSkipSegmentState`, the
+  Trakt/Simkl stop set, `updateMdblistPosition`, `switchMdblistTarget`,
+  `saveResume`, `clear` (write guard; named `clearResumeWriteGuard`),
+  `resetLocalCompletionState`, `tryOpenStartupVod`, `maybeRestoreResume`,
+  `restoreTrackPreferences`, `commit` (server watch; named
+  `commitServerWatch`); routed `resolvePlaylistEntryUrl`,
+  `playPikPakVideoWithRetry`, `waitForVideoReady`.
+- **resolve (1):** `activePlaylist`.
+- **waits (≈ 10):** `mounted`, `setState`; `duration`, `player`,
+  `isPlaying`, `pikPakRetryId`, `isPikPakRetrying`/`pikPakRetryMessage`/
+  `pikPakRetryCount` (set).
+- **PikPak (≈ 12):** `mounted`, `setState`, `context`; `activePlaylist`,
+  `currentIndex`, `openMedia`, `activeHttpHeaders`, `pikPakRetryId`
+  (get/set), the three retry-display fields (set); routed
+  `waitForVideoMetadata`, `goToNextEpisode`.
+- **preload (≈ 16):** `mounted`, `setState`; `seriesPlaylist`,
+  `playlistIdentityToken`, `constructPlaylistItemData`, `currentIndex`,
+  `trackPreferencesReadyForAddonSubtitles`, `dynamicTitle`,
+  `singleFileImdbId`/`singleFileImdbFetched` (get/set); widget
+  `contentImdbId`, `title`, `rdTorrentId`, `torboxTorrentId`,
+  `pikpakCollectionId`; chain `fetchAndMaybeAutoSelectAddonSubtitle`.
+
+### Patched facade adapters (receiver rewrites only)
+
+Existing P13–P17 adapters that forward to a moved member keep their
+signature and change only the receiver:
+- `_VpEpisodeGuideHostAdapter`: 8617 `setManualSelectionMode`, 8622
+  `preloadEpisodeInfo`, 8636 `loadPlaylistIndex`.
+- `_VpEpisodeFetchHostAdapter` 8713.
+- `_VpDebrifyTvChannelsHostAdapter` 8992 `waitForVideoReady`.
+- `_VpSourcePlaylistSwitchHostAdapter`: 9150, 9155, 9166.
+- `_VpSourceSwitchHostAdapter` 9343.
+- `_VpResumeRestoreHostAdapter` 10246 `waitForDuration`.
+- `_VpPlayerMenuUiHostAdapter`: 10578 `fetchSingleFileMovieMetadata`, 10638
+  `playRandomOnce`, 10663 `toggleContinuousShuffle`.
+- `_VpPipLifecycleHostAdapter` 11165 `goToNextEpisode`.
+
+These are 14 sites in all, and the generator patches them as name edits
+(P17 precedent).
+
+### Retained references (call-site rewrites only)
+
+The 31 State-side sites are in `p18/retained.txt`. Every one changes only
+the receiver (`_x(` → `_collab.x(`). Tear-offs stay tear-offs, and none
+gains or loses an `await`. The unawaited
+`_playPikPakVideoWithRetry(...).then(...)` at 2179 stays unawaited.
+`dispose` 6335 keeps its position.
+
+### Async, profile and disposal hazards (characterize, never fix)
+
+1. **Set-and-pop atomicity** (`_handleSeriesNextEpisode` 4746–4759). No
+   `await` comes between the re-check and `Navigator.pop` /
+   `iosPipSession.close`. Because the latch moves with the method, the
+   check and the set stay in one synchronous block. The `context` read
+   becomes `_host.context`, a synchronous live getter.
+2. **Synchronous prefixes across routing** (Hosts above). Every forwarder
+   is an expression body. The step-0 tests pin the observable consequences:
+   a superseded shuffle generation, and a PikPak token bump before the
+   first open.
+3. **`??=` future identity.** Shuffle and startup share one
+   `_episodeMetadataReady` future, so the preload must run exactly once
+   per identity. A test pins the single `fetchEpisodeInfo` call.
+4. **Cancellation tokens stay State-owned.** `_pikPakRetryId` and
+   `_episodeNavigationGeneration` keep their existing writers.
+   `_waitForVideoMetadata` reads the token live on each 500 ms poll and
+   after the 800 ms stabilization delay.
+5. **Profile-owned writes after network work.** `_saveImdbIdToPlaylist`
+   (`PlaylistMetadataStorage.updatePlaylistItemImdbId`) and
+   `_saveSeriesPosterToPlaylist` (`PlaylistArtworkStorage`) run after
+   `fetchEpisodeInfo`. They are guarded only by `mounted`, the playlist
+   identity token and `identical(seriesPlaylist, _seriesPlaylist)`, with
+   no captured profile scope. This is pre-existing. Step 0 records which
+   profile's playlist row is written when the active profile changes
+   mid-fetch, if the harness can reach that state with the player still
+   mounted. Otherwise it is recorded as a follow-up candidate. Not fixed.
+6. **Credential reads at call time.** `_resolvePlaylistEntryUrl` reads
+   provider API keys (`TorboxStorage`, `PremiumizeStorage`,
+   `RealDebridStorage`, `AllDebridStorage`) per call through the existing
+   scoped storage. The move changes nothing.
+7. **Single-file IMDb race (pre-existing).** `_fetchSingleFileMovieMetadata`
+   sets `_singleFileImdbFetched = true` before awaiting
+   `MovieMetadataService.lookupMovie`. A Debrify TV next (4557–4558) that
+   resets both fields during the lookup can be overwritten by the old
+   title's result. This is a follow-up candidate; characterize only.
+8. **`_goToPreviousEpisode` has no entry `mounted` check** (unlike Next).
+   Preserve it.
+9. **Disposal.** `_manualSelectionResetTimer` is cancelled in `dispose` at
+   the same position, and the shuffle wait loop exits on `!mounted`. The
+   PikPak loop exits on `!mounted` or a token change. `_waitForVideoReady`
+   and `_waitForDuration` poll `_duration` with no `mounted` check, for up
+   to 10 s and 20 s, after dispose as well. That is preserved.
+
+### Follow-up candidates (pre-existing; confirm at step 0, preserve, record)
+
+- Hazard 5 (playlist write-back without a captured profile) and hazard 7
+  (the single-file IMDb race).
+- Both PikPak retry exhaustion branches duplicate about 40 lines, which
+  needs a later cleanup. The moved body is kept as is.
+- `print` debugging in load, waits, PikPak and preload (the inventory's
+  `avoid_print`) is kept verbatim.
+
+### Step 0 — characterization of the original
+
+Step T builds the test inventory: which existing `test/features/video_player/**`
+suites already pin each moved member. This covers the P14 resume suites,
+the P16 startup/switch suites, the P17 episode-fetch and guide suites, the
+sleep, completion and tracker suites, and `player_auto_next_routing_test.dart`.
+New suites are added only for gaps. Every new test gets a per-test
+mutation proof on the original; after that come the systematic sweep and
+the independent sample (≥ 75 %). Known gaps from the coverage scan:
+
+- **Resolve:** every provider branch (Torbox torrent vs web download,
+  PikPak, Premiumize item id, Premiumize hash/path, Real-Debrid restricted
+  link, AllDebrid locked link, none). Also missing API key, an empty URL
+  and the thrown text reaching the "Failed to prepare video: …" snackbar.
+  Faked with the existing HTTP override/`MockClient` idioms plus storage
+  seeds; no production seam.
+- **Preload:** the IMDb write-back (skipped when `contentImdbId` is set or
+  the id isn't `tt…`); the poster write-back per rd/torbox/pikpak
+  identifier and its skip conditions; the addon-subtitle retry gating; the
+  movie-collection `fetchMovieMetadataForIndex`; single-file lookup (no
+  year, no title, hit, miss).
+- **Title info:** each title and subtitle branch (TVMaze show name,
+  catalog singleton, Stremio TV dynamic title, catalog single stream,
+  playlist entry, Debrify TV, IPTV, fallback) and the enhanced-metadata
+  map.
+- **Adjacency:** raw/sorted/collection/series next and previous. This
+  covers the main-group 40 % size threshold and the year-then-size sort,
+  `_hasNextEpisode`/`_hasPreviousEpisode` truth tables, and the
+  resolver-owned catalog returning null from `_adjacentEpisode`.
+- **EOF ladder:** each rung's priority (validation gate, live IPTV, sleep
+  end-of-item latch, IPTV next, continuous shuffle, playlist next, Stremio
+  TV next, Debrify TV, in-player fetch, series pop). Includes the order of
+  tracker stops and completion marking before the sleep check.
+- **Manual Next:** the Debrify TV `requestMagicNext` result handling
+  (PikPak branch vs `_pikPakRetryId++` + open, subtitle disable, random or
+  percent start, title, transition clear). Also the series pop payload,
+  the PiP-parked close, and the double-dispatch latch.
+- **Shuffle:** the non-unified dialog, toggle on/off (bag/generation
+  resets, play once on enable), show shuffle (3 attempts, pack-entry
+  retry then fetch, a stale generation returning true, the
+  "No other playable episode" snackbar) and bag exhaustion.
+- **Load:** ordering (tracker stops → `saveResume` → guard clear → index →
+  `switchMdblistTarget` → resets); the sleep latch; request restore on
+  failure; PikPak `showFailure`/`suppressResume`; the manual-validation
+  branch; the `suppressResume` readiness path and `commit` only without
+  manual validation.
+- **Waits/PikPak:** backoff (delays 0/2/4/8/16/18 capped), token
+  cancellation, exhaustion with a Debrify TV auto-skip vs a failure
+  snackbar vs `showFailure: false`, and success clearing the retry
+  display.
+
+### Device checklist (end of series)
+
+- PikPak cold-storage reactivation (retry banner, recovery mid-delay,
+  exhaustion) on Android TV and phone.
+- Debrify TV Next (the static overlay "SIGNAL ACQUIRED"), plus random and
+  percent start.
+- Shuffle menu and continuous shuffle across EOF, on TV (DPAD) and phone.
+- Next and Previous on TV controls and phone controls, including beyond
+  the pack's edge.
+- The series "next" pop into Quick Play, and with iOS PiP parked.
+- Title and subtitle lines for a TVMaze series, a catalog singleton,
+  Stremio TV and IPTV.
+
+### Open questions for the design reviewer
+
+1. **Size.** This is the largest phase yet (≈ 2,385 member lines into ten
+   files). It runs as one phase with one gate, as the 2026-10-15 map has
+   it. Should it instead run as two step-1 commits under one gate (18a
+   navigation/shuffle/title info, 18b load/resolve/waits/PikPak/preload),
+   with no change to the evidence?
+2. **The EOF/manual-Next split.** Is it acceptable that EOF and manual Next
+   live in separate files that call each other only through routing
+   (`goToNextEpisode`)?
+3. **`_waitForVideoReady`/`_waitForDuration`.** These generic waits
+   (callers: engine, P15–P17 adapters, resume restore) move to
+   `vp_media_waits.dart` now rather than with phase 20's engine. Is that
+   right?
+4. **Title info as its own reader collaborator.** It moves now, while its
+   only consumers (build, `_buildTvControls`, `_buildDebrifyTvInfoPanel`)
+   wait for phase 21. Is that acceptable?
+5. **Exclusions.** Do the exclusions above (`_startTransitionOverlay`,
+   `_clearBufferingIndicator`, `_getLastPlayedEpisode`,
+   `_findSeriesEpisodeForCurrentIndex`) need any member moved into this
+   phase instead?
+
 ## Follow-ups
 
 - **Phase 16 original startup/source windows (characterized; no fixes):**
@@ -8293,6 +8699,227 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
   gate); the two Step-0 suites joined `ci_behavior_tests.txt` in the gate
   commit rather than the commits that created them.
 
+### 2026-10-19 — Phase 17 merge and Phase 18 design + Step T (executor: Claude)
+
+- **Phase 17 merged.** It merged as `249566376` (`merge --no-ff`) after the
+  post-gate review fold `c89377758`. Merge checks on `refactor/codebase`:
+  - format: 2,784 files, 0 changed;
+  - architecture/size/storage-keys checks pass;
+  - P17 current move check and P16 history at `c094c864c`: 0 differences;
+  - CI analyze + allowlist: nothing new; vplayer comparator: 178 scoped, 0
+    additions.
+
+  Pushed to `private` (`refactor/codebase`, `refactor/vplayer-p17`).
+- **Phase 18 design** (`d267c513f`) was reviewed by a review agent: "No P1s",
+  4 P2s and 12 P3s, all folded (`dc57b31f7`, resolution at the end of this
+  file).
+- **Step T** (manifest `vplayer_p18.json` status `draft`, PROVISIONAL):
+  - 40 moved declarations (36 methods, four shuffle fields) into ten files;
+    43 retained references (29 State-side code references + 14 retained
+    adapter sites).
+  - Zero comparison differences.
+  - Formatted sizes 161 / 334 / 386 / 370 / 263 / 440 / 197 / 152 / 377 /
+    247, all ≤ 500. Facade 11,583 → 10,093.
+  - The Host contracts are frozen in the deps file.
+  - The original self-comparison, the materialization and 18 real-config
+    negatives pass (`p18/stepT/negatives.log`), including three
+    retained-adapter negatives anchored inside the P16/P17 adapters.
+- **Design adjustment at step T.** `_seriesNextDispatched` and
+  `_manualSelectionResetTimer` stay **State-owned** behind live Host
+  getter/setter pairs, so `dispose` 6335 is unchanged. The scanner partition
+  gives each same-line `//` comment to the next member. Relocating either
+  field would carry the neighbour's comment (`// Show black screen during
+  transitions`, `// Allow resuming for manual selections with progress`) and
+  strand its own. The latch's check-and-set stays in one synchronous block
+  through the live accessors, which the `latch-recheck`/`latch-set`
+  negatives pin.
+- **Prototype analyzer** (CI command, `p18/stepT/probe-analyze.txt`): 0
+  errors; 604 issues vs 573 at base. The +31 are 16 newly unused facade
+  imports (deferred to phase 21 as allowlist lines), 4
+  `curly_braces_in_flow_control_structures` formatter wraps and 11
+  `use_build_context_synchronously` from `_host.mounted` guards. These are
+  registered as receiver-probe additions at step 1.
+- **Tooling** (self-tests or negatives):
+  - Host-interpolation canonicalization in `check_settings_moves.normalize`;
+    the settings self-test passes, with a positive and three negatives.
+  - Opt-in `adapter_state_prefixes` in `occurrence_field_bindings`.
+  - The declared named-record formatter comma.
+  - Two exact `SHADOWED_CONTEXT` edits for the shuffle dialog.
+- **Original baseline:** the frozen P17 inventory run at `dc57b31f7` is in
+  progress (`p18/step0/base.jsonl`). Step 0 follows: characterization suites
+  for the gaps in the resolution, with per-test mutation proofs.
+
+### 2026-10-20 — Phase 18 Step 0 complete (executor: Claude)
+
+- **Systematic sweep** on the original `249566376`
+  (`p18/step0/mutation_batches.py`, `systematic.json`, serial, batch 6):
+  all 1,848 points across the 40 moved declarations, recorded in
+  `mutations-systematic/`.
+- **Closure.** Every survivor and runtime/timeout outcome was rerun with its
+  selection widened by the P18 triage suites and the legacy suites that pin the
+  same behaviour (`closure_plan.py`). Each file set first passed a control
+  run on the original (18/18). The dead legacy shuffle dialog (`point_473`–`503`,
+  unreachable while `kUnifiedPlayerMenuEnabled` is `const true`) is
+  equivalent and was not rerun.
+  - Part 1 stopped at a harness budget defect: widened selections
+    (~145 cases per mutant) hit the 720 s batch cap with every case passed.
+    `mutation_batches.py` gained `--point-seconds` (default 120, the sweep's
+    behaviour); parts 2–5 use 300.
+  - Part 3 reran the part-2 budget cuts one mutant per batch, isolating the
+    one hanging mutant (`point_560`).
+  - Part 4 widened the two moved methods without a kill
+    (`_fetchSingleFileMovieMetadata` + `menu_single_metadata`;
+    `_adjacentEpisode` + the P17 fetch suites). Its first control failed
+    unmutated (two P16 MDBList rollback cases beside the P17 fetch suites), so
+    `source_playlist_request` was dropped and the part rerun.
+  - Part 5 ran `_adjacentEpisode` against the new guide-adjacency suite.
+- **Accounting** (`closure-summary.json`, `dispositions.json`; P17
+  accounting policy): **710 killed, 578 survived, 72 runtime/timeout, 457
+  compile-invalid, 31 equivalent** (52.2% of the valid non-equivalent points).
+  Survivors stay explicitly uncredited; equivalence is claimed only for the
+  dead dialog. Harness limitations recorded: unseeded shuffle randomness,
+  Stopwatch-bounded PikPak windows, the hanging `point_560`, and the
+  unreachable screen-side `tt` guard (`point_1945`; `SeriesPlaylist` adopts
+  only `tt` ids from TVMaze, and the vacuous case pinning it was removed).
+- **Moved methods.** Every moved method with mutation points has at least one
+  kill. The three shuffle fields and the one-expression
+  `_getCurrentEpisodeTitle` delegate carry no points.
+- **Per-test proofs** (`proofs.py`). All 88 P18 test declarations are the
+  first clean assertion kill of at least one mutant. Ten cases needed
+  targeted single-case witnesses (`generate_witness_proofs.py`, controls
+  first).
+- **New suites** (14 files, 109 cases, all passing on the original; format
+  and analyze clean): `video_player_p18_{adjacency, ended_ladder,
+  entry_failures, entry_resolve, guide_adjacency, media_waits,
+  metadata_preload, next_ended, next_paths, pikpak_retry, shuffle,
+  shuffle_paths, title_branches, title_info}_test.dart`. They are listed in
+  the reduced-gate inventory `dev/tool/vplayer_p18_test_inventory.txt`
+  (453 files) and the CI behaviour list.
+- Next: an independent mutation sample by a review agent, then Step 0b and
+  Step 1.
+
+### 2026-10-20 — Phase 18 independent sample and Step 0b (executor: Claude)
+
+- **Independent sample** (review agent, `p18/step0b/independent-sample.md`,
+  worktree `vp18-mut` at `672c138f3`). The agent designed 99 compilable
+  mutants from the source; M11 is equivalent, which leaves 98 valid. The P18
+  files killed **61/98 = 62.2%**, below 75%. Four P1s: the rate itself,
+  plus A04 (in-player Next through the cached guide), L04 (the outgoing
+  resume checkpoint on Next) and L10 (the sleep-latch manual override).
+  Disposition audit: the dead dialog, Stopwatch and `point_560` entries were
+  accepted. `point_689`/`692`/`701`/`704` were found to be equivalent rather
+  than random, `point_690`/`691` deterministic, and `point_1945`
+  compile-invalid as catalogued.
+- **Step 0b tests**:
+  - new `video_player_p18_review_gaps_test.dart` (9 cases): resume
+    checkpoint, manual window, sleep override, guide Next, two-episode
+    shuffle, no-guide fallback, EOF show-shuffle start at zero, pack title,
+    entry headers;
+  - new `video_player_p18_review_handoff_test.dart` (5 cases):
+    season-finale hand-off, custom-resolver guard, cached-guide fallback,
+    movie EOF completion, single-file lookup;
+  - the `title_info` rating is now asserted;
+  - the `adjacency` and `media_waits` helpers assert instead of throwing.
+- **Proofs**:
+  - A control on the unmutated code passed (35/35, `control_0b.txt`).
+  - The exact reviewer mutants (`mutants_0b.json` via `mut.py`,
+    `proofs_0b.jsonl`) were **18/19 killed**: N04 W03 T11 L04 N07 L11 L10
+    A04 S18 S07 T03 L14 N18 N19 A01 A03 N16 M07.
+  - With the executor harness, `point_690`/`691` were killed against the
+    two-episode shuffle case (`witness-0b-*`, control passed).
+- **Rate after Step 0b: 79/98 = 80.6%.** There are 19 P18 survivors. S09 is
+  an **untested behaviour, not a masked one** (post-gate review P2-1, which
+  corrects the earlier "argued survivor" text). Its resume effect is masked by
+  the auto-advance and manual-window skips. But `suppressResume` also selects
+  the playback-proof wait (`vp_playlist_load.dart:385–399`), which makes a
+  shuffle entry that never plays try another source rather than return
+  silently, and it gates the PikPak early return (`:354`). That remains a
+  test gap (Follow-up). The others are still open and recorded in
+  `dispositions.json` (`step0b`):
+  - N20, N23, S11, S16, L02, L06, L13;
+  - the PikPak per-attempt mutants W02/W04/W05/W07/W09–W12;
+  - M04;
+  - M06 and M09, which legacy suites kill.
+
+  An overlay-gone assertion for N23 fails on the original as well, because
+  the transition overlay outlives a failed Debrify TV Next, so it was not
+  added.
+- All 16 P18 files: 123 passed. Format and analyze are clean. The inventory
+  is now 455 files and the CI list +2.
+- Next: Step 1 production moves.
+
+### 2026-10-20 — Phase 18 Step 1 + reduced gate (executor: Claude)
+
+- **Step 1 (`d328da2c4`).** The generator was flipped from PROVISIONAL to
+  FINAL and run on `249566376` (`p18/final/`): zero differences, and sizes
+  equal the Step T prototypes (161 / 334 / 386 / 370 / 263 / 440 / 197 / 152 /
+  377 / 247). The output was copied unchanged into `lib/`. The manifest
+  status is `applied`. Facade **11,583 → 10,093** (ratchet).
+- **Move checks** (`p18/step1/move-checks.log`): P18 current and
+  `--self-test`, and P17 history at `249566376`, all report exhaustive
+  ownership with 0 differences. CI now selects P18 for both runs and adds the
+  P17 history line.
+- **Analyzer.** CI analyze: 604 issues, as in the Step T prototype. The
+  allowlist gains the 16 newly unused facade imports (phase 21 cleanup). The
+  P18 inventory records the 22 receiver-probe identities (31 diagnostics:
+  16 unused imports, four formatter `if` wraps on
+  `_findNextEpisodeIndex`/`_findPreviousEpisodeIndex`, and eleven
+  unrelated-`mounted` guards on `_handleSeriesNextEpisode`,
+  `_playPikPakVideoWithRetry`, `_loadPlaylistIndexAttempt` and
+  `_playShowShuffle`). The comparator reports 209 scoped diagnostics and 0
+  additions.
+- **Reader retargets** (P2-1). Each change is equal or stronger:
+  - `player_auto_next_routing_test`: a P18 manifest-status switch, plus
+    non-negative marker checks and a `.pop(` negative.
+  - `playback_checkpoint_contract_test`: `_togglePlay` is read as its
+    declaration.
+  - `media_server_watch_player_wiring_test`: the EOF declaration;
+    `observeServerWatch(completed: true)` must precede the live-IPTV branch,
+    and three spellings of the commit negative are checked.
+  - `manual_source_validation_contract_test`: the EOF, load-attempt and PikPak
+    declarations; the validation gate must precede the watch observation.
+
+  All 27 cases pass on Step 1.
+- **Reduced gate** (`p18/gate/compare.txt`). The frozen 455-file inventory
+  ran serially on the original (Step 0b head `d75189c4f`) and on
+  `d328da2c4`. All 455 suites loaded in both runs. **3,139 cases, identical
+  outcomes by (suite, name)**: 3,138 successes plus the single pre-existing PiP
+  startup-shield source-text failure.
+- **Mechanical checks.** Format (0 changed), file sizes, storage keys,
+  search/vplayer architecture and the theme/source-guard lists pass.
+  `check_storage_references.py` fails identically on `249566376` (53
+  findings, the Follow-up series test debt).
+- Next: independent post-gate review, merge, then M4.
+
+### 2026-10-20 — Phase 18 independent post-gate review (review agent) — "No P1s"
+
+- Range `249566376..820e5bd14`; the report is
+  `refactor-evidence/vplayer/p18/review/post-gate-review.md`. The reviewer
+  re-ran:
+  - the P18 move checker: current, `--self-test` (317 negatives) and P17
+    history, each with 0 differences;
+  - CI analyze, the allowlist and the comparator (209 scoped, 0 additions);
+  - the reader retargets (27/27), the Step 0b files (14/14), sizes and
+    format;
+  - the storage self-test (53 identical findings);
+  - the gate compare (byte-identical).
+
+  It compared all 40 moved bodies token by token against `249566376`: only
+  receiver rewrites and flattened chains differ, and `dispose` is
+  byte-identical.
+- **P2-1 (folded):** the S09 disposition was corrected above (untested
+  behaviour, Follow-up).
+- **P3s (folded or recorded):**
+  - the survivor list now includes M06 and M09;
+  - `p18/retained.txt` (44, including `dispose`) is superseded by Step T's
+    `final/retained-sites.json` (43, `_manualSelectionResetTimer` stays
+    State-owned), and likewise the resolution's "six fields / 44" wording;
+  - the renamed `CompletionDelivery('waitForVideoMetadata')` hold also
+    matches the adapter forwarder frames (accepted);
+  - `compare.py` would merge duplicate names and `run_inventory.sh` skips
+    missing files; neither occurred (3,139 unique names, 455 files).
+- Next: merge, then M4.
+
 ## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
 
 Reviewed at `c5c8e3500` (facade byte-identical to `be4cd78aa`; split,
@@ -8397,3 +9024,183 @@ forwards a moved member). Three P2s and two P3s, all adopted:
 Activation: final proofs on the accepted P15/P16 parents (refresh affected
 evidence, preserve M3 acceptance), current checker/analyzer CI → P17, P1–P16
 historical, step-T formatted prototypes establish ≤ 500.
+
+## Phase 18 design review resolution (review agent, 2026-10-19) — "No P1s"
+
+Reviewed at `d267c513f`. The facade is byte-identical to `249566376`. The
+reviewer confirmed:
+- 36 methods and six fields, 2,384 attached member lines;
+- the 14 adapter sites, the frozen field ownership, all five exclusions, and
+  `??=`/`.then` future identity through expression forwarders;
+- tear-off `==` and hazards 1, 4, 8 and 9;
+- every destination ≤ 500 lines on formatted prototypes.
+
+The report is `p18/review/design-review-r1.md`. Four P2s and twelve P3s, all
+adopted:
+
+1. **Source-text guards and frame holds (P2-1).** Five readers anchor moved
+   members. Step 1 retargets each one to equal-or-stronger checks at the
+   moved location, or to `vpSourceDeclaration`, with no assertion deleted:
+   - `manual_source_validation_contract_test.dart`: the 256–262 and 307–330
+     slices.
+   - `media_server_watch_player_wiring_test.dart:83–92`: now
+     `_host.observeServerWatch(completed: true)`.
+   - `playback_checkpoint_contract_test.dart:21–25`: the retained
+     `_togglePlay` slice gets a retained end marker.
+   - `player_auto_next_routing_test.dart:9–45`: moved `_host.`/public forms
+     through its manifest-status switch. The `Navigator.of(...).pop` negative
+     matches both the lexical and the `_host.context` spelling.
+   - The P17 frame hold `CompletionDelivery('_waitForVideoMetadata')` is
+     renamed to the suffix form `'waitForVideoMetadata'` at step 0. It passes
+     6/6 on the original and also matches `VpMediaWaits.waitForVideoMetadata`.
+
+   Step T re-scans every `readAsStringSync`/`vpSourceDeclaration`/
+   `CompletionDelivery` user. The scan at `249566376` finds exactly these five.
+   `video_player_navigation_test.dart` and the playlist-content bodies
+   JSON use same-named local helpers, not the facade.
+2. **The synchronous-prefix guarantee is restated (P2-2).**
+   `_loadPlaylistIndexAttempt` bumps `_episodeNavigationGeneration` only for
+   a request-less load (5164); shuffle always passes its request. What has to
+   hold is this: a request-less load (manual Next 4519 or Previous 5039, EOF
+   3702/3710, guide 8636, P16 switch 9166) bumps navigation before its first
+   `await`. An in-flight shuffle (wait loop 4217, `request.isCurrent`) or
+   `_fetchNextEpisodeInPlayer` `stale()` then sees the supersession at its
+   next check. The expression forwarders also preserve two unawaited
+   synchronous prefixes:
+   - 2343 `_loadPlaylistIndex(_currentIndex, autoplay: false)`: navigation
+     bump, scrub, resume epoch, sleep latch, tracker stops and
+     `updateMdblistPosition`, all before the 2345 autosave timer and the 2352
+     preload.
+   - 2572 `_onPlaybackEnded()`: validation gate, `observeServerWatch`,
+     live-IPTV `onEnded` and tracker stops, inside the `completed` listener.
+
+   Step 0 pins "manual Next during an in-flight show shuffle supersedes it".
+3. **The non-unified shuffle dialog is statically unreachable (P2-3).**
+   `kUnifiedPlayerMenuEnabled` is `const true`
+   (`player_menu_panel.dart:19`). The `showDialog` branch is kept verbatim
+   and verified only by the move checker's body comparison. No mutation proof
+   is attempted, since that would need a seam. Step 0 covers the reachable
+   unified path (`openPlayerMenuQuick(PlayerMenuSection.shuffle)`) and the
+   "No playlist items available" snackbar. Lexical contexts (P3-6): only
+   `ScaffoldMessenger.of(context)` (4093) and the `context: context` value
+   (4106) become `_host.context`. The `builder: (context)` parameter and its
+   two `Navigator.of(context).pop` calls stay lexical. The generator registers
+   exactly these two edits (`SHADOWED_CONTEXT`), and the move checker's
+   builder-context signature confirms them.
+4. **PikPak characterization under fake time (P2-4).** `_waitForVideoMetadata`
+   runs on a `dart:core` `Stopwatch`, which widget-test fake time does not
+   advance. The strategy needs no seam:
+   - Success, cancellation (token or request), and the display clearing when
+     the duration appears are driven inside the first 10 s window.
+   - One case drives the first failed attempt: about 10 s of real pumping,
+     tagged slow. It checks the "Reactivating video..." banner with
+     `_pikPakRetryCount` 1, the single re-open, and the "Monitoring attempt
+     2/6" / "monitoring during delay (4s)" log lines. These prove the
+     schedule's first steps without observing delays.
+   - Exhaustion (about 108 s of real time) is a harness limitation. This
+     covers the Debrify auto-skip vs the failure snackbar vs
+     `showFailure: false`. It is recorded on the end-of-series device
+     checklist and verified only by the body comparison.
+5. **Host get/set markings (P3-1)** are measured by the generator, which
+   emits a setter for every `=`/`++`/`--`/`??=`/`+=` site. The setters are:
+   - shuffle `isTransitioning` (get/set);
+   - `tvScrubGeneration` in next, adjacent and load;
+   - load `episodeNavigationGeneration`;
+   - load `currentIndex`, `currentStreamUrl`, `activeHttpHeaders`,
+     `activeOpenedMedia` and `activeMediaShouldPlay` (get/set).
+
+   State-owned objects use the existing getter convention
+   (`resumeWriteGuard`, `serverWatch`, `iptvLiveRecovery`, `player`,
+   `rainbowController`, `hideTimer`; then `_host.x.method()`), not named
+   chain forwarders. Collaborator members are flattened to one forwarder each
+   (P17 `CHAINS`), including the getter `sleepTimerMode`, the getter
+   `iosPipSession` and the setter `skipSegmentsMediaReady`.
+6. **Counts and evidence (P3-2, P3-3).** There are 36 methods and six fields.
+   The retained references are 30 State-side code references (29 lines) plus
+   14 adapter sites, 44 in all. The generator's `retained-sites.json` covers
+   code tokens only. The comment at 2164 (`_waitForVideoReady`) is unchanged.
+   `p18/members.txt` (1-based declaration and attached-comment starts) and
+   `p18/retained.txt` are regenerated.
+7. **Hazards corrected (P3-4, P3-5).**
+   - Hazard 3: `_episodeMetadataReady` has four writers. Startup 2352,
+     shuffle 4239 and the P17 guide `vp_episode_guide.dart:96` use `??=`.
+     The P16 switch `vp_source_playlist_switch.dart:191` reassigns it
+     unconditionally. "Once per identity" holds between switches.
+   - Hazard 5: the guards run once, before the IMDb write. The poster write
+     follows an `await` with no re-check. Both read-modify-write through
+     `PlaylistStorage.getPlaylistItemsRaw()`, which resolves the active
+     profile implicitly. This is the AGENTS "reject stale actions before an
+     implicitly-profile-resolving API" pattern. It is recorded as a
+     follow-up candidate, characterized and not fixed.
+   - Hazard 7: the P17 Debrify channel adapters (8809/8811, 8952/8954) also
+     reset the single-file IMDb pair.
+8. **New pre-existing hazards (P3-7, characterize, never fix):**
+   - Request-less loads have no supersession guard except `mounted`. Every
+     `request?.isCurrent == false` check is null-safe. So an older ordinary
+     load that resumes after a newer one still runs `maybeRestoreResume`,
+     `restoreTrackPreferences`, `isTransitioning = false` and
+     `_serverWatch.commit` (5355–5383).
+   - The Debrify Next random/percent seek after `_waitForVideoReady`
+     (4599–4609) has no token check.
+   - `setState(() => _dynamicTitle = title)` (4612) runs after awaits with no
+     `mounted` check, and throws into the `catch` after dispose.
+   - The unawaited `fetchMovieMetadataForIndex(index).catchError` (5282).
+   - Concurrent EOF ladders from repeated `completed` events. Only the series
+     pop is latched.
+9. **Analyzer identity (P3-8), measured on the provisional probe**
+   (`p18/prov/NOTES.md`, `probe-analyze.txt`):
+   - Four new `curly_braces_in_flow_control_structures` infos come from
+     formatter wraps of `if (_host.activePlaylist == null || …) return -1;`
+     in `findNextEpisodeIndex`/`findPreviousEpisodeIndex`. That is the P17
+     `_showPlaylistSheet` precedent.
+   - The facade gains newly unused imports, whose last users moved. These are
+     deferred to the phase-21 import cleanup, with allowlist lines like P17.
+   - **Contrary to the reviewer's expectation, the probe measures 11
+     `use_build_context_synchronously` infos** in the new files ("guarded by
+     an unrelated 'mounted' check"). The State's own `mounted` guard is now
+     `_host.mounted`, which the lint does not recognize. Earlier phases show
+     the same identity in their collaborators (e.g. P13 recording, P16
+     switch). All 11 are registered at step T as receiver-probe additions
+     with this reason. The static guard for those sites is lost, and their
+     ordering is pinned by the move checker's context checks.
+
+   All of these are step-T registrations, not gate surprises.
+10. **Size headroom (P3-9).** The provisional probe formats load at 440 lines,
+    the largest, and the facade at 10,077. If step T's final prototype for
+    load exceeds 500, the fallback is to move `_setManualSelectionMode` and
+    its timer into `vp_episode_adjacent.dart`.
+11. **`_getMainGroupIndices` stays a routed member (P3-10).** No new shape is
+    introduced during a move. Making it a top-level pure function is recorded
+    as an optional follow-up.
+12. **Step-0 additions (P3-11).**
+    - The manual-selection window: expiry after
+      `manualSelectionResetDuration`, re-arm cancelling the old timer, and the
+      dispose cancel. Step T checks how much
+      `video_player_resume_manual_window_test.dart` already pins.
+    - Whether the resolve fakes can reach
+      `PikPakApiService.instance.getFileDetails` without a seam (the
+      singleton holds auth state). Otherwise that branch is recorded as a
+      harness limitation.
+13. **Verbatim oddities kept (P3-12).** The `_getMainGroupIndices` doc says
+    "≥ 70 %" while the code uses 0.40; the plan's 40 % is right. The
+    duplicated PikPak exhaustion branches are kept (follow-up).
+14. **Open questions resolved:**
+    - One generated step-1 commit under one gate; the diff and evidence are
+      ordered per destination.
+    - Separate files for EOF and manual Next, with "manual Next racing EOF
+      pops once" pinned at step 0.
+    - The generic waits move now, with a header note on post-dispose polling.
+    - Title info becomes its own reader now.
+    - No exclusion moves into P18.
+
+**Tooling found by the provisional probe** (adopted for step T, each with
+self-tests or negatives):
+- `check_settings_moves.normalize` collapses `${_host.x}` back to `$_x` for a
+  registered host-property binding (the context-prefix comparison in
+  PikPak). The settings self-test gains a positive case and three negatives.
+- `occurrence_field_bindings` gains an opt-in `adapter_state_prefixes`
+  (`['_s']`). This is the first phase whose moved members are reached by
+  earlier phases' adapters, so `_s._member` → `_s._collab.member` is checked
+  exactly: receiver path, new name and role.
+- The formatter-only named-record comma in `_getCurrentEpisodeTitleInfo` is
+  declared as an explicit count-1 edit.

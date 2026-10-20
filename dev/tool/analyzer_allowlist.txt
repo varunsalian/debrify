@@ -150,3 +150,20 @@ warning | unused_shown_name | lib/screens/video_player_screen.dart | The name li
 warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/quick_play_storage.dart'. Try removing the import directive
 warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../features/video_player/models/vp_manual_source_validation_failure.dart'. Try removing the import directive
 warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'video_player/widgets/playlist_sheet.dart'. Try removing the import directive
+# Phase 18 frozen move/probe: preserved facade directives, sixteen now-unused imports (end-state cleanup in phase 21).
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/alldebrid_storage.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/playlist_artwork_storage.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/playlist_metadata_storage.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/premiumize_storage.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/real_debrid_storage.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/torbox_storage.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../utils/show_shuffle.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/debrid_service.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/premiumize_service.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/alldebrid_service.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../utils/movie_parser.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/movie_metadata_service.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/torbox_service.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/pikpak_api_service.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/next_episode_service.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../features/video_player/presentation/vp_random_choice_tile.dart'. Try removing the import directive

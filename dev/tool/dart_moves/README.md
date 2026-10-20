@@ -315,3 +315,18 @@ history adds P16 `c094c864c`. The P17 analyzer inventory records two
 receiver-probe identity additions (`_showPlaylistSheet` single-line `if` now
 wrapped by the longer `_host.` receiver; one facade import left unused).
 Facade ratchet 11,583.
+
+P18 Step 1 applies the FINAL materialization on the P17 merge `249566376`
+(not pipelined): ten episode-navigation/playback collaborators
+(`vp_playback_ended`, `vp_episode_next`, `vp_episode_adjacent`, `vp_shuffle`,
+`vp_episode_title_info`, `vp_playlist_load`, `vp_playlist_entry_resolve`,
+`vp_media_waits`, `vp_pikpak_retry`, `vp_metadata_preload`), 40 moved
+declarations (36 methods, four shuffle fields) and 43 retained references.
+`draft_vplayer_navigation_moves.py` writes the formatted sources beneath
+`refactor-evidence/vplayer/p18/final/`; Step 1 copies them unchanged (zero
+comparison differences; sizes equal the Step T prototypes). CI current/self-test
+and both analyzer arguments select P18; P1–P17 history adds P17 `249566376`.
+The P18 analyzer inventory records the Step T receiver-probe additions (16
+unused facade imports, also allowlisted pending phase 21; four formatter
+`if` wraps; eleven unrelated-`mounted` guards). Five source-text readers were
+retargeted to equal-or-stronger declaration reads. Facade ratchet 10,093.

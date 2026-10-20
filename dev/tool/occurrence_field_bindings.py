@@ -19,8 +19,17 @@ def aligned(node, config):
     by_first = {}
     for path, members in paths:
         by_first.setdefault(path[0], []).append((path, members))
+    # Opt-in: a retained facade adapter reaches a later-phase collaborator
+    # through its State field (`_s._load.member` for the original
+    # `_s._member`). Only the registered receiver directly after that exact
+    # adapter prefix is scaffolding; the prefix and member keep their roles.
+    adapter_prefixes = set(config.get('adapter_state_prefixes', []))
     for i, value in enumerate(values):
-        if i and values[i-1] in ('.', '?.'):
+        if i and values[i-1] in ('.', '?.') and not (
+                adapter_prefixes and i >= 2 and values[i-1] == '.'
+                and values[i-2] in adapter_prefixes
+                and (i == 2 or values[i-3] not in ('.', '?.'))
+                and value in config.get('receiver_paths', {})):
             continue
         for path, members in by_first.get(value, []):
             if value in config.get('live_state_receivers', []):
@@ -267,13 +276,24 @@ def failures(original, lookup, rows, source, config, *, members=None, package=No
             field = fields.get(a['name'])
             is_state = a['kind'] == 'lexical' and a['binding'] == 'unbound'
             is_this = a['kind'] == 'selector' and a['qualifierTokens'] == ['this']
-            registered = by_old.get(a['name']) if is_state or is_this else None
+            # Opt-in retained adapter selector `_s._member` -> `_s._receiver.member`.
+            via_adapter = (a['kind'] == 'selector' and a['qualifierTokens'] is not None
+                           and len(a['qualifierTokens']) == 1
+                           and a['qualifierTokens'][0] in config.get('adapter_state_prefixes', []))
+            if via_adapter and (by_old.get(a['name']) is None
+                                or by_old[a['name']]['destination_file'] == source):
+                via_adapter = False  # a retained State member: ordinary selector below
+            registered = by_old.get(a['name']) if is_state or is_this or via_adapter else None
             if registered:
                 target = registered['destination_class']
                 paths = [p for p, owner in (record_paths if field and record_paths is not None else config.get('receiver_owners', {})).items() if owner == target]
                 moved_field = field and is_record_field(field) and (field['destination_file'], field['destination_class'], field['new_name']) in lookup and field['destination_file'] != source
-                if b['kind'] == 'selector':
-                    if b['qualifierTokens'] not in [_parts(p) for p in paths] or b['name'] != registered['new_name']:
+                expected_qualifiers = ([a['qualifierTokens'] + ['.'] + _parts(p) for p in paths]
+                                       if via_adapter else [_parts(p) for p in paths])
+                if via_adapter and b['kind'] != 'selector':
+                    errors.append('Occurrence adapter member receiver changed: '+label)
+                elif b['kind'] == 'selector':
+                    if b['qualifierTokens'] not in expected_qualifiers or b['name'] != registered['new_name']:
                         errors.append('Occurrence field/member receiver changed: '+label)
                 elif ((moved_field and not owns_bare(field, row))
                       or a['kind'] != b['kind'] or a['binding'] != b['binding']):

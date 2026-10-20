@@ -375,6 +375,13 @@ def normalize(values, rows, row=None):
             if values[i + 2:i + 3] == ['}'] and values[i + 1] in mapping:
                 out.extend(['$', mapping[values[i + 1]]])
                 i += 3; continue
+            # A live Host property read (`$_x` -> `${_host.x}`) was canonicalized
+            # above to the bare State name; only that exact single read collapses.
+            if (values[i + 2:i + 3] == ['}'] and values[i + 1] in {
+                    identity.split('.')[-1]
+                    for identity in CONFIG.get('host_property_bindings', {}).values()}):
+                out.extend(['$', values[i + 1]])
+                i += 3; continue
         # Injected context acquisition is checked separately BEFORE removing it.
         if is_context_acquisition(values, i):
             i += 9
@@ -1857,6 +1864,18 @@ def self_test(package=None):
         if normalize(tokens(interpolation_before), [interpolation_row]) == normalize(tokens(method(text)), [interpolation_row]):
             raise AssertionError('Accepted changed interpolation value/expression')
     print('Settings self-test changed interpolation expression: rejected')
+    host_config = dict(CONFIG, receivers=[*CONFIG['receivers'], '_host'],
+                       host_property_bindings={'_host.currentIndex': 'State._currentIndex'})
+    with configured(host_config):
+        host_before = normalize(tokens(method("String title() => 'at $_currentIndex';")), [])
+        if host_before != normalize(tokens(method("String title() => 'at ${_host.currentIndex}';")), []):
+            raise AssertionError('Live Host property interpolation rejected')
+        for text in ("String title() => 'at ${_host.currentIndex + 1}';",
+                     "String title() => 'at ${_host.currentIndex.isEven}';",
+                     "String title() => 'at ${_host.other}';"):
+            if host_before == normalize(tokens(method(text)), []):
+                raise AssertionError('Accepted changed Host interpolation expression')
+    print('Settings self-test Host property interpolation: passed; changed expression rejected')
     scaffold_source = {'owner': 'class NewOwner { final int dependency = 1; }'}
     scaffold_lookup = all_nodes(parse(scaffold_source, package))
     scaffold_key = ('owner', 'NewOwner', 'dependency')
