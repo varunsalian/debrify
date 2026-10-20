@@ -1,8 +1,16 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
 import 'features/video_player/support/vp_source_reader.dart';
+
+/// Phase 18 moved the EOF ladder, playlist load and PikPak retry into
+/// collaborators that reach State members through their Host.
+bool _p18Applied() =>
+    (jsonDecode(File('dev/tool/dart_moves/vplayer_p18.json').readAsStringSync())
+        as Map)['status'] ==
+    'applied';
 
 String between(String source, String start, String end) {
   final first = source.indexOf(start);
@@ -80,16 +88,21 @@ void main() {
       final closing = dispose.indexOf('_serverWatch.close()');
       expect(observation, isNonNegative);
       expect(closing, greaterThan(observation));
-      final eof = between(
-        flutter,
-        'Future<void> _onPlaybackEnded()',
-        '// LIVE IPTV:',
+      final eof = vpSourceDeclaration(
+        '_VideoPlayerScreenState._onPlaybackEnded',
       );
-      expect(
-        eof,
-        contains(RegExp(r'_resumeSave\.observeServerWatch\(completed: true\)')),
+      final live = eof.indexOf('// LIVE IPTV:');
+      final watch = eof.indexOf(
+        _p18Applied()
+            ? '_host.observeServerWatch(completed: true)'
+            : '_resumeSave.observeServerWatch(completed: true)',
       );
+      expect(live, isNonNegative);
+      expect(watch, isNonNegative);
+      expect(watch, lessThan(live));
       expect(eof, isNot(contains('_serverWatch.commit(null)')));
+      expect(eof, isNot(contains('serverWatch.commit(null)')));
+      expect(eof, isNot(contains('commitServerWatch(null)')));
     },
   );
 

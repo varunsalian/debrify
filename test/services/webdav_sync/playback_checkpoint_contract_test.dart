@@ -18,11 +18,10 @@ void main() {
   ).readAsStringSync();
 
   test('pause and settled seek issue explicit persisted checkpoints', () {
-    final toggle = _between(
-      player,
-      'void _togglePlay()',
-      'void _setManualSelectionMode',
-    );
+    // The retained declaration itself: phase 18 moved the neighbour that used
+    // to end this slice (_setManualSelectionMode) out of the facade.
+    final toggle = vpSourceDeclaration('_VideoPlayerScreenState._togglePlay');
+    expect(toggle, startsWith('void _togglePlay()'));
     final seek = _between(
       player,
       'onSeekBarChangeEnd: () {',

@@ -1,8 +1,16 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
 import 'features/video_player/support/vp_source_reader.dart';
+
+/// Phase 18 moved the EOF ladder, playlist load and PikPak retry into
+/// collaborators that reach State members through their Host.
+bool _p18Applied() =>
+    (jsonDecode(File('dev/tool/dart_moves/vplayer_p18.json').readAsStringSync())
+        as Map)['status'] ==
+    'applied';
 
 String _between(String source, String start, String end) {
   final from = source.indexOf(start);
@@ -13,9 +21,6 @@ String _between(String source, String start, String end) {
 }
 
 void main() {
-  final flutterPlayer = File(
-    'lib/screens/video_player_screen.dart',
-  ).readAsStringSync();
   final nativePlayer = File(
     'android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt',
   ).readAsStringSync();
@@ -253,10 +258,8 @@ void main() {
   );
 
   test('Flutter rejected candidates cannot complete or scrobble', () {
-    final ended = _between(
-      flutterPlayer,
-      'Future<void> _onPlaybackEnded()',
-      'void _startTransitionOverlay()',
+    final ended = vpSourceDeclaration(
+      '_VideoPlayerScreenState._onPlaybackEnded',
     );
     final resume = vpSourceDeclaration('_VideoPlayerScreenState._saveResume');
     // The gate moved into _resumeSaveBlocked when saves became serialized;
@@ -272,7 +275,20 @@ void main() {
       '_VideoPlayerScreenState._saveResumeLocked',
     );
 
-    expect(ended, contains('if (_validationGateActive) return;'));
+    final gate =
+        'if (${_p18Applied() ? '_host.' : '_'}validationGateActive) return;';
+    expect(ended, contains(gate));
+    // Still the first statement of the EOF handler.
+    expect(
+      ended.indexOf(gate),
+      lessThan(
+        ended.indexOf(
+          _p18Applied()
+              ? '_host.observeServerWatch'
+              : '_resumeSave.observeServerWatch',
+        ),
+      ),
+    );
     expect(resume, contains('${method}resumeSaveBlocked(debounced)'));
     expect(locked, contains('${method}resumeSaveBlocked(debounced)'));
     expect(resumeBlocked, contains('${fields}validationGateActive'));
@@ -305,15 +321,11 @@ void main() {
   });
 
   test('PikPak keeps cold-storage retries but reports manual exhaustion', () {
-    final playlistLoad = _between(
-      flutterPlayer,
-      'Future<bool> _loadPlaylistIndex(',
-      'Future<String> _resolvePlaylistEntryUrl(',
+    final playlistLoad = vpSourceDeclaration(
+      '_VideoPlayerScreenState._loadPlaylistIndexAttempt',
     );
-    final pikPakRetry = _between(
-      flutterPlayer,
-      'Future<bool> _playPikPakVideoWithRetry(',
-      'Future<void> _preloadEpisodeInfo(',
+    final pikPakRetry = vpSourceDeclaration(
+      '_VideoPlayerScreenState._playPikPakVideoWithRetry',
     );
 
     expect(playlistLoad, contains('final pikPakLoaded'));

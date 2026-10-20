@@ -215,6 +215,16 @@ import '../features/video_player/presentation/legacy_video_player/vp_debrify_tv_
 import '../features/video_player/presentation/legacy_video_player/vp_stremio_tv_channels.dart';
 import '../features/video_player/presentation/legacy_video_player/vp_episode_fetch.dart';
 import '../features/video_player/presentation/legacy_video_player/vp_episode_guide.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_playback_ended.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_episode_next.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_episode_adjacent.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_shuffle.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_episode_title_info.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_playlist_load.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_playlist_entry_resolve.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_media_waits.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_pikpak_retry.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_metadata_preload.dart';
 
 /// A full-featured video player screen with playlist support and navigation controls.
 ///
@@ -470,6 +480,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _stremioTv = VpStremioTvChannels(_VpStremioTvChannelsHostAdapter(this));
     _episodeFetch = VpEpisodeFetch(_VpEpisodeFetchHostAdapter(this));
     _episodeGuide = VpEpisodeGuide(_VpEpisodeGuideHostAdapter(this));
+    _playbackEnded = VpPlaybackEnded(_VpPlaybackEndedHostAdapter(this));
+    _episodeNext = VpEpisodeNext(_VpEpisodeNextHostAdapter(this));
+    _episodeAdjacent = VpEpisodeAdjacent(_VpEpisodeAdjacentHostAdapter(this));
+    _shuffle = VpShuffle(_VpShuffleHostAdapter(this));
+    _episodeTitleInfo = VpEpisodeTitleInfo(
+      _VpEpisodeTitleInfoHostAdapter(this),
+    );
+    _playlistLoad = VpPlaylistLoad(_VpPlaylistLoadHostAdapter(this));
+    _playlistEntryResolve = VpPlaylistEntryResolve(
+      _VpPlaylistEntryResolveHostAdapter(this),
+    );
+    _mediaWaits = VpMediaWaits(_VpMediaWaitsHostAdapter(this));
+    _pikPakRetry = VpPikPakRetry(_VpPikPakRetryHostAdapter(this));
+    _metadataPreload = VpMetadataPreload(_VpMetadataPreloadHostAdapter(this));
   }
   void _vpSetState(VoidCallback fn) => setState(fn);
 
@@ -708,10 +732,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       false; // Allow resuming for manual selections with progress
   Timer? _manualSelectionResetTimer; // Timer to reset manual selection flag
   bool _continuousShuffleEnabled = false;
-  final List<int> _shuffleBag = [];
-  final ShowShuffle _showShuffle = ShowShuffle();
-  bool _showShuffleInProgress = false;
-  int? _activeShowShuffleGeneration;
   int _showShuffleGeneration = 0;
   int _episodeNavigationGeneration = 0;
 
@@ -1138,6 +1158,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   late final VpStremioTvChannels _stremioTv;
   late final VpEpisodeFetch _episodeFetch;
   late final VpEpisodeGuide _episodeGuide;
+  late final VpPlaybackEnded _playbackEnded;
+  late final VpEpisodeNext _episodeNext;
+  late final VpEpisodeAdjacent _episodeAdjacent;
+  late final VpShuffle _shuffle;
+  late final VpEpisodeTitleInfo _episodeTitleInfo;
+  late final VpPlaylistLoad _playlistLoad;
+  late final VpPlaylistEntryResolve _playlistEntryResolve;
+  late final VpMediaWaits _mediaWaits;
+  late final VpPikPakRetry _pikPakRetry;
+  late final VpMetadataPreload _metadataPreload;
 
   // The quiet bottom-right auto-sync surface: a 5s announce line, then
   // nothing until a real event — statuses during passes, word-only results.
@@ -2015,7 +2045,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 'Resume: no prior playback state found, using default ordering',
               );
               // Pick the first item from Main group (by year asc then size desc)
-              final indices = _getMainGroupIndices(_activePlaylist!);
+              final indices = _episodeAdjacent.getMainGroupIndices(
+                _activePlaylist!,
+              );
               initialIndex = indices.isNotEmpty
                   ? indices.first
                   : (widget.startIndex ?? 0);
@@ -2044,7 +2076,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         initialUrl = entry.url;
       } else {
         try {
-          final resolvedUrl = await _resolvePlaylistEntryUrl(initialIndex);
+          final resolvedUrl = await _playlistEntryResolve
+              .resolvePlaylistEntryUrl(initialIndex);
           if (resolvedUrl.isNotEmpty) {
             initialUrl = resolvedUrl;
           } else if (widget.videoUrl.isNotEmpty) {
@@ -2176,48 +2209,48 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 _currentSourceIndex < _effectiveSources!.length
             ? _effectiveSources![_currentSourceIndex]
             : null;
-        _playPikPakVideoWithRetry(initialUrl, isDebrifyTV: isDebrifyTV).then((
-          loaded,
-        ) async {
-          if (!pikpakStillCurrent()) return;
-          if (!loaded) return;
-          // PikPak uses its own cold-storage readiness gate instead of the
-          // ranked VOD gate. Report the winner only after that gate confirms
-          // duration, otherwise a queued-but-unplayable file would be pinned.
-          unawaited(
-            _startupCandidates.commitValidatedStremioSource(launchSource),
-          );
-          // Wait for the video to load and duration to be available
-          await _waitForVideoReady();
-          if (!pikpakStillCurrent()) return;
-          // Random start takes precedence over resume, then startAtPercent.
-          // Same initial-open shape as the ranked branch below — and PikPak
-          // cold-storage streams are the slowest remote opens in the app, the
-          // likeliest to answer the startup seek with a restart at 0 — so the
-          // same guarded, landing-verified seeks apply.
-          if (widget.startFromRandom) {
-            final offset = _randomStartOffset(_duration);
-            if (offset != null) {
-              // A random start has no bookmark to protect — plain seek.
-              await _player.seek(offset);
-            } else {
-              await _resumeRestore.maybeRestoreResume(verifyLanding: true);
-            }
-          } else if (widget.startAtPercent != null) {
-            final offset = _percentStartOffset(_duration);
-            if (offset != null) {
-              await _resumeRestore.seekForResume(
-                offset.inMilliseconds,
-                verifyLanding: true,
+        _pikPakRetry
+            .playPikPakVideoWithRetry(initialUrl, isDebrifyTV: isDebrifyTV)
+            .then((loaded) async {
+              if (!pikpakStillCurrent()) return;
+              if (!loaded) return;
+              // PikPak uses its own cold-storage readiness gate instead of the
+              // ranked VOD gate. Report the winner only after that gate confirms
+              // duration, otherwise a queued-but-unplayable file would be pinned.
+              unawaited(
+                _startupCandidates.commitValidatedStremioSource(launchSource),
               );
-            }
-          } else {
-            await _resumeRestore.maybeRestoreResume(verifyLanding: true);
-          }
-          if (!pikpakStillCurrent()) return;
-          // Restore audio and subtitle track preferences
-          await _trackPreferences.restoreTrackPreferences();
-        });
+              // Wait for the video to load and duration to be available
+              await _mediaWaits.waitForVideoReady();
+              if (!pikpakStillCurrent()) return;
+              // Random start takes precedence over resume, then startAtPercent.
+              // Same initial-open shape as the ranked branch below — and PikPak
+              // cold-storage streams are the slowest remote opens in the app, the
+              // likeliest to answer the startup seek with a restart at 0 — so the
+              // same guarded, landing-verified seeks apply.
+              if (widget.startFromRandom) {
+                final offset = _randomStartOffset(_duration);
+                if (offset != null) {
+                  // A random start has no bookmark to protect — plain seek.
+                  await _player.seek(offset);
+                } else {
+                  await _resumeRestore.maybeRestoreResume(verifyLanding: true);
+                }
+              } else if (widget.startAtPercent != null) {
+                final offset = _percentStartOffset(_duration);
+                if (offset != null) {
+                  await _resumeRestore.seekForResume(
+                    offset.inMilliseconds,
+                    verifyLanding: true,
+                  );
+                }
+              } else {
+                await _resumeRestore.maybeRestoreResume(verifyLanding: true);
+              }
+              if (!pikpakStillCurrent()) return;
+              // Restore audio and subtitle track preferences
+              await _trackPreferences.restoreTrackPreferences();
+            });
       } else {
         // High-res YouTube serves video and audio as separate streams. Open
         // PAUSED, attach the external audio track, then start — so both tracks
@@ -2274,7 +2307,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             return;
           }
           // Wait for duration-dependent resume and random-start calculations.
-          await _waitForVideoReady();
+          await _mediaWaits.waitForVideoReady();
           if (!mounted ||
               _screenDisposed ||
               (isStremioTv && _stremioTvStartupWatch?.hasFailed == true)) {
@@ -2340,7 +2373,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     } else {
       // If no valid URL, try to load the first playlist entry
       if (_activePlaylist != null && _activePlaylist!.isNotEmpty) {
-        _loadPlaylistIndex(_currentIndex, autoplay: false);
+        _playlistLoad.loadPlaylistIndex(_currentIndex, autoplay: false);
       }
     }
     _autosaveTimer = Timer.periodic(
@@ -2349,7 +2382,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     );
 
     // Preload episode information if this is a series
-    _episodeMetadataReady ??= _preloadEpisodeInfo();
+    _episodeMetadataReady ??= _metadataPreload.preloadEpisodeInfo();
   }
 
   void _bindPlayerInstanceSubscriptions(
@@ -2569,7 +2602,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (done && isCurrent()) {
         PlayerVisibility.playbackState(this, ready: false);
         _iptvDiag.onPlaybackEnded(_position);
-        _onPlaybackEnded();
+        _playbackEnded.onPlaybackEnded();
       }
     });
     _bufferingSub = player.stream.buffering.listen((isBuffering) {
@@ -3025,7 +3058,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       );
       recoveryOpenEpoch = _resumeVerifyEpoch;
       await reopening;
-      if (needsPreparation) await _waitForVideoReady();
+      if (needsPreparation) await _mediaWaits.waitForVideoReady();
       if (!mounted) return;
       await _player.setRate(rate);
       await _player.setVolume(volume);
@@ -3584,28 +3617,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
-  // Wait for the video to be ready and duration to be available
-  Future<void> _waitForVideoReady() async {
-    // Wait up to 10 seconds for the video to be ready
-    for (int i = 0; i < 100; i++) {
-      if (_duration > Duration.zero) {
-        return;
-      }
-      await Future.delayed(const Duration(milliseconds: 100));
-    }
-  }
-
-  // Wait for duration to be available before attempting position restoration
-  Future<void> _waitForDuration() async {
-    // Wait up to 20 seconds for duration to be available
-    for (int i = 0; i < 200; i++) {
-      if (_duration > Duration.zero) {
-        return;
-      }
-      await Future.delayed(const Duration(milliseconds: 100));
-    }
-  }
-
   /// Get the last played episode for a series
   Future<Map<String, dynamic>?> _getLastPlayedEpisode(
     SeriesPlaylist seriesPlaylist,
@@ -3640,109 +3651,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     return null;
   }
 
-  Future<void> _onPlaybackEnded() async {
-    // A manually selected replacement is not playback until its validation
-    // gate commits it. In particular, a short provider error video can emit
-    // `completed`; never let that become a watched/scrobble event.
-    if (_validationGateActive) return;
-    _resumeSave.observeServerWatch(completed: true);
-    // LIVE IPTV: an ended live stream is a dropped connection, not a
-    // finished item — the origin closed on us (mpv's keep-open parks on the
-    // last frame, which is the "fake pause" from the Discord report). The
-    // recovery machine re-tunes to the live edge; nothing below this line
-    // (scrobble stop, mark-as-finished, episode advance) may interpret a
-    // live EOF as "watched to the end" — so live returns here even when the
-    // machine declines (backgrounded, sleep-stopped).
-    final endedLiveChannel = _currentIptvChannel;
-    if (endedLiveChannel != null && endedLiveChannel.isLive) {
-      _iptvLiveRecovery.onEnded();
-      return;
-    }
-
-    // Scrobble stop to Trakt when movie finishes
-    _trakt.stopTraktHeartbeat();
-    _trakt.traktScrobble('stop');
-    _simkl.stopSimklHeartbeat();
-    _simkl.simklScrobble('stop');
-    _mdblist.mdblistStop(complete: true);
-
-    // Mark the current episode as finished if it's a series
-    await _completion.markCurrentEpisodeAsFinished();
-    // A locally tracked movie may finish before the next periodic position
-    // save; make EOF a completion too (tracker sessions keep their existing
-    // scrobble-only path above).
-    await _completion.markCurrentMovieAsFinished();
-
-    // "Stop at the end of this episode": suppress every advance below and let
-    // the screen sleep. Playback has already finished, so there is nothing
-    // left to pause.
-    if (_sleep.sleepTimerMode == SleepTimerMode.endOfItem) {
-      _sleep.cancelSleepTimer();
-      _sleepStopLatched = true;
-      _activeMediaShouldPlay = false;
-      _sleep.showSleepTimerToast('Sleep timer — stopping here');
-      return;
-    }
-
-    // IPTV episode list (series/VOD): advance to the next episode in the
-    // season, mirroring the Next button. Checked first because IPTV episodes
-    // carry no playlist / magic-next, so the branches below would otherwise
-    // leave the player parked on the final frame with a next episode available.
-    if (_hasIptvNext) {
-      await _iptvSwitch.switchToIptvChannel(_currentIptvIndex + 1);
-      return;
-    }
-
-    // Playlist auto-advance keeps priority over guide-based Stremio TV next.
-    if (_continuousShuffleEnabled) {
-      if (await _playShowShuffle(autoAdvance: true)) return;
-      final shuffleIndex = _pickShuffleIndex();
-      if (shuffleIndex != null) {
-        _isAutoAdvancing = true;
-        await _loadPlaylistIndex(shuffleIndex, autoplay: true);
-        return;
-      }
-    }
-
-    final nextIndex = _findNextEpisodeIndex();
-    if (nextIndex != -1) {
-      _isAutoAdvancing = true;
-      await _loadPlaylistIndex(nextIndex, autoplay: true);
-      return;
-    }
-
-    if (_hasStremioTvNext) {
-      final handled = await _stremioTv.goToNextStremioTvSlot(
-        resumeCurrentOnFailure: false,
-      );
-      if (handled) return;
-      debugPrint(
-        'Player: Stremio TV auto-next unavailable; leaving playback ended.',
-      );
-      return;
-    }
-
-    // Debrify TV (no playlist): auto-advance using provider if available
-    if ((_activePlaylist == null || _activePlaylist!.isEmpty) &&
-        widget.requestMagicNext != null) {
-      await _goToNextEpisode();
-      return;
-    }
-
-    // Match manual Next for direct links and exhausted packs: keep the player
-    // alive while resolving the following episode.
-    if (await _fetchNextEpisodeInPlayer(autoAdvance: true)) return;
-
-    if (_activePlaylist == null || _activePlaylist!.isEmpty) {
-      // No playlist — try series next episode
-      await _handleSeriesNextEpisode();
-      return;
-    }
-
-    // End of playlist — try series next episode
-    await _handleSeriesNextEpisode();
-  }
-
   void _startTransitionOverlay() {
     if (!mounted) return;
     _rainbowActive = true;
@@ -3762,1003 +3670,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (mounted) setState(() {});
   }
 
-  /// Get the current episode title for display
-  String _getCurrentEpisodeTitle() => _getCurrentEpisodeTitleInfo().title;
-
-  /// The dock title plus whether it's a fetched, human name (TVMaze episode
-  /// title, catalog content title, channel name) as opposed to a release
-  /// filename. TvControls skips its release-noise cleaner for fetched names —
-  /// the token list would truncate a real title containing e.g. "Proper".
-  ({String title, bool fetched}) _getCurrentEpisodeTitleInfo() {
-    final seriesPlaylist = _seriesPlaylist;
-    if (seriesPlaylist != null &&
-        seriesPlaylist.isSeries &&
-        _activePlaylist != null) {
-      // Find the current episode info
-      if (_currentIndex >= 0 && _currentIndex < _activePlaylist!.length) {
-        try {
-          final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
-            (episode) => episode.originalIndex == _currentIndex,
-            orElse: () => seriesPlaylist.allEpisodes.first,
-          );
-
-          // Return episode title if available, otherwise use the playlist entry title
-          if (currentEpisode.episodeInfo?.title != null &&
-              currentEpisode.episodeInfo!.title!.isNotEmpty) {
-            final episodeTitle = currentEpisode.episodeInfo!.title!;
-            // "Show — Episode" when TVMaze supplied the official show name;
-            // the subtitle then drops the name to avoid saying it twice.
-            final show = seriesPlaylist.tvmazeShowName;
-            return (
-              title: show == null || show.isEmpty
-                  ? episodeTitle
-                  : '$show — $episodeTitle',
-              fetched: true,
-            );
-          } else if (currentEpisode.seriesInfo.season != null &&
-              currentEpisode.seriesInfo.episode != null) {
-            // Catalog singleton without TVMaze data yet: the clean catalog
-            // title beats a bare "Episode N".
-            final contentTitle = _effectiveContentTitle;
-            if (_activePlaylist!.length == 1 &&
-                contentTitle != null &&
-                contentTitle.isNotEmpty &&
-                _effectiveStremioTvChannels == null) {
-              return (title: contentTitle, fetched: true);
-            }
-            final episodeTitle = 'Episode ${currentEpisode.seriesInfo.episode}';
-            final show = seriesPlaylist.tvmazeShowName;
-            return (
-              title: show == null || show.isEmpty
-                  ? episodeTitle
-                  : '$show — $episodeTitle',
-              fetched: true,
-            );
-          }
-        } catch (e) {
-          // Silently fail
-        }
-      }
-    }
-
-    // Stremio TV: use dynamic title when a channel switch has occurred
-    if (_hasStremioTvGuide && _dynamicTitle.isNotEmpty) {
-      return (title: _dynamicTitle, fetched: true);
-    }
-
-    // Catalog single stream (Quick Play / Sources tap): prefer the clean
-    // content title over the release filename. Packs are handled by the
-    // series branch above; Debrify TV, IPTV and Stremio TV keep their
-    // dynamic titles.
-    final contentTitle = _effectiveContentTitle;
-    if (contentTitle != null &&
-        contentTitle.isNotEmpty &&
-        widget.requestMagicNext == null &&
-        _effectiveIptvChannels == null &&
-        _effectiveStremioTvChannels == null &&
-        (_activePlaylist == null || _activePlaylist!.length <= 1)) {
-      return (title: contentTitle, fetched: true);
-    }
-
-    // Fallback to the current playlist entry title
-    if (_activePlaylist != null &&
-        _currentIndex >= 0 &&
-        _currentIndex < _activePlaylist!.length) {
-      return (title: _activePlaylist![_currentIndex].title, fetched: false);
-    }
-
-    // If Debrify TV (no playlist) is active, use dynamic title when available
-    // (a Debrify TV title can be a torrent name — keep the cleaner on it).
-    if ((_activePlaylist == null || _activePlaylist!.isEmpty) &&
-        widget.requestMagicNext != null) {
-      return _dynamicTitle.isNotEmpty
-          ? (title: _dynamicTitle, fetched: false)
-          : (title: widget.title, fetched: false);
-    }
-
-    // IPTV: use current channel name
-    final iptvChannels = _effectiveIptvChannels;
-    if (iptvChannels != null &&
-        _currentIptvIndex >= 0 &&
-        _currentIptvIndex < iptvChannels.length) {
-      return (
-        title: iptvChannels[_currentIptvIndex].numberedName,
-        fetched: true,
-      );
-    }
-
-    // Final fallback
-    return (title: widget.title, fetched: false);
-  }
-
-  /// Get the current episode subtitle for display
-  String? _getCurrentEpisodeSubtitle() {
-    final seriesPlaylist = _seriesPlaylist;
-    if (seriesPlaylist != null &&
-        seriesPlaylist.isSeries &&
-        _activePlaylist != null) {
-      // Find the current episode info
-      if (_currentIndex >= 0 && _currentIndex < _activePlaylist!.length) {
-        try {
-          final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
-            (episode) => episode.originalIndex == _currentIndex,
-            orElse: () => seriesPlaylist.allEpisodes.first,
-          );
-
-          // Return series name and season/episode info as subtitle
-          if (currentEpisode.seriesInfo.season != null &&
-              currentEpisode.seriesInfo.episode != null) {
-            // Catalog singleton: the filename-parsed series name can be a
-            // mangled release string; the clean catalog title is authoritative.
-            // While TVMaze hasn't supplied an episode title yet, the title line
-            // is already showing the catalog name — don't repeat it here.
-            final contentTitle = _effectiveContentTitle;
-            final isCatalogSingleton =
-                _activePlaylist!.length == 1 &&
-                contentTitle != null &&
-                contentTitle.isNotEmpty &&
-                _effectiveStremioTvChannels == null;
-            final seasonEpisode =
-                'Season ${currentEpisode.seriesInfo.season}, Episode ${currentEpisode.seriesInfo.episode}';
-            // When TVMaze supplied the show name, the TITLE line already
-            // reads "Show — Episode", so repeating the name here would say
-            // it twice. Without it, fall back to the filename-parsed series
-            // name — release strings only as a last resort, same rule as the
-            // native player's OTT identity row.
-            final showName = seriesPlaylist.tvmazeShowName;
-            if (showName != null && showName.isNotEmpty) {
-              return seasonEpisode;
-            }
-            if (isCatalogSingleton) {
-              final hasEpisodeTitle =
-                  currentEpisode.episodeInfo?.title?.isNotEmpty == true;
-              return hasEpisodeTitle
-                  ? '$contentTitle • $seasonEpisode'
-                  : seasonEpisode;
-            }
-            return '${seriesPlaylist.seriesTitle} • $seasonEpisode';
-          }
-        } catch (e) {}
-      }
-    }
-
-    // IPTV: use current channel group as subtitle
-    final iptvChannels = _effectiveIptvChannels;
-    if (iptvChannels != null &&
-        _currentIptvIndex >= 0 &&
-        _currentIptvIndex < iptvChannels.length) {
-      return iptvChannels[_currentIptvIndex].group ?? 'IPTV';
-    }
-
-    // Catalog single stream: when the title shows the clean content name,
-    // surface the episode identity (and the release detail line) here.
-    final contentTitle = _effectiveContentTitle;
-    if (contentTitle != null &&
-        contentTitle.isNotEmpty &&
-        widget.requestMagicNext == null &&
-        _effectiveStremioTvChannels == null &&
-        (_activePlaylist == null || _activePlaylist!.length <= 1)) {
-      final season = _effectiveContentSeason;
-      final episode = _effectiveContentEpisode;
-      final parts = <String>[
-        if (season != null && episode != null)
-          'Season $season, Episode $episode',
-        if (widget.subtitle != null && widget.subtitle!.trim().isNotEmpty)
-          widget.subtitle!,
-      ];
-      if (parts.isNotEmpty) return parts.join(' • ');
-    }
-
-    // Fallback to the current subtitle or widget subtitle
-    return widget.subtitle;
-  }
-
-  /// Get enhanced metadata for OTT-style display
-  Map<String, dynamic> _getEnhancedMetadata() {
-    final seriesPlaylist = _seriesPlaylist;
-
-    if (seriesPlaylist != null &&
-        seriesPlaylist.isSeries &&
-        _activePlaylist != null) {
-      // Find the current episode info
-      if (_currentIndex >= 0 && _currentIndex < _activePlaylist!.length) {
-        try {
-          final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
-            (episode) => episode.originalIndex == _currentIndex,
-            orElse: () => seriesPlaylist.allEpisodes.first,
-          );
-
-          if (currentEpisode.episodeInfo != null) {
-            final episodeInfo = currentEpisode.episodeInfo!;
-
-            final metadata = {
-              'rating': episodeInfo.rating,
-              'runtime': episodeInfo.runtime,
-              'year': episodeInfo.year,
-              'airDate': episodeInfo.airDate,
-              'language': episodeInfo.language,
-              'genres': episodeInfo.genres,
-              'network': episodeInfo.network,
-              'country': episodeInfo.country,
-              'plot': episodeInfo.plot,
-            };
-
-            return metadata;
-          }
-        } catch (e) {}
-      }
-    }
-
-    return {};
-  }
-
-  /// Find the next logical episode index for auto-advance
-  int _findNextEpisodeIndex() {
-    final seriesPlaylist = _seriesPlaylist;
-
-    if (seriesPlaylist == null || !seriesPlaylist.isSeries) {
-      // Raw mode OR Sorted mode: sequential navigation through all files
-      // In sorted mode, files are already pre-sorted A-Z, so sequential = alphabetical
-      if (widget.viewMode == PlaylistViewMode.raw ||
-          widget.viewMode == PlaylistViewMode.sorted) {
-        if (_activePlaylist == null || _activePlaylist!.isEmpty) return -1;
-        if (_currentIndex + 1 < _activePlaylist!.length) {
-          return _currentIndex + 1;
-        }
-        return -1;
-      }
-
-      // Collection mode (view mode not specified): navigate within Main group only
-      if (_activePlaylist == null || _activePlaylist!.isEmpty) return -1;
-      final indices = _getMainGroupIndices(_activePlaylist!);
-      if (indices.isEmpty) return -1;
-
-      final currentPos = indices.indexOf(_currentIndex);
-      if (currentPos == -1) {
-        return indices.first;
-      }
-
-      if (currentPos + 1 < indices.length) {
-        return indices[currentPos + 1];
-      }
-
-      return -1;
-    }
-
-    // Series mode: existing logic
-    try {
-      // Find current episode in the sorted allEpisodes list
-      final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
-        (episode) => episode.originalIndex == _currentIndex,
-        orElse: () {
-          if (seriesPlaylist.allEpisodes.isEmpty) {
-            throw StateError('allEpisodes is empty');
-          }
-          return seriesPlaylist.allEpisodes.first;
-        },
-      );
-
-      // Find the index of current episode in allEpisodes
-      final currentEpisodeIndex = seriesPlaylist.allEpisodes.indexOf(
-        currentEpisode,
-      );
-
-      if (currentEpisodeIndex == -1 ||
-          currentEpisodeIndex + 1 >= seriesPlaylist.allEpisodes.length) {
-        return -1;
-      }
-
-      // Get the next episode from the sorted list
-      final nextEpisode = seriesPlaylist.allEpisodes[currentEpisodeIndex + 1];
-      return nextEpisode.originalIndex;
-    } catch (e) {
-      return -1;
-    }
-  }
-
-  /// Compute the Main group indices for movie collections (size >= 70% of largest)
-  List<int> _getMainGroupIndices(List<PlaylistEntry> entries) {
-    int maxSize = -1;
-    for (final e in entries) {
-      final s = e.sizeBytes ?? -1;
-      if (s > maxSize) maxSize = s;
-    }
-    final double threshold = maxSize > 0 ? maxSize * 0.40 : -1;
-    final main = <int>[];
-    for (int i = 0; i < entries.length; i++) {
-      final e = entries[i];
-      final isSmall =
-          threshold > 0 && (e.sizeBytes != null && e.sizeBytes! < threshold);
-      if (!isSmall) main.add(i);
-    }
-    int sizeOf(int idx) => entries[idx].sizeBytes ?? -1;
-    int? yearOf(int idx) {
-      final m = RegExp(r'\b(19|20)\d{2}\b').firstMatch(entries[idx].title);
-      if (m != null) return int.tryParse(m.group(0)!);
-      return null;
-    }
-
-    main.sort((a, b) {
-      final ya = yearOf(a);
-      final yb = yearOf(b);
-      if (ya != null && yb != null) return ya.compareTo(yb); // older first
-      return sizeOf(b).compareTo(sizeOf(a));
-    });
-    return main;
-  }
-
-  Future<void> _showRandomPlaybackMenu() async {
-    final entries = _activePlaylist ?? const [];
-    if (entries.isEmpty && !_canFetchEpisodes) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No playlist items available')),
-      );
-      return;
-    }
-
-    if (kUnifiedPlayerMenuEnabled) {
-      _menu.openPlayerMenuQuick(PlayerMenuSection.shuffle);
-      return;
-    }
-
-    _hideTimer?.cancel();
-    final choice = await showDialog<String>(
-      context: context,
-      builder: (context) {
-        final shuffleLabel = _continuousShuffleEnabled
-            ? 'Turn Off Continuous Shuffle'
-            : 'Shuffle Continuously';
-        final shuffleSubtitle = _continuousShuffleEnabled
-            ? 'Return to normal ordered playback'
-            : 'Keep picking random items after each episode ends';
-
-        return AlertDialog(
-          backgroundColor: const Color(0xFF141824),
-          title: const Text(
-            'Shuffle Playback',
-            style: TextStyle(color: Colors.white),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              VpRandomChoiceTile(
-                icon: Icons.shuffle_rounded,
-                title: 'Play Random Once',
-                subtitle: 'Pick one random item, then resume normal order',
-                onTap: () => Navigator.of(context).pop('once'),
-              ),
-              const SizedBox(height: 8),
-              VpRandomChoiceTile(
-                icon: _continuousShuffleEnabled
-                    ? Icons.check_circle_rounded
-                    : Icons.all_inclusive_rounded,
-                title: shuffleLabel,
-                subtitle: shuffleSubtitle,
-                onTap: () => Navigator.of(context).pop('continuous'),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-
-    if (!mounted) return;
-    _scheduleAutoHide();
-
-    if (choice == 'once') {
-      await _playRandomOnce(disableContinuousShuffle: true);
-    } else if (choice == 'continuous') {
-      await _toggleContinuousShuffle();
-    }
-  }
-
-  Future<void> _toggleContinuousShuffle() async {
-    if (_continuousShuffleEnabled) {
-      setState(() {
-        _continuousShuffleEnabled = false;
-        _shuffleBag.clear();
-        _showShuffle.clear();
-        _showShuffleGeneration++;
-      });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Continuous shuffle off')));
-    } else {
-      setState(() {
-        _continuousShuffleEnabled = true;
-        _shuffleBag.clear();
-        _showShuffle.clear();
-        _showShuffleGeneration++;
-      });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Continuous shuffle on')));
-      await _playRandomOnce(disableContinuousShuffle: false);
-    }
-  }
-
-  Future<void> _playRandomOnce({required bool disableContinuousShuffle}) async {
-    if (disableContinuousShuffle) {
-      if (_continuousShuffleEnabled) {
-        setState(() {
-          _continuousShuffleEnabled = false;
-          _shuffleBag.clear();
-          _showShuffle.clear();
-          _showShuffleGeneration++;
-        });
-      } else {
-        _shuffleBag.clear();
-        _showShuffle.clear();
-        _showShuffleGeneration++;
-      }
-    }
-
-    if (await _playShowShuffle()) return;
-    final nextIndex = _pickShuffleIndex();
-    if (nextIndex == null) return;
-    _setManualSelectionMode();
-    await _loadPlaylistIndex(nextIndex, autoplay: true);
-  }
-
-  /// Returns true when show-wide shuffle owns this request, including failure.
-  /// Never fall through to ordered playback after exhausting random candidates.
-  Future<bool> _playShowShuffle({bool autoAdvance = false}) async {
-    if (!_canFetchEpisodes) return false;
-    final generation = _showShuffleGeneration;
-    final navigation = _episodeNavigationGeneration;
-    while (_showShuffleInProgress || _episodeFetchInProgress) {
-      if (_showShuffleInProgress &&
-          _activeShowShuffleGeneration == generation) {
-        return true;
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 25));
-      if (!mounted ||
-          generation != _showShuffleGeneration ||
-          navigation != _episodeNavigationGeneration) {
-        return true;
-      }
-    }
-    _showShuffleInProgress = true;
-    _activeShowShuffleGeneration = generation;
-    bool requestIsCurrent() =>
-        mounted &&
-        generation == _showShuffleGeneration &&
-        (!autoAdvance || !_sleepStopLatched);
-    final request = EpisodePlaybackRequest(
-      currentIdentity: () => _playlistIdentityToken,
-      currentNavigation: () => _episodeNavigationGeneration,
-      isActive: requestIsCurrent,
-    );
-    try {
-      final customInventory =
-          widget.seriesSourceFetcher?.loadCustomEpisodeInventory;
-      final List<Map<String, dynamic>> full;
-      if (customInventory != null) {
-        full = await customInventory();
-      } else {
-        await (_episodeMetadataReady ??= _preloadEpisodeInfo());
-        if (!request.isCurrent) return true;
-        if (_seriesPlaylist == null) {
-          final synthetic = _episodeGuide.buildSyntheticGuide();
-          if (synthetic != null && synthetic.$1.fullTvmazeEpisodes.isEmpty) {
-            await synthetic.$1.fetchEpisodeInfo(
-              playlistItem: _constructPlaylistItemData(),
-              imdbId: _currentSeriesImdbId,
-            );
-          }
-        }
-        if (!request.isCurrent) return true;
-        full = _seriesPlaylist?.fullTvmazeEpisodes.isNotEmpty == true
-            ? _seriesPlaylist!.fullTvmazeEpisodes
-            : (_syntheticGuidePlaylist?.fullTvmazeEpisodes ??
-                  const <Map<String, dynamic>>[]);
-      }
-      if (!request.isCurrent) return true;
-      if (full.isEmpty && customInventory == null) return false;
-      final eligible = full
-          .where((m) => isShuffleEpisodeEligible(m))
-          .map((m) => (m['season'] as int, m['number'] as int))
-          .toList();
-      final attempted = <ShuffleEpisode>{};
-      for (var attempt = 0; attempt < 3; attempt++) {
-        final current = _traktSeasonEpisode();
-        final target = _showShuffle.pick(
-          eligible,
-          current.season == null || current.episode == null
-              ? null
-              : (current.season!, current.episode!),
-          excluded: attempted,
-        );
-        if (target == null) break;
-        attempted.add(target);
-        final index =
-            _seriesPlaylist?.findOriginalIndexBySeasonEpisode(
-              target.$1,
-              target.$2,
-            ) ??
-            -1;
-        if (index >= 0) {
-          // EOF loads must retain sleep-stop and start-from-zero semantics,
-          // including when URL resolution outlasts the manual-selection timer.
-          _isAutoAdvancing = autoAdvance;
-          if (!autoAdvance) _setManualSelectionMode();
-          final outcome = await request.attempt(
-            () => _loadPlaylistIndex(
-              index,
-              autoplay: true,
-              suppressResume: true,
-              request: request,
-            ),
-          );
-          if (outcome != EpisodePlaybackOutcome.unavailable) return true;
-          // A pack entry can have an unavailable URL. Try another source for
-          // this episode before moving on to the next random candidate.
-        }
-        final outcome = await _episodeFetch.fetchAndPlayEpisode(
-          target.$1,
-          target.$2,
-          shuffleGeneration: generation,
-          autoAdvance: autoAdvance,
-          request: request,
-        );
-        if (outcome != EpisodePlaybackOutcome.unavailable) return true;
-      }
-      if (mounted) {
-        setState(() => _isTransitioning = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No other playable episode found for shuffle'),
-          ),
-        );
-      }
-      return true;
-    } catch (error) {
-      debugPrint('Show shuffle failed: $error');
-      if (mounted) {
-        setState(() => _isTransitioning = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not load a random episode')),
-        );
-      }
-      return true;
-    } finally {
-      _showShuffleInProgress = false;
-      _activeShowShuffleGeneration = null;
-      if (mounted && generation != _showShuffleGeneration && _isTransitioning) {
-        setState(() => _isTransitioning = false);
-      }
-    }
-  }
-
-  List<int> _shuffleEligibleIndices() {
-    final entries = _activePlaylist;
-    if (entries == null || entries.isEmpty) return const [];
-
-    final seriesPlaylist = _seriesPlaylist;
-    if (seriesPlaylist != null && seriesPlaylist.isSeries) {
-      final indices = seriesPlaylist.allEpisodes
-          .map((episode) => episode.originalIndex)
-          .where((index) => index >= 0 && index < entries.length)
-          .toSet()
-          .toList();
-      if (indices.isNotEmpty) return indices;
-    }
-
-    if (widget.viewMode == PlaylistViewMode.raw ||
-        widget.viewMode == PlaylistViewMode.sorted) {
-      return List<int>.generate(entries.length, (index) => index);
-    }
-
-    final mainIndices = _getMainGroupIndices(
-      entries,
-    ).where((index) => index >= 0 && index < entries.length).toList();
-    if (mainIndices.isNotEmpty) return mainIndices;
-
-    return List<int>.generate(entries.length, (index) => index);
-  }
-
-  int? _pickShuffleIndex() {
-    final eligible = _shuffleEligibleIndices();
-    if (eligible.isEmpty) return null;
-    if (eligible.length == 1) return eligible.first;
-
-    final eligibleSet = eligible.toSet();
-    _shuffleBag.removeWhere(
-      (index) => !eligibleSet.contains(index) || index == _currentIndex,
-    );
-
-    if (_shuffleBag.isEmpty) {
-      _shuffleBag.addAll(
-        eligible.where((index) => index != _currentIndex).toList()
-          ..shuffle(_random),
-      );
-    }
-
-    if (_shuffleBag.isEmpty) return null;
-    return _shuffleBag.removeLast();
-  }
-
-  /// Find the previous logical episode index
-  int _findPreviousEpisodeIndex() {
-    final seriesPlaylist = _seriesPlaylist;
-
-    if (seriesPlaylist == null || !seriesPlaylist.isSeries) {
-      // Raw mode OR Sorted mode: sequential navigation through all files
-      // In sorted mode, files are already pre-sorted A-Z, so sequential = alphabetical
-      if (widget.viewMode == PlaylistViewMode.raw ||
-          widget.viewMode == PlaylistViewMode.sorted) {
-        if (_activePlaylist == null || _activePlaylist!.isEmpty) return -1;
-        if (_currentIndex - 1 >= 0) {
-          return _currentIndex - 1;
-        }
-        return -1;
-      }
-
-      // Collection mode (view mode not specified): navigate within Main group only
-      if (_activePlaylist == null || _activePlaylist!.isEmpty) return -1;
-      final indices = _getMainGroupIndices(_activePlaylist!);
-      if (indices.isEmpty) return -1;
-
-      final currentPos = indices.indexOf(_currentIndex);
-      if (currentPos == -1) {
-        return indices.first;
-      }
-
-      if (currentPos - 1 >= 0) {
-        return indices[currentPos - 1];
-      }
-
-      return -1;
-    }
-
-    // Series mode: existing logic
-    try {
-      // Find current episode in the sorted allEpisodes list
-      final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
-        (episode) => episode.originalIndex == _currentIndex,
-        orElse: () {
-          if (seriesPlaylist.allEpisodes.isEmpty) {
-            throw StateError('allEpisodes is empty');
-          }
-          return seriesPlaylist.allEpisodes.first;
-        },
-      );
-
-      // Find the index of current episode in allEpisodes
-      final currentEpisodeIndex = seriesPlaylist.allEpisodes.indexOf(
-        currentEpisode,
-      );
-
-      if (currentEpisodeIndex <= 0) {
-        return -1;
-      }
-
-      // Get the previous episode from the sorted list
-      final previousEpisode =
-          seriesPlaylist.allEpisodes[currentEpisodeIndex - 1];
-      return previousEpisode.originalIndex;
-    } catch (e) {
-      return -1;
-    }
-  }
-
-  /// Check if there's a next episode available
-  bool _hasNextEpisode() {
-    if (_findNextEpisodeIndex() != -1) return true;
-    if (_canFetchEpisodes) {
-      final se = _traktSeasonEpisode();
-      if (se.season != null && se.episode != null) return true;
-    }
-    // Series content may have a next episode discoverable via Stremio metadata.
-    // Requires episode info from widget params or a parsed series playlist.
-    if (widget.requestMagicNext == null &&
-        widget.contentType == 'series' &&
-        widget.contentImdbId != null &&
-        (widget.contentSeason != null || _seriesPlaylist != null)) {
-      return true;
-    }
-    return false;
-  }
-
-  /// Check if there's a previous episode available
-  bool _hasPreviousEpisode() {
-    if (_findPreviousEpisodeIndex() != -1) return true;
-    // Beyond the pack's start: a previous episode may exist show-wide and be
-    // fetchable in-player (metadata-list adjacency decides at press time).
-    if (_canFetchEpisodes) {
-      final se = _traktSeasonEpisode();
-      if (se.season != null && se.episode != null) {
-        return _adjacentEpisode(se.season!, se.episode!, -1) != null ||
-            (widget.seriesSourceFetcher?.resolveAdjacentEpisode != null &&
-                (se.season! > 1 || se.episode! > 1));
-      }
-    }
-    return false;
-  }
-
   void _clearBufferingIndicator() {
     _bufferingDebounceTimer?.cancel();
     _showBufferingIndicator.value = false;
-  }
-
-  /// Navigate to next episode
-  Future<void> _goToNextEpisode() async {
-    // Check if widget is still mounted before any state changes
-    if (!mounted) return;
-
-    // Show black screen during transition to hide previous frame
-    _clearBufferingIndicator();
-    setState(() {
-      _isTransitioning = true;
-      _tvScrubGeneration++;
-      _tvAbandonScrub();
-    });
-
-    // Only show transition overlay for Debrify TV content (when requestMagicNext is available)
-    final isDebrifyTV = widget.requestMagicNext != null;
-    if (isDebrifyTV) {
-      _startTransitionOverlay();
-    }
-    try {
-      await _player.pause();
-    } catch (_) {}
-    if (_continuousShuffleEnabled) {
-      if (await _playShowShuffle()) return;
-      final shuffleIndex = _pickShuffleIndex();
-      if (shuffleIndex != null) {
-        _setManualSelectionMode();
-        await _loadPlaylistIndex(shuffleIndex, autoplay: true);
-        return;
-      }
-    }
-
-    final nextIndex = _findNextEpisodeIndex();
-    if (nextIndex != -1) {
-      // Mark this as a manual episode selection
-      _setManualSelectionMode();
-      await _loadPlaylistIndex(nextIndex, autoplay: true);
-      return;
-    }
-
-    if (_hasStremioTvNext) {
-      final handled = await _stremioTv.goToNextStremioTvSlot();
-      if (handled) return;
-    }
-
-    // Series content beyond the pack: fetch the next episode IN-PLAYER when
-    // possible (no relaunch), falling back to the pop-and-quick-play handoff.
-    if (await _fetchNextEpisodeInPlayer()) return;
-
-    // Series content without season pack: find next episode and trigger Quick Play
-    if (widget.requestMagicNext == null) {
-      final handled = await _handleSeriesNextEpisode();
-      if (handled) return;
-    }
-
-    // If there is no playlist-based next item and Debrify TV provider is present, use it
-    if (widget.requestMagicNext != null) {
-      debugPrint('Player: MagicTV next requested.');
-      try {
-        final result = await widget.requestMagicNext!();
-        final url = result != null ? (result['url'] ?? '') : '';
-        final title = result != null ? (result['title'] ?? '') : '';
-        final provider = result != null ? (result['provider'] ?? '') : '';
-        final pikpakFileId = result != null
-            ? (result['pikpakFileId'] ?? '')
-            : '';
-
-        if (url.isNotEmpty) {
-          debugPrint(
-            'Player: MagicTV next success. Opening new URL (provider: $provider, pikpakFileId: $pikpakFileId).',
-          );
-
-          // Clear subtitle, IMDB, and local completion state when switching content
-          _resetSubtitleState();
-          _singleFileImdbId = null;
-          _singleFileImdbFetched = false;
-          _completion.resetLocalCompletionState();
-
-          // Update TV static overlay to show signal acquired
-          if (title.isNotEmpty && mounted) {
-            setState(() {
-              _tvStaticMessage = '📺 SIGNAL ACQUIRED';
-              _tvStaticSubtext = '▶ ${title.toUpperCase()}';
-            });
-          }
-
-          // Use PikPak retry logic if this is a PikPak video
-          final isPikPak =
-              provider.toLowerCase() == 'pikpak' || pikpakFileId.isNotEmpty;
-          if (isPikPak) {
-            debugPrint(
-              'Player: Detected PikPak video from Debrify TV, using retry logic',
-            );
-            // _playPikPakVideoWithRetry will increment _pikPakRetryId to cancel previous retries
-            await _playPikPakVideoWithRetry(
-              url,
-              overrideProvider: provider,
-              overridePikPakFileId: pikpakFileId,
-              isDebrifyTV: true,
-            );
-          } else {
-            // Cancel any ongoing PikPak retry when switching to non-PikPak video
-            _pikPakRetryId++;
-            await _openMedia(
-              mk.Media(url, httpHeaders: _activeHttpHeaders),
-              play: true,
-            );
-          }
-          _currentStreamUrl = url;
-          // Disable auto-enabled embedded subtitles to prevent duplicates
-          await _subtitleApply.setSubtitleTrackWithDiagnostics(
-            mk.SubtitleTrack.no(),
-            source: 'debrify-tv-open-disable-auto',
-          );
-          // If advanced option is enabled, jump to a random timestamp for Debrify TV items
-          if (widget.startFromRandom) {
-            await _waitForVideoReady();
-            final offset = _randomStartOffset(_duration);
-            if (offset != null) {
-              await _player.seek(offset);
-            }
-          } else if (widget.startAtPercent != null) {
-            await _waitForVideoReady();
-            final offset = _percentStartOffset(_duration);
-            if (offset != null) {
-              await _player.seek(offset);
-            }
-          }
-          if (title.isNotEmpty) {
-            setState(() {
-              _dynamicTitle = title;
-            });
-          }
-          // Clear transition state when video is ready
-          if (mounted) {
-            setState(() {
-              _isTransitioning = false;
-            });
-          }
-          return;
-        }
-      } catch (e) {
-        debugPrint('Player: MagicTV next failed: $e');
-      }
-    }
-
-    // Clear transition state if no next episode found
-    if (mounted) {
-      setState(() {
-        _isTransitioning = false;
-      });
-    }
-  }
-
-  /// Shared manual/EOF path beyond the current pack. A handled fetch, including
-  /// cancellation or failure, stays in-player rather than relaunching it.
-  Future<bool> _fetchNextEpisodeInPlayer({bool autoAdvance = false}) async {
-    if (!_canFetchEpisodes) return false;
-    if (_episodeFetchInProgress) return true;
-    final identity = _playlistIdentityToken;
-    final navigation = _episodeNavigationGeneration;
-    bool stale() =>
-        !mounted ||
-        identity != _playlistIdentityToken ||
-        navigation != _episodeNavigationGeneration ||
-        (autoAdvance && _sleepStopLatched);
-    if (stale()) return true;
-    final se = _traktSeasonEpisode();
-    if (se.season == null || se.episode == null) return false;
-    var next = _adjacentEpisode(se.season!, se.episode!, 1);
-    if (next == null) {
-      final resolved = await _resolveAdjacentWithCachedGuide(
-        se.season!,
-        se.episode!,
-        1,
-      );
-      if (resolved != null) next = (resolved.season, resolved.episode);
-    }
-    if (next == null &&
-        widget.seriesSourceFetcher?.resolveAdjacentEpisode == null &&
-        widget.contentImdbId != null) {
-      final episode = await NextEpisodeService.findNextEpisode(
-        widget.contentImdbId!,
-        se.season!,
-        se.episode!,
-      );
-      if (episode != null) next = (episode.season, episode.episode);
-    }
-    if (stale()) return true;
-    if (next == null) return false;
-    debugPrint(
-      'Player: Next episode S${next.$1}E${next.$2} in-player autoAdvance=$autoAdvance',
-    );
-    await _episodeFetch.fetchAndPlayEpisode(
-      next.$1,
-      next.$2,
-      autoAdvance: autoAdvance,
-    );
-    return true;
-  }
-
-  /// Legacy fallback: pop with the next episode for the caller's Quick Play.
-  Future<bool> _handleSeriesNextEpisode() async {
-    // Already popping to hand off the next episode — a second trigger (manual
-    // Next racing end-of-video auto-advance) must not run again.
-    if (_seriesNextDispatched) return true;
-    if (widget.contentType != 'series' ||
-        widget.contentImdbId == null ||
-        widget.seriesSourceFetcher?.resolveAdjacentEpisode != null) {
-      return false;
-    }
-
-    // Determine the CURRENT episode: prefer the series playlist (tracks actual
-    // playback position within a season pack) over widget params (set at launch).
-    int? currentSeason;
-    int? currentEpisode;
-
-    final seriesPlaylist = _seriesPlaylist;
-    if (seriesPlaylist != null &&
-        seriesPlaylist.isSeries &&
-        _activePlaylist != null &&
-        _currentIndex >= 0 &&
-        _currentIndex < _activePlaylist!.length) {
-      try {
-        final current = seriesPlaylist.allEpisodes.firstWhere(
-          (ep) => ep.originalIndex == _currentIndex,
-        );
-        currentSeason = current.seriesInfo.season;
-        currentEpisode = current.seriesInfo.episode;
-      } catch (_) {
-        // firstWhere threw — no match, fall through to widget params
-      }
-    }
-
-    // Fallback to widget params (single-file playback without a series playlist)
-    currentSeason ??= widget.contentSeason;
-    currentEpisode ??= widget.contentEpisode;
-
-    if (currentSeason == null || currentEpisode == null) return false;
-
-    debugPrint(
-      'Player: Looking up next episode after S${currentSeason}E$currentEpisode',
-    );
-    final nextEp = await NextEpisodeService.findNextEpisode(
-      widget.contentImdbId!,
-      currentSeason,
-      currentEpisode,
-    );
-
-    if (nextEp == null) {
-      debugPrint(
-        'Player: No next episode found (last episode or lookup failed)',
-      );
-      return false;
-    }
-
-    debugPrint(
-      'Player: Found next episode S${nextEp.season}E${nextEp.episode}, popping for Quick Play',
-    );
-    // Re-check the guard right before popping. Because nothing awaits between
-    // here and the pop, this set-and-pop is atomic on Dart's single thread, so
-    // a concurrent call that already passed the top guard and is resuming from
-    // its own await will see the flag set and return without a second pop.
-    if (!mounted || _seriesNextDispatched) return true;
-    _seriesNextDispatched = true;
-    final result = <String, dynamic>{
-      'quickPlayNext': true,
-      'imdbId': widget.contentImdbId,
-      'season': nextEp.season,
-      'episode': nextEp.episode,
-      'title': widget.contentTitle ?? widget.title,
-      'contentType': widget.contentType,
-    };
-    if (_pip.iosPipSession?.isParked ?? false) {
-      _pip.iosPipSession!.close(result);
-    } else {
-      Navigator.of(context).pop(result);
-    }
-    return true;
   }
 
   /// Load default player settings (aspect)
@@ -5020,1204 +3934,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       widget.stremioTvNextProvider != null;
 
   bool get _hasAnyNext =>
-      _hasNextEpisode() || widget.requestMagicNext != null || _hasStremioTvNext;
-
-  /// Navigate to previous episode
-  Future<void> _goToPreviousEpisode() async {
-    // Show black screen during transition to hide previous frame
-    _clearBufferingIndicator();
-    setState(() {
-      _isTransitioning = true;
-      _tvScrubGeneration++;
-      _tvAbandonScrub();
-    });
-
-    final previousIndex = _findPreviousEpisodeIndex();
-    if (previousIndex != -1) {
-      // Mark this as a manual episode selection
-      _setManualSelectionMode();
-      await _loadPlaylistIndex(previousIndex, autoplay: true);
-    } else {
-      // Beyond the pack's start: fetch the previous episode in-player.
-      if (_canFetchEpisodes) {
-        final se = _traktSeasonEpisode();
-        var prev = (se.season != null && se.episode != null)
-            ? _adjacentEpisode(se.season!, se.episode!, -1)
-            : null;
-        if (prev == null && se.season != null && se.episode != null) {
-          final resolved = await _resolveAdjacentWithCachedGuide(
-            se.season!,
-            se.episode!,
-            -1,
-          );
-          if (resolved != null) prev = (resolved.season, resolved.episode);
-        }
-        if (prev != null) {
-          await _episodeFetch.fetchAndPlayEpisode(prev.$1, prev.$2);
-          return;
-        }
-      }
-      // Clear transition state if no previous episode found
-      if (mounted) {
-        setState(() {
-          _isTransitioning = false;
-        });
-      }
-    }
-  }
-
-  /// Tear down the black transition overlay when a load fails partway (bad
-  /// index, or no resolvable URL — e.g. a dead debrid/torbox link on the next
-  /// episode). Without this the UI stays stuck on the black transition
-  /// `Container` and the rainbow overlay never stops. The source-switch caller
-  /// clears transition state itself, so this only rescues the other callers
-  /// (`_goToNextEpisode`, shuffle). Safe to call redundantly.
-  void _clearTransitionOnFailure() {
-    _transitionStopTimer?.cancel();
-    _transitionPhaseTimer?.cancel();
-    _rainbowController.stop();
-    _transitionRunning = false;
-    _rainbowActive = false;
-    // No new media will open, so the duration emit that normally re-arms the
-    // skip lookup never comes. Leaving it disarmed would silently cost the
-    // skip button for the rest of whatever is still playing.
-    _skip.skipSegmentsMediaReady = true;
-    if (mounted) {
-      setState(() {
-        _isTransitioning = false;
-      });
-    } else {
-      _isTransitioning = false;
-    }
-  }
-
-  Future<bool> _loadPlaylistIndex(
-    int index, {
-    bool autoplay = false,
-    EpisodePlaybackRequest? request,
-    bool skipInitialSave = false,
-    // Source switch on the same content: resume the checkpointed local position
-    // exactly (see _maybeRestoreResume).
-    bool preferLocalResume = false,
-    bool suppressResume = false,
-    Torrent? manualValidationSource,
-    int? manualValidationSourceIndex,
-  }) async {
-    if (request == null) {
-      return _loadPlaylistIndexAttempt(
-        index,
-        autoplay: autoplay,
-        skipInitialSave: skipInitialSave,
-        preferLocalResume: preferLocalResume,
-        suppressResume: suppressResume,
-        manualValidationSource: manualValidationSource,
-        manualValidationSourceIndex: manualValidationSourceIndex,
-      );
-    }
-    final outgoingIndex = _currentIndex;
-    final outgoingUrl = _currentStreamUrl;
-    final outgoingHeaders = _activeHttpHeaders;
-    final outgoingMedia = _activeOpenedMedia;
-    final outgoingShouldPlay = _activeMediaShouldPlay;
-    final outgoingPaused = _activeMediaUserPaused;
-    var loaded = false;
-    try {
-      loaded = await _loadPlaylistIndexAttempt(
-        index,
-        autoplay: autoplay,
-        request: request,
-        skipInitialSave: skipInitialSave,
-        preferLocalResume: preferLocalResume,
-        suppressResume: suppressResume,
-        manualValidationSource: manualValidationSource,
-        manualValidationSourceIndex: manualValidationSourceIndex,
-      );
-      return loaded;
-    } finally {
-      if (!loaded && mounted) {
-        final restored = request.restorePlaylist(() {
-          _currentIndex = outgoingIndex;
-          _currentStreamUrl = outgoingUrl;
-          _activeHttpHeaders = outgoingHeaders;
-          _activeOpenedMedia = outgoingMedia;
-          _activeMediaShouldPlay = outgoingShouldPlay;
-          _activeMediaUserPaused = outgoingPaused;
-          _isAutoAdvancing = false;
-        });
-        if (restored) await _mdblist.switchMdblistTarget();
-      }
-    }
-  }
-
-  Future<bool> _loadPlaylistIndexAttempt(
-    int index, {
-    bool autoplay = false,
-    EpisodePlaybackRequest? request,
-    bool skipInitialSave = false,
-    // Source switch on the same content: resume the checkpointed local position
-    // exactly (see _maybeRestoreResume).
-    bool preferLocalResume = false,
-    bool suppressResume = false,
-    Torrent? manualValidationSource,
-    int? manualValidationSourceIndex,
-  }) async {
-    if (request == null) _episodeNavigationGeneration++;
-    if (request?.isCurrent == false) return false;
-    // A new item is being loaded: any scrub in flight belongs to the outgoing
-    // one and must never land on this one; same for the landing verifier
-    // (epoch bump — a verifier retry must never seek the incoming item).
-    // NOTE: the resume write GUARD is deliberately NOT cleared here — the
-    // outgoing item's checkpoint _saveResume() below must still run against
-    // the armed guard, or an unlanded resume's ~0 position would be filed over
-    // that item's bookmark by the very switch that abandons it. The clear sits
-    // immediately after that save.
-    _tvScrubGeneration++;
-    _tvAbandonScrub();
-    _resumeVerifyEpoch++;
-    if (_activePlaylist == null ||
-        index < 0 ||
-        index >= _activePlaylist!.length) {
-      _clearTransitionOnFailure();
-      return false;
-    }
-
-    // A sleep stop wins over anything already queued. Checked BEFORE any state
-    // moves: bailing out after _currentIndex has advanced would leave the
-    // playlist pointing at an episode that never opened, so resume and
-    // metadata would file against the wrong item. Only automatic advances are
-    // suppressed — picking something by hand means the viewer is awake, so it
-    // clears the latch instead.
-    if (_sleepStopLatched) {
-      if (autoplay && _isAutoAdvancing) {
-        _isAutoAdvancing = false;
-        _clearTransitionOnFailure();
-        return false;
-      }
-      _sleepStopLatched = false;
-    }
-
-    print(
-      'PikPak: _loadPlaylistIndex called with index: $index, autoplay: $autoplay',
-    );
-
-    // Resolve before changing the playing identity: a cancelled or failed
-    // lookup must not label the outgoing stream as the unplayed target.
-    final entry = _activePlaylist![index];
-    // Resolve the actual streaming URL if needed
-    String videoUrl = entry.url;
-    if (videoUrl.isEmpty) {
-      try {
-        videoUrl = await _resolvePlaylistEntryUrl(index);
-      } catch (e) {
-        final errorText = e.toString().replaceFirst('Exception: ', '');
-        if (mounted && request?.isCurrent != false) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Failed to prepare video: $errorText',
-                style: const TextStyle(color: Colors.white),
-              ),
-              backgroundColor: Theme.of(context).colorScheme.error,
-              duration: VideoPlayerTimingConstants.controlsAutoHideDuration,
-            ),
-          );
-        }
-        videoUrl = entry.url;
-      }
-    }
-    if (!mounted || request?.isCurrent == false) return false;
-    if (videoUrl.isEmpty) {
-      if (request == null) _currentStreamUrl = null;
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text(
-              'No playable URL found for this entry',
-              style: TextStyle(color: Colors.white),
-            ),
-            backgroundColor: Theme.of(context).colorScheme.error,
-            duration: VideoPlayerTimingConstants.controlsAutoHideDuration,
-          ),
-        );
-      }
-      _clearTransitionOnFailure();
-      return false;
-    }
-
-    // Scrobble stop for the current episode before switching
-    _trakt.stopTraktHeartbeat();
-    _trakt.traktScrobble('stop');
-    _simkl.stopSimklHeartbeat();
-    _simkl.simklScrobble('stop');
-    // Keep the MDBList session's playing bit until switchTarget captures it.
-    // Calling exit here would make the incoming episode look paused and would
-    // prevent its initial checkpoint/timer from starting.
-    _mdblist.updateMdblistPosition();
-
-    // Callers that already checkpointed the outgoing episode (e.g. a source
-    // switch, which saves BEFORE swapping the playlist) skip this save so it
-    // can't write the current position against the newly-swapped playlist.
-    if (!skipInitialSave) {
-      await _resumeSave.saveResume();
-    }
-    if (!mounted || request?.isCurrent == false) return false;
-    // The outgoing item's guarded checkpoint has run; from here on the guard
-    // belongs to nobody. Clearing now stops it suppressing the incoming item's
-    // saves and makes any in-flight landing verifier abort instead of
-    // re-issuing the outgoing item's target against the new one.
-    _resumeWriteGuard.clear();
-    _currentIndex = index;
-    await _mdblist.switchMdblistTarget();
-    if (!mounted || request?.isCurrent == false) return false;
-    _completion.resetLocalCompletionState();
-
-    // Clear subtitle cache and selection when changing content
-    _resetSubtitleState();
-    _skip.resetSkipSegmentState();
-
-    // For movie collections, prefetch movie metadata for the new index
-    // This runs in background so subtitles are ready when user opens TracksSheet
-    final seriesPlaylist = _seriesPlaylist;
-    if (seriesPlaylist != null && !seriesPlaylist.isSeries) {
-      seriesPlaylist.fetchMovieMetadataForIndex(index).catchError((e) {
-        // Silently ignore errors - metadata is optional
-        return null;
-      });
-    }
-
-    print(
-      'PikPak: Loading playlist entry - provider: ${entry.provider}, pikpakFileId: ${entry.pikpakFileId}',
-    );
-
-    _currentStreamUrl = videoUrl;
-
-    // Check if this is a PikPak video
-    final currentEntry = _activePlaylist?[index];
-    _activeHttpHeaders = currentEntry?.httpHeaders;
-    final isPikPak =
-        currentEntry?.provider?.toLowerCase() == 'pikpak' ||
-        currentEntry?.pikpakFileId != null;
-
-    // ALWAYS use retry logic for PikPak videos, regardless of autoplay
-    if (isPikPak) {
-      // For PikPak, we need retry logic even if not autoplaying
-      // _playPikPakVideoWithRetry will increment _pikPakRetryId to cancel previous retries
-      final pikPakLoaded = await _playPikPakVideoWithRetry(
-        videoUrl,
-        request: request,
-        // A manual source transaction owns its single failure message. The
-        // retry UI remains unchanged while cold storage is being reactivated.
-        showFailure: manualValidationSourceIndex == null,
-      );
-      if (manualValidationSourceIndex != null && !pikPakLoaded) return false;
-      if (request != null && suppressResume && !pikPakLoaded) return false;
-      if (!autoplay) {
-        // Still use retry but without autoplay; pause only after it succeeds.
-        _activeMediaShouldPlay = false;
-        if (pikPakLoaded) await _player.pause();
-      }
-    } else {
-      // Non-PikPak videos play normally
-      // Cancel any ongoing PikPak retry when switching to non-PikPak video
-      _pikPakRetryId++;
-      if (manualValidationSourceIndex != null) {
-        final valid = await _startupCandidates.tryOpenStartupVod(
-          videoUrl,
-          httpHeaders: _activeHttpHeaders,
-          source: manualValidationSource,
-          sourceIndex: manualValidationSourceIndex,
-        );
-        if (!valid) return false;
-        if (!autoplay) await _player.pause();
-      } else {
-        await _openMedia(
-          mk.Media(videoUrl, httpHeaders: _activeHttpHeaders),
-          play: autoplay,
-          request: request,
-        );
-      }
-    }
-
-    if (!mounted || request?.isCurrent == false) return false;
-    // Shuffle needs playback proof to decide whether to try another episode.
-    // Ordinary episode/source navigation retains its existing readiness path.
-    if (request != null && suppressResume) {
-      final ready = await waitForEpisodePlayback(
-        isCurrent: () => request.isCurrent,
-        isPaused: () => _activeMediaUserPaused || _pausedByLifecycle,
-        isReady: () =>
-            _player.state.duration > Duration.zero &&
-            (_activeMediaUserPaused ||
-                _pausedByLifecycle ||
-                (_player.state.playing &&
-                    _player.state.position >=
-                        const Duration(milliseconds: 40))),
-      );
-      if (!ready) return false;
-    } else {
-      await _waitForVideoReady();
-    }
-    if (!mounted || request?.isCurrent == false) return false;
-    if (suppressResume) {
-      // Starting a random episode at zero is independent of whether the
-      // viewer requested it or EOF advanced automatically.
-      _resumeWriteGuard.clear();
-      _isAutoAdvancing = false;
-    } else {
-      await _resumeRestore.maybeRestoreResume(
-        preferLocalResume: preferLocalResume,
-      );
-    }
-    // Restore audio and subtitle track preferences
-    await _trackPreferences.restoreTrackPreferences();
-
-    // Clear transition state when video is ready
-    if (mounted) {
-      setState(() {
-        _isTransitioning = false;
-      });
-    }
-    // Ordinary episode opens use the readiness path above, rather than the
-    // startup/manual-source commit callback. Bind sync only after that lands.
-    if (manualValidationSourceIndex == null) {
-      _serverWatch.commit(_openedWatchSource);
-    }
-    return true;
-  }
-
-  Future<String> _resolvePlaylistEntryUrl(int index) async {
-    if (_activePlaylist == null ||
-        index < 0 ||
-        index >= _activePlaylist!.length) {
-      return '';
-    }
-
-    final entry = _activePlaylist![index];
-
-    if (entry.url.isNotEmpty) {
-      return entry.url;
-    }
-
-    final provider = entry.provider?.toLowerCase();
-    final hasTorboxMetadata =
-        entry.torboxTorrentId != null && entry.torboxFileId != null;
-    final hasTorboxWebDownloadMetadata =
-        entry.torboxWebDownloadId != null && entry.torboxFileId != null;
-
-    if (provider == 'torbox' ||
-        hasTorboxMetadata ||
-        hasTorboxWebDownloadMetadata) {
-      final torrentId = entry.torboxTorrentId;
-      final webDownloadId = entry.torboxWebDownloadId;
-      final fileId = entry.torboxFileId;
-      if (fileId == null || (torrentId == null && webDownloadId == null)) {
-        throw Exception('Torbox file metadata missing');
-      }
-      final apiKey = await TorboxStorage.getTorboxApiKey();
-      if (apiKey == null || apiKey.isEmpty) {
-        throw Exception('Missing Torbox API key');
-      }
-      try {
-        String url;
-        if (webDownloadId != null) {
-          // Web download - use web download API
-          url = await TorboxService.requestWebDownloadFileLink(
-            apiKey: apiKey,
-            webId: webDownloadId,
-            fileId: fileId,
-          );
-        } else {
-          // Torrent - use torrent API
-          url = await TorboxService.requestFileDownloadLink(
-            apiKey: apiKey,
-            torrentId: torrentId!,
-            fileId: fileId,
-          );
-        }
-        if (url.isEmpty) {
-          throw Exception('Torbox returned an empty stream URL');
-        }
-        return url;
-      } catch (e) {
-        throw Exception('Torbox link failed: $e');
-      }
-    }
-
-    // PikPak lazy resolution
-    final hasPikPakMetadata = entry.pikpakFileId != null;
-    if (provider == 'pikpak' || hasPikPakMetadata) {
-      final fileId = entry.pikpakFileId;
-      if (fileId == null) {
-        throw Exception('PikPak file metadata missing');
-      }
-      try {
-        final pikpak = PikPakApiService.instance;
-        final fileData = await pikpak.getFileDetails(fileId);
-        final url = pikpak.getStreamingUrl(fileData);
-        if (url == null || url.isEmpty) {
-          throw Exception('PikPak returned an empty stream URL');
-        }
-        return url;
-      } catch (e) {
-        throw Exception('PikPak link failed: $e');
-      }
-    }
-
-    // Premiumize cloud-browser lazy resolution: re-fetch a fresh direct link by
-    // cloud item id (items saved from the cloud browser have no infohash).
-    if (entry.premiumizeItemId != null && entry.premiumizeItemId!.isNotEmpty) {
-      final apiKey = await PremiumizeStorage.getPremiumizeApiKey();
-      if (apiKey == null || apiKey.isEmpty) {
-        throw Exception('Missing Premiumize API key');
-      }
-      try {
-        final file = await PremiumizeService.resolveItemById(
-          apiKey,
-          entry.premiumizeItemId!,
-        );
-        if (file == null || file.link.isEmpty) {
-          throw Exception('File not found in Premiumize cloud');
-        }
-        return file.link;
-      } catch (e) {
-        throw Exception('Premiumize link failed: $e');
-      }
-    }
-
-    // Premiumize lazy resolution: re-fetch direct links by infohash and match
-    // the file by its stored path (Premiumize direct links eventually expire).
-    final hasPremiumizeMetadata =
-        entry.premiumizeHash != null && entry.premiumizePath != null;
-    if (provider == 'premiumize' || hasPremiumizeMetadata) {
-      final hash = entry.premiumizeHash;
-      final path = entry.premiumizePath;
-      if (hash == null || hash.isEmpty || path == null || path.isEmpty) {
-        throw Exception('Premiumize file metadata missing');
-      }
-      final apiKey = await PremiumizeStorage.getPremiumizeApiKey();
-      if (apiKey == null || apiKey.isEmpty) {
-        throw Exception('Missing Premiumize API key');
-      }
-      try {
-        final files = await PremiumizeService.resolveFilesByHash(apiKey, hash);
-        final match = files.firstWhere(
-          (f) => f.path == path,
-          orElse: () => throw Exception('File not found in Premiumize cloud'),
-        );
-        if (match.link.isEmpty) {
-          throw Exception('Premiumize returned an empty stream URL');
-        }
-        return match.link;
-      } catch (e) {
-        throw Exception('Premiumize link failed: $e');
-      }
-    }
-
-    if (entry.restrictedLink != null) {
-      final apiKey = await RealDebridStorage.getApiKey();
-      if (apiKey == null || apiKey.isEmpty) {
-        throw Exception('Missing Real Debrid API key');
-      }
-      try {
-        final unrestrictResult = await DebridService.unrestrictLink(
-          apiKey,
-          entry.restrictedLink!,
-        );
-        final url = unrestrictResult['download']?.toString() ?? '';
-        if (url.isEmpty) {
-          throw Exception('Real Debrid returned an empty stream URL');
-        }
-        return url;
-      } catch (e) {
-        throw Exception('Real Debrid link failed: $e');
-      }
-    }
-
-    // AllDebrid lazy resolution: unlock the stored locked link on demand
-    // (mirrors Real-Debrid's restrictedLink → unrestrict). The locked link is
-    // stable; only the unlocked CDN URL expires, so this is also more robust
-    // than resolving every episode up front.
-    if (provider == 'alldebrid' ||
-        (entry.allDebridLink != null && entry.allDebridLink!.isNotEmpty)) {
-      final lockedLink = entry.allDebridLink;
-      if (lockedLink == null || lockedLink.isEmpty) {
-        throw Exception('AllDebrid link metadata missing');
-      }
-      final apiKey = await AllDebridStorage.getAllDebridApiKey();
-      if (apiKey == null || apiKey.isEmpty) {
-        throw Exception('Missing AllDebrid API key');
-      }
-      try {
-        final url = await AllDebridService.unlockLink(apiKey, lockedLink);
-        if (url.isEmpty) {
-          throw Exception('AllDebrid returned an empty stream URL');
-        }
-        return url;
-      } catch (e) {
-        throw Exception('AllDebrid link failed: $e');
-      }
-    }
-
-    throw Exception('No URL metadata available for this entry');
-  }
-
-  /// Waits for video metadata (duration) to become available
-  /// Returns true if metadata loads, false if timeout or cancelled
-  /// This is the only reliable way to detect if a PikPak file is actually loading
-  ///
-  /// The additionalMonitoringSeconds parameter allows continuous monitoring during retry delays
-  /// to detect if video loads during the delay period (prevents unnecessary player resets)
-  Future<bool> _waitForVideoMetadata({
-    int timeoutSeconds = 15,
-    required int retryId,
-    int additionalMonitoringSeconds = 0,
-  }) async {
-    final totalTimeoutSeconds = timeoutSeconds + additionalMonitoringSeconds;
-    final stopwatch = Stopwatch()..start();
-
-    while (stopwatch.elapsed.inSeconds < totalTimeoutSeconds) {
-      // Check if this retry has been cancelled (user navigated to different video)
-      if (_pikPakRetryId != retryId) {
-        print(
-          'PikPak: Retry cancelled (token mismatch: current=$_pikPakRetryId, expected=$retryId)',
-        );
-        return false;
-      }
-
-      // Check if widget was disposed (prevents operations on unmounted widget)
-      if (!mounted) {
-        print('PikPak: Widget disposed during metadata wait');
-        return false;
-      }
-
-      // FIX: Check BOTH _duration field (from stream) AND player.state.duration (direct state)
-      // This ensures we catch the video loading whether the stream has fired or not
-      // For the first video, streams might not fire reliably, so we need the direct state check
-      final streamDuration = _duration;
-      final directDuration = _player.state.duration;
-      final effectiveDuration = streamDuration > Duration.zero
-          ? streamDuration
-          : directDuration;
-
-      if (effectiveDuration > Duration.zero) {
-        print(
-          'PikPak: Video duration available (stream: $streamDuration, direct: $directDuration, effective: $effectiveDuration)',
-        );
-
-        // Additional verification: wait a bit longer to ensure playback actually started
-        // This gives the player time to transition from "has duration" to "is playing"
-        // and allows all stream listeners to synchronize their state updates
-        print(
-          'PikPak: Duration detected, waiting for playback to stabilize...',
-        );
-        await Future.delayed(const Duration(milliseconds: 800));
-
-        // Check mounted state after delay
-        if (!mounted) {
-          print('PikPak: Widget disposed during stabilization delay');
-          return false;
-        }
-
-        // Final cancellation check after stabilization delay
-        if (_pikPakRetryId != retryId) {
-          print(
-            'PikPak: Retry cancelled during stabilization (navigation occurred)',
-          );
-          return false;
-        }
-
-        // Verify playback is actually happening, not just buffering with duration
-        // This prevents false positives where duration loads but video won't play
-        // Check both stream state and direct player state for reliability
-        final streamPlaying = _isPlaying;
-        final directPlaying = _player.state.playing;
-
-        if (streamPlaying || directPlaying) {
-          print(
-            'PikPak: Video confirmed playing - duration: $effectiveDuration, playing: true (stream: $streamPlaying, direct: $directPlaying)',
-          );
-        } else {
-          // Duration is available but playback hasn't started yet
-          // This is acceptable - duration alone is sufficient for cold storage detection
-          print(
-            'PikPak: Duration available ($effectiveDuration), playback will start shortly',
-          );
-        }
-
-        // CRITICAL FIX: Clear retry state IMMEDIATELY when video loads
-        // This prevents the retry UI from remaining visible if video loaded during monitoring
-        _isPikPakRetrying = false;
-        _pikPakRetryMessage = null;
-        _pikPakRetryCount = 0;
-
-        if (mounted) {
-          setState(() {
-            // State already cleared above - this just triggers rebuild
-          });
-        }
-
-        return true;
-      }
-
-      // Wait a bit before checking again
-      await Future.delayed(const Duration(milliseconds: 500));
-    }
-
-    // Timeout - video metadata never loaded, file is likely in cold storage
-    print(
-      'PikPak: Timeout waiting for video metadata (${totalTimeoutSeconds}s elapsed)',
-    );
-    return false;
-  }
-
-  /// Attempts to play a PikPak video with retry logic for cold storage
-  Future<bool> _playPikPakVideoWithRetry(
-    String videoUrl, {
-    String? overrideProvider,
-    String? overridePikPakFileId,
-    bool isDebrifyTV = false,
-    bool showFailure = true,
-    EpisodePlaybackRequest? request,
-  }) async {
-    if (request?.isCurrent == false) return false;
-    // Only apply retry logic for PikPak videos
-    // Support both playlist entries and Debrify TV (requestMagicNext) flows
-    final currentEntry =
-        _activePlaylist != null &&
-            _currentIndex >= 0 &&
-            _currentIndex < _activePlaylist!.length
-        ? _activePlaylist![_currentIndex]
-        : null;
-    final isPikPak =
-        overrideProvider?.toLowerCase() == 'pikpak' ||
-        overridePikPakFileId != null ||
-        currentEntry?.provider?.toLowerCase() == 'pikpak' ||
-        currentEntry?.pikpakFileId != null ||
-        isDebrifyTV ||
-        videoUrl.contains(
-          'mypikpak.com',
-        ); // Detect PikPak by URL (Stremio TV, etc.)
-
-    print(
-      'PikPak: _playPikPakVideoWithRetry called for index $_currentIndex, isPikPak: $isPikPak, overrideProvider: $overrideProvider, overridePikPakFileId: $overridePikPakFileId, isDebrifyTV: $isDebrifyTV',
-    );
-
-    if (!isPikPak) {
-      // Not a PikPak video, play normally
-      await _openMedia(
-        mk.Media(videoUrl, httpHeaders: _activeHttpHeaders),
-        play: true,
-        request: request,
-      );
-      return true;
-    }
-
-    print('PikPak: Starting retry logic for cold storage handling');
-
-    // Generate a new retry ID to cancel any previous retry loops
-    _pikPakRetryId++;
-    final myRetryId = _pikPakRetryId;
-    print('PikPak: Generated retry ID: $myRetryId');
-
-    // Reset retry state
-    _pikPakRetryCount = 0;
-    _isPikPakRetrying = false;
-    _pikPakRetryMessage = null;
-
-    // Retry with exponential backoff
-    // Standardized retry parameters to match Java/Kotlin implementation
-    const maxRetries = 5; // 6 total attempts including initial
-    const baseDelaySeconds = 2;
-    const metadataTimeoutSeconds = 10; // Standardized timeout
-    const maxDelaySeconds = 18; // Standardized max delay cap
-
-    // CRITICAL FIX: Open player ONCE before the retry loop
-    // This prevents resetting the video to 0:00 if it loads during a retry delay
-    print('PikPak: Initial playback attempt - opening media...');
-    try {
-      await _openMedia(
-        mk.Media(videoUrl, httpHeaders: _activeHttpHeaders),
-        play: true,
-        request: request,
-      );
-    } catch (e) {
-      print('PikPak: Initial player.open() failed with error: $e');
-      // Continue with retry loop - might work on subsequent attempts
-    }
-
-    int attempt = 0;
-    while (attempt <= maxRetries) {
-      try {
-        // Check if cancelled before starting attempt
-        if (_pikPakRetryId != myRetryId || request?.isCurrent == false) {
-          print(
-            'PikPak: Retry loop cancelled before attempt ${attempt + 1} (navigation occurred)',
-          );
-          // Clear state synchronously
-          _isPikPakRetrying = false;
-          _pikPakRetryMessage = null;
-          _pikPakRetryCount = 0;
-          if (mounted) {
-            setState(() {});
-          }
-          return false;
-        }
-
-        print('PikPak: Monitoring attempt ${attempt + 1}/${maxRetries + 1}...');
-
-        // Calculate delay for this attempt (0 for first attempt)
-        final delaySeconds = attempt == 0
-            ? 0
-            : (baseDelaySeconds * (1 << (attempt - 1)));
-        final cappedDelay = delaySeconds > maxDelaySeconds
-            ? maxDelaySeconds
-            : delaySeconds;
-
-        // CRITICAL FIX: Wait for video metadata with EXTENDED monitoring during delay period
-        // This allows detection of video loading DURING the delay, preventing unnecessary player resets
-        print(
-          'PikPak: Waiting for video duration (${metadataTimeoutSeconds}s) + monitoring during delay (${cappedDelay}s)...',
-        );
-        final loadSuccess = await _waitForVideoMetadata(
-          timeoutSeconds: metadataTimeoutSeconds,
-          retryId: myRetryId,
-          additionalMonitoringSeconds: cappedDelay,
-        );
-
-        if (request?.isCurrent == false) return false;
-        if (loadSuccess) {
-          // Success! Video loaded (either immediately or during monitoring/delay)
-          print('PikPak: Video metadata loaded successfully - file is ready!');
-          // Note: Retry state already cleared by _waitForVideoMetadata
-          print('PikPak: Retry mechanism fully deactivated, playback ready');
-          return true;
-        }
-
-        // Video didn't load even after monitoring during delay
-        print(
-          'PikPak: Video metadata failed to load after ${metadataTimeoutSeconds + cappedDelay}s - file likely in cold storage',
-        );
-
-        // Check if this was the last attempt (all retries exhausted)
-        if (attempt >= maxRetries) {
-          // ALL RETRIES EXHAUSTED - handle here
-          print('PikPak: All retry attempts exhausted. Video failed to load.');
-
-          // Clear retry state
-          _isPikPakRetrying = false;
-          _pikPakRetryMessage = null;
-          _pikPakRetryCount = 0;
-
-          if (mounted) {
-            setState(() {});
-
-            if (isDebrifyTV) {
-              // Auto-skip for Debrify TV
-              print('PikPak: Auto-advancing to next video in Debrify TV queue');
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    'Video failed to load. Skipping to next...',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  backgroundColor: Colors.orange,
-                  duration: Duration(seconds: 3),
-                ),
-              );
-              await _goToNextEpisode();
-            } else if (showFailure) {
-              // Show error for regular playlist
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    'Failed to play video after multiple attempts. Please try again later.',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  backgroundColor: Colors.red,
-                  duration: Duration(seconds: 5),
-                ),
-              );
-            }
-          }
-          return false; // Exhausted the cold-storage retries.
-        }
-
-        // Still have retries left - continue with retry logic
-        // Calculate delay for NEXT attempt
-        final nextDelaySeconds = baseDelaySeconds * (1 << attempt);
-        final nextDelay = nextDelaySeconds > maxDelaySeconds
-            ? maxDelaySeconds
-            : nextDelaySeconds;
-
-        // Update UI to show retry state
-        if (mounted) {
-          setState(() {
-            _isPikPakRetrying = true;
-            _pikPakRetryCount = attempt + 1;
-            _pikPakRetryMessage = 'Reactivating video...';
-          });
-        }
-
-        print(
-          'PikPak: Retry ${attempt + 1} - reopening player and waiting ${nextDelay}s before next check...',
-        );
-
-        // Check if widget was disposed
-        if (!mounted) {
-          print('PikPak: Widget disposed before retry');
-          return false;
-        }
-
-        // Check if cancelled
-        if (_pikPakRetryId != myRetryId || request?.isCurrent == false) {
-          print(
-            'PikPak: Retry loop cancelled before reopening player (navigation occurred)',
-          );
-          // Clear state synchronously
-          _isPikPakRetrying = false;
-          _pikPakRetryMessage = null;
-          _pikPakRetryCount = 0;
-          if (mounted) {
-            setState(() {});
-          }
-          return false;
-        }
-
-        // Try reopening the player (might help reactivate cold storage file)
-        try {
-          await _openMedia(
-            mk.Media(videoUrl, httpHeaders: _activeHttpHeaders),
-            play: true,
-            request: request,
-          );
-        } catch (e) {
-          print(
-            'PikPak: Retry ${attempt + 1} - player.open() failed with error: $e',
-          );
-          // Continue - the monitoring in next iteration might still detect if it loads
-        }
-      } catch (e) {
-        print('PikPak: Retry attempt ${attempt + 1} failed with error: $e');
-
-        // Check if this was the last attempt (all retries exhausted)
-        if (attempt >= maxRetries) {
-          // ALL RETRIES EXHAUSTED - handle here
-          print(
-            'PikPak: All retry attempts exhausted after error. Video failed to load.',
-          );
-
-          // Clear retry state
-          _isPikPakRetrying = false;
-          _pikPakRetryMessage = null;
-          _pikPakRetryCount = 0;
-
-          if (mounted) {
-            setState(() {});
-
-            if (isDebrifyTV) {
-              // Auto-skip for Debrify TV
-              print('PikPak: Auto-advancing to next video in Debrify TV queue');
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    'Video failed to load. Skipping to next...',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  backgroundColor: Colors.orange,
-                  duration: Duration(seconds: 3),
-                ),
-              );
-              await _goToNextEpisode();
-            } else if (showFailure) {
-              // Show error for regular playlist
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    'Failed to play video after multiple attempts. Please try again later.',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  backgroundColor: Colors.red,
-                  duration: Duration(seconds: 5),
-                ),
-              );
-            }
-          }
-          return false; // Exhausted the cold-storage retries.
-        }
-
-        // Still have retries left - continue with retry logic
-        // Calculate delay for next attempt
-        final delaySeconds = baseDelaySeconds * (1 << attempt);
-        final nextDelay = delaySeconds > maxDelaySeconds
-            ? maxDelaySeconds
-            : delaySeconds;
-
-        if (mounted) {
-          setState(() {
-            _isPikPakRetrying = true;
-            _pikPakRetryCount = attempt + 1;
-            _pikPakRetryMessage = 'Reactivating video...';
-          });
-        }
-
-        print(
-          'PikPak: Error in attempt ${attempt + 1}, waiting ${nextDelay}s before retry...',
-        );
-
-        // Check if widget was disposed
-        if (!mounted) {
-          print('PikPak: Widget disposed during error handling');
-          return false;
-        }
-
-        // Check if cancelled
-        if (_pikPakRetryId != myRetryId || request?.isCurrent == false) {
-          print(
-            'PikPak: Retry loop cancelled during error handling (navigation occurred)',
-          );
-          // Clear state synchronously
-          _isPikPakRetrying = false;
-          _pikPakRetryMessage = null;
-          _pikPakRetryCount = 0;
-          if (mounted) {
-            setState(() {});
-          }
-          return false;
-        }
-
-        // Try reopening the player for next attempt
-        try {
-          await _openMedia(
-            mk.Media(videoUrl, httpHeaders: _activeHttpHeaders),
-            play: true,
-            request: request,
-          );
-        } catch (reopenError) {
-          print(
-            'PikPak: Error retry - player.open() failed with error: $reopenError',
-          );
-          // Continue - next iteration might succeed
-        }
-      }
-
-      attempt++;
-    }
-    return false;
-  }
-
-  /// Preload episode information in the background
-  Future<void> _preloadEpisodeInfo() async {
-    final seriesPlaylist = _seriesPlaylist;
-
-    if (seriesPlaylist != null && seriesPlaylist.isSeries) {
-      final playlistIdentityToken = _playlistIdentityToken;
-      // Preload episode information in the background
-      // Pass IMDB ID from catalog for faster, more accurate lookup
-      await seriesPlaylist
-          .fetchEpisodeInfo(
-            playlistItem: _constructPlaylistItemData(),
-            imdbId: widget.contentImdbId,
-          )
-          .then((_) async {
-            if (!mounted ||
-                playlistIdentityToken != _playlistIdentityToken ||
-                !identical(seriesPlaylist, _seriesPlaylist)) {
-              return;
-            }
-
-            // TVMaze can discover the series IMDB ID after the initial subtitle
-            // restore has already run. Retry the existing addon subtitle path so
-            // RD/Torbox season packs do not require reopening the player.
-            _retryAddonSubtitleFetchAfterSeriesMetadata(
-              seriesPlaylist,
-              playlistIdentityToken,
-            );
-
-            // Trigger UI update to show the episode info
-            setState(() {});
-
-            // Save discovered IMDB ID back to playlist item for future direct plays
-            await _saveImdbIdToPlaylist(seriesPlaylist);
-
-            // Extract poster URL from series data and save to playlist
-            await _saveSeriesPosterToPlaylist(seriesPlaylist);
-          })
-          .catchError((error) {
-            // Silently handle errors - this is just preloading
-          });
-    } else if (seriesPlaylist != null && !seriesPlaylist.isSeries) {
-      // For non-series content (movie collections), fetch movie metadata for current index
-      // This enables subtitles for movies from Debrid/Torbox/PikPak
-      await seriesPlaylist
-          .fetchMovieMetadataForIndex(_currentIndex)
-          .then((imdbId) {
-            // Trigger UI update if IMDB ID was discovered
-            if (mounted && imdbId != null) {
-              setState(() {});
-            }
-          })
-          .catchError((error) {
-            // Silently handle errors - this is just preloading
-          });
-    } else if (seriesPlaylist == null && widget.contentImdbId == null) {
-      // Single-file playback (no playlist) - try to fetch movie metadata from title
-      await _fetchSingleFileMovieMetadata();
-    }
-  }
-
-  void _retryAddonSubtitleFetchAfterSeriesMetadata(
-    SeriesPlaylist seriesPlaylist,
-    int playlistIdentityToken,
-  ) {
-    final imdbId = seriesPlaylist.imdbId;
-    if (imdbId == null || !imdbId.startsWith('tt')) return;
-    if (playlistIdentityToken != _playlistIdentityToken) return;
-    if (!identical(seriesPlaylist, _seriesPlaylist)) return;
-
-    // If track preferences have not completed yet, the normal restore path will
-    // see the newly discovered IMDB ID and fetch subtitles at the right time.
-    if (!_trackPreferencesReadyForAddonSubtitles) {
-      debugPrint(
-        'VideoPlayer: Series IMDB resolved before track restore; subtitle fetch will run during restore',
-      );
-      return;
-    }
-
-    debugPrint(
-      'VideoPlayer: Series IMDB resolved after initial subtitle fetch, retrying addon subtitles (IMDB: $imdbId)',
-    );
-    unawaited(_addonSubtitles.fetchAndMaybeAutoSelectAddonSubtitle());
-  }
-
-  /// Fetch movie metadata for single-file playback (when no playlist exists)
-  Future<void> _fetchSingleFileMovieMetadata() async {
-    // Skip if already fetched or we have an IMDB ID
-    if (_singleFileImdbFetched || widget.contentImdbId != null) {
-      return;
-    }
-
-    _singleFileImdbFetched = true;
-
-    // Use dynamic title (updated on stream switch) or fall back to widget title
-    final title = _dynamicTitle.isNotEmpty ? _dynamicTitle : widget.title;
-    if (title.isEmpty) {
-      debugPrint('MovieMetadata: No title for single-file lookup');
-      return;
-    }
-
-    debugPrint('MovieMetadata: Single-file lookup for "$title"');
-
-    // Parse the title for movie info
-    final movieInfo = MovieParser.parseFilename(title);
-
-    if (!movieInfo.hasYear) {
-      debugPrint('MovieMetadata: No year pattern in single-file title');
-      return;
-    }
-
-    if (movieInfo.title == null || movieInfo.title!.isEmpty) {
-      debugPrint('MovieMetadata: Could not extract title from single-file');
-      return;
-    }
-
-    debugPrint(
-      'MovieMetadata: Parsed single-file title="${movieInfo.title}", year=${movieInfo.year}',
-    );
-
-    try {
-      final metadata = await MovieMetadataService.lookupMovie(
-        movieInfo.title!,
-        movieInfo.year,
-      );
-
-      if (metadata != null) {
-        _singleFileImdbId = metadata.imdbId;
-        debugPrint(
-          'MovieMetadata: Found IMDB ID "${metadata.imdbId}" for single-file "${metadata.title}"',
-        );
-        if (mounted) {
-          setState(() {});
-        }
-      } else {
-        debugPrint('MovieMetadata: No match found for single-file');
-      }
-    } catch (e) {
-      debugPrint('MovieMetadata: Error during single-file lookup: $e');
-    }
-  }
-
-  Future<void> _saveImdbIdToPlaylist(SeriesPlaylist seriesPlaylist) async {
-    final imdbId = seriesPlaylist.imdbId;
-    if (imdbId == null || !imdbId.startsWith('tt')) return;
-    if (widget.contentImdbId != null) return;
-
-    await PlaylistMetadataStorage.updatePlaylistItemImdbId(
-      imdbId,
-      rdTorrentId: widget.rdTorrentId,
-      torboxTorrentId: widget.torboxTorrentId,
-      pikpakCollectionId: widget.pikpakCollectionId,
-    );
-  }
-
-  /// Save series poster URL to playlist item
-  Future<void> _saveSeriesPosterToPlaylist(
-    SeriesPlaylist seriesPlaylist,
-  ) async {
-    print('🎬 _saveSeriesPosterToPlaylist called');
-    print('  seriesTitle: ${seriesPlaylist.seriesTitle}');
-
-    if (seriesPlaylist.seriesTitle == null) {
-      print('  ⚠️ No series title, skipping poster save');
-      return;
-    }
-
-    // Get identifiers from widget parameters
-    final rdTorrentId = widget.rdTorrentId;
-    final torboxTorrentId = widget.torboxTorrentId;
-    final pikpakCollectionId = widget.pikpakCollectionId;
-
-    print('  rdTorrentId: $rdTorrentId');
-    print('  torboxTorrentId: $torboxTorrentId');
-    print('  pikpakCollectionId: $pikpakCollectionId');
-
-    // Need at least one identifier to save poster
-    if ((rdTorrentId == null || rdTorrentId.isEmpty) &&
-        (torboxTorrentId == null || torboxTorrentId.isEmpty) &&
-        (pikpakCollectionId == null || pikpakCollectionId.isEmpty)) {
-      print('  ⚠️ No valid identifier found, skipping poster save');
-      return;
-    }
-
-    final posterUrl = seriesPlaylist.showPosterUrl;
-    if (posterUrl == null || posterUrl.isEmpty) {
-      print('  ⚠️ No poster URL from fetchEpisodeInfo');
-      return;
-    }
-
-    print('  Poster URL: $posterUrl');
-    try {
-      if (rdTorrentId != null && rdTorrentId.isNotEmpty) {
-        await PlaylistArtworkStorage.updatePlaylistItemPoster(
-          posterUrl,
-          rdTorrentId: rdTorrentId,
-        );
-      }
-      if (torboxTorrentId != null && torboxTorrentId.isNotEmpty) {
-        await PlaylistArtworkStorage.updatePlaylistItemPoster(
-          posterUrl,
-          torboxTorrentId: torboxTorrentId,
-        );
-      }
-      if (pikpakCollectionId != null && pikpakCollectionId.isNotEmpty) {
-        await PlaylistArtworkStorage.updatePlaylistItemPoster(
-          posterUrl,
-          pikpakCollectionId: pikpakCollectionId,
-        );
-      }
-    } catch (e) {
-      print('  ❌ Error saving poster: $e');
-    }
-  }
+      _episodeAdjacent.hasNextEpisode() ||
+      widget.requestMagicNext != null ||
+      _hasStremioTvNext;
 
   late final VpPipLifecycle _pip;
 
@@ -6651,12 +4370,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             final showIdentity =
                 widget.showVideoTitle && !widget.showChannelName;
             final titleInfo = showIdentity
-                ? _getCurrentEpisodeTitleInfo()
+                ? _episodeTitleInfo.getCurrentEpisodeTitleInfo()
                 : null;
             return TvControls(
               title: titleInfo?.title ?? '',
               titleIsClean: titleInfo?.fetched ?? false,
-              subtitle: showIdentity ? _getCurrentEpisodeSubtitle() : null,
+              subtitle: showIdentity
+                  ? _episodeTitleInfo.getCurrentEpisodeSubtitle()
+                  : null,
               infoPanel:
                   _buildIptvInfoPanel(flush: true) ??
                   _buildDebrifyTvInfoPanel(flush: true),
@@ -6688,12 +4409,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                   ? () => _iptvSwitch.switchToIptvChannel(_currentIptvIndex + 1)
                   : _zapRing.canZapIptvChannel
                   ? () => _zapLadder.zapIptvChannel(1)
-                  : (_hasAnyNext ? _goToNextEpisode : null),
+                  : (_hasAnyNext ? _episodeNext.goToNextEpisode : null),
               onPrevious: _hasIptvPrevious
                   ? () => _iptvSwitch.switchToIptvChannel(_currentIptvIndex - 1)
                   : _zapRing.canZapIptvChannel
                   ? () => _zapLadder.zapIptvChannel(-1)
-                  : (_hasPreviousEpisode() ? _goToPreviousEpisode : null),
+                  : (_episodeAdjacent.hasPreviousEpisode()
+                        ? _episodeAdjacent.goToPreviousEpisode
+                        : null),
               onNextChannel: widget.requestNextChannel != null
                   ? _debrifyChannels.goToNextChannel
                   : null,
@@ -6706,7 +4429,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                   _effectiveIptvChannels == null &&
                       ((_activePlaylist?.isNotEmpty ?? false) ||
                           _canFetchEpisodes)
-                  ? () => unawaited(_showRandomPlaybackMenu())
+                  ? () => unawaited(_shuffle.showRandomPlaybackMenu())
                   : null,
               onShowSources: hasSources
                   ? _sourceSwitch.showSourceSheetOverlay
@@ -7129,20 +4852,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _scheduleAutoHide();
   }
 
-  /// Sets manual episode selection mode with automatic reset after 30 seconds
-  void _setManualSelectionMode({bool allowResume = false}) {
-    _isManualEpisodeSelection = true;
-    _allowResumeForManualSelection = allowResume;
-    _manualSelectionResetTimer?.cancel();
-    _manualSelectionResetTimer = Timer(
-      VideoPlayerTimingConstants.manualSelectionResetDuration,
-      () {
-        _isManualEpisodeSelection = false;
-        _allowResumeForManualSelection = false;
-      },
-    );
-  }
-
   // Build subtitle view configuration from settings
   // NOTE: the television bar deliberately does NOT move subtitles.
   //
@@ -7245,7 +4954,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Widget? _buildDebrifyTvInfoPanel({required bool flush}) {
     if (!_debrifyTvOwnsIdentity) return null;
     final name = (_currentChannelName ?? widget.channelName)?.trim();
-    final title = widget.showVideoTitle ? _getCurrentEpisodeTitle() : null;
+    final title = widget.showVideoTitle
+        ? _episodeTitleInfo.getCurrentEpisodeTitle()
+        : null;
     if ((name == null || name.isEmpty) &&
         _currentChannelNumber == null &&
         (title == null || title.isEmpty)) {
@@ -7298,49 +5009,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // Synthetic 1-entry guide backing for single-stream launches (no playlist):
   // lets the episode guide open and offer the show's full episode list.
   SeriesPlaylist? _syntheticGuidePlaylist;
-
-  /// Resolve with the origin first; only an unavailable guide permits fallback.
-  Future<({int season, int episode})?> _resolveAdjacentWithCachedGuide(
-    int season,
-    int episode,
-    int direction,
-  ) async {
-    final resolver = widget.seriesSourceFetcher?.resolveAdjacentEpisode;
-    if (resolver == null) return null;
-    return resolveAdjacentWithGuideFallback(
-      resolver: resolver,
-      season: season,
-      episode: episode,
-      direction: direction,
-      cachedGuide: () {
-        final target = _adjacentEpisode(
-          season,
-          episode,
-          direction,
-          allowResolverFallback: true,
-        );
-        return target == null ? null : (season: target.$1, episode: target.$2);
-      },
-    );
-  }
-
-  (int, int)? _adjacentEpisode(
-    int season,
-    int episode,
-    int direction, {
-    bool allowResolverFallback = false,
-  }) {
-    // Custom catalogs own their episode order, even after TVMaze fills the guide.
-    if (!allowResolverFallback &&
-        widget.seriesSourceFetcher?.resolveAdjacentEpisode != null)
-      return null;
-    final full = _seriesPlaylist?.fullTvmazeEpisodes.isNotEmpty == true
-        ? _seriesPlaylist!.fullTvmazeEpisodes
-        : (_syntheticGuidePlaylist?.fullTvmazeEpisodes ??
-              const <Map<String, dynamic>>[]);
-    final target = cachedGuideAdjacentEpisode(full, season, episode, direction);
-    return target == null ? null : (target.season, target.episode);
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -7615,7 +5283,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             // N key for next episode (Mac)
             if (key == LogicalKeyboardKey.keyN) {
               if (_hasAnyNext) {
-                _goToNextEpisode();
+                _episodeNext.goToNextEpisode();
                 return KeyEventResult.handled;
               }
             }
@@ -7664,13 +5332,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             // Next/Previous episode navigation
             if (key == LogicalKeyboardKey.mediaSkipForward) {
               if (_hasAnyNext) {
-                _goToNextEpisode();
+                _episodeNext.goToNextEpisode();
                 return KeyEventResult.handled;
               }
             }
             if (key == LogicalKeyboardKey.mediaSkipBackward) {
-              if (_hasPreviousEpisode()) {
-                _goToPreviousEpisode();
+              if (_episodeAdjacent.hasPreviousEpisode()) {
+                _episodeAdjacent.goToPreviousEpisode();
                 return KeyEventResult.handled;
               }
             }
@@ -8027,12 +5695,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                   title:
                                       widget.showVideoTitle &&
                                           !widget.showChannelName
-                                      ? _getCurrentEpisodeTitle()
+                                      ? _episodeTitleInfo
+                                            .getCurrentEpisodeTitle()
                                       : '',
                                   subtitle:
                                       widget.showVideoTitle &&
                                           !widget.showChannelName
-                                      ? _getCurrentEpisodeSubtitle()
+                                      ? _episodeTitleInfo
+                                            .getCurrentEpisodeSubtitle()
                                       : null,
                                   // Merged into the dock: the channel panel rides on
                                   // top of the transport bar as one surface.
@@ -8089,7 +5759,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                       _dockExtent.value = h;
                                     }
                                   },
-                                  enhancedMetadata: _getEnhancedMetadata(),
+                                  enhancedMetadata: _episodeTitleInfo
+                                      .getEnhancedMetadata(),
                                   clock: _playbackUiClock,
                                   isPlaying: _isPlaying,
                                   isReady: isReady,
@@ -8162,7 +5833,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                         )
                                       : _zapRing.canZapIptvChannel
                                       ? () => _zapLadder.zapIptvChannel(1)
-                                      : (_hasAnyNext ? _goToNextEpisode : null),
+                                      : (_hasAnyNext
+                                            ? _episodeNext.goToNextEpisode
+                                            : null),
                                   onNextChannel:
                                       widget.requestNextChannel != null
                                       ? _debrifyChannels.goToNextChannel
@@ -8173,8 +5846,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                         )
                                       : _zapRing.canZapIptvChannel
                                       ? () => _zapLadder.zapIptvChannel(-1)
-                                      : (_hasPreviousEpisode()
-                                            ? _goToPreviousEpisode
+                                      : (_episodeAdjacent.hasPreviousEpisode()
+                                            ? _episodeAdjacent
+                                                  .goToPreviousEpisode
                                             : null),
                                   hasNext:
                                       _hasAnyNext ||
@@ -8194,7 +5868,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                       ? _stremioTv.showStremioTvGuideOverlay
                                       : null,
                                   hasPrevious:
-                                      _hasPreviousEpisode() ||
+                                      _episodeAdjacent.hasPreviousEpisode() ||
                                       _hasIptvPrevious ||
                                       _zapRing.canZapIptvChannel,
                                   // A live channel has no timeline to scrub: the
@@ -8217,8 +5891,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                   hideRandom: _effectiveIptvChannels != null,
                                   hideOptions: widget.hideOptions,
                                   hideBackButton: widget.hideBackButton,
-                                  onRandom: () =>
-                                      unawaited(_showRandomPlaybackMenu()),
+                                  onRandom: () => unawaited(
+                                    _shuffle.showRandomPlaybackMenu(),
+                                  ),
                                   hasIptvChannels:
                                       _effectiveIptvChannels?.isNotEmpty ==
                                       true,
@@ -8588,6 +6263,839 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 }
 
+class _VpMetadataPreloadHostAdapter implements VpMetadataPreloadHost {
+  _VpMetadataPreloadHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  int get currentIndex => _s._currentIndex;
+  @override
+  String get dynamicTitle => _s._dynamicTitle;
+  @override
+  int get playlistIdentityToken => _s._playlistIdentityToken;
+  @override
+  SeriesPlaylist? get seriesPlaylist => _s._seriesPlaylist;
+  @override
+  bool get singleFileImdbFetched => _s._singleFileImdbFetched;
+  @override
+  set singleFileImdbFetched(bool v) => _s._singleFileImdbFetched = v;
+  @override
+  set singleFileImdbId(String? v) => _s._singleFileImdbId = v;
+  @override
+  bool get trackPreferencesReadyForAddonSubtitles =>
+      _s._trackPreferencesReadyForAddonSubtitles;
+  @override
+  Map<String, dynamic>? constructPlaylistItemData() =>
+      _s._constructPlaylistItemData();
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  void setState(VoidCallback fn) => _s._vpSetState(fn);
+  @override
+  String? get contentImdbId => _s.widget.contentImdbId;
+  @override
+  String get title => _s.widget.title;
+  @override
+  String? get rdTorrentId => _s.widget.rdTorrentId;
+  @override
+  String? get torboxTorrentId => _s.widget.torboxTorrentId;
+  @override
+  String? get pikpakCollectionId => _s.widget.pikpakCollectionId;
+  @override
+  Future<void> fetchAndMaybeAutoSelectAddonSubtitle() =>
+      _s._addonSubtitles.fetchAndMaybeAutoSelectAddonSubtitle();
+}
+
+class _VpPikPakRetryHostAdapter implements VpPikPakRetryHost {
+  _VpPikPakRetryHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  Map<String, String>? get activeHttpHeaders => _s._activeHttpHeaders;
+  @override
+  List<PlaylistEntry>? get activePlaylist => _s._activePlaylist;
+  @override
+  int get currentIndex => _s._currentIndex;
+  @override
+  set isPikPakRetrying(bool v) => _s._isPikPakRetrying = v;
+  @override
+  set pikPakRetryCount(int v) => _s._pikPakRetryCount = v;
+  @override
+  int get pikPakRetryId => _s._pikPakRetryId;
+  @override
+  set pikPakRetryId(int v) => _s._pikPakRetryId = v;
+  @override
+  set pikPakRetryMessage(String? v) => _s._pikPakRetryMessage = v;
+  @override
+  Future<void> openMedia(
+    mk.Media media, {
+    required bool play,
+    bool? desiredPlay,
+    bool liveStream = false,
+    EpisodePlaybackRequest? request,
+    bool Function()? beforeOpen,
+    Torrent? source,
+    int? preserveStartupEpoch,
+  }) => _s._openMedia(
+    media,
+    play: play,
+    desiredPlay: desiredPlay,
+    liveStream: liveStream,
+    request: request,
+    beforeOpen: beforeOpen,
+    source: source,
+    preserveStartupEpoch: preserveStartupEpoch,
+  );
+  @override
+  Future<void> goToNextEpisode() => _s._episodeNext.goToNextEpisode();
+  @override
+  Future<bool> waitForVideoMetadata({
+    int timeoutSeconds = 15,
+    required int retryId,
+    int additionalMonitoringSeconds = 0,
+  }) => _s._mediaWaits.waitForVideoMetadata(
+    timeoutSeconds: timeoutSeconds,
+    retryId: retryId,
+    additionalMonitoringSeconds: additionalMonitoringSeconds,
+  );
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  BuildContext get context => _s.context;
+  @override
+  void setState(VoidCallback fn) => _s._vpSetState(fn);
+}
+
+class _VpMediaWaitsHostAdapter implements VpMediaWaitsHost {
+  _VpMediaWaitsHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  Duration get duration => _s._duration;
+  @override
+  set isPikPakRetrying(bool v) => _s._isPikPakRetrying = v;
+  @override
+  bool get isPlaying => _s._isPlaying;
+  @override
+  set pikPakRetryCount(int v) => _s._pikPakRetryCount = v;
+  @override
+  int get pikPakRetryId => _s._pikPakRetryId;
+  @override
+  set pikPakRetryMessage(String? v) => _s._pikPakRetryMessage = v;
+  @override
+  mk.Player get player => _s._player;
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  void setState(VoidCallback fn) => _s._vpSetState(fn);
+}
+
+class _VpPlaylistEntryResolveHostAdapter implements VpPlaylistEntryResolveHost {
+  _VpPlaylistEntryResolveHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  List<PlaylistEntry>? get activePlaylist => _s._activePlaylist;
+}
+
+class _VpPlaylistLoadHostAdapter implements VpPlaylistLoadHost {
+  _VpPlaylistLoadHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  Map<String, String>? get activeHttpHeaders => _s._activeHttpHeaders;
+  @override
+  set activeHttpHeaders(Map<String, String>? v) => _s._activeHttpHeaders = v;
+  @override
+  bool get activeMediaShouldPlay => _s._activeMediaShouldPlay;
+  @override
+  set activeMediaShouldPlay(bool v) => _s._activeMediaShouldPlay = v;
+  @override
+  bool get activeMediaUserPaused => _s._activeMediaUserPaused;
+  @override
+  set activeMediaUserPaused(bool v) => _s._activeMediaUserPaused = v;
+  @override
+  mk.Media? get activeOpenedMedia => _s._activeOpenedMedia;
+  @override
+  set activeOpenedMedia(mk.Media? v) => _s._activeOpenedMedia = v;
+  @override
+  List<PlaylistEntry>? get activePlaylist => _s._activePlaylist;
+  @override
+  set allowResumeForManualSelection(bool v) =>
+      _s._allowResumeForManualSelection = v;
+  @override
+  int get currentIndex => _s._currentIndex;
+  @override
+  set currentIndex(int v) => _s._currentIndex = v;
+  @override
+  String? get currentStreamUrl => _s._currentStreamUrl;
+  @override
+  set currentStreamUrl(String? v) => _s._currentStreamUrl = v;
+  @override
+  int get episodeNavigationGeneration => _s._episodeNavigationGeneration;
+  @override
+  set episodeNavigationGeneration(int v) => _s._episodeNavigationGeneration = v;
+  @override
+  bool get isAutoAdvancing => _s._isAutoAdvancing;
+  @override
+  set isAutoAdvancing(bool v) => _s._isAutoAdvancing = v;
+  @override
+  set isManualEpisodeSelection(bool v) => _s._isManualEpisodeSelection = v;
+  @override
+  set isTransitioning(bool v) => _s._isTransitioning = v;
+  @override
+  Timer? get manualSelectionResetTimer => _s._manualSelectionResetTimer;
+  @override
+  set manualSelectionResetTimer(Timer? v) => _s._manualSelectionResetTimer = v;
+  @override
+  Torrent? get openedWatchSource => _s._openedWatchSource;
+  @override
+  bool get pausedByLifecycle => _s._pausedByLifecycle;
+  @override
+  int get pikPakRetryId => _s._pikPakRetryId;
+  @override
+  set pikPakRetryId(int v) => _s._pikPakRetryId = v;
+  @override
+  mk.Player get player => _s._player;
+  @override
+  set rainbowActive(bool v) => _s._rainbowActive = v;
+  @override
+  AnimationController get rainbowController => _s._rainbowController;
+  @override
+  int get resumeVerifyEpoch => _s._resumeVerifyEpoch;
+  @override
+  set resumeVerifyEpoch(int v) => _s._resumeVerifyEpoch = v;
+  @override
+  ResumeWriteGuard get resumeWriteGuard => _s._resumeWriteGuard;
+  @override
+  SeriesPlaylist? get seriesPlaylist => _s._seriesPlaylist;
+  @override
+  MediaServerWatchController get serverWatch => _s._serverWatch;
+  @override
+  bool get sleepStopLatched => _s._sleepStopLatched;
+  @override
+  set sleepStopLatched(bool v) => _s._sleepStopLatched = v;
+  @override
+  Timer? get transitionPhaseTimer => _s._transitionPhaseTimer;
+  @override
+  set transitionRunning(bool v) => _s._transitionRunning = v;
+  @override
+  Timer? get transitionStopTimer => _s._transitionStopTimer;
+  @override
+  int get tvScrubGeneration => _s._tvScrubGeneration;
+  @override
+  set tvScrubGeneration(int v) => _s._tvScrubGeneration = v;
+  @override
+  void tvAbandonScrub() => _s._tvAbandonScrub();
+  @override
+  void resetSubtitleState() => _s._resetSubtitleState();
+  @override
+  Future<void> openMedia(
+    mk.Media media, {
+    required bool play,
+    bool? desiredPlay,
+    bool liveStream = false,
+    EpisodePlaybackRequest? request,
+    bool Function()? beforeOpen,
+    Torrent? source,
+    int? preserveStartupEpoch,
+  }) => _s._openMedia(
+    media,
+    play: play,
+    desiredPlay: desiredPlay,
+    liveStream: liveStream,
+    request: request,
+    beforeOpen: beforeOpen,
+    source: source,
+    preserveStartupEpoch: preserveStartupEpoch,
+  );
+  @override
+  Future<bool> playPikPakVideoWithRetry(
+    String videoUrl, {
+    String? overrideProvider,
+    String? overridePikPakFileId,
+    bool isDebrifyTV = false,
+    bool showFailure = true,
+    EpisodePlaybackRequest? request,
+  }) => _s._pikPakRetry.playPikPakVideoWithRetry(
+    videoUrl,
+    overrideProvider: overrideProvider,
+    overridePikPakFileId: overridePikPakFileId,
+    isDebrifyTV: isDebrifyTV,
+    showFailure: showFailure,
+    request: request,
+  );
+  @override
+  Future<void> waitForVideoReady() => _s._mediaWaits.waitForVideoReady();
+  @override
+  Future<String> resolvePlaylistEntryUrl(int index) =>
+      _s._playlistEntryResolve.resolvePlaylistEntryUrl(index);
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  BuildContext get context => _s.context;
+  @override
+  void setState(VoidCallback fn) => _s._vpSetState(fn);
+  @override
+  Future<void> saveResume() => _s._resumeSave.saveResume();
+  @override
+  Future<void> maybeRestoreResume({
+    bool preferLocalResume = false,
+    bool verifyLanding = false,
+  }) => _s._resumeRestore.maybeRestoreResume(
+    preferLocalResume: preferLocalResume,
+    verifyLanding: verifyLanding,
+  );
+  @override
+  void stopTraktHeartbeat() => _s._trakt.stopTraktHeartbeat();
+  @override
+  void traktScrobble(String action) => _s._trakt.traktScrobble(action);
+  @override
+  void stopSimklHeartbeat() => _s._simkl.stopSimklHeartbeat();
+  @override
+  void simklScrobble(String action) => _s._simkl.simklScrobble(action);
+  @override
+  void updateMdblistPosition() => _s._mdblist.updateMdblistPosition();
+  @override
+  Future<void> switchMdblistTarget() => _s._mdblist.switchMdblistTarget();
+  @override
+  void resetLocalCompletionState() =>
+      _s._completion.resetLocalCompletionState();
+  @override
+  set skipSegmentsMediaReady(bool v) => _s._skip.skipSegmentsMediaReady = v;
+  @override
+  void resetSkipSegmentState() => _s._skip.resetSkipSegmentState();
+  @override
+  Future<bool> tryOpenStartupVod(
+    String url, {
+    Duration timeout = const Duration(seconds: 12),
+    Map<String, String>? httpHeaders,
+    Torrent? source,
+    int? sourceIndex,
+    int attempt = 1,
+    int maxAttempts = 1,
+  }) => _s._startupCandidates.tryOpenStartupVod(
+    url,
+    timeout: timeout,
+    httpHeaders: httpHeaders,
+    source: source,
+    sourceIndex: sourceIndex,
+    attempt: attempt,
+    maxAttempts: maxAttempts,
+  );
+  @override
+  Future<void> restoreTrackPreferences() =>
+      _s._trackPreferences.restoreTrackPreferences();
+}
+
+class _VpEpisodeTitleInfoHostAdapter implements VpEpisodeTitleInfoHost {
+  _VpEpisodeTitleInfoHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  List<PlaylistEntry>? get activePlaylist => _s._activePlaylist;
+  @override
+  int get currentIndex => _s._currentIndex;
+  @override
+  int get currentIptvIndex => _s._currentIptvIndex;
+  @override
+  String get dynamicTitle => _s._dynamicTitle;
+  @override
+  int? get effectiveContentEpisode => _s._effectiveContentEpisode;
+  @override
+  int? get effectiveContentSeason => _s._effectiveContentSeason;
+  @override
+  String? get effectiveContentTitle => _s._effectiveContentTitle;
+  @override
+  List<IptvChannel>? get effectiveIptvChannels => _s._effectiveIptvChannels;
+  @override
+  List<Map<String, dynamic>>? get effectiveStremioTvChannels =>
+      _s._effectiveStremioTvChannels;
+  @override
+  bool get hasStremioTvGuide => _s._hasStremioTvGuide;
+  @override
+  SeriesPlaylist? get seriesPlaylist => _s._seriesPlaylist;
+  @override
+  Future<Map<String, String>?> Function()? get requestMagicNext =>
+      _s.widget.requestMagicNext;
+  @override
+  String get title => _s.widget.title;
+  @override
+  String? get subtitle => _s.widget.subtitle;
+}
+
+class _VpShuffleHostAdapter implements VpShuffleHost {
+  _VpShuffleHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  List<PlaylistEntry>? get activePlaylist => _s._activePlaylist;
+  @override
+  bool get canFetchEpisodes => _s._canFetchEpisodes;
+  @override
+  bool get continuousShuffleEnabled => _s._continuousShuffleEnabled;
+  @override
+  set continuousShuffleEnabled(bool v) => _s._continuousShuffleEnabled = v;
+  @override
+  int get currentIndex => _s._currentIndex;
+  @override
+  String? get currentSeriesImdbId => _s._currentSeriesImdbId;
+  @override
+  bool get episodeFetchInProgress => _s._episodeFetchInProgress;
+  @override
+  Future<void>? get episodeMetadataReady => _s._episodeMetadataReady;
+  @override
+  set episodeMetadataReady(Future<void>? v) => _s._episodeMetadataReady = v;
+  @override
+  int get episodeNavigationGeneration => _s._episodeNavigationGeneration;
+  @override
+  Timer? get hideTimer => _s._hideTimer;
+  @override
+  set isAutoAdvancing(bool v) => _s._isAutoAdvancing = v;
+  @override
+  bool get isTransitioning => _s._isTransitioning;
+  @override
+  set isTransitioning(bool v) => _s._isTransitioning = v;
+  @override
+  int get playlistIdentityToken => _s._playlistIdentityToken;
+  @override
+  math.Random get random => _s._random;
+  @override
+  SeriesPlaylist? get seriesPlaylist => _s._seriesPlaylist;
+  @override
+  int get showShuffleGeneration => _s._showShuffleGeneration;
+  @override
+  set showShuffleGeneration(int v) => _s._showShuffleGeneration = v;
+  @override
+  bool get sleepStopLatched => _s._sleepStopLatched;
+  @override
+  SeriesPlaylist? get syntheticGuidePlaylist => _s._syntheticGuidePlaylist;
+  @override
+  void scheduleAutoHide() => _s._scheduleAutoHide();
+  @override
+  ({int? season, int? episode}) traktSeasonEpisode() =>
+      _s._traktSeasonEpisode();
+  @override
+  Map<String, dynamic>? constructPlaylistItemData() =>
+      _s._constructPlaylistItemData();
+  @override
+  Future<bool> loadPlaylistIndex(
+    int index, {
+    bool autoplay = false,
+    EpisodePlaybackRequest? request,
+    bool skipInitialSave = false,
+    bool preferLocalResume = false,
+    bool suppressResume = false,
+    Torrent? manualValidationSource,
+    int? manualValidationSourceIndex,
+  }) => _s._playlistLoad.loadPlaylistIndex(
+    index,
+    autoplay: autoplay,
+    request: request,
+    skipInitialSave: skipInitialSave,
+    preferLocalResume: preferLocalResume,
+    suppressResume: suppressResume,
+    manualValidationSource: manualValidationSource,
+    manualValidationSourceIndex: manualValidationSourceIndex,
+  );
+  @override
+  void setManualSelectionMode({bool allowResume = false}) =>
+      _s._playlistLoad.setManualSelectionMode(allowResume: allowResume);
+  @override
+  List<int> getMainGroupIndices(List<PlaylistEntry> entries) =>
+      _s._episodeAdjacent.getMainGroupIndices(entries);
+  @override
+  Future<void> preloadEpisodeInfo() => _s._metadataPreload.preloadEpisodeInfo();
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  BuildContext get context => _s.context;
+  @override
+  void setState(VoidCallback fn) => _s._vpSetState(fn);
+  @override
+  SeriesSourceFetcher? get seriesSourceFetcher => _s.widget.seriesSourceFetcher;
+  @override
+  PlaylistViewMode? get viewMode => _s.widget.viewMode;
+  @override
+  void openPlayerMenuQuick(PlayerMenuSection section) =>
+      _s._menu.openPlayerMenuQuick(section);
+  @override
+  (SeriesPlaylist, List<PlaylistEntry>)? buildSyntheticGuide() =>
+      _s._episodeGuide.buildSyntheticGuide();
+  @override
+  Future<EpisodePlaybackOutcome> fetchAndPlayEpisode(
+    int season,
+    int episode, {
+    int? shuffleGeneration,
+    bool autoAdvance = false,
+    EpisodePlaybackRequest? request,
+  }) => _s._episodeFetch.fetchAndPlayEpisode(
+    season,
+    episode,
+    shuffleGeneration: shuffleGeneration,
+    autoAdvance: autoAdvance,
+    request: request,
+  );
+}
+
+class _VpEpisodeAdjacentHostAdapter implements VpEpisodeAdjacentHost {
+  _VpEpisodeAdjacentHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  List<PlaylistEntry>? get activePlaylist => _s._activePlaylist;
+  @override
+  bool get canFetchEpisodes => _s._canFetchEpisodes;
+  @override
+  int get currentIndex => _s._currentIndex;
+  @override
+  bool get episodeFetchInProgress => _s._episodeFetchInProgress;
+  @override
+  int get episodeNavigationGeneration => _s._episodeNavigationGeneration;
+  @override
+  set isTransitioning(bool v) => _s._isTransitioning = v;
+  @override
+  int get playlistIdentityToken => _s._playlistIdentityToken;
+  @override
+  SeriesPlaylist? get seriesPlaylist => _s._seriesPlaylist;
+  @override
+  bool get sleepStopLatched => _s._sleepStopLatched;
+  @override
+  SeriesPlaylist? get syntheticGuidePlaylist => _s._syntheticGuidePlaylist;
+  @override
+  int get tvScrubGeneration => _s._tvScrubGeneration;
+  @override
+  set tvScrubGeneration(int v) => _s._tvScrubGeneration = v;
+  @override
+  void clearBufferingIndicator() => _s._clearBufferingIndicator();
+  @override
+  void tvAbandonScrub() => _s._tvAbandonScrub();
+  @override
+  ({int? season, int? episode}) traktSeasonEpisode() =>
+      _s._traktSeasonEpisode();
+  @override
+  Future<bool> loadPlaylistIndex(
+    int index, {
+    bool autoplay = false,
+    EpisodePlaybackRequest? request,
+    bool skipInitialSave = false,
+    bool preferLocalResume = false,
+    bool suppressResume = false,
+    Torrent? manualValidationSource,
+    int? manualValidationSourceIndex,
+  }) => _s._playlistLoad.loadPlaylistIndex(
+    index,
+    autoplay: autoplay,
+    request: request,
+    skipInitialSave: skipInitialSave,
+    preferLocalResume: preferLocalResume,
+    suppressResume: suppressResume,
+    manualValidationSource: manualValidationSource,
+    manualValidationSourceIndex: manualValidationSourceIndex,
+  );
+  @override
+  void setManualSelectionMode({bool allowResume = false}) =>
+      _s._playlistLoad.setManualSelectionMode(allowResume: allowResume);
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  void setState(VoidCallback fn) => _s._vpSetState(fn);
+  @override
+  Future<Map<String, String>?> Function()? get requestMagicNext =>
+      _s.widget.requestMagicNext;
+  @override
+  String? get contentType => _s.widget.contentType;
+  @override
+  String? get contentImdbId => _s.widget.contentImdbId;
+  @override
+  int? get contentSeason => _s.widget.contentSeason;
+  @override
+  SeriesSourceFetcher? get seriesSourceFetcher => _s.widget.seriesSourceFetcher;
+  @override
+  PlaylistViewMode? get viewMode => _s.widget.viewMode;
+  @override
+  Future<EpisodePlaybackOutcome> fetchAndPlayEpisode(
+    int season,
+    int episode, {
+    int? shuffleGeneration,
+    bool autoAdvance = false,
+    EpisodePlaybackRequest? request,
+  }) => _s._episodeFetch.fetchAndPlayEpisode(
+    season,
+    episode,
+    shuffleGeneration: shuffleGeneration,
+    autoAdvance: autoAdvance,
+    request: request,
+  );
+}
+
+class _VpEpisodeNextHostAdapter implements VpEpisodeNextHost {
+  _VpEpisodeNextHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  Map<String, String>? get activeHttpHeaders => _s._activeHttpHeaders;
+  @override
+  List<PlaylistEntry>? get activePlaylist => _s._activePlaylist;
+  @override
+  bool get continuousShuffleEnabled => _s._continuousShuffleEnabled;
+  @override
+  int get currentIndex => _s._currentIndex;
+  @override
+  set currentStreamUrl(String? v) => _s._currentStreamUrl = v;
+  @override
+  Duration get duration => _s._duration;
+  @override
+  set dynamicTitle(String v) => _s._dynamicTitle = v;
+  @override
+  bool get hasStremioTvNext => _s._hasStremioTvNext;
+  @override
+  set isTransitioning(bool v) => _s._isTransitioning = v;
+  @override
+  int get pikPakRetryId => _s._pikPakRetryId;
+  @override
+  set pikPakRetryId(int v) => _s._pikPakRetryId = v;
+  @override
+  mk.Player get player => _s._player;
+  @override
+  bool get seriesNextDispatched => _s._seriesNextDispatched;
+  @override
+  set seriesNextDispatched(bool v) => _s._seriesNextDispatched = v;
+  @override
+  SeriesPlaylist? get seriesPlaylist => _s._seriesPlaylist;
+  @override
+  set singleFileImdbFetched(bool v) => _s._singleFileImdbFetched = v;
+  @override
+  set singleFileImdbId(String? v) => _s._singleFileImdbId = v;
+  @override
+  int get tvScrubGeneration => _s._tvScrubGeneration;
+  @override
+  set tvScrubGeneration(int v) => _s._tvScrubGeneration = v;
+  @override
+  set tvStaticMessage(String v) => _s._tvStaticMessage = v;
+  @override
+  set tvStaticSubtext(String v) => _s._tvStaticSubtext = v;
+  @override
+  void clearBufferingIndicator() => _s._clearBufferingIndicator();
+  @override
+  void startTransitionOverlay() => _s._startTransitionOverlay();
+  @override
+  void tvAbandonScrub() => _s._tvAbandonScrub();
+  @override
+  void resetSubtitleState() => _s._resetSubtitleState();
+  @override
+  Future<void> openMedia(
+    mk.Media media, {
+    required bool play,
+    bool? desiredPlay,
+    bool liveStream = false,
+    EpisodePlaybackRequest? request,
+    bool Function()? beforeOpen,
+    Torrent? source,
+    int? preserveStartupEpoch,
+  }) => _s._openMedia(
+    media,
+    play: play,
+    desiredPlay: desiredPlay,
+    liveStream: liveStream,
+    request: request,
+    beforeOpen: beforeOpen,
+    source: source,
+    preserveStartupEpoch: preserveStartupEpoch,
+  );
+  @override
+  Duration? randomStartOffset(Duration total) => _s._randomStartOffset(total);
+  @override
+  Duration? percentStartOffset(Duration total) => _s._percentStartOffset(total);
+  @override
+  Future<bool> playShowShuffle({bool autoAdvance = false}) =>
+      _s._shuffle.playShowShuffle(autoAdvance: autoAdvance);
+  @override
+  int? pickShuffleIndex() => _s._shuffle.pickShuffleIndex();
+  @override
+  Future<bool> loadPlaylistIndex(
+    int index, {
+    bool autoplay = false,
+    EpisodePlaybackRequest? request,
+    bool skipInitialSave = false,
+    bool preferLocalResume = false,
+    bool suppressResume = false,
+    Torrent? manualValidationSource,
+    int? manualValidationSourceIndex,
+  }) => _s._playlistLoad.loadPlaylistIndex(
+    index,
+    autoplay: autoplay,
+    request: request,
+    skipInitialSave: skipInitialSave,
+    preferLocalResume: preferLocalResume,
+    suppressResume: suppressResume,
+    manualValidationSource: manualValidationSource,
+    manualValidationSourceIndex: manualValidationSourceIndex,
+  );
+  @override
+  int findNextEpisodeIndex() => _s._episodeAdjacent.findNextEpisodeIndex();
+  @override
+  Future<bool> fetchNextEpisodeInPlayer({bool autoAdvance = false}) =>
+      _s._episodeAdjacent.fetchNextEpisodeInPlayer(autoAdvance: autoAdvance);
+  @override
+  void setManualSelectionMode({bool allowResume = false}) =>
+      _s._playlistLoad.setManualSelectionMode(allowResume: allowResume);
+  @override
+  Future<bool> playPikPakVideoWithRetry(
+    String videoUrl, {
+    String? overrideProvider,
+    String? overridePikPakFileId,
+    bool isDebrifyTV = false,
+    bool showFailure = true,
+    EpisodePlaybackRequest? request,
+  }) => _s._pikPakRetry.playPikPakVideoWithRetry(
+    videoUrl,
+    overrideProvider: overrideProvider,
+    overridePikPakFileId: overridePikPakFileId,
+    isDebrifyTV: isDebrifyTV,
+    showFailure: showFailure,
+    request: request,
+  );
+  @override
+  Future<void> waitForVideoReady() => _s._mediaWaits.waitForVideoReady();
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  BuildContext get context => _s.context;
+  @override
+  void setState(VoidCallback fn) => _s._vpSetState(fn);
+  @override
+  Future<Map<String, String>?> Function()? get requestMagicNext =>
+      _s.widget.requestMagicNext;
+  @override
+  bool get startFromRandom => _s.widget.startFromRandom;
+  @override
+  double? get startAtPercent => _s.widget.startAtPercent;
+  @override
+  String? get contentType => _s.widget.contentType;
+  @override
+  String? get contentImdbId => _s.widget.contentImdbId;
+  @override
+  int? get contentSeason => _s.widget.contentSeason;
+  @override
+  int? get contentEpisode => _s.widget.contentEpisode;
+  @override
+  String? get contentTitle => _s.widget.contentTitle;
+  @override
+  String get title => _s.widget.title;
+  @override
+  SeriesSourceFetcher? get seriesSourceFetcher => _s.widget.seriesSourceFetcher;
+  @override
+  void resetLocalCompletionState() =>
+      _s._completion.resetLocalCompletionState();
+  @override
+  Future<bool> goToNextStremioTvSlot({bool resumeCurrentOnFailure = true}) => _s
+      ._stremioTv
+      .goToNextStremioTvSlot(resumeCurrentOnFailure: resumeCurrentOnFailure);
+  @override
+  Future<bool> setSubtitleTrackWithDiagnostics(
+    mk.SubtitleTrack track, {
+    required String source,
+    bool Function()? isCurrent,
+  }) => _s._subtitleApply.setSubtitleTrackWithDiagnostics(
+    track,
+    source: source,
+    isCurrent: isCurrent,
+  );
+  @override
+  PlayerPipSession? get iosPipSession => _s._pip.iosPipSession;
+}
+
+class _VpPlaybackEndedHostAdapter implements VpPlaybackEndedHost {
+  _VpPlaybackEndedHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  set activeMediaShouldPlay(bool v) => _s._activeMediaShouldPlay = v;
+  @override
+  List<PlaylistEntry>? get activePlaylist => _s._activePlaylist;
+  @override
+  bool get continuousShuffleEnabled => _s._continuousShuffleEnabled;
+  @override
+  IptvChannel? get currentIptvChannel => _s._currentIptvChannel;
+  @override
+  int get currentIptvIndex => _s._currentIptvIndex;
+  @override
+  bool get hasIptvNext => _s._hasIptvNext;
+  @override
+  bool get hasStremioTvNext => _s._hasStremioTvNext;
+  @override
+  IptvLiveRecovery get iptvLiveRecovery => _s._iptvLiveRecovery;
+  @override
+  set isAutoAdvancing(bool v) => _s._isAutoAdvancing = v;
+  @override
+  set sleepStopLatched(bool v) => _s._sleepStopLatched = v;
+  @override
+  bool get validationGateActive => _s._validationGateActive;
+  @override
+  Future<bool> playShowShuffle({bool autoAdvance = false}) =>
+      _s._shuffle.playShowShuffle(autoAdvance: autoAdvance);
+  @override
+  int? pickShuffleIndex() => _s._shuffle.pickShuffleIndex();
+  @override
+  Future<bool> loadPlaylistIndex(
+    int index, {
+    bool autoplay = false,
+    EpisodePlaybackRequest? request,
+    bool skipInitialSave = false,
+    bool preferLocalResume = false,
+    bool suppressResume = false,
+    Torrent? manualValidationSource,
+    int? manualValidationSourceIndex,
+  }) => _s._playlistLoad.loadPlaylistIndex(
+    index,
+    autoplay: autoplay,
+    request: request,
+    skipInitialSave: skipInitialSave,
+    preferLocalResume: preferLocalResume,
+    suppressResume: suppressResume,
+    manualValidationSource: manualValidationSource,
+    manualValidationSourceIndex: manualValidationSourceIndex,
+  );
+  @override
+  int findNextEpisodeIndex() => _s._episodeAdjacent.findNextEpisodeIndex();
+  @override
+  Future<void> goToNextEpisode() => _s._episodeNext.goToNextEpisode();
+  @override
+  Future<bool> fetchNextEpisodeInPlayer({bool autoAdvance = false}) =>
+      _s._episodeAdjacent.fetchNextEpisodeInPlayer(autoAdvance: autoAdvance);
+  @override
+  Future<bool> handleSeriesNextEpisode() =>
+      _s._episodeNext.handleSeriesNextEpisode();
+  @override
+  Future<Map<String, String>?> Function()? get requestMagicNext =>
+      _s.widget.requestMagicNext;
+  @override
+  void observeServerWatch({bool completed = false}) =>
+      _s._resumeSave.observeServerWatch(completed: completed);
+  @override
+  void stopTraktHeartbeat() => _s._trakt.stopTraktHeartbeat();
+  @override
+  void traktScrobble(String action) => _s._trakt.traktScrobble(action);
+  @override
+  void stopSimklHeartbeat() => _s._simkl.stopSimklHeartbeat();
+  @override
+  void simklScrobble(String action) => _s._simkl.simklScrobble(action);
+  @override
+  void mdblistStop({bool complete = false}) =>
+      _s._mdblist.mdblistStop(complete: complete);
+  @override
+  Future<void> markCurrentEpisodeAsFinished() =>
+      _s._completion.markCurrentEpisodeAsFinished();
+  @override
+  Future<void> markCurrentMovieAsFinished() =>
+      _s._completion.markCurrentMovieAsFinished();
+  @override
+  SleepTimerMode get sleepTimerMode => _s._sleep.sleepTimerMode;
+  @override
+  void cancelSleepTimer() => _s._sleep.cancelSleepTimer();
+  @override
+  void showSleepTimerToast(String message) =>
+      _s._sleep.showSleepTimerToast(message);
+  @override
+  Future<void> switchToIptvChannel(int index, {bool quietRecovery = false}) =>
+      _s._iptvSwitch.switchToIptvChannel(index, quietRecovery: quietRecovery);
+  @override
+  Future<bool> goToNextStremioTvSlot({bool resumeCurrentOnFailure = true}) => _s
+      ._stremioTv
+      .goToNextStremioTvSlot(resumeCurrentOnFailure: resumeCurrentOnFailure);
+}
+
 class _VpEpisodeGuideHostAdapter implements VpEpisodeGuideHost {
   _VpEpisodeGuideHostAdapter(this._s);
   final _VideoPlayerScreenState _s;
@@ -8614,12 +7122,12 @@ class _VpEpisodeGuideHostAdapter implements VpEpisodeGuideHost {
       _s._syntheticGuidePlaylist = v;
   @override
   void setManualSelectionMode({bool allowResume = false}) =>
-      _s._setManualSelectionMode(allowResume: allowResume);
+      _s._playlistLoad.setManualSelectionMode(allowResume: allowResume);
   @override
   ({int? season, int? episode}) traktSeasonEpisode() =>
       _s._traktSeasonEpisode();
   @override
-  Future<void> preloadEpisodeInfo() => _s._preloadEpisodeInfo();
+  Future<void> preloadEpisodeInfo() => _s._metadataPreload.preloadEpisodeInfo();
   @override
   Map<String, dynamic>? constructPlaylistItemData() =>
       _s._constructPlaylistItemData();
@@ -8633,7 +7141,7 @@ class _VpEpisodeGuideHostAdapter implements VpEpisodeGuideHost {
     bool suppressResume = false,
     Torrent? manualValidationSource,
     int? manualValidationSourceIndex,
-  }) => _s._loadPlaylistIndex(
+  }) => _s._playlistLoad.loadPlaylistIndex(
     index,
     autoplay: autoplay,
     request: request,
@@ -8710,7 +7218,7 @@ class _VpEpisodeFetchHostAdapter implements VpEpisodeFetchHost {
   bool get validationGateActive => _s._validationGateActive;
   @override
   void setManualSelectionMode({bool allowResume = false}) =>
-      _s._setManualSelectionMode(allowResume: allowResume);
+      _s._playlistLoad.setManualSelectionMode(allowResume: allowResume);
   @override
   bool get mounted => _s.mounted;
   @override
@@ -8989,7 +7497,7 @@ class _VpDebrifyTvChannelsHostAdapter implements VpDebrifyTvChannelsHost {
     preserveStartupEpoch: preserveStartupEpoch,
   );
   @override
-  Future<void> waitForVideoReady() => _s._waitForVideoReady();
+  Future<void> waitForVideoReady() => _s._mediaWaits.waitForVideoReady();
   @override
   Duration? randomStartOffset(Duration total) => _s._randomStartOffset(total);
   @override
@@ -9147,12 +7655,12 @@ class _VpSourcePlaylistSwitchHostAdapter implements VpSourcePlaylistSwitchHost {
   @override
   void clearBufferingIndicator() => _s._clearBufferingIndicator();
   @override
-  Future<void> waitForVideoReady() => _s._waitForVideoReady();
+  Future<void> waitForVideoReady() => _s._mediaWaits.waitForVideoReady();
   @override
   ({int? season, int? episode}) traktSeasonEpisode() =>
       _s._traktSeasonEpisode();
   @override
-  Future<void> preloadEpisodeInfo() => _s._preloadEpisodeInfo();
+  Future<void> preloadEpisodeInfo() => _s._metadataPreload.preloadEpisodeInfo();
   @override
   Future<bool> loadPlaylistIndex(
     int index, {
@@ -9163,7 +7671,7 @@ class _VpSourcePlaylistSwitchHostAdapter implements VpSourcePlaylistSwitchHost {
     bool suppressResume = false,
     Torrent? manualValidationSource,
     int? manualValidationSourceIndex,
-  }) => _s._loadPlaylistIndex(
+  }) => _s._playlistLoad.loadPlaylistIndex(
     index,
     autoplay: autoplay,
     request: request,
@@ -9340,7 +7848,7 @@ class _VpSourceSwitchHostAdapter implements VpSourceSwitchHost {
   @override
   void resetSubtitleState() => _s._resetSubtitleState();
   @override
-  Future<void> waitForVideoReady() => _s._waitForVideoReady();
+  Future<void> waitForVideoReady() => _s._mediaWaits.waitForVideoReady();
   @override
   Future<void> setExternalAudioTrack(String url) =>
       _s._setExternalAudioTrack(url);
@@ -10243,7 +8751,7 @@ class _VpResumeRestoreHostAdapter implements VpResumeRestoreHost {
   @override
   bool get screenDisposed => _s._screenDisposed;
   @override
-  Future<void> waitForDuration() => _s._waitForDuration();
+  Future<void> waitForDuration() => _s._mediaWaits.waitForDuration();
   @override
   Future<Map<String, dynamic>?> getEnhancedPlaybackState() =>
       _s._resumeSave.getEnhancedPlaybackState();
@@ -10575,7 +9083,7 @@ class _VpPlayerMenuUiHostAdapter implements VpPlayerMenuUiHost {
   String? get effectiveContentType => _s._effectiveContentType;
   @override
   Future<void> fetchSingleFileMovieMetadata() =>
-      _s._fetchSingleFileMovieMetadata();
+      _s._metadataPreload.fetchSingleFileMovieMetadata();
   @override
   void hidePlayerMenu() => _s._menu.hidePlayerMenu();
   @override
@@ -10634,8 +9142,9 @@ class _VpPlayerMenuUiHostAdapter implements VpPlayerMenuUiHost {
     cacheKey: cacheKey,
   );
   @override
-  Future<void> playRandomOnce({bool disableContinuousShuffle = false}) =>
-      _s._playRandomOnce(disableContinuousShuffle: disableContinuousShuffle);
+  Future<void> playRandomOnce({bool disableContinuousShuffle = false}) => _s
+      ._shuffle
+      .playRandomOnce(disableContinuousShuffle: disableContinuousShuffle);
   @override
   mk.Player get player => _s._player;
   @override
@@ -10660,7 +9169,8 @@ class _VpPlayerMenuUiHostAdapter implements VpPlayerMenuUiHost {
   ValueNotifier<String?> get subtitleSelectionCorrection =>
       _s._subtitleSelectionCorrection;
   @override
-  Future<void> toggleContinuousShuffle() => _s._toggleContinuousShuffle();
+  Future<void> toggleContinuousShuffle() =>
+      _s._shuffle.toggleContinuousShuffle();
   @override
   set userManuallySelectedSubtitle(bool v) =>
       _s._userManuallySelectedSubtitle = v;
@@ -11162,7 +9672,7 @@ class _VpPipLifecycleHostAdapter implements VpPipLifecycleHost {
   @override
   void togglePlay() => _s._togglePlay();
   @override
-  Future<void> goToNextEpisode() => _s._goToNextEpisode();
+  Future<void> goToNextEpisode() => _s._episodeNext.goToNextEpisode();
   @override
   void cancelPendingIptvCatchup({bool hideFeedback = true}) =>
       _s._iptvGuide.cancelPendingIptvCatchup(hideFeedback: hideFeedback);

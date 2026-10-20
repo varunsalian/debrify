@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PROVISIONAL P18 evidence-only materialization on the P17 merge (249566376); never writes lib/."""
+"""FINAL P18 evidence-only materialization on the P17 merge (249566376); never writes lib/."""
 import argparse
 import json
 import subprocess
@@ -158,7 +158,7 @@ def build(package):
    if occurrences(vals,['widget','.',name]):g['forwarders'].append(typ+' get '+name+' => _s.widget.'+name+';')
   for c in CHAINS:
    if occurrences(vals,c['before']):g['forwarders']+=c['forwarders']
- spec.update(phase=18,status='draft',span_order=list(spans),finalization=dict(label='PROVISIONAL',preparation_base=BASE,history='All seventeen applied phases; every earlier destination derived without a whitelist.'),provisional=dict(label='PROVISIONAL',preparation_base=BASE,pending=['design review','step T'],host_contracts={g['name']:g['forwarders'] for g in GROUPS},construction='Final assignments follow all five P17 collaborators.'))
+ spec.update(phase=18,status='FINAL',span_order=list(spans),finalization=dict(label='FINAL',preparation_base=BASE,history='All seventeen applied phases; every earlier destination derived without a whitelist.'),provisional=dict(label='FINAL',preparation_base=BASE,pending=[],host_contracts={g['name']:g['forwarders'] for g in GROUPS},construction='Final assignments follow all five P17 collaborators.'))
  registrations=[dict(before=['widget','.',n],after=['_host','.',n],binding='unbound',role_change='live widget selector') for n in WIDGET]+[dict(before=c['before'],after=['_host','.',c['name']],binding='unbound',role_change='Complete live collaborator chain via facade routing') for c in CHAINS]
  spec['guards']=dict(occurrence_field_bindings=dict(owners=[STATE],state_classes=[STATE],mandatory_qualification=True,owner_scoped_bare_fields={STATE+'.'+n:byname[n]['name'] for n in FIELDS}),record_owners=[STATE],record_fields={STATE:FIELDS},receiver_owners={g['receiver']:g['name'] for g in GROUPS},receiver_paths={g['receiver']:g['name'] for g in GROUPS},receiver_members={g['name']:[n[1:] for n in g['names']] for g in GROUPS},receivers=['_host',*[g['receiver'] for g in GROUPS]],live_state_receivers=['_host'],adapter_state_prefixes=['_s'],require_live_state_callbacks=True,host_property_bindings=hostbindings,registered_occurrence_substitutions=registrations)
  retained_sites=[]
@@ -219,6 +219,6 @@ def main():
  errors=[] if a.no_check else check(spec,original,formatted,a.parser_package)
  assert all(v<=500 for k,v in sizes.items() if k!='facade'),sizes
  if not a.no_check and not errors:(R/'dev/tool/dart_moves/vplayer_p18.json').write_text(json.dumps(spec,indent=2)+'\n')
- for file,value in [('membership.json',measured),('retained-sites.json',sites),('hosts.json',spec['provisional']['host_contracts']),('spec.json',spec),('result.json',dict(label='PROVISIONAL',comparison_errors=errors,sizes=sizes,retained_references=len(sites)))]: (a.probe/file).write_text(json.dumps(value,indent=2)+'\n')
- print('PROVISIONAL differences',len(errors),sizes,'retained',len(sites))
+ for file,value in [('membership.json',measured),('retained-sites.json',sites),('hosts.json',spec['provisional']['host_contracts']),('spec.json',spec),('result.json',dict(label='FINAL',comparison_errors=errors,sizes=sizes,retained_references=len(sites)))]: (a.probe/file).write_text(json.dumps(value,indent=2)+'\n')
+ print('FINAL differences',len(errors),sizes,'retained',len(sites))
 if __name__=='__main__':main()

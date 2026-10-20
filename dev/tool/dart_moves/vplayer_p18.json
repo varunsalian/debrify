@@ -2,7 +2,7 @@
   "schema": 1,
   "series": "vplayer",
   "phase": 18,
-  "status": "draft",
+  "status": "applied",
   "base": "249566376",
   "source": "lib/screens/video_player_screen.dart",
   "feature": "lib/features/video_player",
@@ -17836,17 +17836,14 @@
     ":tail"
   ],
   "finalization": {
-    "label": "PROVISIONAL",
+    "label": "FINAL",
     "preparation_base": "249566376",
     "history": "All seventeen applied phases; every earlier destination derived without a whitelist."
   },
   "provisional": {
-    "label": "PROVISIONAL",
+    "label": "FINAL",
     "preparation_base": "249566376",
-    "pending": [
-      "design review",
-      "step T"
-    ],
+    "pending": [],
     "host_contracts": {
       "VpPlaybackEnded": [
         "set activeMediaShouldPlay(bool v) => _s._activeMediaShouldPlay = v;",
