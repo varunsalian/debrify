@@ -8827,13 +8827,19 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
     A04 S18 S07 T03 L14 N18 N19 A01 A03 N16 M07.
   - With the executor harness, `point_690`/`691` were killed against the
     two-episode shuffle case (`witness-0b-*`, control passed).
-- **Rate after Step 0b: 79/98 = 80.6%.** S09 remains an argued survivor:
-  `suppressResume` is masked by the auto-advance and manual-window resume
-  skips unless a lazy entry's resolution outlasts the 30 s window. These are
-  still open and recorded in `dispositions.json` (`step0b`):
+- **Rate after Step 0b: 79/98 = 80.6%.** There are 19 P18 survivors. S09 is
+  an **untested behaviour, not a masked one** (post-gate review P2-1, which
+  corrects the earlier "argued survivor" text). Its resume effect is masked by
+  the auto-advance and manual-window skips. But `suppressResume` also selects
+  the playback-proof wait (`vp_playlist_load.dart:385–399`), which makes a
+  shuffle entry that never plays try another source rather than return
+  silently, and it gates the PikPak early return (`:354`). That remains a
+  test gap (Follow-up). The others are still open and recorded in
+  `dispositions.json` (`step0b`):
   - N20, N23, S11, S16, L02, L06, L13;
   - the PikPak per-attempt mutants W02/W04/W05/W07/W09–W12;
-  - M04.
+  - M04;
+  - M06 and M09, which legacy suites kill.
 
   An overlay-gone assertion for N23 fails on the original as well, because
   the transition overlay outlives a failed Debrify TV Next, so it was not
@@ -8884,6 +8890,35 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
   `check_storage_references.py` fails identically on `249566376` (53
   findings, the Follow-up series test debt).
 - Next: independent post-gate review, merge, then M4.
+
+### 2026-10-20 — Phase 18 independent post-gate review (review agent) — "No P1s"
+
+- Range `249566376..820e5bd14`; the report is
+  `refactor-evidence/vplayer/p18/review/post-gate-review.md`. The reviewer
+  re-ran:
+  - the P18 move checker: current, `--self-test` (317 negatives) and P17
+    history, each with 0 differences;
+  - CI analyze, the allowlist and the comparator (209 scoped, 0 additions);
+  - the reader retargets (27/27), the Step 0b files (14/14), sizes and
+    format;
+  - the storage self-test (53 identical findings);
+  - the gate compare (byte-identical).
+
+  It compared all 40 moved bodies token by token against `249566376`: only
+  receiver rewrites and flattened chains differ, and `dispose` is
+  byte-identical.
+- **P2-1 (folded):** the S09 disposition was corrected above (untested
+  behaviour, Follow-up).
+- **P3s (folded or recorded):**
+  - the survivor list now includes M06 and M09;
+  - `p18/retained.txt` (44, including `dispose`) is superseded by Step T's
+    `final/retained-sites.json` (43, `_manualSelectionResetTimer` stays
+    State-owned), and likewise the resolution's "six fields / 44" wording;
+  - the renamed `CompletionDelivery('waitForVideoMetadata')` hold also
+    matches the adapter forwarder frames (accepted);
+  - `compare.py` would merge duplicate names and `run_inventory.sh` skips
+    missing files; neither occurred (3,139 unique names, 455 files).
+- Next: merge, then M4.
 
 ## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
 
