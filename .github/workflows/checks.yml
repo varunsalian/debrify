@@ -75,8 +75,11 @@ jobs:
       # First production video_player files: exhaustive ownership/history and
       # frozen scaffolding checks use separate tool-only parser packages.
       # Phase 18 owns episode navigation, shuffle, title info, playlist load/resolve, media waits, PikPak retry and metadata preload; all accepted seam patches stay frozen.
-      - run: python3 dev/tool/check_dart_moves.py --manifest dev/tool/dart_moves/vplayer_p18.json --self-test --parser-package .dart_tool/vplayer_parser/ci_moves_self/.dart_tool/package_config.json
-      - run: python3 dev/tool/check_dart_moves.py --manifest dev/tool/dart_moves/vplayer_p18.json --parser-package .dart_tool/vplayer_parser/ci_moves_current/.dart_tool/package_config.json
+      # S2f checkpoint: P18 is proven at its accepted boundary 46bc00ce7; the
+      # current facade (P18 plus exactly the three S2f patches) is proven by the
+      # platform seam proof's checkpoint overlay until phase 19 step 1.
+      - run: python3 dev/tool/check_dart_moves.py --manifest dev/tool/dart_moves/vplayer_p18.json --at 46bc00ce7 --self-test --parser-package .dart_tool/vplayer_parser/ci_moves_self/.dart_tool/package_config.json
+      - run: python3 dev/tool/check_dart_moves.py --manifest dev/tool/dart_moves/vplayer_p18.json --at 46bc00ce7 --parser-package .dart_tool/vplayer_parser/ci_moves_current/.dart_tool/package_config.json
       - run: python3 dev/tool/check_dart_moves.py --manifest dev/tool/dart_moves/vplayer_p1.json --at 31a347ad2 --parser-package .dart_tool/vplayer_parser/ci_moves_p1_history/.dart_tool/package_config.json
       - run: python3 dev/tool/check_dart_moves.py --manifest dev/tool/dart_moves/vplayer_p2.json --at fc24e32ae --parser-package .dart_tool/vplayer_parser/ci_moves_p2_history/.dart_tool/package_config.json
       - run: python3 dev/tool/check_dart_moves.py --manifest dev/tool/dart_moves/vplayer_p3.json --at 890df14d8 --parser-package .dart_tool/vplayer_parser/ci_moves_p3_history/.dart_tool/package_config.json
@@ -94,9 +97,10 @@ jobs:
       - run: python3 dev/tool/check_dart_moves.py --manifest dev/tool/dart_moves/vplayer_p15.json --at ed7c6717a --parser-package .dart_tool/vplayer_parser/ci_moves_p15_history/.dart_tool/package_config.json
       - run: python3 dev/tool/check_dart_moves.py --manifest dev/tool/dart_moves/vplayer_p16.json --at c094c864c --parser-package .dart_tool/vplayer_parser/ci_moves_p16_history/.dart_tool/package_config.json
       - run: python3 dev/tool/check_dart_moves.py --manifest dev/tool/dart_moves/vplayer_p17.json --at 249566376 --parser-package .dart_tool/vplayer_parser/ci_moves_p17_history/.dart_tool/package_config.json
-      # S remains frozen; S2 through S2e preserve all platform checkpoints.
+      # S remains frozen; S2 through S2f preserve all platform checkpoints.
       - run: python3 dev/tool/vplayer_seam_proof.py --self-test --parser-package .dart_tool/vplayer_parser/ci_seam/.dart_tool/package_config.json
       # S2e: exactly two candidate reads; no P15 placeholder/history exemption.
+      # S2f: exactly two dedicated renderer-validation reads plus three hook insertions.
       - run: python3 dev/tool/vplayer_platform_seam_proof.py --self-test --parser-package .dart_tool/vplayer_parser/ci_platform_seam/.dart_tool/package_config.json
       - run: python3 dev/tool/recordings_architecture_test.py
       - run: python3 dev/tool/alldebrid_files_architecture_test.py

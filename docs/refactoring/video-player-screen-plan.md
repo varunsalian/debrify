@@ -9300,6 +9300,48 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
   Device checks stay on the end-of-series checklist.
 - Next: Phase 19 design, then a review agent's review.
 
+### 2026-10-20 — Phase 19 S2f seam checkpoint (executor: Claude)
+
+- From design `c3be82656` on M4 `46bc00ce7`. Production change: two
+  `Platform.isAndroid` reads become `VpS2Hooks.isAndroidRendererValidation`.
+  The sites are `_installDecoderObservers` (early return) and
+  `_scheduleRendererStartupValidation` (`isAndroid:` argument). `VpS2Hooks`
+  gains the `androidRendererValidation` callback, field and getter. The getter
+  defaults to `Platform.isAndroid` and never reads the `android` callback, so
+  the 17 Android-override suites keep their current path.
+- `vplayer_p19_seam.json` (checkpoint, base `46bc00ce7`, owner P18) classifies
+  all **685** facade spans with three patched declarations and
+  `patched_class_projection` for `VpS2Hooks`. `vplayer_checkpoint_proof.py`
+  now holds both the S2e and S2f checkpoints.
+- Platform seam proof self-test: PASS. Its new negatives are rejected at the
+  exact site: per site, wrong predicate, wrong hook predicate, override
+  bypassed, predicate twice and operand order, plus TV predicate changed for
+  the schedule site. Also rejected: the three getter-default negatives and S2b
+  `_canFallbackExplicitRenderer` wrong hook predicate. S proof: exit 0.
+- CI: the P18 current and self-test checks now run `--at 46bc00ce7` because the
+  current facade carries the S2f patches. Its history check passes with 0
+  differences. The current facade is proven by the S2f checkpoint overlay
+  until Step 1.
+- File-size exception: the facade baseline was raised 10093 → 10096
+  (temporary, documented in the baseline). Phase 19 Step 1 lowers it.
+- Checks:
+  - analyzer: 209 scoped diagnostics, 0 additions;
+  - CI allowlist: nothing new;
+  - format: 0 changed;
+  - size and architecture checks: pass.
+- **Before/after**: 455-file P18 inventory (`nice -n 19`, `--no-pub`,
+  `--concurrency=1`, test hooks) against P18 gate `p18/gate/current.jsonl`
+  (`d328da2c4`; lib/test/dev identical to `46bc00ce7`):
+  - 3139 → 3140 cases, 0 load errors.
+  - The only identity added is "S2f renderer validation is independent of the
+    Android override".
+  - The single failure, `playback_startup_view_test.dart` "startup shield
+    remains opaque and noninteractive in PiP", is the same one as the
+    baseline (pre-existing).
+  - Evidence: `refactor-evidence/vplayer/p19/seam/` (`after.jsonl`,
+    `compare.txt`, proofs, analyzer logs).
+- Next: S2f independent review (review agent), then Step T.
+
 ## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
 
 Reviewed at `c5c8e3500` (facade byte-identical to `be4cd78aa`; split,

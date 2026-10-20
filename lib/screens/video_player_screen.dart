@@ -2822,7 +2822,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // reinstall that wiped the device's preferences, and either could have
     // done it. Kept regardless, because a probe that only feeds an
     // Android-gated fallback has no business running anywhere else.
-    if (!Platform.isAndroid) return;
+    if (!VpS2Hooks.isAndroidRendererValidation) return;
 
     try {
       await platform.observeProperty('hwdec-current', (value) async {
@@ -2846,7 +2846,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   void _scheduleRendererStartupValidation() {
     if (!AndroidRendererStartupFallback.shouldArm(
-          isAndroid: Platform.isAndroid,
+          isAndroid: VpS2Hooks.isAndroidRendererValidation,
           isAndroidTv: PlatformUtil.isAndroidTvCached,
           mode: _androidVideoRendererMode,
           alreadyValidated: _rendererValidatedForSession,
@@ -10065,9 +10065,10 @@ class VideoPlayerScreenTestHooks {
 /// Platform predicates for the separately reviewed PiP characterization seam.
 @visibleForTesting
 class VpS2Hooks {
-  const VpS2Hooks({this.ios, this.android});
+  const VpS2Hooks({this.ios, this.android, this.androidRendererValidation});
   final bool Function()? ios;
   final bool Function()? android;
+  final bool Function()? androidRendererValidation;
   static VpS2Hooks? _installed;
 
   static void install(VpS2Hooks? hooks) {
@@ -10090,4 +10091,6 @@ class VpS2Hooks {
   static bool get isIOS => _installed?.ios?.call() ?? Platform.isIOS;
   static bool get isAndroid =>
       _installed?.android?.call() ?? Platform.isAndroid;
+  static bool get isAndroidRendererValidation =>
+      _installed?.androidRendererValidation?.call() ?? Platform.isAndroid;
 }

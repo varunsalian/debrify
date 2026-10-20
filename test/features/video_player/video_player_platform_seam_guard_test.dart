@@ -30,6 +30,36 @@ void main() {
     expect(result.stdout, contains('"s2c_sites": 1'));
     expect(result.stdout, contains('"s2d_sites": 2'));
     expect(result.stdout, contains('"s2e_sites": 2'));
+    expect(result.stdout, contains('"s2f_sites": 2'));
+    expect(result.stdout, contains('"s2f_patched_declarations": 3'));
+    expect(result.stdout, contains('"s2f_hook_insertions": 3'));
+    for (final site in [
+      '_installDecoderObservers',
+      '_scheduleRendererStartupValidation',
+    ]) {
+      for (final negative in [
+        'wrong predicate',
+        'wrong hook predicate',
+        'override bypassed',
+        'predicate twice',
+        'operand order',
+        if (site == '_scheduleRendererStartupValidation')
+          'TV predicate changed',
+      ]) {
+        expect(result.stdout, contains('S2f $site: $negative'));
+      }
+    }
+    expect(
+      result.stdout,
+      contains('S2b _canFallbackExplicitRenderer: wrong hook predicate'),
+    );
+    for (final negative in [
+      'wrong renderer-validation default',
+      'renderer-validation reads android callback',
+      'renderer-validation override ignored',
+    ]) {
+      expect(result.stdout, contains(negative));
+    }
     for (final site in ['_openStartupDebridDirect', '_tryOpenStartupVod']) {
       for (final negative in [
         'wrong predicate',
@@ -99,6 +129,40 @@ void main() {
   test('S2 native defaults are unchanged without an installed override', () {
     expect(VpS2Hooks.isIOS, Platform.isIOS);
     expect(VpS2Hooks.isAndroid, Platform.isAndroid);
+    expect(VpS2Hooks.isAndroidRendererValidation, Platform.isAndroid);
+  });
+
+  test('S2f renderer validation is independent of the Android override', () {
+    if (!enabled) return;
+    final calls = <String>[];
+    VpS2Hooks.install(
+      VpS2Hooks(
+        android: () {
+          calls.add('android');
+          return true;
+        },
+      ),
+    );
+    expect(VpS2Hooks.isAndroidRendererValidation, Platform.isAndroid);
+    expect(calls, isEmpty);
+    expect(VpS2Hooks.isAndroid, isTrue);
+    expect(calls, ['android']);
+    calls.clear();
+    var validation = true;
+    VpS2Hooks.install(
+      VpS2Hooks(
+        androidRendererValidation: () {
+          calls.add('validation');
+          return validation;
+        },
+      ),
+    );
+    expect(VpS2Hooks.isAndroid, Platform.isAndroid);
+    expect(calls, isEmpty);
+    expect(VpS2Hooks.isAndroidRendererValidation, isTrue);
+    validation = false;
+    expect(VpS2Hooks.isAndroidRendererValidation, isFalse);
+    expect(calls, ['validation', 'validation']);
   });
 
   test('S2 installation requires the explicit test-only compile-time flag', () {
