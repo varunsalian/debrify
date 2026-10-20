@@ -9367,6 +9367,72 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
   as a follow-up. A comment edit would change the proven facade tokens.
 - Next: Phase 19 Step T.
 
+### 2026-10-20 — Phase 19 Step T (executor: Claude)
+
+- Base `4c97c4687` (S2f `c8c8a6ffc` plus its review fold). The generator
+  `dev/tool/draft_vplayer_engine_moves.py` writes evidence only, plus
+  manifest `vplayer_p19.json` (FINAL, applied at Step 1).
+- **28 moved declarations** (21 methods, 7 fields including both statics)
+  go into five files. There are 15 retained references: 12 State call sites
+  plus the three patched P16/P17 adapters (`_VpSourceSwitchHostAdapter`,
+  `_VpStartupGateHostAdapter`, `_VpPlayerMenuUiHostAdapter`, as
+  `patched_class_projection`). They are listed in `p19/retained.txt`; the
+  dispose tear-off stays a tear-off.
+- Zero comparison differences.
+- Formatted sizes, all ≤ 500:
+  - audio 205;
+  - lease 94;
+  - tvOS 149;
+  - probe 349;
+  - fallback 355.
+
+  The facade goes from 10,096 to 9,447.
+- Hosts are frozen as (names/declarations): audio 8/9, lease 1/1, tvOS 8/11,
+  probe 18/23 and fallback 50/57. The contracts are in the deps doc.
+  - The fallback projects `isAndroid` and `isAndroidRendererValidation`; the
+    probe projects only `isAndroidRendererValidation`. Both are live
+    `VpS2Hooks` reads in the facade, and no destination names `VpS2Hooks`.
+  - Static Host getter `tvReleaseLogChannel`.
+  - `outputLeaseTimeout` and `androidPlayerDiagnosticChannel` stay static in
+    their owners, renamed public as moved members are.
+- **Negatives** (`dev/tool/test_dart_engine_moves.py`, `p19/stepT/negatives.log`):
+  the original self-comparison, the materialization and **22 real-manifest
+  negatives** pass. They cover:
+  - static-final laziness;
+  - inert fields;
+  - the diagnostic channel name;
+  - the constructor;
+  - the flip-chain store;
+  - each S2b/S2f site predicate and projection;
+  - the static channel;
+  - the fallback's synchronous prefix and generation direction;
+  - the remedy callback guard;
+  - the three retained adapters;
+  - the dispose tear-off, claim await and boundary call sites;
+  - a duplicate move.
+- **Prototype analyzer** (CI command on a scratch copy,
+  `p19/stepT/probe-analyze.txt`): 0 errors; 609 issues against 604 at S2f.
+  By identity:
+  - additions: four newly unused facade imports (`audio_effect_session_service`,
+    `player_audio_config`, `video_output_lease`, `language_mapping`), one
+    `curly_braces_in_flow_control_structures` formatter wrap (tvOS) and one
+    `use_build_context_synchronously` from a `_host.mounted` guard
+    (fallback); the `isHeld` `invalid_use_of_visible_for_testing_member`
+    warning moves with the lease;
+  - removed: the unused `media_kit_subtitle_auto_sync` import, which is now
+    used by the audio Host adapter.
+
+  These are registered at Step 1 as in P18.
+- **Source-text guards:** only `test/media_server_service_test.dart:1466–1469`
+  reads moved names. It is retargeted at Step 1 to
+  `vpSourceDeclaration('_VideoPlayerScreenState._openMedia')`.
+- **Platform seam proof:** the S2b `_canFallbackExplicitRenderer` and S2f
+  relocated-owner branches, with their projection negatives, are written and
+  run at Step 1. The proof only reaches them once the members leave the
+  facade.
+- Next: Step 0 characterization of the gaps listed in the design, with
+  per-test mutation proofs.
+
 ## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
 
 Reviewed at `c5c8e3500` (facade byte-identical to `be4cd78aa`; split,
