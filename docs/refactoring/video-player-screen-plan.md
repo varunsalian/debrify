@@ -10499,3 +10499,17 @@ The remaining items are adopted:
 Open questions: answered as the reviewer recommended (1 exception
 admissible with P1-3 and P2-3; 2 `_networkTuning` with media open; 3–5
 agreed).
+
+**Round 2 (review agent, 2026-10-21) — "No P1s".** The four P1
+resolutions verified against the tools. Round-2 P3 notes, adopted:
+R1 `VIDEO_PLAYER_SIZE_EXCEPTIONS` is new — the check at
+`check_search_architecture.py:1012` looks it up while keeping the pinned
+500 cap and the separate 800 ceiling. R2 phase 19's `p19_relocated_sites`
+stays; the P20 relocations get their own pinned key. R3 collaborator
+classes are public (`VpPlayerStartup`, …). R4 the step-T scan also covers
+stack consumers (`timerOrigins`, `timerOwners`, `.stack.contains(`). R5 the
+source-overlap precondition counts listener timers regardless of
+activity; if none is ever created on the original, the vacuity is
+recorded as pre-existing instead. R6 the relocated S check asserts
+`ready:` calls the collaborator's own `onPlayerInstanceReady` and each
+factory forwarder is used exactly once.
