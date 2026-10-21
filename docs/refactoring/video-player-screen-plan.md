@@ -4788,6 +4788,11 @@ sweep and the independent sample (≥ 75 %). Known gaps:
 
 ## Follow-ups
 
+- P19 renderer fallback (characterized by the strengthened F35 case; no
+  fix): Next pressed while the old player is still disposing opens the next
+  item on that disposing player. The fallback then returns at its epoch
+  check, so the rebuilt player is live but has opened nothing.
+
 - P19 S2f: `lib/screens/video_player_screen.dart` comment above
   `_installDecoderObservers` says the fallback is "gated on
   `Platform.isAndroid`". It now reads `VpS2Hooks.isAndroidRendererValidation`,
@@ -9517,7 +9522,8 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
 - **Independent sample** (review agent, worktree `vp19-mut` at `0cf24cfac`;
   `p19/step0b/independent-sample.md`): 203 multi-site semantic mutants, all
   compilable. 17 were excluded with reasons (`excluded.json`). **140/186
-  valid = 75.3%** from the P19 files, or 80.1% with the five legacy renderer
+  valid = 75.3%** from the P19 files (corrected by the re-sample to
+  **140/187 = 74.9%**, because the F08 exclusion was wrong), or 80.1% with the five legacy renderer
   suites of the gate inventory. By group: renderer fallback 46% (62.5% with
   the legacy suites), renderer validation 62%, all other groups ≥88%.
   - Verdict: three P1s:
@@ -9551,22 +9557,23 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
     fallback-teardown first. Both new files are in the reduced-gate
     inventory (469 files) and the CI behaviour list.
 - **Not closed, with reasons** (P2 records):
-  - F02, the stale-media guard after the final validation delay. Every
-    reachable open in that 250 ms window runs inside a transition (Next,
-    source switch, zap), so `!_isTransitioning` rejects first. The only
-    untransitioned opens are the quiet IPTV recovery and the startup ladder,
-    and neither runs during validation in the host fixture.
+  - F02, the stale-media guard after the final validation delay. The
+    re-sample rejected the transition argument: the startup failover ladder,
+    IPTV live-source candidates and PikPak retry reopens open media without
+    `_isTransitioning`, so the window is reachable in production. Open
+    because the host fixture does not sequence those on fake time
+    (`StartupDriver` could).
   - F03/F04, falling back while recording or while IPTV errors are muted.
     Recording needs the real-server RecordingDriver. Outside the quiet
     recovery, the mute window coincides with the transition flag.
   - F21/F18, a pair that masks each other: the generation bump makes every
     old-subscription callback a no-op. F18 is killed by the legacy suites.
-  - F22/F23: the host fixture never installs subtitle auto-sync (it is
-    experimental and off), and the external-subtitle path is read only by
-    auto-sync.
+  - F22/F23, the subtitle auto-sync and external-subtitle carry. Testable
+    (`video_player_subtitle_sync_boundaries_test.dart` enables auto-sync in
+    a host test); open because the P19 fixture does not enable it.
   - F54/F55, the stale-epoch and already-failed Stremio watch guards on the
     failure path.
-  - L07 is disputed as equivalent. `VideoOutputLease.acquire` serialises
+  - L07 is equivalent (accepted by the re-sample). `VideoOutputLease.acquire` serialises
     waiters, so a second late grant can only follow the release of the
     first, and in production that release happens only at dispose, when
     `_screenDisposed` already rejects it.
@@ -9611,6 +9618,46 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
   (the Follow-up series test debt).
 - Next: independent post-gate review, the re-sample verdict, merge, then
   phase 20.
+
+### 2026-10-21 — Phase 19 re-sample and post-gate review (review agents)
+
+- **Re-sample after Step 0b** (review agent; `p19/step0b/independent-sample.md`
+  section "Re-sample after Step 0b", `results3.jsonl`). The sample's 63
+  non-killed mutants were rerun against all 14 P19 files at `8b8039a3c`.
+  - **156/186 = 83.9%** (86.6% with the five legacy renderer suites). 16
+    newly killed (R14, R16, R26, V17, F08, F11, F29, F35, F41, F47, F48,
+    F50, F53, F56, F57, F58). L07 moved to the exclusions as equivalent.
+  - Fallback group 66.7% (75.4% with the legacy suites); validation 68.8%;
+    audio, lease and tvOS 100%; probe 89.5%.
+  - **P1 F09** (the `finally` reset of the fallback in-progress flag): lost,
+    every app resume after a completed fallback returns early and playback
+    never resumes. Closed: new case "a completed fallback still resumes
+    playback after backgrounding" in `video_player_p19_fallback_review_test.dart`.
+  - P2: the F35 case now asserts the rebuilt player opens nothing (the
+    original behaviour); the bug is recorded in Follow-ups. F02 and F22/F23
+    dispositions reworded above (reachable/testable, still open).
+  - Witness (`p19/step0b-witness3/results.jsonl`, all 14 P19 files at
+    `8b8039a3c` with the new test file): F09 and F35 KILLED, first failure
+    `Expected:` in the new/strengthened cases. The file passes 8/8 on the
+    Step 1 branch.
+  - P3 nits kept as records: F48 counts a debug log line rather than the
+    re-selected track; V09, V18 and F29 hang in `d.close()` after a failed
+    expectation instead of failing fast.
+- **Post-gate review** (review agent; `p19/post-gate-review.md`) —
+  **"No P1s"**. All 28 moved members compared against BASE with an
+  independent normalising diff: 21 identical, 7 differ only by live Host
+  forwarders with unchanged targets and arguments. CI/tooling edits do not
+  weaken any check; the gate is valid (469 suites, 3,256 identical, the
+  single pre-existing PiP failure).
+  - P2-1 (re-sample verdict outstanding before merge): closed by this entry.
+  - P3 records: the first two runs in `step1/move-checks.log` are broken
+    argument runs (valid runs in `move-checks-dart.log`); `analyze.txt`
+    predates the commit (files identical to the generator output); the
+    renderer-fallback Host is wide (50 names) and moved doc comments still
+    name old private members (phase 21 cleanup); `_mount` sits outside the
+    test's `try`/`finally` (failure-path leak only); the stranded
+    video-output slot stays a Follow-up.
+- Next: merge into `refactor/codebase`, then phase 20.
 
 ## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
 

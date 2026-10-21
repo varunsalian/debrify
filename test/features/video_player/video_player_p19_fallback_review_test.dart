@@ -191,7 +191,8 @@ void main() {
         expect(_opened(old).last, _next, reason: 'Next took the screen');
         disposing.complete();
         final rebuilt = await _rebuilt(d);
-        expect(_opened(rebuilt), isNot(contains(_url)));
+        // The original reopens nothing on the rebuilt player (Follow-up).
+        expect(_opened(rebuilt), isEmpty);
       } finally {
         if (!disposing.isCompleted) disposing.complete();
         await d.close();
@@ -259,6 +260,50 @@ void main() {
       } finally {
         SharedPreferencesStorePlatform.instance = old;
         SharedPreferences.resetStatic();
+        await d.close();
+      }
+    },
+  );
+
+  testWidgets(
+    'P19 a completed fallback still resumes playback after backgrounding',
+    (t) async {
+      final d = await _mount(t);
+      try {
+        d.player.emit('error', _failure);
+        final rebuilt = await _rebuilt(d);
+        rebuilt.state = rebuilt.state.copyWith(playing: true);
+        rebuilt.emit('playing', true);
+        await d.f.advance(t);
+        for (final state in const [
+          AppLifecycleState.inactive,
+          AppLifecycleState.hidden,
+          AppLifecycleState.paused,
+        ]) {
+          d.observe(() => t.binding.handleAppLifecycleStateChanged(state));
+        }
+        await d.f.advance(t);
+        expect(_names(rebuilt), contains('pause'));
+        final before = _names(rebuilt).where((n) => n == 'play').length;
+        for (final state in const [
+          AppLifecycleState.hidden,
+          AppLifecycleState.inactive,
+          AppLifecycleState.resumed,
+        ]) {
+          d.observe(() => t.binding.handleAppLifecycleStateChanged(state));
+        }
+        await d.f.advance(t);
+        expect(_names(rebuilt).where((n) => n == 'play').length, before + 1);
+      } finally {
+        if (t.binding.lifecycleState != AppLifecycleState.resumed) {
+          for (final state in const [
+            AppLifecycleState.hidden,
+            AppLifecycleState.inactive,
+            AppLifecycleState.resumed,
+          ]) {
+            t.binding.handleAppLifecycleStateChanged(state);
+          }
+        }
         await d.close();
       }
     },
