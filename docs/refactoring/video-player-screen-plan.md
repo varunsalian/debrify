@@ -4788,6 +4788,9 @@ sweep and the independent sample (≥ 75 %). Known gaps:
 
 ## Phase 20 — player engine II: startup orchestration, player instance, subscriptions, media open, network tuning and player defaults
 
+> **Read with the Phase 20 design review resolution at the end of this
+> file** — it supersedes this section where they differ.
+
 Branch `refactor/vplayer-p20` (worktree `../debrify-wt/vplayer-p20`), based
 on the phase-19 merge `0f5bfb161`. It is not pipelined. Evidence
 `refactor-evidence/vplayer/p20/`. Line numbers are at `0f5bfb161` (facade
@@ -10467,3 +10470,32 @@ The remaining items are adopted:
     `androidRendererValidation`. A validation-on/android-off install
     appears only in a test labelled as the independence proof.
   - The field is listed as `final` in the ledger.
+
+## Phase 20 design review resolution (review agent, 2026-10-21)
+
+> Supersedes the Phase 20 section where they differ. Report:
+> `p20/design-review.md` (round 1: 4 P1s, 4 P2s, 9 P3s).
+
+| Finding | Resolution |
+|---|---|
+| **P1-1** `VpS2Hooks` sites cannot move verbatim (platform seam proof rejects `VpS2Hooks` outside the facade; S2b reads `_initializePlayer` from the State; seam guard pins `"s2b_sites": 2`) | As P19: live Host getters, never the hook in a moved file. Startup Host `bool get isAndroid => VpS2Hooks.isAndroid;` (1671), subscriptions and media-open Hosts `bool get isIOS => VpS2Hooks.isIOS;` (2192, 2621). Each forwarder is evaluated at the original read time (getter, no caching). `vplayer_platform_seam_proof.py` gains a P20 relocated-owner branch: the S2b `_initializePlayer` site resolves to `_VpPlayerStartup.initializePlayer` through the validating reader on applied manifests, requires `_host.isAndroid` at the same position and the facade forwarder body exactly `VpS2Hooks.isAndroid`, and keeps `s2b_sites` at 2. Negatives: forwarder bound to the wrong predicate, forwarder cached in a field, moved site reading a literal, site count changed. The seam guard test expectations follow (equal or stronger). The two `isIOS` sites get the same forwarder check. Step T runs the proof on the probe. |
+| **P1-2** `_createPlayerInstance` calls the private `VideoPlayerScreenTestHooks._createPlayer`/`._createVideoController`; `vplayer_seam_proof.py` rejects the hooks outside the facade and its `ready removed`/`assignment order` self-tests rewrite facade text | Instance Host factory forwarders `mk.Player createPlayer({required mk.PlayerConfiguration configuration})` and `mkv.VideoController createVideoController(mk.Player player, {required mkv.VideoControllerConfiguration configuration})`, each a plain expression forwarding to the private hook (same arguments, same order, same turn). `vplayer_seam_proof.py` gains a relocated branch: the `ready:` callback and the `_player`→`_playerCreated`→`_videoController` assignment order are verified in `vp_player_instance.dart` (through Host setters, in order), the facade forwarders are verified to be single forwarding expressions, and the `ready removed` / `assignment order` / `forwarder bypassed` negatives run against the collaborator text. |
+| **P1-3** `check_search_architecture.py:104` caps `lib/features/video_player/**` at 500 lines | `VIDEO_PLAYER_SIZE_EXCEPTIONS` gains an exact-count entry for `vp_player_startup.dart` (the formatted step-1 count, set at step 1 from the generator output), with a comment naming the exit Follow-up. `vplayer_architecture_test.py` adds cases: exact count passes, count + 1 fails, an unlisted file over 500 still fails. No other limit changes. |
+| **P1-4** stack-trace matchers on underscored names: `CompletionDelivery('._initializePlayer')` (`video_player_resume_late_entry_test.dart:23`), `CompletionDelivery('_loadPlayerDefaults')` (`video_player_identify_early_test.dart:87`), the `'_bindPlayerInstanceSubscriptions'` timer filter (`video_player_source_overlap_test.dart:205`) | Step 0 retargets each to the un-prefixed form (`'initializePlayer'`, `'loadPlayerDefaults'`, `'bindPlayerInstanceSubscriptions'`), which matches both the original and the moved frame; each is proved on the original (the intercept still fires: a witness assertion on the intercepted delivery / the filtered timer list being non-empty where the test relies on it). The source-overlap filter gains a non-empty precondition so the `isEmpty` check cannot pass vacuously. Step T's scan widens to every stack-trace matcher (`CompletionDelivery(`, `StackTrace.current`, `.toString().contains(`, `frames`, `Trace.from`) across `test/` and records the inventory. |
+| P2-1 `_networkTuning` table/text contradiction; member count | `_networkTuning` moves to **media open** (its only reader and writer, 2561/2566; reviewer's preference). Table corrected; 14 members, 1,180 lines. |
+| P2-2 subscriptions estimate (≈ 78 Host names) | Step T measures; if the formatted subscriptions prototype exceeds 500, `_cancelPlayerInstanceSubscriptions` moves to the instance file (it is the instance teardown counterpart and is routed from the renderer fallback either way). Decided at step T, recorded in the manifest. |
+| P2-3 exception exit must stay tracked | Phase 21's completion audit lists `vp_player_startup.dart` as an **open exception** with the Follow-up *startup orchestration decomposition*; it does not count as completed structure. |
+| P2-4 Hazard 3 misstated | Corrected: an unreadable default skips tuning **for that open** (defaults stay `null`); the next VOD open retries the capture (2482–2485). |
+| P3-1 line citations | `_autosaveTimer`: readers are dispose 3130 and the startup write 2111 (3228 is its declaration). Table fields cite declaration lines. `members.txt` header relabelled `prev_end span_start lines name`. |
+| P3-2 `PlayerVisibility` rationale | Passing the collaborator would be a **silent no-op** (`player_visibility.dart:29–30` ignores unknown owners). `Object get visibilityOwner => _s;`. Step 0's owner-identity case observes `PlayerVisibility.refreshAllowed` with a short settle duration. |
+| P3-3 callback sentence | Restricted to construction-time callbacks; all listener, timer, `.then`, open-closure, authorization, `request.commit` and post-frame callbacks capture `_host` live. |
+| P3-4 comments naming moved members | Recorded in `p20/retained.txt` (facade 519, 533, 542; `vp_audio_output.dart:71`, `vp_decoder_probe.dart:54`, `vp_mdblist_scrobbler.dart:69`; `network_tuning.dart:17/22`; moved docs 2442, 2450). Verbatim; phase 21 cleanup. |
+| P3-5 defaults writes | It also writes collaborator-owned `_display.aspectMode` and `_subtitleSync.subtitleAutoSyncEnabled` through chains (unchanged). |
+| P3-6 call sites | PikPak retry 5688 is among the 13 `openMedia` forwarders. |
+| P3-7 Follow-up candidates | Added: `canPublishRecordings().then` / `engineEnabled().then` without error handlers (1859, 1867); the post-claim return at 1834 checks `mounted` only. |
+| P3-8 step-0 gaps | Added: `beforeOpen` refusal; `request.commit` vs direct open; `_dynamicTitle`; per-entry headers → `widget.httpHeaders`; out-of-range `iptvStartIndex` (live default, `liveStream`); renderer-mode read under the S2b `android` override; `_loadDockPrefs` unawaited after defaults. |
+| P3-9 naming | Collaborator fields: `_playerDefaults`, `_playerInstance`, `_playerSubscriptions`, `_networkTuner`, `_mediaOpen`, `_playerStartup`. |
+
+Open questions: answered as the reviewer recommended (1 exception
+admissible with P1-3 and P2-3; 2 `_networkTuning` with media open; 3–5
+agreed).
