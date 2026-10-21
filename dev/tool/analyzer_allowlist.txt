@@ -90,7 +90,7 @@ warning | unused_field | lib/screens/video_player_screen.dart | The value of the
 warning | unused_field | lib/screens/video_player_screen.dart | The value of the field '_rainbowOpacity' isn't used. Try removing the field, or using it
 warning | unused_field | lib/screens/video_player_screen.dart | The value of the field '_transitionPhase' isn't used. Try removing the field, or using it
 warning | unused_field | lib/screens/video_player_screen.dart | The value of the field '_transitionPhase2Started' isn't used. Try removing the field, or using it
-warning | invalid_use_of_visible_for_testing_member | lib/screens/video_player_screen.dart | The member 'isHeld' can only be used within 'package:debrify/widgets/video_output_lease.dart' or a test
+warning | invalid_use_of_visible_for_testing_member | lib/features/video_player/presentation/legacy_video_player/vp_video_output_lease.dart | The member 'isHeld' can only be used within 'package:debrify/widgets/video_output_lease.dart' or a test
 
 # 2026-10-12 P3: original facade import retained by frozen import list; unused identity recorded in the Step T receiver probe.
 warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/skip_segments_storage.dart'. Try removing the import directive
@@ -109,7 +109,6 @@ warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 
 warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/local_completion_storage.dart'. Try removing the import directive
 
 # 2026-10-14 vplayer P9: three frozen retained imports become unused; identities recorded in the Step-T receiver probe.
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'video_player/services/media_kit_subtitle_auto_sync.dart'. Try removing the import directive
 warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'video_player/widgets/subtitle_line_picker_overlay.dart'. Try removing the import directive
 warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'video_player/widgets/sync_stepper_overlay.dart'. Try removing the import directive
 
@@ -167,3 +166,10 @@ warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 
 warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/pikpak_api_service.dart'. Try removing the import directive
 warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/next_episode_service.dart'. Try removing the import directive
 warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../features/video_player/presentation/vp_random_choice_tile.dart'. Try removing the import directive
+# Phase 19 frozen move/probe: preserved facade directives, four now-unused imports (end-state cleanup in phase 21); the S2f/P15
+# 'isHeld' read moves with _claimVideoOutput into vp_video_output_lease.dart; the audio-output Host forwarder
+# subtitleAutoSync uses 'media_kit_subtitle_auto_sync.dart' again, so its P9 entry is retired.
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/audio_effect_session_service.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../utils/player_audio_config.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../widgets/video_output_lease.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'video_player/utils/language_mapping.dart'. Try removing the import directive

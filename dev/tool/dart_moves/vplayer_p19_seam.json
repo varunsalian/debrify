@@ -1,0 +1,3814 @@
+{
+  "schema": 1,
+  "series": "vplayer",
+  "phase": 19,
+  "status": "checkpoint",
+  "base": "46bc00ce7",
+  "source": "lib/screens/video_player_screen.dart",
+  "feature": "lib/features/video_player",
+  "split_containers": [
+    "_VideoPlayerScreenState"
+  ],
+  "facade_directives": [
+    "import 'package:debrify/services/storage/alldebrid_storage.dart';",
+    "import 'package:debrify/services/storage/episode_completion_storage.dart';",
+    "import 'package:debrify/services/storage/episode_resume_storage.dart';",
+    "import 'package:debrify/services/storage/iptv_appearance_storage.dart';",
+    "import 'package:debrify/services/storage/iptv_audio_storage.dart';",
+    "import 'package:debrify/services/storage/iptv_history_storage.dart';",
+    "import 'package:debrify/services/storage/iptv_last_channel_storage.dart';",
+    "import 'package:debrify/services/storage/iptv_playlist_storage.dart';",
+    "import 'package:debrify/services/storage/local_completion_storage.dart';",
+    "import 'package:debrify/services/storage/movie_progress_storage.dart';",
+    "import 'package:debrify/services/storage/player_appearance_storage.dart';",
+    "import 'package:debrify/services/storage/player_network_storage.dart';",
+    "import 'package:debrify/services/storage/player_settings_storage.dart';",
+    "import 'package:debrify/services/storage/playlist_artwork_storage.dart';",
+    "import 'package:debrify/services/storage/playlist_metadata_storage.dart';",
+    "import 'package:debrify/services/storage/premiumize_storage.dart';",
+    "import 'package:debrify/services/storage/quick_play_storage.dart';",
+    "import 'package:debrify/services/storage/real_debrid_storage.dart';",
+    "import 'package:debrify/services/storage/series_progress_storage.dart';",
+    "import 'package:debrify/services/storage/skip_segments_storage.dart';",
+    "import 'package:debrify/services/storage/subtitle_settings_storage.dart';",
+    "import 'package:debrify/services/storage/torbox_storage.dart';",
+    "import 'package:debrify/services/storage/track_preferences_storage.dart';",
+    "import 'package:debrify/services/storage/tracker_episode_progress_storage.dart';",
+    "import 'package:debrify/services/storage/video_progress_storage.dart';",
+    "import 'package:debrify/services/storage/video_resume_storage.dart';",
+    "import '../models/source_playlist_resolver.dart';",
+    "import '../widgets/playback_startup_view.dart';",
+    "import '../utils/episode_playback_request.dart';",
+    "import '../utils/show_shuffle.dart';",
+    "import '../models/subtitle_source_priority.dart';",
+    "import 'video_player/utils/subtitle_priority_selection.dart';",
+    "import 'video_player/player_pip_route.dart';",
+    "import 'dart:async';",
+    "import '../services/source_selection_diagnostics.dart';",
+    "import '../services/player_visibility.dart';",
+    "import '../utils/media_kit_init.dart';",
+    "import 'dart:io';",
+    "import 'dart:math' as math;",
+    "import 'package:flutter/foundation.dart' show kIsWeb, kProfileMode, kReleaseMode, listEquals, visibleForTesting;",
+    "import 'package:flutter/material.dart';",
+    "import '../models/custom_series_identity.dart';",
+    "import 'package:path_provider/path_provider.dart';",
+    "import '../utils/app_storage.dart';",
+    "import 'package:window_manager/window_manager.dart';",
+    "import 'package:flutter/services.dart';",
+    "import '../services/player_display_controls.dart';",
+    "import 'package:synchronized/synchronized.dart';",
+    "import '../services/local_playback_resume_resolver.dart';",
+    "import '../services/startup_stream_policy.dart';",
+    "import '../services/direct_source_authorization.dart';",
+    "import '../services/media_server_watch_sync.dart';",
+    "import '../services/resume_write_guard.dart';",
+    "import '../models/profiles/profile_policy.dart';",
+    "import '../services/profiles/profile_policy_guard.dart';",
+    "import '../services/skip_segment_service.dart';",
+    "import '../services/analytics_service.dart';",
+    "import '../services/pip_service.dart';",
+    "import '../services/audio_effect_session_service.dart';",
+    "import '../services/tvos_decode_remedy.dart';",
+    "import '../services/tvos_display_match_service.dart';",
+    "import '../services/android_native_downloader.dart';",
+    "import '../services/desktop_recording_service.dart';",
+    "import '../services/live_recording_service.dart';",
+    "import '../services/main_page_bridge.dart';",
+    "import '../services/profiles/profile_lock_controller.dart';",
+    "import '../services/tracking_source_policy.dart';",
+    "import '../services/profiles/profile_runtime.dart';",
+    "import '../widgets/recording_limit_dialogs.dart';",
+    "import '../services/debrid_service.dart';",
+    "import '../services/premiumize_service.dart';",
+    "import '../services/alldebrid_service.dart';",
+    "import '../utils/platform_util.dart';",
+    "import '../utils/player_audio_config.dart';",
+    "import '../utils/time_formatters.dart';",
+    "import '../utils/series_parser.dart';",
+    "import '../utils/movie_parser.dart';",
+    "import '../utils/iptv_player_paging.dart';",
+    "import '../services/movie_metadata_service.dart';",
+    "import '../models/iptv_playlist.dart';",
+    "import '../services/stremio_iptv_service.dart';",
+    "import '../services/iptv_epg_service.dart';",
+    "import '../models/playlist_view_mode.dart';",
+    "import '../models/series_playlist.dart';",
+    "import '../services/torbox_service.dart';",
+    "import '../services/pikpak_api_service.dart';",
+    "import '../services/next_episode_service.dart';",
+    "import '../widgets/tv_text_field.dart';",
+    "import '../widgets/video_output_lease.dart';",
+    "import 'package:media_kit/media_kit.dart' as mk;",
+    "import 'package:media_kit_video/media_kit_video.dart' as mkv;",
+    "import 'video_player/models/playlist_entry.dart';",
+    "import 'video_player/services/external_subtitle_payload.dart';",
+    "import 'video_player/services/subtitle_track_utils.dart';",
+    "import 'video_player/models/gesture_state.dart';",
+    "import 'video_player/models/hud_state.dart';",
+    "import 'video_player/painters/double_tap_ripple_painter.dart';",
+    "import 'video_player/utils/gesture_helpers.dart';",
+    "import 'video_player/utils/language_mapping.dart';",
+    "import 'video_player/utils/subtitle_audio_policy.dart';",
+    "import 'video_player/utils/aspect_mode_utils.dart';",
+    "import 'video_player/constants/timing_constants.dart';",
+    "import 'video_player/widgets/auto_sync_pill.dart';",
+    "import 'video_player/widgets/seek_hud.dart';",
+    "import 'video_player/widgets/vertical_hud.dart';",
+    "import 'video_player/widgets/aspect_ratio_hud.dart';",
+    "import 'video_player/widgets/controls.dart';",
+    "import 'video_player/widgets/dock_style.dart';",
+    "import 'video_player/widgets/tv_controls.dart';",
+    "import 'video_player/widgets/aspect_ratio_video.dart';",
+    "import 'video_player/widgets/transition_overlay.dart';",
+    "import 'video_player/widgets/pikpak_retry_overlay.dart';",
+    "import 'video_player/widgets/buffering_indicator.dart';",
+    "import 'video_player/widgets/tracks_sheet.dart';",
+    "import 'video_player/widgets/player_menu_panel.dart';",
+    "import 'video_player/widgets/playlist_sheet.dart';",
+    "import 'video_player/widgets/channel_guide.dart';",
+    "import 'video_player/widgets/iptv_channel_sheet.dart';",
+    "import 'video_player/widgets/iptv_zap_banner.dart';",
+    "import 'video_player/widgets/player_guide_style.dart';",
+    "import '../widgets/iptv/styles/iptv_style.dart';",
+    "import 'video_player/widgets/source_sheet.dart';",
+    "import 'video_player/widgets/stremio_tv_guide_sheet.dart';",
+    "import 'video_player/models/channel_entry.dart';",
+    "import 'video_player/services/network_tuning.dart';",
+    "import 'video_player/services/subtitle_settings_service.dart';",
+    "import 'video_player/services/media_kit_subtitle_auto_sync.dart';",
+    "import 'video_player/services/playback_ui_clock.dart';",
+    "import 'video_player/services/skip_segment_ui_controller.dart';",
+    "import 'video_player/services/android_renderer_startup_fallback.dart';",
+    "import 'video_player/services/iptv_tune_diagnostics.dart';",
+    "import 'video_player/services/iptv_live_recovery.dart';",
+    "import 'video_player/widgets/subtitle_line_picker_overlay.dart';",
+    "import 'video_player/widgets/skip_segment_button.dart';",
+    "import 'video_player/widgets/sleep_timer_sheet.dart';",
+    "import 'video_player/widgets/sync_stepper_overlay.dart';",
+    "import 'video_player/widgets/spotlight_dialog.dart';",
+    "import 'video_player/widgets/debrify_tv_banner.dart';",
+    "import '../models/stremio_subtitle.dart';",
+    "import '../models/stremio_addon.dart';",
+    "import '../models/torrent.dart';",
+    "import '../models/android_video_renderer_mode.dart';",
+    "import '../models/content_display_match_mode.dart';",
+    "import '../services/series_source_fetcher.dart';",
+    "import '../services/stremio_service.dart';",
+    "import '../services/stremio_subtitle_service.dart';",
+    "import '../services/trakt/trakt_service.dart';",
+    "import '../services/simkl/simkl_service.dart';",
+    "import '../services/mdblist/mdblist_models.dart';",
+    "import '../services/mdblist/mdblist_scrobble_session.dart';",
+    "import '../services/mdblist/mdblist_service.dart';",
+    "import 'package:http/http.dart' as http;",
+    "import '../utils/episode_progress_merge.dart';",
+    "import '../utils/tv_keys.dart';",
+    "import '../utils/tv_search_focus_handoff.dart';",
+    "export 'video_player/models/playlist_entry.dart';",
+    "export 'video_player/models/channel_entry.dart';",
+    "export '../features/video_player/models/iptv_catchup_request_gate.dart' show IptvCatchupRequestGate;",
+    "import '../features/video_player/models/vp_manual_source_validation_failure.dart';",
+    "import '../features/video_player/models/vp_season_episode_selection.dart';",
+    "import '../features/video_player/models/vp_subtitle_apply_attempt.dart';",
+    "import '../features/video_player/models/vp_iptv_zap_page.dart';",
+    "import '../features/video_player/models/iptv_catchup_request_gate.dart';",
+    "import '../features/video_player/presentation/vp_random_choice_tile.dart';",
+    "import '../features/video_player/application/vp_format.dart';",
+    "import '../features/video_player/application/vp_filename_hash.dart';",
+    "import '../features/video_player/application/vp_identity_text.dart';",
+    "import '../features/video_player/application/vp_subtitle_identity.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_sleep_timer_controller.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_skip_segment_controller.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_display_mode_controller.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_trakt_scrobbler.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_simkl_scrobbler.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_mdblist_scrobbler.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_local_completion.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_pip_lifecycle.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_subtitle_auto_sync.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_subtitle_apply.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_subtitle_language_policy.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_track_preferences.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_addon_subtitles.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_identify_title.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_identify_title_ui.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_player_menu_ui.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_player_menu.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_iptv_recording.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_iptv_recording_resources.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_resume_keys.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_resume_restore.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_resume_save.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_iptv_zap_ring.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_iptv_zap_ladder.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_iptv_guide_catchup.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_iptv_channel_switch.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_iptv_live_sources.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_iptv_watch_memory.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_iptv_zap_banner.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_startup_candidates.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_startup_failover.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_startup_gate.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_source_switch.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_source_playlist_switch.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_debrify_tv_channels.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_debrify_tv_banner.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_stremio_tv_channels.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_episode_fetch.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_episode_guide.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_playback_ended.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_episode_next.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_episode_adjacent.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_shuffle.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_episode_title_info.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_playlist_load.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_playlist_entry_resolve.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_media_waits.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_pikpak_retry.dart';",
+    "import '../features/video_player/presentation/legacy_video_player/vp_metadata_preload.dart';"
+  ],
+  "facade_orders": {
+    "@directives": [
+      "@directive:0",
+      "@directive:1",
+      "@directive:2",
+      "@directive:3",
+      "@directive:4",
+      "@directive:5",
+      "@directive:6",
+      "@directive:7",
+      "@directive:8",
+      "@directive:9",
+      "@directive:10",
+      "@directive:11",
+      "@directive:12",
+      "@directive:13",
+      "@directive:14",
+      "@directive:15",
+      "@directive:16",
+      "@directive:17",
+      "@directive:18",
+      "@directive:19",
+      "@directive:20",
+      "@directive:21",
+      "@directive:22",
+      "@directive:23",
+      "@directive:24",
+      "@directive:25",
+      "@directive:26",
+      "@directive:27",
+      "@directive:28",
+      "@directive:29",
+      "@directive:30",
+      "@directive:31",
+      "@directive:32",
+      "@directive:33",
+      "@directive:34",
+      "@directive:35",
+      "@directive:36",
+      "@directive:37",
+      "@directive:38",
+      "@directive:39",
+      "@directive:40",
+      "@directive:41",
+      "@directive:42",
+      "@directive:43",
+      "@directive:44",
+      "@directive:45",
+      "@directive:46",
+      "@directive:47",
+      "@directive:48",
+      "@directive:49",
+      "@directive:50",
+      "@directive:51",
+      "@directive:52",
+      "@directive:53",
+      "@directive:54",
+      "@directive:55",
+      "@directive:56",
+      "@directive:57",
+      "@directive:58",
+      "@directive:59",
+      "@directive:60",
+      "@directive:61",
+      "@directive:62",
+      "@directive:63",
+      "@directive:64",
+      "@directive:65",
+      "@directive:66",
+      "@directive:67",
+      "@directive:68",
+      "@directive:69",
+      "@directive:70",
+      "@directive:71",
+      "@directive:72",
+      "@directive:73",
+      "@directive:74",
+      "@directive:75",
+      "@directive:76",
+      "@directive:77",
+      "@directive:78",
+      "@directive:79",
+      "@directive:80",
+      "@directive:81",
+      "@directive:82",
+      "@directive:83",
+      "@directive:84",
+      "@directive:85",
+      "@directive:86",
+      "@directive:87",
+      "@directive:88",
+      "@directive:89",
+      "@directive:90",
+      "@directive:91",
+      "@directive:92",
+      "@directive:93",
+      "@directive:94",
+      "@directive:95",
+      "@directive:96",
+      "@directive:97",
+      "@directive:98",
+      "@directive:99",
+      "@directive:100",
+      "@directive:101",
+      "@directive:102",
+      "@directive:103",
+      "@directive:104",
+      "@directive:105",
+      "@directive:106",
+      "@directive:107",
+      "@directive:108",
+      "@directive:109",
+      "@directive:110",
+      "@directive:111",
+      "@directive:112",
+      "@directive:113",
+      "@directive:114",
+      "@directive:115",
+      "@directive:116",
+      "@directive:117",
+      "@directive:118",
+      "@directive:119",
+      "@directive:120",
+      "@directive:121",
+      "@directive:122",
+      "@directive:123",
+      "@directive:124",
+      "@directive:125",
+      "@directive:126",
+      "@directive:127",
+      "@directive:128",
+      "@directive:129",
+      "@directive:130",
+      "@directive:131",
+      "@directive:132",
+      "@directive:133",
+      "@directive:134",
+      "@directive:135",
+      "@directive:136",
+      "@directive:137",
+      "@directive:138",
+      "@directive:139",
+      "@directive:140",
+      "@directive:141",
+      "@directive:142",
+      "@directive:143",
+      "@directive:144",
+      "@directive:145",
+      "@directive:146",
+      "@directive:147",
+      "@directive:148",
+      "@directive:149",
+      "@directive:150",
+      "@directive:151",
+      "@directive:152",
+      "@directive:153",
+      "@directive:154",
+      "@directive:155",
+      "@directive:156",
+      "@directive:157",
+      "@directive:158",
+      "@directive:159",
+      "@directive:160",
+      "@directive:161",
+      "@directive:162",
+      "@directive:163",
+      "@directive:164",
+      "@directive:165",
+      "@directive:166",
+      "@directive:167",
+      "@directive:168",
+      "@directive:169",
+      "@directive:170",
+      "@directive:171",
+      "@directive:172",
+      "@directive:173",
+      "@directive:174",
+      "@directive:175",
+      "@directive:176",
+      "@directive:177",
+      "@directive:178",
+      "@directive:179",
+      "@directive:180",
+      "@directive:181",
+      "@directive:182",
+      "@directive:183",
+      "@directive:184",
+      "@directive:185",
+      "@directive:186",
+      "@directive:187",
+      "@directive:188",
+      "@directive:189",
+      "@directive:190",
+      "@directive:191",
+      "@directive:192",
+      "@directive:193",
+      "@directive:194",
+      "@directive:195",
+      "@directive:196",
+      "@directive:197",
+      "@directive:198",
+      "@directive:199",
+      "@directive:200",
+      "@directive:201",
+      "@directive:202",
+      "@directive:203",
+      "@directive:204",
+      "@directive:205",
+      "@directive:206",
+      "@directive:207",
+      "@directive:208",
+      "@directive:209",
+      "@directive:210",
+      "@directive:211",
+      "@directive:212",
+      "@directive:213",
+      "@directive:214",
+      "@directive:215",
+      "@directive:216"
+    ],
+    "": [
+      "VideoPlayerScreen",
+      "_VideoPlayerScreenState",
+      "_VpMetadataPreloadHostAdapter",
+      "_VpPikPakRetryHostAdapter",
+      "_VpMediaWaitsHostAdapter",
+      "_VpPlaylistEntryResolveHostAdapter",
+      "_VpPlaylistLoadHostAdapter",
+      "_VpEpisodeTitleInfoHostAdapter",
+      "_VpShuffleHostAdapter",
+      "_VpEpisodeAdjacentHostAdapter",
+      "_VpEpisodeNextHostAdapter",
+      "_VpPlaybackEndedHostAdapter",
+      "_VpEpisodeGuideHostAdapter",
+      "_VpEpisodeFetchHostAdapter",
+      "_VpStremioTvChannelsHostAdapter",
+      "_VpDebrifyTvBannerHostAdapter",
+      "_VpDebrifyTvChannelsHostAdapter",
+      "_VpSourcePlaylistSwitchHostAdapter",
+      "_VpSourceSwitchHostAdapter",
+      "_VpStartupGateHostAdapter",
+      "_VpStartupFailoverHostAdapter",
+      "_VpStartupCandidatesHostAdapter",
+      "_VpIptvZapBannerHostAdapter",
+      "_VpIptvWatchMemoryHostAdapter",
+      "_VpIptvLiveSourcesHostAdapter",
+      "_VpIptvChannelSwitchHostAdapter",
+      "_VpIptvGuideCatchupHostAdapter",
+      "_VpIptvZapLadderHostAdapter",
+      "_VpIptvZapRingHostAdapter",
+      "_VpResumeSaveHostAdapter",
+      "_VpResumeRestoreHostAdapter",
+      "_VpResumeKeysHostAdapter",
+      "_VpIptvRecordingResourcesHostAdapter",
+      "_VpIptvRecordingHostAdapter",
+      "_VpPlayerMenuHostAdapter",
+      "_VpPlayerMenuUiHostAdapter",
+      "_VpIdentifyTitleUiHostAdapter",
+      "_VpIdentifyTitleHostAdapter",
+      "_VpAddonSubtitlesHostAdapter",
+      "_VpTrackPreferencesHostAdapter",
+      "_VpSubtitleLanguagePolicyHostAdapter",
+      "_VpSubtitleApplyHostAdapter",
+      "_VpSubtitleAutoSyncHostAdapter",
+      "_VpPipLifecycleHostAdapter",
+      "_VpLocalCompletionHostAdapter",
+      "_VpMdblistScrobblerHostAdapter",
+      "_VpSimklScrobblerHostAdapter",
+      "_VpTraktScrobblerHostAdapter",
+      "_VpDisplayModeHostAdapter",
+      "_VpSkipSegmentHostAdapter",
+      "_VpSleepTimerHostAdapter",
+      "VideoPlayerScreenTestHooks",
+      "VpS2Hooks"
+    ],
+    "_VideoPlayerScreenState": [
+      "_VideoPlayerScreenState._VideoPlayerScreenState",
+      "_VideoPlayerScreenState._vpSetState",
+      "_VideoPlayerScreenState._tvReleaseLogChannel",
+      "_VideoPlayerScreenState._androidPlayerDiagnosticChannel",
+      "_VideoPlayerScreenState._player",
+      "_VideoPlayerScreenState._playerCreated",
+      "_VideoPlayerScreenState._audioEffectSessionId",
+      "_VideoPlayerScreenState._videoController",
+      "_VideoPlayerScreenState._androidVideoRendererMode",
+      "_VideoPlayerScreenState._tvosDecodeRemedy",
+      "_VideoPlayerScreenState._tvosForceSoftwareDecode",
+      "_VideoPlayerScreenState._contentDisplayMatchMode",
+      "_VideoPlayerScreenState._tvosDisplayMatchToken",
+      "_VideoPlayerScreenState._tvosDisplayMatchTimer",
+      "_VideoPlayerScreenState._lastTvosDisplayMatchSignature",
+      "_VideoPlayerScreenState._audioPassthroughEnabled",
+      "_VideoPlayerScreenState._systemAudioEffectsEnabled",
+      "_VideoPlayerScreenState._appleMultichannelEnabled",
+      "_VideoPlayerScreenState._tvosRouteOutputChannels",
+      "_VideoPlayerScreenState._tvosForceStereoAudio",
+      "_VideoPlayerScreenState._tvosLegacyAudioOutput",
+      "_VideoPlayerScreenState._playerInstanceGeneration",
+      "_VideoPlayerScreenState._playerPresentationInitialized",
+      "_VideoPlayerScreenState._rendererValidatedForSession",
+      "_VideoPlayerScreenState._rendererFallbackInProgress",
+      "_VideoPlayerScreenState._rendererStartupGuardToken",
+      "_VideoPlayerScreenState._rendererStartupValidationGeneration",
+      "_VideoPlayerScreenState._activeOpenedMedia",
+      "_VideoPlayerScreenState._activeMediaShouldPlay",
+      "_VideoPlayerScreenState._activeMediaUserPaused",
+      "_VideoPlayerScreenState._random",
+      "_VideoPlayerScreenState._cachedSeriesPlaylist",
+      "_VideoPlayerScreenState._activePlaylist",
+      "_VideoPlayerScreenState._seriesImdbKnownAtLaunch",
+      "_VideoPlayerScreenState._episodeMetadataReady",
+      "_VideoPlayerScreenState._playerInitializationFuture",
+      "_VideoPlayerScreenState._playlistIdentityToken",
+      "_VideoPlayerScreenState._controlsVisible",
+      "_VideoPlayerScreenState._currentStreamUrl",
+      "_VideoPlayerScreenState._singleFileImdbId",
+      "_VideoPlayerScreenState._singleFileImdbFetched",
+      "_VideoPlayerScreenState._manualContentImdbId",
+      "_VideoPlayerScreenState._manualContentType",
+      "_VideoPlayerScreenState._manualContentSeason",
+      "_VideoPlayerScreenState._manualContentEpisode",
+      "_VideoPlayerScreenState._manualSubtitleDisplayLabel",
+      "_VideoPlayerScreenState._isPikPakRetrying",
+      "_VideoPlayerScreenState._pikPakRetryCount",
+      "_VideoPlayerScreenState._pikPakRetryMessage",
+      "_VideoPlayerScreenState._pikPakRetryId",
+      "_VideoPlayerScreenState._constructPlaylistItemData",
+      "_VideoPlayerScreenState._seriesPlaylist",
+      "_VideoPlayerScreenState._hideTimer",
+      "_VideoPlayerScreenState._tvBarScope",
+      "_VideoPlayerScreenState._tvPlayPauseFocus",
+      "_VideoPlayerScreenState._tvProgressFocus",
+      "_VideoPlayerScreenState._tvRootFocus",
+      "_VideoPlayerScreenState._tvNoTimeline",
+      "_VideoPlayerScreenState._tvScrubTarget",
+      "_VideoPlayerScreenState._tvLastArrowAt",
+      "_VideoPlayerScreenState._tvScrubWasPlaying",
+      "_VideoPlayerScreenState._tvScrubRepeats",
+      "_VideoPlayerScreenState._tvScrubGeneration",
+      "_VideoPlayerScreenState._tvScrubStartedAtGeneration",
+      "_VideoPlayerScreenState._isSeekingWithSlider",
+      "_VideoPlayerScreenState._lastSliderSeekPos",
+      "_VideoPlayerScreenState._showDebrifyBanner",
+      "_VideoPlayerScreenState._debrifyBannerFloatingMounted",
+      "_VideoPlayerScreenState._showIptvZapBanner",
+      "_VideoPlayerScreenState._iptvZapFloatingMounted",
+      "_VideoPlayerScreenState._iptvZapChannel",
+      "_VideoPlayerScreenState._iptvZapEpg",
+      "_VideoPlayerScreenState._iptvZapEpgLoading",
+      "_VideoPlayerScreenState._iptvZapClock",
+      "_VideoPlayerScreenState._ripple",
+      "_VideoPlayerScreenState._panIgnore",
+      "_VideoPlayerScreenState._currentIndex",
+      "_VideoPlayerScreenState._lastTapLocal",
+      "_VideoPlayerScreenState._isManualEpisodeSelection",
+      "_VideoPlayerScreenState._isAutoAdvancing",
+      "_VideoPlayerScreenState._allowResumeForManualSelection",
+      "_VideoPlayerScreenState._manualSelectionResetTimer",
+      "_VideoPlayerScreenState._continuousShuffleEnabled",
+      "_VideoPlayerScreenState._showShuffleGeneration",
+      "_VideoPlayerScreenState._episodeNavigationGeneration",
+      "_VideoPlayerScreenState._currentChannelName",
+      "_VideoPlayerScreenState._currentChannelNumber",
+      "_VideoPlayerScreenState._currentChannelId",
+      "_VideoPlayerScreenState._showChannelGuide",
+      "_VideoPlayerScreenState._showSyncOverlay",
+      "_VideoPlayerScreenState._channelEntries",
+      "_VideoPlayerScreenState._showIptvChannelSheet",
+      "_VideoPlayerScreenState._currentIptvIndex",
+      "_VideoPlayerScreenState._iptvDiag",
+      "_VideoPlayerScreenState._iptvReconnectText",
+      "_VideoPlayerScreenState._iptvLiveRecovery",
+      "_VideoPlayerScreenState._iptvChannelsOverride",
+      "_VideoPlayerScreenState._iptvGuideContextOverride",
+      "_VideoPlayerScreenState._iptvStartOverActive",
+      "_VideoPlayerScreenState._iptvStartOverLoading",
+      "_VideoPlayerScreenState._iptvStartOverTimelineRequested",
+      "_VideoPlayerScreenState._effectiveIptvChannels",
+      "_VideoPlayerScreenState._iptvZapBannerOwnsIdentity",
+      "_VideoPlayerScreenState._playerGuideStyle",
+      "_VideoPlayerScreenState._dockStyle",
+      "_VideoPlayerScreenState._dockPalette",
+      "_VideoPlayerScreenState._dockSize",
+      "_VideoPlayerScreenState._dockExtent",
+      "_VideoPlayerScreenState._infoPanelHeight",
+      "_VideoPlayerScreenState._dockVolume",
+      "_VideoPlayerScreenState._infoPanelSignature",
+      "_VideoPlayerScreenState._lastInfoPanelSignature",
+      "_VideoPlayerScreenState._infoPanelGeneration",
+      "_VideoPlayerScreenState._dockGeometryGeneration",
+      "_VideoPlayerScreenState._dockGeometrySignature",
+      "_VideoPlayerScreenState._lastDockGeometrySignature",
+      "_VideoPlayerScreenState.didChangeDependencies",
+      "_VideoPlayerScreenState._refreshDockGeometry",
+      "_VideoPlayerScreenState._reservedInfoPanelHeight",
+      "_VideoPlayerScreenState._playerGuideTokens",
+      "_VideoPlayerScreenState._recordingSupported",
+      "_VideoPlayerScreenState._isRecording",
+      "_VideoPlayerScreenState._recordingTempPath",
+      "_VideoPlayerScreenState._lifecycle",
+      "_VideoPlayerScreenState._pausedByLifecycle",
+      "_VideoPlayerScreenState._engineTaskId",
+      "_VideoPlayerScreenState._engineFlagOn",
+      "_VideoPlayerScreenState._recordLogSub",
+      "_VideoPlayerScreenState._subtitleDiagnosticLogSub",
+      "_VideoPlayerScreenState._subtitleDiagnosticGeneration",
+      "_VideoPlayerScreenState._activeSubtitleApplyAttempt",
+      "_VideoPlayerScreenState._subtitleSelectionCorrection",
+      "_VideoPlayerScreenState._desktopRecordingRevisionListener",
+      "_VideoPlayerScreenState._recordingStartGen",
+      "_VideoPlayerScreenState._iptvGuideContextGeneration",
+      "_VideoPlayerScreenState._showSourceSheet",
+      "_VideoPlayerScreenState._currentSourceIndex",
+      "_VideoPlayerScreenState._serverWatch",
+      "_VideoPlayerScreenState._openedWatchSource",
+      "_VideoPlayerScreenState._watchOpenEpoch",
+      "_VideoPlayerScreenState._stremioSourcesOverride",
+      "_VideoPlayerScreenState._resolveStremioSourceOverride",
+      "_VideoPlayerScreenState._augmentedSources",
+      "_VideoPlayerScreenState._showPlayerMenu",
+      "_VideoPlayerScreenState._playerMenuInitialSection",
+      "_VideoPlayerScreenState._playerMenuKey",
+      "_VideoPlayerScreenState._menuImdbId",
+      "_VideoPlayerScreenState._menuContentType",
+      "_VideoPlayerScreenState._menuSeason",
+      "_VideoPlayerScreenState._menuEpisode",
+      "_VideoPlayerScreenState._menuCachedSlots",
+      "_VideoPlayerScreenState._menuCacheKey",
+      "_VideoPlayerScreenState._showStremioTvGuide",
+      "_VideoPlayerScreenState._currentStremioTvChannelId",
+      "_VideoPlayerScreenState._stremioTvChannelsOverride",
+      "_VideoPlayerScreenState._showStremioTvNextLoading",
+      "_VideoPlayerScreenState._currentStremioTvContentImdbId",
+      "_VideoPlayerScreenState._currentStremioTvContentType",
+      "_VideoPlayerScreenState._currentStremioTvContentSeason",
+      "_VideoPlayerScreenState._currentStremioTvContentEpisode",
+      "_VideoPlayerScreenState._currentStremioTvContentTitle",
+      "_VideoPlayerScreenState._effectiveSources",
+      "_VideoPlayerScreenState._effectiveResolver",
+      "_VideoPlayerScreenState._effectiveStremioTvChannels",
+      "_VideoPlayerScreenState._effectiveContentImdbId",
+      "_VideoPlayerScreenState._effectiveContentType",
+      "_VideoPlayerScreenState._effectiveContentSeason",
+      "_VideoPlayerScreenState._effectiveContentEpisode",
+      "_VideoPlayerScreenState._effectiveContentTitle",
+      "_VideoPlayerScreenState._currentSeriesImdbId",
+      "_VideoPlayerScreenState._skip",
+      "_VideoPlayerScreenState._subtitleSettings",
+      "_VideoPlayerScreenState._cachedStremioSubtitles",
+      "_VideoPlayerScreenState._cachedAddonSlots",
+      "_VideoPlayerScreenState._injectedSubtitleSlots",
+      "_VideoPlayerScreenState._cachedSubtitleKey",
+      "_VideoPlayerScreenState._selectedStremioSubtitleId",
+      "_VideoPlayerScreenState._embeddedSubtitleApplied",
+      "_VideoPlayerScreenState._userManuallySelectedSubtitle",
+      "_VideoPlayerScreenState._trackPreferencesReadyForAddonSubtitles",
+      "_VideoPlayerScreenState._addonSubtitleFetchToken",
+      "_VideoPlayerScreenState._activeExternalSubtitlePath",
+      "_VideoPlayerScreenState._subtitleOnlyForeignAudio",
+      "_VideoPlayerScreenState._subtitleForcedOnly",
+      "_VideoPlayerScreenState._hasSubtitlePolicy",
+      "_VideoPlayerScreenState._subtitlePreferredAudio",
+      "_VideoPlayerScreenState._subtitleSelectedAudio",
+      "_VideoPlayerScreenState._subtitleAudioRevision",
+      "_VideoPlayerScreenState._subtitleSync",
+      "_VideoPlayerScreenState._subtitleApply",
+      "_VideoPlayerScreenState._subtitleLanguage",
+      "_VideoPlayerScreenState._trackPreferences",
+      "_VideoPlayerScreenState._addonSubtitles",
+      "_VideoPlayerScreenState._identify",
+      "_VideoPlayerScreenState._identifyUi",
+      "_VideoPlayerScreenState._menuUi",
+      "_VideoPlayerScreenState._menu",
+      "_VideoPlayerScreenState._recording",
+      "_VideoPlayerScreenState._recordingResources",
+      "_VideoPlayerScreenState._resumeKeys",
+      "_VideoPlayerScreenState._resumeRestore",
+      "_VideoPlayerScreenState._resumeSave",
+      "_VideoPlayerScreenState._zapRing",
+      "_VideoPlayerScreenState._zapLadder",
+      "_VideoPlayerScreenState._iptvGuide",
+      "_VideoPlayerScreenState._iptvSwitch",
+      "_VideoPlayerScreenState._iptvSources",
+      "_VideoPlayerScreenState._iptvMemory",
+      "_VideoPlayerScreenState._iptvBanner",
+      "_VideoPlayerScreenState._startupCandidates",
+      "_VideoPlayerScreenState._startupFailover",
+      "_VideoPlayerScreenState._startupGate",
+      "_VideoPlayerScreenState._sourceSwitch",
+      "_VideoPlayerScreenState._sourcePlaylistSwitch",
+      "_VideoPlayerScreenState._debrifyChannels",
+      "_VideoPlayerScreenState._debrifyBanner",
+      "_VideoPlayerScreenState._stremioTv",
+      "_VideoPlayerScreenState._episodeFetch",
+      "_VideoPlayerScreenState._episodeGuide",
+      "_VideoPlayerScreenState._playbackEnded",
+      "_VideoPlayerScreenState._episodeNext",
+      "_VideoPlayerScreenState._episodeAdjacent",
+      "_VideoPlayerScreenState._shuffle",
+      "_VideoPlayerScreenState._episodeTitleInfo",
+      "_VideoPlayerScreenState._playlistLoad",
+      "_VideoPlayerScreenState._playlistEntryResolve",
+      "_VideoPlayerScreenState._mediaWaits",
+      "_VideoPlayerScreenState._pikPakRetry",
+      "_VideoPlayerScreenState._metadataPreload",
+      "_VideoPlayerScreenState._autoSyncPill",
+      "_VideoPlayerScreenState._autoSyncPillLastShown",
+      "_VideoPlayerScreenState._isReady",
+      "_VideoPlayerScreenState._startupGateActive",
+      "_VideoPlayerScreenState._startupGateOverlayHidden",
+      "_VideoPlayerScreenState._manualSourceGateActive",
+      "_VideoPlayerScreenState._validationGateActive",
+      "_VideoPlayerScreenState._startupGateMessage",
+      "_VideoPlayerScreenState._resumeWriteGuard",
+      "_VideoPlayerScreenState._resumeSaveLock",
+      "_VideoPlayerScreenState._resumeVerifyEpoch",
+      "_VideoPlayerScreenState._stremioTvStartupSeek",
+      "_VideoPlayerScreenState._stremioTvStartupWatch",
+      "_VideoPlayerScreenState._isPlaying",
+      "_VideoPlayerScreenState._isPipActive",
+      "_VideoPlayerScreenState._position",
+      "_VideoPlayerScreenState._duration",
+      "_VideoPlayerScreenState._playbackUiClock",
+      "_VideoPlayerScreenState._activeSkipSegmentUi",
+      "_VideoPlayerScreenState._isTransitioning",
+      "_VideoPlayerScreenState._seriesNextDispatched",
+      "_VideoPlayerScreenState._completion",
+      "_VideoPlayerScreenState._posSub",
+      "_VideoPlayerScreenState._durSub",
+      "_VideoPlayerScreenState._playSub",
+      "_VideoPlayerScreenState._paramsSub",
+      "_VideoPlayerScreenState._trackSub",
+      "_VideoPlayerScreenState._completedSub",
+      "_VideoPlayerScreenState._bufferingSub",
+      "_VideoPlayerScreenState._iptvErrorSub",
+      "_VideoPlayerScreenState._rendererStartupErrorSub",
+      "_VideoPlayerScreenState._decoderProbeGeneration",
+      "_VideoPlayerScreenState._decoderProbeToken",
+      "_VideoPlayerScreenState._decoderProbeParams",
+      "_VideoPlayerScreenState._decoderProbeTimer",
+      "_VideoPlayerScreenState._lastDecoderDiagnosticSignature",
+      "_VideoPlayerScreenState._showBufferingIndicator",
+      "_VideoPlayerScreenState._bufferingDebounceTimer",
+      "_VideoPlayerScreenState._mode",
+      "_VideoPlayerScreenState._gestureStartPosition",
+      "_VideoPlayerScreenState._gestureStartVideoPosition",
+      "_VideoPlayerScreenState._gestureStartVolume",
+      "_VideoPlayerScreenState._gestureStartBrightness",
+      "_VideoPlayerScreenState._seekHud",
+      "_VideoPlayerScreenState._verticalHud",
+      "_VideoPlayerScreenState._aspectRatioHud",
+      "_VideoPlayerScreenState._display",
+      "_VideoPlayerScreenState._sleep",
+      "_VideoPlayerScreenState._sleepStopLatched",
+      "_VideoPlayerScreenState._speedHoldHud",
+      "_VideoPlayerScreenState._startsInPortrait",
+      "_VideoPlayerScreenState._rainbowController",
+      "_VideoPlayerScreenState._rainbowOpacity",
+      "_VideoPlayerScreenState._rainbowActive",
+      "_VideoPlayerScreenState._transitionRunning",
+      "_VideoPlayerScreenState._transitionStopTimer",
+      "_VideoPlayerScreenState._transitionPhaseTimer",
+      "_VideoPlayerScreenState._transitionPhase",
+      "_VideoPlayerScreenState._transitionPhase2Started",
+      "_VideoPlayerScreenState._tvStaticMessage",
+      "_VideoPlayerScreenState._tvStaticSubtext",
+      "_VideoPlayerScreenState._tvStaticMessages",
+      "_VideoPlayerScreenState._dynamicTitle",
+      "_VideoPlayerScreenState._trakt",
+      "_VideoPlayerScreenState._simkl",
+      "_VideoPlayerScreenState._mdblist",
+      "_VideoPlayerScreenState._episodeTrackerProgressImdbId",
+      "_VideoPlayerScreenState._analyticsHeartbeatTimer",
+      "_VideoPlayerScreenState._randomStartOffset",
+      "_VideoPlayerScreenState._percentStartOffset",
+      "_VideoPlayerScreenState.initState",
+      "_VideoPlayerScreenState._persistablePosition",
+      "_VideoPlayerScreenState._traktSeasonEpisode",
+      "_VideoPlayerScreenState._startAnalyticsHeartbeat",
+      "_VideoPlayerScreenState._bindEpisodeTrackerProgressIdentity",
+      "_VideoPlayerScreenState._setExternalAudioTrack",
+      "_VideoPlayerScreenState._attachAudioEffectSession",
+      "_VideoPlayerScreenState._releaseAudioEffectSession",
+      "_VideoPlayerScreenState._outputLease",
+      "_VideoPlayerScreenState._outputLeaseTimeout",
+      "_VideoPlayerScreenState._claimVideoOutput",
+      "_VideoPlayerScreenState._releaseVideoOutput",
+      "_VideoPlayerScreenState._screenDisposed",
+      "_VideoPlayerScreenState._createPlayerInstance",
+      "_VideoPlayerScreenState._passthroughFlipChain",
+      "_VideoPlayerScreenState._setAudioPassthroughLive",
+      "_VideoPlayerScreenState._applyPassthroughFlip",
+      "_VideoPlayerScreenState._configurePlayerAudio",
+      "_VideoPlayerScreenState._installTvosDecodeRemedy",
+      "_VideoPlayerScreenState._onPlayerInstanceReady",
+      "_VideoPlayerScreenState._initializePlayer",
+      "_VideoPlayerScreenState._bindPlayerInstanceSubscriptions",
+      "_VideoPlayerScreenState._cancelPlayerInstanceSubscriptions",
+      "_VideoPlayerScreenState._mediaServerFrameGeneration",
+      "_VideoPlayerScreenState._handleDecoderProbeParams",
+      "_VideoPlayerScreenState._resetTvosDisplayMatchForMediaBoundary",
+      "_VideoPlayerScreenState._scheduleTvosDisplayMatch",
+      "_VideoPlayerScreenState._installDecoderObservers",
+      "_VideoPlayerScreenState._scheduleRendererStartupValidation",
+      "_VideoPlayerScreenState._validateRendererStartup",
+      "_VideoPlayerScreenState._canFallbackExplicitRenderer",
+      "_VideoPlayerScreenState._fallbackExplicitRendererToAutomatic",
+      "_VideoPlayerScreenState._scheduleDecoderProbe",
+      "_VideoPlayerScreenState._reportActiveVideoDecoder",
+      "_VideoPlayerScreenState._emitDecoderDiagnosticOnce",
+      "_VideoPlayerScreenState._beginMediaGeneration",
+      "_VideoPlayerScreenState._networkTuning",
+      "_VideoPlayerScreenState._networkTuningDefaults",
+      "_VideoPlayerScreenState._networkTuningChain",
+      "_VideoPlayerScreenState._applyNetworkTuning",
+      "_VideoPlayerScreenState._applyNetworkTuningInner",
+      "_VideoPlayerScreenState._openMedia",
+      "_VideoPlayerScreenState._releasePlayerDiagnostic",
+      "_VideoPlayerScreenState.didUpdateWidget",
+      "_VideoPlayerScreenState._getLastPlayedEpisode",
+      "_VideoPlayerScreenState._startTransitionOverlay",
+      "_VideoPlayerScreenState._clearBufferingIndicator",
+      "_VideoPlayerScreenState._dockBand",
+      "_VideoPlayerScreenState._skipButtonBottom",
+      "_VideoPlayerScreenState._loadDockPrefs",
+      "_VideoPlayerScreenState._loadPlayerDefaults",
+      "_VideoPlayerScreenState._tvReleaseFocusForOverlay",
+      "_VideoPlayerScreenState._kIptvZapPageSize",
+      "_VideoPlayerScreenState._iptvZapWindowOffset",
+      "_VideoPlayerScreenState._iptvZapCategoryTotal",
+      "_VideoPlayerScreenState._iptvZapPagingActive",
+      "_VideoPlayerScreenState._iptvZapCategory",
+      "_VideoPlayerScreenState._iptvZapCategories",
+      "_VideoPlayerScreenState._iptvZapRequestInFlight",
+      "_VideoPlayerScreenState._iptvZapPendingInputs",
+      "_VideoPlayerScreenState._iptvSwitchTicket",
+      "_VideoPlayerScreenState._iptvChannelKey",
+      "_VideoPlayerScreenState._iptvErrorsMuted",
+      "_VideoPlayerScreenState._lastIptvErrorShown",
+      "_VideoPlayerScreenState._currentIptvChannel",
+      "_VideoPlayerScreenState._hasIptvNext",
+      "_VideoPlayerScreenState._hasIptvPrevious",
+      "_VideoPlayerScreenState._isIptvSeriesContext",
+      "_VideoPlayerScreenState._activeHttpHeaders",
+      "_VideoPlayerScreenState._hasStremioTvGuide",
+      "_VideoPlayerScreenState._hasStremioTvNext",
+      "_VideoPlayerScreenState._hasAnyNext",
+      "_VideoPlayerScreenState._pip",
+      "_VideoPlayerScreenState.dispose",
+      "_VideoPlayerScreenState._autosaveTimer",
+      "_VideoPlayerScreenState._tvAutoHideBlocked",
+      "_VideoPlayerScreenState._scheduleAutoHide",
+      "_VideoPlayerScreenState._tvShowBar",
+      "_VideoPlayerScreenState._tvHideBar",
+      "_VideoPlayerScreenState._tvScrubBegin",
+      "_VideoPlayerScreenState._tvScrubStep",
+      "_VideoPlayerScreenState._tvScrubCommit",
+      "_VideoPlayerScreenState._tvAbandonScrub",
+      "_VideoPlayerScreenState._tvScrubCancel",
+      "_VideoPlayerScreenState._buildTvControls",
+      "_VideoPlayerScreenState._iptvSheetKey",
+      "_VideoPlayerScreenState._overlayJustClosed",
+      "_VideoPlayerScreenState._anyPlayerOverlayOpen",
+      "_VideoPlayerScreenState._closeTopPlayerOverlay",
+      "_VideoPlayerScreenState._openTvGuide",
+      "_VideoPlayerScreenState._handleTvKey",
+      "_VideoPlayerScreenState._toggleControls",
+      "_VideoPlayerScreenState._onControlsVisibilityChanged",
+      "_VideoPlayerScreenState._handleDoubleTap",
+      "_VideoPlayerScreenState._onPanStart",
+      "_VideoPlayerScreenState._onPanUpdate",
+      "_VideoPlayerScreenState._onPanEnd",
+      "_VideoPlayerScreenState._togglePlay",
+      "_VideoPlayerScreenState._buildSubtitleViewConfig",
+      "_VideoPlayerScreenState._buildCustomAspectRatioVideo",
+      "_VideoPlayerScreenState._buildTransitionOverlay",
+      "_VideoPlayerScreenState._buildStremioTvNextLoadingOverlay",
+      "_VideoPlayerScreenState._debrifyTvOwnsIdentity",
+      "_VideoPlayerScreenState._buildDebrifyTvInfoPanel",
+      "_VideoPlayerScreenState._buildIptvInfoPanel",
+      "_VideoPlayerScreenState._canFetchEpisodes",
+      "_VideoPlayerScreenState._episodeFetchInProgress",
+      "_VideoPlayerScreenState._syntheticGuidePlaylist",
+      "_VideoPlayerScreenState.build",
+      "_VideoPlayerScreenState._isAnyOverlayOpen",
+      "_VideoPlayerScreenState._wakeControlsOnPointer",
+      "_VideoPlayerScreenState._resetSubtitleState",
+      "_VideoPlayerScreenState._findSeriesEpisodeForCurrentIndex"
+    ]
+  },
+  "destinations": {},
+  "scaffolding": {},
+  "declarations": [
+    {
+      "original": "@directive:0",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:1",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:2",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:3",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:4",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:5",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:6",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:7",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:8",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:9",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:10",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:11",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:12",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:13",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:14",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:15",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:16",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:17",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:18",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:19",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:20",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:21",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:22",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:23",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:24",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:25",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:26",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:27",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:28",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:29",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:30",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:31",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:32",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:33",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:34",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:35",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:36",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:37",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:38",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:39",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:40",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:41",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:42",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:43",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:44",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:45",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:46",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:47",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:48",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:49",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:50",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:51",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:52",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:53",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:54",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:55",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:56",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:57",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:58",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:59",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:60",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:61",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:62",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:63",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:64",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:65",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:66",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:67",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:68",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:69",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:70",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:71",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:72",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:73",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:74",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:75",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:76",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:77",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:78",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:79",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:80",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:81",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:82",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:83",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:84",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:85",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:86",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:87",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:88",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:89",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:90",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:91",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:92",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:93",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:94",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:95",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:96",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:97",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:98",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:99",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:100",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:101",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:102",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:103",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:104",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:105",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:106",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:107",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:108",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:109",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:110",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:111",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:112",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:113",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:114",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:115",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:116",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:117",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:118",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:119",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:120",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:121",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:122",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:123",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:124",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:125",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:126",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:127",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:128",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:129",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:130",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:131",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:132",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:133",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:134",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:135",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:136",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:137",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:138",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:139",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:140",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:141",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:142",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:143",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:144",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:145",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:146",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:147",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:148",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:149",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:150",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:151",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:152",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:153",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:154",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:155",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:156",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:157",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:158",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:159",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:160",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:161",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:162",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:163",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:164",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:165",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:166",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:167",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:168",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:169",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:170",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:171",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:172",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:173",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:174",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:175",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:176",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:177",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:178",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:179",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:180",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:181",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:182",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:183",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:184",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:185",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:186",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:187",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:188",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:189",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:190",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:191",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:192",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:193",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:194",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:195",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:196",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:197",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:198",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:199",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:200",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:201",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:202",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:203",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:204",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:205",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:206",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:207",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:208",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:209",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:210",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:211",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:212",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:213",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:214",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:215",
+      "fate": "retained"
+    },
+    {
+      "original": "@directive:216",
+      "fate": "retained"
+    },
+    {
+      "original": "VideoPlayerScreen",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState:header",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._VideoPlayerScreenState",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._vpSetState",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._tvReleaseLogChannel",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._androidPlayerDiagnosticChannel",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._player",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._playerCreated",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._audioEffectSessionId",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._videoController",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._androidVideoRendererMode",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._tvosDecodeRemedy",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._tvosForceSoftwareDecode",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._contentDisplayMatchMode",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._tvosDisplayMatchToken",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._tvosDisplayMatchTimer",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._lastTvosDisplayMatchSignature",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._audioPassthroughEnabled",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._systemAudioEffectsEnabled",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._appleMultichannelEnabled",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._tvosRouteOutputChannels",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._tvosForceStereoAudio",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._tvosLegacyAudioOutput",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._playerInstanceGeneration",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._playerPresentationInitialized",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._rendererValidatedForSession",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._rendererFallbackInProgress",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._rendererStartupGuardToken",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._rendererStartupValidationGeneration",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._activeOpenedMedia",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._activeMediaShouldPlay",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._activeMediaUserPaused",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._random",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._cachedSeriesPlaylist",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._activePlaylist",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._seriesImdbKnownAtLaunch",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._episodeMetadataReady",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._playerInitializationFuture",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._playlistIdentityToken",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._controlsVisible",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._currentStreamUrl",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._singleFileImdbId",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._singleFileImdbFetched",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._manualContentImdbId",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._manualContentType",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._manualContentSeason",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._manualContentEpisode",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._manualSubtitleDisplayLabel",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._isPikPakRetrying",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._pikPakRetryCount",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._pikPakRetryMessage",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._pikPakRetryId",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._constructPlaylistItemData",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._seriesPlaylist",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._hideTimer",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._tvBarScope",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._tvPlayPauseFocus",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._tvProgressFocus",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._tvRootFocus",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._tvNoTimeline",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._tvScrubTarget",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._tvLastArrowAt",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._tvScrubWasPlaying",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._tvScrubRepeats",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._tvScrubGeneration",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._tvScrubStartedAtGeneration",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._isSeekingWithSlider",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._lastSliderSeekPos",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._showDebrifyBanner",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._debrifyBannerFloatingMounted",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._showIptvZapBanner",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._iptvZapFloatingMounted",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._iptvZapChannel",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._iptvZapEpg",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._iptvZapEpgLoading",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._iptvZapClock",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._ripple",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._panIgnore",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._currentIndex",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._lastTapLocal",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._isManualEpisodeSelection",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._isAutoAdvancing",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._allowResumeForManualSelection",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._manualSelectionResetTimer",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._continuousShuffleEnabled",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._showShuffleGeneration",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._episodeNavigationGeneration",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._currentChannelName",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._currentChannelNumber",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._currentChannelId",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._showChannelGuide",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._showSyncOverlay",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._channelEntries",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._showIptvChannelSheet",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._currentIptvIndex",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._iptvDiag",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._iptvReconnectText",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._iptvLiveRecovery",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._iptvChannelsOverride",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._iptvGuideContextOverride",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._iptvStartOverActive",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._iptvStartOverLoading",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._iptvStartOverTimelineRequested",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._effectiveIptvChannels",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._iptvZapBannerOwnsIdentity",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._playerGuideStyle",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._dockStyle",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._dockPalette",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._dockSize",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._dockExtent",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._infoPanelHeight",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._dockVolume",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._infoPanelSignature",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._lastInfoPanelSignature",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._infoPanelGeneration",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._dockGeometryGeneration",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._dockGeometrySignature",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._lastDockGeometrySignature",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState.didChangeDependencies",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._refreshDockGeometry",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._reservedInfoPanelHeight",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._playerGuideTokens",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._recordingSupported",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._isRecording",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._recordingTempPath",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._lifecycle",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._pausedByLifecycle",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._engineTaskId",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._engineFlagOn",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._recordLogSub",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._subtitleDiagnosticLogSub",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._subtitleDiagnosticGeneration",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._activeSubtitleApplyAttempt",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._subtitleSelectionCorrection",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._desktopRecordingRevisionListener",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._recordingStartGen",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._iptvGuideContextGeneration",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._showSourceSheet",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._currentSourceIndex",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._serverWatch",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._openedWatchSource",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._watchOpenEpoch",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._stremioSourcesOverride",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._resolveStremioSourceOverride",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._augmentedSources",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._showPlayerMenu",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._playerMenuInitialSection",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._playerMenuKey",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._menuImdbId",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._menuContentType",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._menuSeason",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._menuEpisode",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._menuCachedSlots",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._menuCacheKey",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._showStremioTvGuide",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._currentStremioTvChannelId",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._stremioTvChannelsOverride",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._showStremioTvNextLoading",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._currentStremioTvContentImdbId",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._currentStremioTvContentType",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._currentStremioTvContentSeason",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._currentStremioTvContentEpisode",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._currentStremioTvContentTitle",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._effectiveSources",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._effectiveResolver",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._effectiveStremioTvChannels",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._effectiveContentImdbId",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._effectiveContentType",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._effectiveContentSeason",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._effectiveContentEpisode",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._effectiveContentTitle",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._currentSeriesImdbId",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._skip",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._subtitleSettings",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._cachedStremioSubtitles",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._cachedAddonSlots",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._injectedSubtitleSlots",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._cachedSubtitleKey",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._selectedStremioSubtitleId",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._embeddedSubtitleApplied",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._userManuallySelectedSubtitle",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._trackPreferencesReadyForAddonSubtitles",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._addonSubtitleFetchToken",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._activeExternalSubtitlePath",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._subtitleOnlyForeignAudio",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._subtitleForcedOnly",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._hasSubtitlePolicy",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._subtitlePreferredAudio",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._subtitleSelectedAudio",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._subtitleAudioRevision",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._subtitleSync",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._subtitleApply",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._subtitleLanguage",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._trackPreferences",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._addonSubtitles",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._identify",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._identifyUi",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._menuUi",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._menu",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._recording",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._recordingResources",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._resumeKeys",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._resumeRestore",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._resumeSave",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._zapRing",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._zapLadder",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._iptvGuide",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._iptvSwitch",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._iptvSources",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._iptvMemory",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._iptvBanner",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._startupCandidates",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._startupFailover",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._startupGate",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._sourceSwitch",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._sourcePlaylistSwitch",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._debrifyChannels",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._debrifyBanner",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._stremioTv",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._episodeFetch",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._episodeGuide",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._playbackEnded",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._episodeNext",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._episodeAdjacent",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._shuffle",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._episodeTitleInfo",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._playlistLoad",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._playlistEntryResolve",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._mediaWaits",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._pikPakRetry",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._metadataPreload",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._autoSyncPill",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._autoSyncPillLastShown",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._isReady",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._startupGateActive",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._startupGateOverlayHidden",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._manualSourceGateActive",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._validationGateActive",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._startupGateMessage",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._resumeWriteGuard",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._resumeSaveLock",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._resumeVerifyEpoch",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._stremioTvStartupSeek",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._stremioTvStartupWatch",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._isPlaying",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._isPipActive",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._position",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._duration",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._playbackUiClock",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._activeSkipSegmentUi",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._isTransitioning",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._seriesNextDispatched",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._completion",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._posSub",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._durSub",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._playSub",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._paramsSub",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._trackSub",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._completedSub",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._bufferingSub",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._iptvErrorSub",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._rendererStartupErrorSub",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._decoderProbeGeneration",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._decoderProbeToken",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._decoderProbeParams",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._decoderProbeTimer",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._lastDecoderDiagnosticSignature",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._showBufferingIndicator",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._bufferingDebounceTimer",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._mode",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._gestureStartPosition",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._gestureStartVideoPosition",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._gestureStartVolume",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._gestureStartBrightness",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._seekHud",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._verticalHud",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._aspectRatioHud",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._display",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._sleep",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._sleepStopLatched",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._speedHoldHud",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._startsInPortrait",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._rainbowController",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._rainbowOpacity",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._rainbowActive",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._transitionRunning",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._transitionStopTimer",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._transitionPhaseTimer",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._transitionPhase",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._transitionPhase2Started",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._tvStaticMessage",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._tvStaticSubtext",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._tvStaticMessages",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._dynamicTitle",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._trakt",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._simkl",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._mdblist",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._episodeTrackerProgressImdbId",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._analyticsHeartbeatTimer",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._randomStartOffset",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._percentStartOffset",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState.initState",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._persistablePosition",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._traktSeasonEpisode",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._startAnalyticsHeartbeat",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._bindEpisodeTrackerProgressIdentity",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._setExternalAudioTrack",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._attachAudioEffectSession",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._releaseAudioEffectSession",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._outputLease",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._outputLeaseTimeout",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._claimVideoOutput",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._releaseVideoOutput",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._screenDisposed",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._createPlayerInstance",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._passthroughFlipChain",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._setAudioPassthroughLive",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._applyPassthroughFlip",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._configurePlayerAudio",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._installTvosDecodeRemedy",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._onPlayerInstanceReady",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._initializePlayer",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._bindPlayerInstanceSubscriptions",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._cancelPlayerInstanceSubscriptions",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._mediaServerFrameGeneration",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._handleDecoderProbeParams",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._resetTvosDisplayMatchForMediaBoundary",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._scheduleTvosDisplayMatch",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._installDecoderObservers",
+      "fate": "patched",
+      "patches": [
+        {
+          "before": [
+            "!",
+            "Platform",
+            ".",
+            "isAndroid",
+            ")",
+            "return",
+            ";"
+          ],
+          "after": [
+            "!",
+            "VpS2Hooks",
+            ".",
+            "isAndroidRendererValidation",
+            ")",
+            "return",
+            ";"
+          ],
+          "count": 1
+        }
+      ],
+      "reason": "Approved S2f renderer-validation predicate seam (dedicated hook, default Platform.isAndroid); arguments/order unchanged.",
+      "test": "dev/tool/vplayer_platform_seam_proof.py"
+    },
+    {
+      "original": "_VideoPlayerScreenState._scheduleRendererStartupValidation",
+      "fate": "patched",
+      "patches": [
+        {
+          "before": [
+            "isAndroid",
+            ":",
+            "Platform",
+            ".",
+            "isAndroid",
+            ","
+          ],
+          "after": [
+            "isAndroid",
+            ":",
+            "VpS2Hooks",
+            ".",
+            "isAndroidRendererValidation",
+            ","
+          ],
+          "count": 1
+        }
+      ],
+      "reason": "Approved S2f renderer-validation predicate seam (dedicated hook, default Platform.isAndroid); arguments/order unchanged.",
+      "test": "dev/tool/vplayer_platform_seam_proof.py"
+    },
+    {
+      "original": "_VideoPlayerScreenState._validateRendererStartup",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._canFallbackExplicitRenderer",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._fallbackExplicitRendererToAutomatic",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._scheduleDecoderProbe",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._reportActiveVideoDecoder",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._emitDecoderDiagnosticOnce",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._beginMediaGeneration",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._networkTuning",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._networkTuningDefaults",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._networkTuningChain",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._applyNetworkTuning",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._applyNetworkTuningInner",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._openMedia",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._releasePlayerDiagnostic",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState.didUpdateWidget",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._getLastPlayedEpisode",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._startTransitionOverlay",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._clearBufferingIndicator",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._dockBand",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._skipButtonBottom",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._loadDockPrefs",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._loadPlayerDefaults",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._tvReleaseFocusForOverlay",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._kIptvZapPageSize",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._iptvZapWindowOffset",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._iptvZapCategoryTotal",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._iptvZapPagingActive",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._iptvZapCategory",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._iptvZapCategories",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._iptvZapRequestInFlight",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._iptvZapPendingInputs",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._iptvSwitchTicket",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._iptvChannelKey",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._iptvErrorsMuted",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._lastIptvErrorShown",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._currentIptvChannel",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._hasIptvNext",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._hasIptvPrevious",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._isIptvSeriesContext",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._activeHttpHeaders",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._hasStremioTvGuide",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._hasStremioTvNext",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._hasAnyNext",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._pip",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState.dispose",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._autosaveTimer",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._tvAutoHideBlocked",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._scheduleAutoHide",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._tvShowBar",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._tvHideBar",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._tvScrubBegin",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._tvScrubStep",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._tvScrubCommit",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._tvAbandonScrub",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._tvScrubCancel",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._buildTvControls",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._iptvSheetKey",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._overlayJustClosed",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._anyPlayerOverlayOpen",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._closeTopPlayerOverlay",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._openTvGuide",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._handleTvKey",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._toggleControls",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._onControlsVisibilityChanged",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._handleDoubleTap",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._onPanStart",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._onPanUpdate",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._onPanEnd",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._togglePlay",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._buildSubtitleViewConfig",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._buildCustomAspectRatioVideo",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._buildTransitionOverlay",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._buildStremioTvNextLoadingOverlay",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._debrifyTvOwnsIdentity",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._buildDebrifyTvInfoPanel",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._buildIptvInfoPanel",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._canFetchEpisodes",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._episodeFetchInProgress",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._syntheticGuidePlaylist",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState.build",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._isAnyOverlayOpen",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._wakeControlsOnPointer",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._resetSubtitleState",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState._findSeriesEpisodeForCurrentIndex",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState:tail",
+      "fate": "retained"
+    },
+    {
+      "original": "_VideoPlayerScreenState:close",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpMetadataPreloadHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpPikPakRetryHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpMediaWaitsHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpPlaylistEntryResolveHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpPlaylistLoadHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpEpisodeTitleInfoHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpShuffleHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpEpisodeAdjacentHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpEpisodeNextHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpPlaybackEndedHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpEpisodeGuideHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpEpisodeFetchHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpStremioTvChannelsHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpDebrifyTvBannerHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpDebrifyTvChannelsHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpSourcePlaylistSwitchHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpSourceSwitchHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpStartupGateHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpStartupFailoverHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpStartupCandidatesHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpIptvZapBannerHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpIptvWatchMemoryHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpIptvLiveSourcesHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpIptvChannelSwitchHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpIptvGuideCatchupHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpIptvZapLadderHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpIptvZapRingHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpResumeSaveHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpResumeRestoreHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpResumeKeysHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpIptvRecordingResourcesHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpIptvRecordingHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpPlayerMenuHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpPlayerMenuUiHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpIdentifyTitleUiHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpIdentifyTitleHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpAddonSubtitlesHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpTrackPreferencesHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpSubtitleLanguagePolicyHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpSubtitleApplyHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpSubtitleAutoSyncHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpPipLifecycleHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpLocalCompletionHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpMdblistScrobblerHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpSimklScrobblerHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpTraktScrobblerHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpDisplayModeHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpSkipSegmentHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "_VpSleepTimerHostAdapter",
+      "fate": "retained"
+    },
+    {
+      "original": "VideoPlayerScreenTestHooks",
+      "fate": "retained"
+    },
+    {
+      "original": "VpS2Hooks",
+      "fate": "patched",
+      "patches": [
+        {
+          "before": [
+            "this",
+            ".",
+            "android",
+            "}"
+          ],
+          "after": [
+            "this",
+            ".",
+            "android",
+            ",",
+            "this",
+            ".",
+            "androidRendererValidation",
+            "}"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "?",
+            "android",
+            ";",
+            "static"
+          ],
+          "after": [
+            "?",
+            "android",
+            ";",
+            "final",
+            "bool",
+            "Function",
+            "(",
+            ")",
+            "?",
+            "androidRendererValidation",
+            ";",
+            "static"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "_installed",
+            "?.",
+            "android",
+            "?.",
+            "call",
+            "(",
+            ")",
+            "??",
+            "Platform",
+            ".",
+            "isAndroid",
+            ";",
+            "}"
+          ],
+          "after": [
+            "_installed",
+            "?.",
+            "android",
+            "?.",
+            "call",
+            "(",
+            ")",
+            "??",
+            "Platform",
+            ".",
+            "isAndroid",
+            ";",
+            "static",
+            "bool",
+            "get",
+            "isAndroidRendererValidation",
+            "=>",
+            "_installed",
+            "?.",
+            "androidRendererValidation",
+            "?.",
+            "call",
+            "(",
+            ")",
+            "??",
+            "Platform",
+            ".",
+            "isAndroid",
+            ";",
+            "}"
+          ],
+          "count": 1
+        }
+      ],
+      "reason": "Approved S2f renderer-validation predicate seam (dedicated hook, default Platform.isAndroid); arguments/order unchanged.",
+      "test": "dev/tool/vplayer_platform_seam_proof.py"
+    },
+    {
+      "original": ":tail",
+      "fate": "retained"
+    }
+  ],
+  "checkpoint": "S2f",
+  "patched_class_projection": [
+    "VpS2Hooks"
+  ],
+  "pipeline_note": "Dedicated renderer-validation predicate seam on accepted P18; all eighteen historical phases protected."
+}

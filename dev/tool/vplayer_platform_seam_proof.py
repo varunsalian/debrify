@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""S2/S2b/S2c/S2d/S2e ownership, default/order and installation/reference guards."""
+"""S2/S2b/S2c/S2d/S2e/S2f ownership, default/order and installation/reference guards."""
 import argparse
 import json
 import re
@@ -17,6 +17,7 @@ MANIFEST = 'dev/tool/dart_moves/vplayer_p8_seam.json'
 S2C_MANIFEST = 'dev/tool/dart_moves/vplayer_p10_seam.json'
 S2D_MANIFEST = 'dev/tool/dart_moves/vplayer_p13_seam.json'
 S2E_MANIFEST = 'dev/tool/dart_moves/vplayer_p16_seam.json'
+S2F_MANIFEST = 'dev/tool/dart_moves/vplayer_p19_seam.json'
 HOOK = 'VpS2Hooks'
 S2_SITES = {
     'initState': {'isIOS': 1, 'isAndroid': 1},
@@ -91,6 +92,85 @@ S2E_CONDITION = [
 ]
 
 
+VALIDATION = 'isAndroidRendererValidation'
+S2F_PATCHES = {
+    '_installDecoderObservers': dict(
+        before=['!', 'Platform', '.', 'isAndroid', ')', 'return', ';'],
+        after=['!', HOOK, '.', VALIDATION, ')', 'return', ';'], count=1),
+    '_scheduleRendererStartupValidation': dict(
+        before=['isAndroid', ':', 'Platform', '.', 'isAndroid', ','],
+        after=['isAndroid', ':', HOOK, '.', VALIDATION, ','], count=1),
+}
+_GETTER = ['_installed', '?.', 'android', '?.', 'call', '(', ')', '??',
+           'Platform', '.', 'isAndroid', ';']
+S2F_HOOK_PATCHES = [
+    dict(before=['this', '.', 'android', '}'],
+         after=['this', '.', 'android', ',', 'this', '.', 'androidRendererValidation', '}'],
+         count=1),
+    dict(before=['?', 'android', ';', 'static'],
+         after=['?', 'android', ';', 'final', 'bool', 'Function', '(', ')', '?',
+                'androidRendererValidation', ';', 'static'], count=1),
+    dict(before=[*_GETTER, '}'],
+         after=[*_GETTER, 'static', 'bool', 'get', VALIDATION, '=>', '_installed', '?.',
+                'androidRendererValidation', '?.', 'call', '(', ')', '??', 'Platform',
+                '.', 'isAndroid', ';', '}'], count=1),
+]
+# Exact S2f contexts: the NativePlayer check precedes the observer gate, and
+# the validation predicate is the first shouldArm argument.
+S2F_CONTEXTS = {
+    '_installDecoderObservers': [
+        'if', '(', 'platform', 'is', '!', 'mk', '.', 'NativePlayer', ')', 'return', ';',
+        'if', '(', '!', HOOK, '.', VALIDATION, ')', 'return', ';'],
+    '_scheduleRendererStartupValidation': [
+        'if', '(', '!', 'AndroidRendererStartupFallback', '.', 'shouldArm', '(',
+        'isAndroid', ':', HOOK, '.', VALIDATION, ',',
+        'isAndroidTv', ':', 'PlatformUtil', '.', 'isAndroidTvCached', ','],
+}
+
+
+def apply_patches(body, patches):
+    body = list(body)
+    for patch in patches:
+        hits = includes(body, patch['before'])
+        assert len(hits) == patch['count'] == 1, (patch['before'], hits)
+        at = hits[0]
+        body[at:at + len(patch['before'])] = patch['after']
+    return body
+
+
+RENDERER_FALLBACK = 'lib/features/video_player/presentation/legacy_video_player/vp_renderer_fallback.dart'
+DECODER_PROBE = 'lib/features/video_player/presentation/legacy_video_player/vp_decoder_probe.dart'
+# P19 resolution P1-1/P1-2 and P3: the fallback Host projects both live
+# predicates; the probe Host projects only renderer validation.
+ENGINE_PROJECTIONS = {
+    '_VpRendererFallbackHostAdapter': ('isAndroid', VALIDATION),
+    '_VpDecoderProbeHostAdapter': (VALIDATION,),
+}
+
+
+def engine_projection_errors(adapters):
+    """Relocated S2b/S2f owners read each predicate live through the facade."""
+    errors = []
+    for adapter, predicates in ENGINE_PROJECTIONS.items():
+        members = adapters.get(adapter, {})
+        for predicate in predicates:
+            expected = ['@', 'override', 'bool', 'get', predicate, '=>', HOOK, '.', predicate, ';']
+            if members.get(predicate) != expected:
+                errors.append('P19 live Host projection changed: ' + adapter + '.' + predicate)
+        for predicate in {'isAndroid', VALIDATION} - set(predicates):
+            if predicate in members:
+                errors.append('P19 unexpected Host projection: ' + adapter + '.' + predicate)
+    return errors
+
+
+def validation_site_errors(members):
+    """One dedicated predicate per S2f site, in its original operand position."""
+    return ['S2f validation predicate default/count/order changed: ' + name
+            for name, context in S2F_CONTEXTS.items()
+            if len(includes(members.get(name, []), context)) != 1
+            or members.get(name, []).count(HOOK) != 1]
+
+
 def candidate_site_errors(members):
     """Exact short-circuit and argument order; one live predicate per site."""
     return ['S2e candidate predicate default/count/order changed: ' + name
@@ -122,9 +202,10 @@ def includes(body, seq):
 
 def default_errors(members):
     errors = []
-    for name, callback in [('isIOS', 'ios'), ('isAndroid', 'android')]:
+    for name, callback, default in [('isIOS', 'ios', 'isIOS'), ('isAndroid', 'android', 'isAndroid'),
+                                    (VALIDATION, 'androidRendererValidation', 'isAndroid')]:
         expected = ['static', 'bool', 'get', name, '=>', '_installed', '?.', callback,
-                    '?.', 'call', '(', ')', '??', 'Platform', '.', name, ';']
+                    '?.', 'call', '(', ')', '??', 'Platform', '.', default, ';']
         if members[name] != expected:
             errors.append('default/override path changed: ' + name)
     return errors
@@ -259,6 +340,15 @@ def prove(package, self_test=False):
         if r['fate'] == 'patched'}
     assert all(r['fate'] in {'retained', 'patched'} for r in candidates['declarations'])
     assert candidates['destinations'] == candidates['scaffolding'] == {}
+    validation = load_manifest(S2F_MANIFEST)
+    assert validation['base'] == '46bc00ce7' and validation['checkpoint'] == 'S2f'
+    validation_patches = {r['original']: r['patches'] for r in validation['declarations']
+                          if r['fate'] == 'patched'}
+    assert validation_patches == {
+        **{'_VideoPlayerScreenState.' + n: [patch] for n, patch in S2F_PATCHES.items()},
+        HOOK: S2F_HOOK_PATCHES}
+    assert all(r['fate'] in {'retained', 'patched'} for r in validation['declarations'])
+    assert validation['destinations'] == validation['scaffolding'] == {}
     applied = []
     for path in (ROOT / 'dev/tool/dart_moves').glob('*.json'):
         candidate = json.loads(path.read_text())
@@ -270,7 +360,8 @@ def prove(package, self_test=False):
     errors += source_errors(sources)
     unit = parse({SOURCE: sources[SOURCE]}, package, ownership=True)[SOURCE]
     hook = next(n for n in unit['declarations'] if n['name'] == HOOK)
-    assert tokens(hook) == checkpoint['scaffolding'][SOURCE][HOOK]
+    # The accepted S2 hook plus exactly the three reviewed S2f insertions.
+    assert tokens(hook) == apply_patches(checkpoint['scaffolding'][SOURCE][HOOK], S2F_HOOK_PATCHES)
     members = {n['name']: [t['text'] for t in n['tokens'] if not t['comment']] for n in hook['members']}
     errors += default_errors(members) + installation_errors(members)
     state = next(n for n in unit['declarations'] if n['name'] == '_VideoPlayerScreenState')
@@ -325,6 +416,41 @@ def prove(package, self_test=False):
         projection_members = {n['name']: [t['text'] for t in n['tokens'] if not t['comment']]
                               for n in adapter['members']}
         errors += subtitle_projection_errors(projection_members)
+    validation_members = {n['name']: [t['text'] for t in n['tokens'] if not t['comment']]
+                          for n in state['members'] if n['name'] in S2F_PATCHES}
+    # P19 relocates S2b _canFallbackExplicitRenderer and both S2f sites. As
+    # for S2c/S2e: resolve the LIVE owner through the validating reader,
+    # assert its destination, restore only the exact live Host projection
+    # (once), then apply the unchanged original-condition proof.
+    engine_projection_members = None
+    relocated_sites = 0
+    for site, path, predicate, members_by_site in [
+        ('_canFallbackExplicitRenderer', RENDERER_FALLBACK, 'isAndroid', renderer_members),
+        ('_scheduleRendererStartupValidation', RENDERER_FALLBACK, VALIDATION, validation_members),
+        ('_installDecoderObservers', DECODER_PROBE, VALIDATION, validation_members),
+    ]:
+        if site in members_by_site:
+            continue
+        resolved = read('_VideoPlayerScreenState.' + site, package)
+        assert resolved['path'] == path, (site, resolved['path'])
+        moved = parse({'live': resolved['source']}, package, ownership=True)['live']['declarations'][0]
+        body = [t['text'] for t in moved['tokens'] if not t['comment']]
+        before = ['_host', '.', predicate]
+        hits = includes(body, before)
+        assert len(hits) == 1, (site, hits)
+        at = hits[0]
+        body[at:at + len(before)] = [HOOK, '.', predicate]
+        members_by_site[site] = body
+        relocated_sites += 1
+    if relocated_sites:
+        assert relocated_sites == 3, relocated_sites
+        engine_projection_members = {}
+        for adapter_name in ['_VpRendererFallbackHostAdapter', '_VpDecoderProbeHostAdapter']:
+            adapter = next(n for n in unit['declarations'] if n['name'] == adapter_name)
+            engine_projection_members[adapter_name] = {
+                n['name']: [t['text'] for t in n['tokens'] if not t['comment']]
+                for n in adapter['members']}
+        errors += engine_projection_errors(engine_projection_members)
     errors += renderer_site_errors(renderer_members)
     recording_members = {n['name']: [t['text'] for t in n['tokens'] if not t['comment']]
                          for n in state['members'] if n['name'] in S2D_PATCHES}
@@ -352,6 +478,7 @@ def prove(package, self_test=False):
             for n in adapter['members'] if not n.get('isSetter')}
         errors += recording_projection_errors(recording_projection_members)
     errors += recording_site_errors(recording_members)
+    errors += validation_site_errors(validation_members)
     negatives = []
     if self_test:
         import copy
@@ -386,6 +513,10 @@ def prove(package, self_test=False):
             ('override ignored', 'isIOS', '_installed', 'null'),
             ('default eager', 'isIOS', '??', '|'),
             ('callback twice', 'isIOS', 'call', 'callTwice'),
+            ('wrong renderer-validation default', VALIDATION, 'isAndroid', 'isIOS'),
+            ('renderer-validation reads android callback', VALIDATION,
+             'androidRendererValidation', 'android'),
+            ('renderer-validation override ignored', VALIDATION, '_installed', 'null'),
         ]:
             mutated = copy.deepcopy(members);target = mutated[getter];index = len(target)-2 if name.startswith('wrong') else target.index(old);target[index] = new
             assert default_errors(mutated), 'independent default guard accepted ' + name
@@ -446,6 +577,66 @@ def prove(package, self_test=False):
                     body[body.index('isAndroidTvCached', start)] = 'isTelevision'
                 assert renderer_site_errors(mutated), 'independent site guard accepted ' + site + ': ' + name
                 negatives.append('S2b ' + site + ': ' + name)
+        mutated = copy.deepcopy(renderer_members)
+        body = mutated['_canFallbackExplicitRenderer']
+        at = includes(body, [HOOK, '.', 'isAndroid'])[0]
+        body[at + 2] = VALIDATION
+        assert renderer_site_errors(mutated), 'S2b accepted the validation predicate'
+        negatives.append('S2b _canFallbackExplicitRenderer: wrong hook predicate')
+        for site, context in S2F_CONTEXTS.items():
+            for name in ['wrong predicate', 'wrong hook predicate', 'override bypassed',
+                         'predicate twice', 'operand order', 'TV predicate changed']:
+                if site == '_installDecoderObservers' and name == 'TV predicate changed':
+                    continue
+                mutated = copy.deepcopy(validation_members)
+                body = mutated[site]
+                start = includes(body, context)[0]
+                hook_at = start + context.index(HOOK)
+                if name == 'wrong predicate':
+                    body[hook_at + 2] = 'isIOS'
+                elif name == 'wrong hook predicate':
+                    body[hook_at + 2] = 'isAndroid'
+                elif name == 'override bypassed':
+                    body[hook_at] = 'Platform'
+                elif name == 'predicate twice':
+                    body[hook_at:hook_at] = [HOOK, '.', VALIDATION, '&&']
+                elif name == 'operand order':
+                    end = start + len(context)
+                    if site == '_installDecoderObservers':
+                        # The gate before the NativePlayer check.
+                        body[start:end] = [*context[11:], *context[:11]]
+                    else:
+                        body[start:end] = [*context[:7], *context[13:], *context[7:13]]
+                else:
+                    body[body.index('isAndroidTvCached', start)] = 'isTelevision'
+                assert validation_site_errors(mutated), 'independent S2f guard accepted ' + site + ': ' + name
+                negatives.append('S2f ' + site + ': ' + name)
+        if engine_projection_members is not None:
+            for adapter, predicates in ENGINE_PROJECTIONS.items():
+                for predicate in predicates:
+                    other = 'isAndroid' if predicate == VALIDATION else VALIDATION
+                    for name, before, after in [
+                        ('wrong hook predicate', [HOOK, '.', predicate], [HOOK, '.', other]),
+                        ('override bypassed', [HOOK], ['Platform']),
+                        ('cached predicate', [HOOK, '.', predicate], ['_cachedPredicate']),
+                        ('predicate twice', [HOOK, '.', predicate],
+                         [HOOK, '.', predicate, '&&', HOOK, '.', predicate]),
+                    ]:
+                        mutated = copy.deepcopy(engine_projection_members)
+                        body = mutated[adapter][predicate]
+                        hits = includes(body, before)
+                        assert len(hits) == 1, (adapter, predicate, name, hits)
+                        at = hits[0]
+                        body[at:at + len(before)] = after
+                        assert engine_projection_errors(mutated) == [
+                            'P19 live Host projection changed: ' + adapter + '.' + predicate], name
+                        negatives.append('P19 ' + adapter + '.' + predicate + ': ' + name)
+            mutated = copy.deepcopy(engine_projection_members)
+            mutated['_VpDecoderProbeHostAdapter']['isAndroid'] = [
+                '@', 'override', 'bool', 'get', 'isAndroid', '=>', HOOK, '.', 'isAndroid', ';']
+            assert engine_projection_errors(mutated) == [
+                'P19 unexpected Host projection: _VpDecoderProbeHostAdapter.isAndroid']
+            negatives.append('P19 probe Host gains isAndroid')
         for name, before, after in [
             ('wrong predicate', [HOOK, '.', 'isAndroid'], [HOOK, '.', 'isIOS']),
             ('override bypassed', [HOOK], ['Platform']),
@@ -561,7 +752,10 @@ def prove(package, self_test=False):
                         s2d_patched_declarations=len(recording_patches), s2d_predicate_occurrences=2,
                         s2e_sites=2, s2e_classified_spans=len(candidates['declarations']),
                         s2e_patched_declarations=2, s2e_predicate_occurrences=2,
-                        s2e_valid_operand_order_negatives=2 if self_test else 0)
+                        s2e_valid_operand_order_negatives=2 if self_test else 0,
+                        s2f_sites=len(S2F_PATCHES), s2f_classified_spans=len(validation['declarations']),
+                        s2f_patched_declarations=len(validation_patches), s2f_hook_insertions=len(S2F_HOOK_PATCHES),
+                        p19_relocated_sites=relocated_sites)
 
 
 def main():

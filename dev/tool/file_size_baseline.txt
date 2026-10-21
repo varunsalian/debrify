@@ -21,7 +21,9 @@
 # 2026-10-18: Phase 16 startup + source switching extraction; remaining player workflows exit in phases 17–21.
 # 2026-10-19: Phase 17 TV channels, Debrify TV banner, episode fetch + synthetic guide extraction; remaining player workflows exit in phases 18–21.
 # 2026-10-20: Phase 18 episode navigation, shuffle, title info, playlist load/resolve, media waits, PikPak retry + metadata preload extraction; remaining player workflows exit in phases 19–21.
-10093 lib/screens/video_player_screen.dart
+# 2026-10-20: S2f seam checkpoint adds 3 facade lines (dedicated renderer-validation hook); temporary until phase 19 step 1 lowers it.
+# 2026-10-21: Phase 19 audio output, video-output lease, tvOS decode remedy/display match, decoder probe + renderer fallback extraction (lowers the S2f checkpoint too); remaining player workflows exit in phases 20–21.
+9447 lib/screens/video_player_screen.dart
 6919 lib/services/profiles/profile_registry.dart
 6478 android/app/src/main/java/com/debrify/app/tv/TorboxTvPlayerActivity.java
 5475 lib/services/remote_control/remote_command_router.dart

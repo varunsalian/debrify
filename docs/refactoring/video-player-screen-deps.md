@@ -13824,3 +13824,143 @@ String? get pikpakCollectionId => _s.widget.pikpakCollectionId;
 Future<void> fetchAndMaybeAutoSelectAddonSubtitle() => _s._addonSubtitles.fetchAndMaybeAutoSelectAddonSubtitle();
 ```
 
+
+## Phase 19 Step T — audio output, video-output lease, tvOS video, decoder probe, renderer fallback (2026-10-20)
+
+Base **4c97c4687** (S2f checkpoint `c8c8a6ffc` plus its review fold, on M4 `46bc00ce7`). Manifest `dev/tool/dart_moves/vplayer_p19.json` (FINAL; applied at step 1); generator `dev/tool/draft_vplayer_engine_moves.py`, negatives `dev/tool/test_dart_engine_moves.py`. Facade 10,096 → 9,447 formatted lines; 15 retained references (12 State-side call sites + 3 retained adapter sites).
+
+| Destination / Host | Formatted lines | Distinct names / declarations |
+|---|---:|---:|
+| `vp_audio_output.dart` / `VpAudioOutputHost` | 205 | 8 / 9 |
+| `vp_video_output_lease.dart` / `VpVideoOutputLeaseHost` | 94 | 1 / 1 |
+| `vp_tvos_video.dart` / `VpTvosVideoHost` | 149 | 8 / 11 |
+| `vp_decoder_probe.dart` / `VpDecoderProbeHost` | 349 | 18 / 23 |
+| `vp_renderer_fallback.dart` / `VpRendererFallbackHost` | 355 | 50 / 57 |
+
+Exact Host contracts (live facade projections, expression-bodied forwarders):
+
+VpAudioOutputHost:
+
+```dart
+bool get appleMultichannelEnabled => _s._appleMultichannelEnabled;
+bool get audioPassthroughEnabled => _s._audioPassthroughEnabled;
+set audioPassthroughEnabled(bool v) => _s._audioPassthroughEnabled = v;
+mk.Player get player => _s._player;
+bool get systemAudioEffectsEnabled => _s._systemAudioEffectsEnabled;
+bool get tvosForceStereoAudio => _s._tvosForceStereoAudio;
+bool get tvosLegacyAudioOutput => _s._tvosLegacyAudioOutput;
+int get tvosRouteOutputChannels => _s._tvosRouteOutputChannels;
+MediaKitSubtitleAutoSync? get subtitleAutoSync => _s._subtitleSync.subtitleAutoSync;
+```
+
+VpVideoOutputLeaseHost:
+
+```dart
+bool get screenDisposed => _s._screenDisposed;
+```
+
+VpTvosVideoHost:
+
+```dart
+ContentDisplayMatchMode get contentDisplayMatchMode => _s._contentDisplayMatchMode;
+mk.Player get player => _s._player;
+bool get screenDisposed => _s._screenDisposed;
+TvosDecodeRemedy? get tvosDecodeRemedy => _s._tvosDecodeRemedy;
+set tvosDecodeRemedy(TvosDecodeRemedy? v) => _s._tvosDecodeRemedy = v;
+Timer? get tvosDisplayMatchTimer => _s._tvosDisplayMatchTimer;
+set tvosDisplayMatchTimer(Timer? v) => _s._tvosDisplayMatchTimer = v;
+int get tvosDisplayMatchToken => _s._tvosDisplayMatchToken;
+set tvosDisplayMatchToken(int v) => _s._tvosDisplayMatchToken = v;
+void scheduleDecoderProbe() => _s._decoderProbe.scheduleDecoderProbe();
+bool get mounted => _s.mounted;
+```
+
+VpDecoderProbeHost:
+
+```dart
+AndroidVideoRendererMode get androidVideoRendererMode => _s._androidVideoRendererMode;
+int get decoderProbeGeneration => _s._decoderProbeGeneration;
+mk.VideoParams? get decoderProbeParams => _s._decoderProbeParams;
+set decoderProbeParams(mk.VideoParams? v) => _s._decoderProbeParams = v;
+Timer? get decoderProbeTimer => _s._decoderProbeTimer;
+set decoderProbeTimer(Timer? v) => _s._decoderProbeTimer = v;
+int get decoderProbeToken => _s._decoderProbeToken;
+set decoderProbeToken(int v) => _s._decoderProbeToken = v;
+String? get lastDecoderDiagnosticSignature => _s._lastDecoderDiagnosticSignature;
+set lastDecoderDiagnosticSignature(String? v) => _s._lastDecoderDiagnosticSignature = v;
+Torrent? get openedWatchSource => _s._openedWatchSource;
+mk.Player get player => _s._player;
+int get playerInstanceGeneration => _s._playerInstanceGeneration;
+int get rendererStartupGuardToken => _s._rendererStartupGuardToken;
+set rendererStartupGuardToken(int v) => _s._rendererStartupGuardToken = v;
+set rendererStartupValidationGeneration(int v) => _s._rendererStartupValidationGeneration = v;
+TvosDecodeRemedy? get tvosDecodeRemedy => _s._tvosDecodeRemedy;
+MethodChannel get tvReleaseLogChannel => _VideoPlayerScreenState._tvReleaseLogChannel;
+void resetTvosDisplayMatchForMediaBoundary() => _s._tvosVideo.resetTvosDisplayMatchForMediaBoundary();
+void scheduleTvosDisplayMatch(mk.VideoParams params) => _s._tvosVideo.scheduleTvosDisplayMatch(params);
+void scheduleRendererStartupValidation() => _s._rendererFallback.scheduleRendererStartupValidation();
+bool get mounted => _s.mounted;
+bool get isAndroidRendererValidation => VpS2Hooks.isAndroidRendererValidation;
+```
+
+VpRendererFallbackHost:
+
+```dart
+set activeExternalSubtitlePath(String? v) => _s._activeExternalSubtitlePath = v;
+bool get activeMediaShouldPlay => _s._activeMediaShouldPlay;
+bool get activeMediaUserPaused => _s._activeMediaUserPaused;
+mk.Media? get activeOpenedMedia => _s._activeOpenedMedia;
+AndroidVideoRendererMode get androidVideoRendererMode => _s._androidVideoRendererMode;
+set androidVideoRendererMode(AndroidVideoRendererMode v) => _s._androidVideoRendererMode = v;
+IptvChannel? get currentIptvChannel => _s._currentIptvChannel;
+int get decoderProbeGeneration => _s._decoderProbeGeneration;
+set duration(Duration v) => _s._duration = v;
+bool get iptvErrorsMuted => _s._iptvErrorsMuted;
+set isPlaying(bool v) => _s._isPlaying = v;
+set isReady(bool v) => _s._isReady = v;
+bool get isRecording => _s._isRecording;
+bool get isTransitioning => _s._isTransitioning;
+bool get pausedByLifecycle => _s._pausedByLifecycle;
+mk.Player get player => _s._player;
+set playerCreated(bool v) => _s._playerCreated = v;
+int get playerInstanceGeneration => _s._playerInstanceGeneration;
+set playerInstanceGeneration(int v) => _s._playerInstanceGeneration = v;
+Duration get position => _s._position;
+set position(Duration v) => _s._position = v;
+bool get rendererFallbackInProgress => _s._rendererFallbackInProgress;
+set rendererFallbackInProgress(bool v) => _s._rendererFallbackInProgress = v;
+int get rendererStartupGuardToken => _s._rendererStartupGuardToken;
+set rendererStartupGuardToken(int v) => _s._rendererStartupGuardToken = v;
+int get rendererStartupValidationGeneration => _s._rendererStartupValidationGeneration;
+set rendererStartupValidationGeneration(int v) => _s._rendererStartupValidationGeneration = v;
+bool get rendererValidatedForSession => _s._rendererValidatedForSession;
+set rendererValidatedForSession(bool v) => _s._rendererValidatedForSession = v;
+int get resumeVerifyEpoch => _s._resumeVerifyEpoch;
+ResumeWriteGuard get resumeWriteGuard => _s._resumeWriteGuard;
+ValueNotifier<bool> get showBufferingIndicator => _s._showBufferingIndicator;
+bool get sleepStopLatched => _s._sleepStopLatched;
+DeferredStartupSeek get stremioTvStartupSeek => _s._stremioTvStartupSeek;
+ChannelStartupWatch? get stremioTvStartupWatch => _s._stremioTvStartupWatch;
+void createPlayerInstance(AndroidVideoRendererMode rendererMode) => _s._createPlayerInstance(rendererMode);
+Future<void> cancelPlayerInstanceSubscriptions() => _s._cancelPlayerInstanceSubscriptions();
+Future<void> openMedia(mk.Media media, {required bool play, bool? desiredPlay, bool liveStream = false, EpisodePlaybackRequest? request, bool Function()? beforeOpen, Torrent? source, int? preserveStartupEpoch}) => _s._openMedia(media, play: play, desiredPlay: desiredPlay, liveStream: liveStream, request: request, beforeOpen: beforeOpen, source: source, preserveStartupEpoch: preserveStartupEpoch);
+Future<void> attachAudioEffectSession() => _s._audioOutput.attachAudioEffectSession();
+Future<void> claimVideoOutput() => _s._videoOutputLease.claimVideoOutput();
+Future<void> configurePlayerAudio(mk.Player player) => _s._audioOutput.configurePlayerAudio(player);
+void releaseAudioEffectSession() => _s._audioOutput.releaseAudioEffectSession();
+void releasePlayerDiagnostic(String fields) => _s._decoderProbe.releasePlayerDiagnostic(fields);
+Future<void> setExternalAudioTrack(String audioUrl) => _s._audioOutput.setExternalAudioTrack(audioUrl);
+bool get mounted => _s.mounted;
+BuildContext get context => _s.context;
+void setState(VoidCallback fn) => _s._vpSetState(fn);
+String? get audioUrl => _s.widget.audioUrl;
+bool get isAndroid => VpS2Hooks.isAndroid;
+bool get isAndroidRendererValidation => VpS2Hooks.isAndroidRendererValidation;
+Future<void> disposeSubtitleAutoSync() => _s._subtitleSync.disposeSubtitleAutoSync();
+void installSubtitleAutoSyncForPlayer(mk.Player player) => _s._subtitleSync.installSubtitleAutoSyncForPlayer(player);
+Future<void> waitForVideoReady() => _s._mediaWaits.waitForVideoReady();
+Future<void> seekForResume(int targetMs, {bool verifyLanding = false}) => _s._resumeRestore.seekForResume(targetMs, verifyLanding: verifyLanding);
+Future<void> restoreTrackPreferences() => _s._trackPreferences.restoreTrackPreferences();
+void watchStremioTvStartup(String url) => _s._startupGate.watchStremioTvStartup(url);
+Future<void> reportStartupFailure({bool Function()? isCurrent}) => _s._startupGate.reportStartupFailure(isCurrent: isCurrent);
+```

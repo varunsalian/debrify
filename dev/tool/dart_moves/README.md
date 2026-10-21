@@ -330,3 +330,18 @@ The P18 analyzer inventory records the Step T receiver-probe additions (16
 unused facade imports, also allowlisted pending phase 21; four formatter
 `if` wraps; eleven unrelated-`mounted` guards). Five source-text readers were
 retargeted to equal-or-stronger declaration reads. Facade ratchet 10,093.
+
+P19 Step 1 applies the FINAL materialization on the S2f checkpoint `4c97c4687`
+(the P18 merge plus the three reviewed renderer-validation hook insertions):
+five engine collaborators (`vp_audio_output`, `vp_video_output_lease`,
+`vp_tvos_video`, `vp_decoder_probe`, `vp_renderer_fallback`) and 15 retained
+references. `draft_vplayer_engine_moves.py` writes the formatted sources beneath
+`refactor-evidence/vplayer/p19/step1/final/`; Step 1 copies them unchanged (zero
+comparison differences; byte-identical to the Step T prototype). CI
+current/self-test and both analyzer arguments select P19; P1–P18 history adds
+P18 `46bc00ce7`, which also retires the S2f checkpoint-overlay note. The
+platform seam proof reports `p19_relocated_sites=3`. The P19 analyzer inventory
+records the Step T receiver-probe additions (four unused facade imports, also
+allowlisted pending phase 21; one formatter `if` wrap on
+`_scheduleTvosDisplayMatch`; one unrelated-`mounted` guard on
+`_fallbackExplicitRendererToAutomatic`). Facade ratchet 9,447.

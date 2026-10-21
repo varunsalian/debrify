@@ -225,6 +225,11 @@ import '../features/video_player/presentation/legacy_video_player/vp_playlist_en
 import '../features/video_player/presentation/legacy_video_player/vp_media_waits.dart';
 import '../features/video_player/presentation/legacy_video_player/vp_pikpak_retry.dart';
 import '../features/video_player/presentation/legacy_video_player/vp_metadata_preload.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_audio_output.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_video_output_lease.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_tvos_video.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_decoder_probe.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_renderer_fallback.dart';
 
 /// A full-featured video player screen with playlist support and navigation controls.
 ///
@@ -494,14 +499,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _mediaWaits = VpMediaWaits(_VpMediaWaitsHostAdapter(this));
     _pikPakRetry = VpPikPakRetry(_VpPikPakRetryHostAdapter(this));
     _metadataPreload = VpMetadataPreload(_VpMetadataPreloadHostAdapter(this));
+    _audioOutput = VpAudioOutput(_VpAudioOutputHostAdapter(this));
+    _videoOutputLease = VpVideoOutputLease(
+      _VpVideoOutputLeaseHostAdapter(this),
+    );
+    _tvosVideo = VpTvosVideo(_VpTvosVideoHostAdapter(this));
+    _decoderProbe = VpDecoderProbe(_VpDecoderProbeHostAdapter(this));
+    _rendererFallback = VpRendererFallback(
+      _VpRendererFallbackHostAdapter(this),
+    );
   }
   void _vpSetState(VoidCallback fn) => setState(fn);
 
   static const MethodChannel _tvReleaseLogChannel = MethodChannel(
     'debrify/tvlog',
-  );
-  static const MethodChannel _androidPlayerDiagnosticChannel = MethodChannel(
-    'debrify/player_diagnostics',
   );
 
   late mk.Player _player;
@@ -509,11 +520,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // user backs out before that (or init throws first), dispose() must not
   // touch the unassigned late field (LateInitializationError during pop).
   bool _playerCreated = false;
-
-  /// Audio session announced to system effect apps (Android only). Non-null
-  /// only while an OPEN broadcast is outstanding — see
-  /// [_attachAudioEffectSession] / [_releaseAudioEffectSession].
-  int? _audioEffectSessionId;
   late mkv.VideoController _videoController;
   AndroidVideoRendererMode _androidVideoRendererMode =
       AndroidVideoRendererMode.automatic;
@@ -531,7 +537,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       ContentDisplayMatchMode.systemDefault;
   int _tvosDisplayMatchToken = 0;
   Timer? _tvosDisplayMatchTimer;
-  String? _lastTvosDisplayMatchSignature;
 
   /// Audio-output settings (AUDIO_FIDELITY_PLAN.md), preloaded in
   /// [_loadPlayerDefaults] and applied by [_configurePlayerAudio].
@@ -1168,6 +1173,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   late final VpMediaWaits _mediaWaits;
   late final VpPikPakRetry _pikPakRetry;
   late final VpMetadataPreload _metadataPreload;
+  late final VpAudioOutput _audioOutput;
+  late final VpVideoOutputLease _videoOutputLease;
+  late final VpTvosVideo _tvosVideo;
+  late final VpDecoderProbe _decoderProbe;
+  late final VpRendererFallback _rendererFallback;
 
   // The quiet bottom-right auto-sync surface: a 5s announce line, then
   // nothing until a real event — statuses during passes, word-only results.
@@ -1579,162 +1589,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _mdblist.mdblistEpisodeProgress = null;
   }
 
-  /// Load an external audio track to play alongside a video-only stream
-  /// (high-res YouTube serves video and audio separately). Uses media_kit's
-  /// AudioTrack.uri (mpv `audio-add`), which is URL-safe — unlike the
-  /// `audio-files` path-list option, which mangles URLs on the `:`/`,`
-  /// separators. Must be called AFTER the main media has loaded.
-  Future<void> _setExternalAudioTrack(String audioUrl) async {
-    try {
-      await _player.setAudioTrack(mk.AudioTrack.uri(audioUrl));
-    } catch (e) {
-      debugPrint('VideoPlayer: failed to set external audio track: $e');
-    }
-  }
-
-  /// Put Android audio on an effects-capable output and announce the session,
-  /// so system effect apps (Wavelet, OEM equalizers, hearing-accessibility
-  /// tools) can process our playback like they do for other video apps.
-  ///
-  /// Two separate things block that by default:
-  ///
-  ///  1. media_kit pins Android to `ao=opensles`, and mpv's OpenSL ES output
-  ///     never sets SL_ANDROID_KEY_PERFORMANCE_MODE — so Android applies its
-  ///     default low-latency path, which is documented to carry *no* hardware
-  ///     or software effects. Nothing can attach to our audio at all, which is
-  ///     why even a global/"legacy mode" equalizer has no effect on us.
-  ///     `audiotrack` is an ordinary AudioTrack and is effects-capable; the
-  ///     `opensles` fallback keeps today's behaviour on any device where
-  ///     AudioTrack fails to initialise, so audio can't be lost outright.
-  ///  2. Effect apps attach to a session id learned from the standard OPEN
-  ///     broadcast. mpv generates an id internally and tells nobody, so we pin
-  ///     our own via `audiotrack-session-id` and announce that.
-  ///
-  /// Fails soft at every step: effects are a nice-to-have, playback is not.
-  /// Opt-in (Settings → Player Settings): switching the audio backend is a real
-  /// change to how every device outputs sound, so off must leave playback byte
-  /// for byte as it was.
-  Future<void> _attachAudioEffectSession() async {
-    if (!Platform.isAndroid) return;
-    // Everything below is inside the catch: _initializePlayer() runs
-    // unawaited, so anything that escapes here would abort the rest of init
-    // and leave a black screen — including for users who have this turned off,
-    // since the settings read itself happens either way.
-    try {
-      final platform = _player.platform;
-      if (platform is! mk.NativePlayer) return;
-      // The CACHED field, deliberately: [_configurePlayerAudio] chose the
-      // audio output from it, and a fresh preference read here could
-      // diverge mid-session — announcing a session on an output that was
-      // never switched, or vice versa. "Restart playback to apply" is the
-      // settings contract for both halves.
-      if (!_systemAudioEffectsEnabled) return;
-      // `ao=audiotrack,...` itself is owned by [_configurePlayerAudio] now
-      // (the passthrough setting needs the same output, and two writers of
-      // `ao` is how the two settings would fight) — this method keeps only
-      // the session-id half.
-      final sessionId = await AudioEffectSessionService.generateSessionId();
-      // No id available: still worth keeping the effects-capable output, since
-      // effect apps that detect sessions on their own can then attach.
-      if (sessionId == null) return;
-      await platform.setProperty('audiotrack-session-id', '$sessionId');
-      await AudioEffectSessionService.open(sessionId);
-      _audioEffectSessionId = sessionId;
-    } catch (e) {
-      debugPrint('VideoPlayer: audio effect session setup failed: $e');
-    }
-  }
-
-  /// Release the announced audio session. Unpaired OPENs leave effect apps
-  /// attached to dead audio and degrade *other* apps' equalizers, so this must
-  /// run on every exit from the player.
-  void _releaseAudioEffectSession() {
-    final sessionId = _audioEffectSessionId;
-    if (sessionId == null) return;
-    _audioEffectSessionId = null;
-    AudioEffectSessionService.close(sessionId);
-  }
-
-  /// This player's claim on the process's one video output.
-  ///
-  /// HELD for the controller's lifetime rather than taken as a momentary
-  /// barrier. A barrier that released before construction left a gap: a trailer
-  /// parked on the lease would be granted it and build its own output while
-  /// this player was still constructing — the two-output case, which is a
-  /// SIGABRT on tvOS.
-  VideoOutputLeaseHandle? _outputLease;
-
-  /// Take the slot before building a controller.
-  ///
-  /// The ambient trailer surfaces tear down when playback launches, but the
-  /// native release is asynchronous — "teardown was requested" is not "the
-  /// output is gone".
-  ///
-  /// **Bounded, deliberately.** Review pushed back on this twice: a timeout
-  /// that proceeds can, in principle, recreate the two-output case. The
-  /// judgement here is that an unbounded wait turns a stuck native disposal
-  /// into "video never plays again this session", which is a worse and far more
-  /// likely outcome than the crash it guards against — and by the time three
-  /// seconds have passed, something is already wrong. It logs, and it still
-  /// takes the slot when it finally frees, so the player never ends up
-  /// untracked.
-  ///
-  /// tvOS waits longer before giving up: proceeding into the overlap is a
-  /// certain SIGABRT there, and since the native Dispose handshake became
-  /// completion-gated (mpv render context freed before the channel call
-  /// returns) a held lease reliably frees — a slow release is a wait, not a
-  /// lockout.
-  static final Duration _outputLeaseTimeout = PlatformUtil.isTvOS
-      ? const Duration(seconds: 10)
-      : const Duration(seconds: 3);
-
-  Future<void> _claimVideoOutput() async {
-    if (_outputLease != null) return; // renderer fallback reuses the claim
-    if (!VideoOutputLease.isHeld) {
-      final handle = await VideoOutputLease.acquire(debugLabel: 'player');
-      if (_screenDisposed) {
-        handle.release();
-        return;
-      }
-      _outputLease = handle;
-      return;
-    }
-    final pending = VideoOutputLease.acquire(debugLabel: 'player');
-    VideoOutputLeaseHandle? handle;
-    try {
-      handle = await pending.timeout(_outputLeaseTimeout);
-    } on TimeoutException {
-      debugPrint(
-        'VideoOutputLease: player proceeding without the slot — a previous '
-        'video output has not released after '
-        '${_outputLeaseTimeout.inSeconds}s.',
-      );
-      // The wait was abandoned, not cancelled. Take the slot whenever it does
-      // arrive rather than handing it back: this player IS alive and holding a
-      // video output, so releasing would leave it untracked and let a trailer
-      // build a second one beside it.
-      unawaited(
-        pending.then((late) {
-          if (_screenDisposed || _outputLease != null) {
-            late.release();
-          } else {
-            _outputLease = late;
-          }
-        }),
-      );
-    }
-    if (_screenDisposed) {
-      handle?.release();
-      return;
-    }
-    _outputLease = handle;
-  }
-
-  void _releaseVideoOutput() {
-    _outputLease?.release();
-    _outputLease = null;
-  }
-
   /// Set once `dispose()` has run, so a claim still in flight at that moment
   /// gives the slot straight back instead of being stranded by the `!mounted`
   /// return at its call site — which would block every future trailer engine
@@ -1763,134 +1617,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             : rendererMode.hardwareDecoder,
       ),
     );
-    _installTvosDecodeRemedy(player);
+    _tvosVideo.installTvosDecodeRemedy(player);
     _bindPlayerInstanceSubscriptions(instanceGeneration, player);
-    unawaited(_installDecoderObservers(instanceGeneration, player));
+    unawaited(
+      _decoderProbe.installDecoderObservers(instanceGeneration, player),
+    );
     unawaited(_display.applyAspectVideoZoom());
-  }
-
-  /// Serializes live passthrough flips: each runs WHOLE, in order. Without
-  /// this a rapid double-toggle could interleave two aid cycles and leave
-  /// the newer one reading `aid=no` mid-way through the older one's cycle —
-  /// stranding the player silent.
-  Future<void> _passthroughFlipChain = Future<void>.value();
-
-  /// The in-player passthrough flip — persists the same setting the
-  /// Playback Defaults row writes, applies the explicit property values
-  /// (including the OFF restores), then cycles the audio track so the
-  /// CURRENT file's audio chain re-initialises: `audio-spdif` is read at
-  /// decoder init, and `ao` reloads on the reconfig. Sub-second audio gap,
-  /// position untouched. Fails soft: playback outlives any of this (and
-  /// mpv gives no rejection signal to roll a switch back on — the toggle's
-  /// caption owns the "silence means off" contract).
-  Future<void> _setAudioPassthroughLive(bool enabled) {
-    final flip = _passthroughFlipChain.then(
-      (_) => _applyPassthroughFlip(enabled),
-    );
-    _passthroughFlipChain = flip.catchError((_) {});
-    return flip;
-  }
-
-  Future<void> _applyPassthroughFlip(bool enabled) async {
-    _audioPassthroughEnabled = enabled;
-    try {
-      await PlayerSettingsStorage.setAudioPassthroughEnabled(enabled);
-      // An audio filter would force compressed passthrough formats through a
-      // PCM decoder. Remove the passive analysis chain before the aid cycle;
-      // when passthrough is disabled, re-arm only after PCM output is restored.
-      if (enabled) {
-        await _subtitleSync.subtitleAutoSync?.setPassthroughEnabled(true);
-      }
-      final platform = _player.platform;
-      if (platform is! mk.NativePlayer) return;
-      for (final (property, value)
-          in PlayerAudioConfig.androidLiveToggleProperties(
-            passthroughEnabled: enabled,
-            systemAudioEffects: _systemAudioEffectsEnabled,
-          )) {
-        await platform.setProperty(property, value);
-      }
-      final aid = await platform.getProperty('aid');
-      if (aid.isNotEmpty && aid != 'no') {
-        await platform.setProperty('aid', 'no');
-        await platform.setProperty('aid', aid);
-      }
-      if (!enabled) {
-        await _subtitleSync.subtitleAutoSync?.setPassthroughEnabled(false);
-      }
-    } catch (e) {
-      debugPrint('VideoPlayer: live passthrough toggle failed: $e');
-    }
-  }
-
-  /// The single owner of the player's audio-output properties — ordered
-  /// list from [PlayerAudioConfig], awaited before the first open, run at
-  /// EVERY player-instance creation site (initial + the Android renderer
-  /// fallback recreate). Fails soft per property: audio configuration is a
-  /// nice-to-have, playback is not.
-  Future<void> _configurePlayerAudio(mk.Player player) async {
-    final platform = player.platform;
-    if (platform is! mk.NativePlayer) return;
-    final props = PlayerAudioConfig.audioProperties(
-      isAndroid: !kIsWeb && Platform.isAndroid,
-      isApple: PlatformUtil.isTvOS || PlatformUtil.isIosMobile,
-      isTvOS: PlatformUtil.isTvOS,
-      routeOutputChannels: _tvosRouteOutputChannels,
-      tvosForceStereo: _tvosForceStereoAudio,
-      tvosLegacyAudioOutput: _tvosLegacyAudioOutput,
-      passthroughEnabled: _audioPassthroughEnabled,
-      systemAudioEffects: _systemAudioEffectsEnabled,
-      multichannelEnabled: _appleMultichannelEnabled,
-    );
-    for (final (property, value) in props) {
-      try {
-        await platform.setProperty(property, value);
-      } catch (e) {
-        debugPrint('VideoPlayer: audio config $property=$value failed: $e');
-      }
-    }
-    // Preferred audio language, handed to mpv itself as `alang`. The Dart
-    // matcher (_applyDefaultAudioLanguage) only runs after the track list
-    // reaches Dart and only matches on metadata; mpv applies the preference
-    // at stream selection, and its matcher also weighs the default/forced
-    // dispositions. Users with no preference set send nothing.
-    try {
-      final lang = await SubtitleSettingsStorage.getDefaultAudioLanguage();
-      if (lang != null && lang.isNotEmpty) {
-        final alang = LanguageMapper.alangForCode(lang);
-        if (alang.isNotEmpty) await platform.setProperty('alang', alang);
-      }
-    } catch (e) {
-      debugPrint('VideoPlayer: alang config failed: $e');
-    }
-  }
-
-  /// tvOS only: the 10-bit remedy ladder, bound to THIS player instance's
-  /// property interface. Plain post-create property access — deliberately
-  /// not `mpv_observe_property` (see the SIGABRT note in
-  /// [_installDecoderObservers]); the ladder is driven by the existing
-  /// Dart-side videoParams stream instead.
-  void _installTvosDecodeRemedy(mk.Player player) {
-    if (!PlatformUtil.isTvOS) return;
-    final platform = player.platform;
-    if (platform is! mk.NativePlayer) return;
-    _tvosDecodeRemedy?.dispose();
-    _tvosDecodeRemedy = TvosDecodeRemedy(
-      getProperty: platform.getProperty,
-      setProperty: platform.setProperty,
-      // The standard 8-bit-surface pin, applied before every file's decoder
-      // exists: 8-bit content is NV12 already (no change), 10-bit decodes
-      // straight to NV12 with no blue flash and no mid-play cycle. The
-      // reactive ladder underneath only ever engages if VideoToolbox
-      // rejects the pin for some exotic stream.
-      pinNv12FromStart: true,
-      // A settle is a decode-path change the one-shot probe has already
-      // reported around — re-arm it so the diagnostic line carries the
-      // remedy journey.
-      onStateChanged: () {
-        if (mounted) _scheduleDecoderProbe();
-      },
-    );
   }
 
   void _onPlayerInstanceReady(int instanceGeneration) {
@@ -2098,10 +1830,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     _currentIndex = initialIndex;
     _dynamicTitle = widget.title;
-    await _claimVideoOutput();
+    await _videoOutputLease.claimVideoOutput();
     if (!mounted) return;
     _createPlayerInstance(_androidVideoRendererMode);
-    await _configurePlayerAudio(_player);
+    await _audioOutput.configurePlayerAudio(_player);
     _subtitleSync.installSubtitleAutoSyncForPlayer(_player);
     // libmpv exposes `stream-record`; the web backend does not. Gate the
     // record control on having a native player — and, on Android, on the
@@ -2143,7 +1875,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // Must happen before the first open() — mpv reads both audio options when
     // it creates the audio output, which is on first playback.
-    await _attachAudioEffectSession();
+    await _audioOutput.attachAudioEffectSession();
 
     _currentStreamUrl = initialUrl.isNotEmpty ? initialUrl : null;
     if (_activePlaylist != null &&
@@ -2314,7 +2046,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             return;
           }
           if (hasExternalAudio) {
-            await _setExternalAudioTrack(widget.audioUrl!);
+            await _audioOutput.setExternalAudioTrack(widget.audioUrl!);
           }
           // Random start takes precedence over resume, then startAtPercent.
           if (widget.startFromRandom) {
@@ -2422,7 +2154,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _iptvDiag.onFirstFrame();
         _iptvLiveRecovery.onFirstFrame();
       }
-      _handleDecoderProbeParams(params);
+      _decoderProbe.handleDecoderProbeParams(params);
     });
     _rendererStartupErrorSub = player.stream.error.listen((error) {
       final source = _openedWatchSource;
@@ -2448,7 +2180,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         return;
       }
       unawaited(
-        _fallbackExplicitRendererToAutomatic(
+        _rendererFallback.fallbackExplicitRendererToAutomatic(
           instanceGeneration: instanceGeneration,
           mediaGeneration: _decoderProbeGeneration,
           reason: 'renderer_error',
@@ -2674,630 +2406,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
-  int _mediaServerFrameGeneration = -1;
-
-  void _handleDecoderProbeParams(mk.VideoParams params) {
-    final width = params.dw ?? params.w ?? 0;
-    final height = params.dh ?? params.h ?? 0;
-    if (width <= 0 || height <= 0) {
-      // Player.open() normally resets VideoParams before loading the next item.
-      // Treat it as an extra invalidation signal, but do not require it: the
-      // app-owned generation started in _openMedia is the session boundary.
-      _decoderProbeToken++;
-      _decoderProbeTimer?.cancel();
-      _decoderProbeTimer = null;
-      _decoderProbeParams = null;
-      _rendererStartupGuardToken++;
-      _rendererStartupValidationGeneration = -1;
-      _resetTvosDisplayMatchForMediaBoundary();
-      return;
-    }
-    if (_openedWatchSource != null &&
-        _mediaServerFrameGeneration != _decoderProbeGeneration) {
-      _mediaServerFrameGeneration = _decoderProbeGeneration;
-      logSourceSelection(
-        'media_server_first_frame',
-        source: _openedWatchSource,
-        player: 'mpv',
-      );
-    }
-    _decoderProbeParams = params;
-    _scheduleTvosDisplayMatch(params);
-    _scheduleDecoderProbe();
-    _scheduleRendererStartupValidation();
-    final remedy = _tvosDecodeRemedy;
-    if (remedy != null) {
-      // Only ever STARTS the ladder (from idle, on a triggering format) —
-      // the ladder's own transitional events are ignored inside it.
-      unawaited(remedy.evaluate(params, _decoderProbeGeneration));
-    }
-  }
-
-  void _resetTvosDisplayMatchForMediaBoundary() {
-    _tvosDisplayMatchToken++;
-    _tvosDisplayMatchTimer?.cancel();
-    _tvosDisplayMatchTimer = null;
-    _lastTvosDisplayMatchSignature = null;
-    if (!PlatformUtil.isTvOS || !_contentDisplayMatchMode.requestsMatching) {
-      return;
-    }
-    // AVDisplayManager retains criteria until explicitly replaced. Clear the
-    // outgoing item's request so content with missing/invalid fps metadata can
-    // never inherit the previous refresh rate.
-    unawaited(
-      TvosDisplayMatchService.clear().catchError((Object error) {
-        debugPrint('DisplayMatch: tvOS boundary clear failed: $error');
-      }),
-    );
-  }
-
-  void _scheduleTvosDisplayMatch(mk.VideoParams params) {
-    if (!PlatformUtil.isTvOS || !_contentDisplayMatchMode.requestsMatching) {
-      return;
-    }
-    final width = params.dw ?? params.w ?? 0;
-    final height = params.dh ?? params.h ?? 0;
-    if (width <= 0 || height <= 0) return;
-    final token = ++_tvosDisplayMatchToken;
-    _tvosDisplayMatchTimer?.cancel();
-    _tvosDisplayMatchTimer = Timer(const Duration(milliseconds: 200), () async {
-      if (_screenDisposed || token != _tvosDisplayMatchToken) return;
-      final platform = _player.platform;
-      if (platform is! mk.NativePlayer) return;
-      final selectedTrack = _player.state.track.video;
-      var fps = selectedTrack.fps;
-      if (fps == null || !fps.isFinite || fps <= 0) {
-        for (final property in const ['container-fps', 'estimated-vf-fps']) {
-          try {
-            final candidate = double.tryParse(
-              await platform.getProperty(property),
-            );
-            if (candidate != null && candidate.isFinite && candidate > 0) {
-              fps = candidate;
-              break;
-            }
-          } catch (_) {
-            // Some containers publish only one of the two fps properties.
-          }
-        }
-      }
-      if (_screenDisposed ||
-          token != _tvosDisplayMatchToken ||
-          fps == null ||
-          !fps.isFinite ||
-          fps <= 0) {
-        return;
-      }
-      var codec = selectedTrack.codec;
-      if (codec == null || codec.isEmpty) {
-        try {
-          codec = await platform.getProperty('video-codec');
-        } catch (_) {
-          codec = null;
-        }
-      }
-      if (_screenDisposed || token != _tvosDisplayMatchToken) return;
-      final signature =
-          '${_contentDisplayMatchMode.storageKey}|$width|$height|${fps.toStringAsFixed(4)}|${codec ?? ''}';
-      if (signature == _lastTvosDisplayMatchSignature) return;
-      try {
-        final status = await TvosDisplayMatchService.apply(
-          mode: _contentDisplayMatchMode,
-          width: width,
-          height: height,
-          refreshRate: fps,
-          codec: codec,
-        );
-        if (_screenDisposed || token != _tvosDisplayMatchToken) return;
-        _lastTvosDisplayMatchSignature = signature;
-        debugPrint(
-          'DisplayMatch: tvOS requested ${width}x$height@${fps.toStringAsFixed(3)} '
-          'mode=${_contentDisplayMatchMode.storageKey} '
-          'enabled=${status['matchingEnabled']}',
-        );
-      } catch (error) {
-        debugPrint('DisplayMatch: tvOS request failed: $error');
-      }
-    });
-  }
-
-  Future<void> _installDecoderObservers(
-    int instanceGeneration,
-    mk.Player player,
-  ) async {
-    final platform = player.platform;
-    if (platform is! mk.NativePlayer) return;
-
-    // ANDROID ONLY, deliberately.
-    //
-    // These observers exist to feed the Android explicit-renderer fallback
-    // (`_scheduleRendererStartupValidation`), which is itself
-    // gated on `Platform.isAndroid` — so everywhere else they were pure cost.
-    //
-    // They are also `mpv_observe_property` calls issued unawaited, at the same
-    // moment the video controller is building the native render context on its
-    // own worker — which is the window a tvOS SIGABRT was landing in.
-    //
-    // NOT confirmed as the cause: the crash stopped after this change AND a
-    // reinstall that wiped the device's preferences, and either could have
-    // done it. Kept regardless, because a probe that only feeds an
-    // Android-gated fallback has no business running anywhere else.
-    if (!Platform.isAndroid) return;
-
-    try {
-      await platform.observeProperty('hwdec-current', (value) async {
-        if (mounted && instanceGeneration == _playerInstanceGeneration) {
-          _scheduleDecoderProbe();
-        }
-      });
-    } catch (_) {
-      // The one-shot query below still works if this property is unavailable.
-    }
-    try {
-      await platform.observeProperty('current-vo', (value) async {
-        if (mounted && instanceGeneration == _playerInstanceGeneration) {
-          _scheduleDecoderProbe();
-        }
-      });
-    } catch (_) {
-      // Keep the independent hwdec observer when only current-vo is unavailable.
-    }
-  }
-
-  void _scheduleRendererStartupValidation() {
-    if (!AndroidRendererStartupFallback.shouldArm(
-          isAndroid: Platform.isAndroid,
-          isAndroidTv: PlatformUtil.isAndroidTvCached,
-          mode: _androidVideoRendererMode,
-          alreadyValidated: _rendererValidatedForSession,
-          fallbackInProgress: _rendererFallbackInProgress,
-        ) ||
-        _iptvErrorsMuted ||
-        _rendererStartupValidationGeneration == _decoderProbeGeneration) {
-      return;
-    }
-    _rendererStartupValidationGeneration = _decoderProbeGeneration;
-    final guardToken = ++_rendererStartupGuardToken;
-    final instanceGeneration = _playerInstanceGeneration;
-    final mediaGeneration = _decoderProbeGeneration;
-    final player = _player;
-    unawaited(
-      _validateRendererStartup(
-        guardToken: guardToken,
-        instanceGeneration: instanceGeneration,
-        mediaGeneration: mediaGeneration,
-        player: player,
-      ),
-    );
-  }
-
-  Future<void> _validateRendererStartup({
-    required int guardToken,
-    required int instanceGeneration,
-    required int mediaGeneration,
-    required mk.Player player,
-  }) async {
-    final platform = player.platform;
-    if (platform is! mk.NativePlayer) return;
-
-    // VideoParams is already positive at this point, so this is not a network
-    // startup timeout. Give Android's SurfaceProducer/codec bridge three seconds
-    // to attach the requested output and require two matching reads.
-    var previousOutput = '';
-    for (var attempt = 0; attempt < 12; attempt++) {
-      if (!mounted ||
-          guardToken != _rendererStartupGuardToken ||
-          instanceGeneration != _playerInstanceGeneration ||
-          mediaGeneration != _decoderProbeGeneration) {
-        return;
-      }
-      try {
-        final output = await platform.getProperty('current-vo');
-        if (AndroidRendererStartupFallback.isExpectedOutput(
-              mode: _androidVideoRendererMode,
-              value: output,
-            ) &&
-            output == previousOutput) {
-          _rendererValidatedForSession = true;
-          _rendererStartupGuardToken++;
-          return;
-        }
-        previousOutput = output;
-      } catch (_) {
-        // A transient property-query failure gets the remainder of the window.
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 250));
-    }
-
-    await _fallbackExplicitRendererToAutomatic(
-      instanceGeneration: instanceGeneration,
-      mediaGeneration: mediaGeneration,
-      reason: 'requested_output_not_ready',
-    );
-  }
-
-  bool _canFallbackExplicitRenderer({
-    required int instanceGeneration,
-    required int mediaGeneration,
-  }) =>
-      AndroidRendererStartupFallback.shouldArm(
-        isAndroid: VpS2Hooks.isAndroid,
-        isAndroidTv: PlatformUtil.isAndroidTvCached,
-        mode: _androidVideoRendererMode,
-        alreadyValidated: _rendererValidatedForSession,
-        fallbackInProgress: _rendererFallbackInProgress,
-      ) &&
-      mounted &&
-      instanceGeneration == _playerInstanceGeneration &&
-      mediaGeneration == _decoderProbeGeneration &&
-      _activeOpenedMedia != null &&
-      !_isRecording &&
-      !_iptvErrorsMuted &&
-      !_isTransitioning;
-
-  Future<void> _fallbackExplicitRendererToAutomatic({
-    required int instanceGeneration,
-    required int mediaGeneration,
-    required String reason,
-  }) async {
-    if (!_canFallbackExplicitRenderer(
-      instanceGeneration: instanceGeneration,
-      mediaGeneration: mediaGeneration,
-    )) {
-      return;
-    }
-
-    _rendererFallbackInProgress = true;
-    _rendererStartupGuardToken++;
-    final startupEpoch = _resumeVerifyEpoch;
-    final restartChannelWatch = _stremioTvStartupWatch?.isPending == true;
-    int? recoveryOpenEpoch;
-    final media = _activeOpenedMedia!;
-    final oldPlayer = _player;
-    final oldState = oldPlayer.state;
-    // A renderer rebuild mid-startup can race an unlanded resume seek: the
-    // live position is then a restart artifact, and the rebuilt player must
-    // come back at the promised target, not ~0. (Pure query — the guard stays
-    // armed for the rebuilt player's own landing.)
-    final livePosition = _position > Duration.zero
-        ? _position
-        : oldState.position;
-    final heldMs = _resumeWriteGuard.heldTargetIfBlocked(
-      livePosition.inMilliseconds,
-    );
-    final resumePosition = heldMs != null
-        ? Duration(milliseconds: heldMs)
-        : livePosition;
-    final shouldResumePlayback =
-        _activeMediaShouldPlay && !_activeMediaUserPaused && !_sleepStopLatched;
-    final rate = oldState.rate;
-    final volume = oldState.volume;
-    final isLive = _currentIptvChannel?.isLive == true;
-    final externalAudio = widget.audioUrl;
-    final hasExternalAudio = externalAudio != null && externalAudio.isNotEmpty;
-
-    final failedRenderer = _androidVideoRendererMode.storageKey;
-    _releasePlayerDiagnostic(
-      'generation=$mediaGeneration phase=fallback '
-      'status=renderer_startup_failed platform=android backend=libmpv '
-      'requested_renderer=$failedRenderer fallback=automatic reason=$reason',
-    );
-
-    // Invalidate every old callback before the first await. Only one native
-    // player may own audio and the Android surface during the restart.
-    _playerInstanceGeneration++;
-    _playerCreated = false;
-    _isReady = false;
-    _isPlaying = false;
-    _showBufferingIndicator.value = false;
-    setState(() {});
-
-    try {
-      await _cancelPlayerInstanceSubscriptions();
-      await _subtitleSync.disposeSubtitleAutoSync();
-      _activeExternalSubtitlePath = null;
-      _releaseAudioEffectSession();
-      try {
-        await oldPlayer.pause();
-      } catch (_) {}
-      try {
-        await oldPlayer.dispose();
-      } catch (_) {
-        // Disposal normally succeeds, but retain ownership if the native
-        // backend throws so route teardown can make one final cleanup attempt.
-        _playerCreated = true;
-        rethrow;
-      }
-      if (!mounted) return;
-
-      // Remember the compatibility result. The setting now visibly reads
-      // Automatic, and choosing an explicit renderer again retries it.
-      _androidVideoRendererMode = AndroidVideoRendererMode.automatic;
-      try {
-        await PlayerSettingsStorage.setAndroidVideoRendererMode(
-          AndroidVideoRendererMode.automatic,
-        );
-      } catch (_) {
-        // Playback can still recover for this session if preferences are full
-        // or unavailable.
-      }
-      if (!mounted) return;
-
-      _duration = Duration.zero;
-      _position = Duration.zero;
-      await _claimVideoOutput();
-      if (!mounted) return;
-      _createPlayerInstance(AndroidVideoRendererMode.automatic);
-      await _configurePlayerAudio(_player);
-      _subtitleSync.installSubtitleAutoSyncForPlayer(_player);
-      await _attachAudioEffectSession();
-      if (!mounted) return;
-      setState(() {});
-
-      final needsPreparation =
-          hasExternalAudio || (!isLive && resumePosition > Duration.zero);
-      final playOnOpen =
-          shouldResumePlayback && !_pausedByLifecycle && !needsPreparation;
-      // Navigation during the rebuild wins over this old media's restart.
-      if (startupEpoch != _resumeVerifyEpoch) return;
-      final reopening = _openMedia(
-        media,
-        play: playOnOpen,
-        desiredPlay: shouldResumePlayback,
-        // The recreated player starts with a clean property set — without
-        // this a live channel would silently lose its ffmpeg reconnect
-        // options at the renderer fallback (codex round 2, finding 16).
-        liveStream: isLive,
-        preserveStartupEpoch: startupEpoch,
-        beforeOpen: restartChannelWatch
-            ? () {
-                _startupGate.watchStremioTvStartup(media.uri);
-                return true;
-              }
-            : null,
-      );
-      recoveryOpenEpoch = _resumeVerifyEpoch;
-      await reopening;
-      if (needsPreparation) await _mediaWaits.waitForVideoReady();
-      if (!mounted) return;
-      await _player.setRate(rate);
-      await _player.setVolume(volume);
-      if (hasExternalAudio) {
-        await _setExternalAudioTrack(externalAudio);
-      }
-      if (!isLive && resumePosition > Duration.zero) {
-        // Re-ARMS the guard at the carried position: the rebuilt player gets
-        // its own protected landing instead of an unguarded raw seek.
-        await _resumeRestore.seekForResume(resumePosition.inMilliseconds);
-      }
-      unawaited(_trackPreferences.restoreTrackPreferences());
-      if (shouldResumePlayback && !_pausedByLifecycle && !playOnOpen) {
-        await _player.play();
-      }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Direct Surface was unavailable. Using Automatic renderer.',
-            ),
-            duration: Duration(seconds: 4),
-          ),
-        );
-      }
-    } catch (_) {
-      _releasePlayerDiagnostic(
-        'generation=$mediaGeneration phase=fallback '
-        'status=failed platform=android backend=libmpv '
-        'requested_renderer=direct_surface fallback=automatic',
-      );
-      final failureEpoch = recoveryOpenEpoch ?? startupEpoch;
-      if (restartChannelWatch && failureEpoch == _resumeVerifyEpoch) {
-        final watch = _stremioTvStartupWatch;
-        if (watch?.hasFailed != true) {
-          watch?.dispose();
-          _stremioTvStartupSeek.cancel();
-          unawaited(
-            _startupGate.reportStartupFailure(
-              isCurrent: () => failureEpoch == _resumeVerifyEpoch,
-            ),
-          );
-        }
-      }
-    } finally {
-      _rendererFallbackInProgress = false;
-    }
-  }
-
-  void _scheduleDecoderProbe() {
-    final params = _decoderProbeParams;
-    if (params == null) return;
-    _decoderProbeTimer?.cancel();
-    final generation = _decoderProbeGeneration;
-    final token = ++_decoderProbeToken;
-    _decoderProbeTimer = Timer(const Duration(milliseconds: 150), () {
-      unawaited(
-        _reportActiveVideoDecoder(
-          params: params,
-          generation: generation,
-          token: token,
-        ),
-      );
-    });
-  }
-
-  Future<void> _reportActiveVideoDecoder({
-    required mk.VideoParams params,
-    required int generation,
-    required int token,
-  }) async {
-    final platform = _player.platform;
-    if (platform is! mk.NativePlayer) {
-      _emitDecoderDiagnosticOnce(
-        generation: generation,
-        signature: 'web',
-        fields:
-            'phase=stable status=unavailable platform=web backend=web '
-            'reason=no_native_decoder',
-      );
-      return;
-    }
-
-    var decoder = '';
-    var codec = '';
-    var output = '';
-    var previousDecoder = '';
-    var previousOutput = '';
-    var stable = false;
-    // Audio, read on the DEVICE side (AUDIO_FIDELITY_PLAN.md): what the AO
-    // actually writes, not what the decoder produced — the gap between the
-    // two is the downgrade being diagnosed.
-    var aoName = '';
-    var audioChannels = '';
-    var previousAo = '';
-    var previousAudioChannels = '';
-    var audioCodec = '';
-    var decodedChannels = '';
-    var audioFormat = '';
-
-    try {
-      // VideoParams means a decoder has produced metadata, not necessarily
-      // that the output surface has finished attaching. Require two matching
-      // reads so an early `current-vo=null` is never presented as the verdict.
-      // Audio joins the match condition but not the readiness one: a
-      // video-only file has no AO to wait for, and empty-matches-empty.
-      for (var attempt = 0; attempt < 12; attempt++) {
-        if (!mounted ||
-            generation != _decoderProbeGeneration ||
-            token != _decoderProbeToken) {
-          return;
-        }
-        decoder = await platform.getProperty('hwdec-current');
-        output = await platform.getProperty('current-vo');
-        aoName = await platform.getProperty('current-ao');
-        audioChannels = await platform.getProperty(
-          'audio-out-params/channel-count',
-        );
-        final outputReady = output.isNotEmpty && output != 'null';
-        final decoderReady = decoder.isNotEmpty;
-        if (decoderReady &&
-            outputReady &&
-            decoder == previousDecoder &&
-            output == previousOutput &&
-            aoName == previousAo &&
-            audioChannels == previousAudioChannels) {
-          stable = true;
-          break;
-        }
-        previousDecoder = decoder;
-        previousOutput = output;
-        previousAo = aoName;
-        previousAudioChannels = audioChannels;
-        await Future<void>.delayed(const Duration(milliseconds: 250));
-      }
-      if (!mounted ||
-          generation != _decoderProbeGeneration ||
-          token != _decoderProbeToken) {
-        return;
-      }
-      codec = await platform.getProperty('video-codec');
-      audioCodec = await platform.getProperty('audio-codec-name');
-      decodedChannels = await platform.getProperty(
-        'audio-params/channel-count',
-      );
-      audioFormat = await platform.getProperty('audio-out-params/format');
-    } catch (_) {
-      if (!mounted || generation != _decoderProbeGeneration) return;
-      _emitDecoderDiagnosticOnce(
-        generation: generation,
-        signature: 'error',
-        fields:
-            'phase=error status=unavailable '
-            'platform=${Platform.operatingSystem} reason=property_query_failed',
-      );
-      return;
-    }
-
-    final width = params.dw ?? params.w ?? 0;
-    final height = params.dh ?? params.h ?? 0;
-    final status = decoder == 'no'
-        ? 'software'
-        : decoder.isEmpty
-        ? 'unavailable'
-        : 'hardware';
-    final normalizedOutput = output.isEmpty || output == 'null'
-        ? 'unknown'
-        : output;
-    final requestedRenderer = Platform.isAndroid
-        ? _androidVideoRendererMode.storageKey
-        : 'platform_default';
-    // The remedy journey (tvOS): what the decoder produced originally, what
-    // it produces now, and where the ladder settled. In the signature too —
-    // a settle re-arms this probe, and dedupe on the old signature would
-    // swallow exactly the report that proves the remedy ran.
-    final remedy = _tvosDecodeRemedy;
-    final remedyState = switch (remedy?.state) {
-      null || TvosRemedyState.none => 'none',
-      TvosRemedyState.nv12 => 'nv12',
-      TvosRemedyState.software => 'software',
-      TvosRemedyState.gaveUp => 'gave_up',
-    };
-    // confirmed/failed mean the remedy's own settling poll verified the
-    // format by DIRECT read — the stream-captured params above can lag
-    // behind a settle (no final event is guaranteed after reconfig).
-    final remedyOutcome = remedy == null
-        ? 'none'
-        : remedy.applying
-        ? 'pending'
-        : switch (remedy.state) {
-            TvosRemedyState.none => 'none',
-            TvosRemedyState.nv12 || TvosRemedyState.software => 'confirmed',
-            TvosRemedyState.gaveUp => 'failed',
-          };
-    final remedyFields = remedy == null
-        ? ''
-        : 'pixelformat=${params.pixelformat ?? 'unknown'} '
-              'hw_pixelformat=${params.hwPixelformat ?? 'none'} '
-              'detected_hw_pixelformat=${remedy.detectedHwPixelformat ?? 'none'} '
-              'verified_hw_pixelformat=${remedy.verifiedHwPixelformat ?? 'none'} '
-              'gamma=${params.gamma ?? 'unknown'} '
-              'primaries=${params.primaries ?? 'unknown'} '
-              'remedy=$remedyState remedy_outcome=$remedyOutcome ';
-    final signature =
-        '$decoder|$normalizedOutput|$codec|${width}x$height|'
-        '$remedyState|$remedyOutcome';
-    _emitDecoderDiagnosticOnce(
-      generation: generation,
-      signature: signature,
-      fields:
-          'phase=${stable ? 'stable' : 'partial'} status=$status '
-          'platform=${Platform.operatingSystem} backend=libmpv '
-          'codec=${codec.isEmpty ? 'unknown' : codec} '
-          'decoder=${decoder.isEmpty ? 'unknown' : decoder} '
-          'output=$normalizedOutput '
-          '$remedyFields'
-          'audio_codec=${audioCodec.isEmpty ? 'none' : audioCodec} '
-          'decoded_channels=${decodedChannels.isEmpty ? 'none' : decodedChannels} '
-          'audio_channels=${audioChannels.isEmpty ? 'none' : audioChannels} '
-          'audio_format=${audioFormat.isEmpty ? 'none' : audioFormat} '
-          'ao=${aoName.isEmpty ? 'none' : aoName} '
-          'requested_renderer=$requestedRenderer '
-          'resolution=${width}x$height',
-    );
-  }
-
-  void _emitDecoderDiagnosticOnce({
-    required int generation,
-    required String signature,
-    required String fields,
-  }) {
-    if (generation != _decoderProbeGeneration) return;
-    final taggedSignature = '$generation|$signature';
-    if (_lastDecoderDiagnosticSignature == taggedSignature) return;
-    _lastDecoderDiagnosticSignature = taggedSignature;
-    _releasePlayerDiagnostic('generation=$generation $fields');
-  }
-
   void _beginMediaGeneration({int? preserveStartupEpoch}) {
     if (preserveStartupEpoch == null) {
       _stremioTvStartupSeek.cancel();
@@ -3320,7 +2428,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // This is the guaranteed boundary for every playlist item, IPTV zap,
     // startup candidate, and manual source switch. VideoParams normally emits
     // an invalid value too, but display correctness must not depend on it.
-    _resetTvosDisplayMatchForMediaBoundary();
+    _tvosVideo.resetTvosDisplayMatchForMediaBoundary();
     _playbackUiClock.beginMedia();
     _activeSkipSegmentUi.clear();
   }
@@ -3562,37 +2670,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       return DirectSourceAuthorization.runIfAuthorized(source, commitOpen);
     }
     return commitOpen();
-  }
-
-  void _releasePlayerDiagnostic(String fields) {
-    final message = 'DEBRIFY_PLAYER_DECODER $fields';
-    if (Platform.isAndroid) {
-      // A dedicated native tag lets release captures select only this
-      // privacy-safe line. Capturing Flutter's general stdout exposed unrelated
-      // service logs and must not be required for decoder diagnostics.
-      unawaited(
-        _androidPlayerDiagnosticChannel
-            .invokeMethod<void>('logDecoder', {'message': fields})
-            .catchError((_) {}),
-      );
-      return;
-    }
-    if (PlatformUtil.isTvOS) {
-      // tvOS release builds deliberately do not bridge every debugPrint call,
-      // because unrelated logs can contain private playback data. This narrow,
-      // privacy-safe diagnostic still needs to reach the Xcode/device console.
-      unawaited(
-        _tvReleaseLogChannel
-            .invokeMethod<void>('log', message)
-            .catchError((_) {}),
-      );
-      return;
-    }
-
-    // Intentional: print reaches desktop process consoles in release builds.
-    // Keep this payload free of titles, URLs and account IDs.
-    // ignore: avoid_print
-    print(message);
   }
 
   @override
@@ -4103,7 +3180,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _rendererStartupErrorSub?.cancel();
     _bufferingDebounceTimer?.cancel();
     _showBufferingIndicator.dispose();
-    _releaseAudioEffectSession();
+    _audioOutput.releaseAudioEffectSession();
     _screenDisposed = true;
     final subtitleAutoSync = _subtitleSync.subtitleAutoSync;
     _subtitleSync.subtitleAutoSync = null;
@@ -4113,10 +3190,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       () async {
         await subtitleAutoSync?.dispose();
         await _player.dispose();
-      }().whenComplete(_releaseVideoOutput);
+      }().whenComplete(_videoOutputLease.releaseVideoOutput);
     } else if (subtitleAutoSync != null) {
       unawaited(subtitleAutoSync.dispose());
-      _releaseVideoOutput();
+      _videoOutputLease.releaseVideoOutput();
     }
     _transitionStopTimer?.cancel();
     _rainbowController.dispose();
@@ -6263,6 +5340,280 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 }
 
+class _VpRendererFallbackHostAdapter implements VpRendererFallbackHost {
+  _VpRendererFallbackHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  set activeExternalSubtitlePath(String? v) =>
+      _s._activeExternalSubtitlePath = v;
+  @override
+  bool get activeMediaShouldPlay => _s._activeMediaShouldPlay;
+  @override
+  bool get activeMediaUserPaused => _s._activeMediaUserPaused;
+  @override
+  mk.Media? get activeOpenedMedia => _s._activeOpenedMedia;
+  @override
+  AndroidVideoRendererMode get androidVideoRendererMode =>
+      _s._androidVideoRendererMode;
+  @override
+  set androidVideoRendererMode(AndroidVideoRendererMode v) =>
+      _s._androidVideoRendererMode = v;
+  @override
+  IptvChannel? get currentIptvChannel => _s._currentIptvChannel;
+  @override
+  int get decoderProbeGeneration => _s._decoderProbeGeneration;
+  @override
+  set duration(Duration v) => _s._duration = v;
+  @override
+  bool get iptvErrorsMuted => _s._iptvErrorsMuted;
+  @override
+  set isPlaying(bool v) => _s._isPlaying = v;
+  @override
+  set isReady(bool v) => _s._isReady = v;
+  @override
+  bool get isRecording => _s._isRecording;
+  @override
+  bool get isTransitioning => _s._isTransitioning;
+  @override
+  bool get pausedByLifecycle => _s._pausedByLifecycle;
+  @override
+  mk.Player get player => _s._player;
+  @override
+  set playerCreated(bool v) => _s._playerCreated = v;
+  @override
+  int get playerInstanceGeneration => _s._playerInstanceGeneration;
+  @override
+  set playerInstanceGeneration(int v) => _s._playerInstanceGeneration = v;
+  @override
+  Duration get position => _s._position;
+  @override
+  set position(Duration v) => _s._position = v;
+  @override
+  bool get rendererFallbackInProgress => _s._rendererFallbackInProgress;
+  @override
+  set rendererFallbackInProgress(bool v) => _s._rendererFallbackInProgress = v;
+  @override
+  int get rendererStartupGuardToken => _s._rendererStartupGuardToken;
+  @override
+  set rendererStartupGuardToken(int v) => _s._rendererStartupGuardToken = v;
+  @override
+  int get rendererStartupValidationGeneration =>
+      _s._rendererStartupValidationGeneration;
+  @override
+  set rendererStartupValidationGeneration(int v) =>
+      _s._rendererStartupValidationGeneration = v;
+  @override
+  bool get rendererValidatedForSession => _s._rendererValidatedForSession;
+  @override
+  set rendererValidatedForSession(bool v) =>
+      _s._rendererValidatedForSession = v;
+  @override
+  int get resumeVerifyEpoch => _s._resumeVerifyEpoch;
+  @override
+  ResumeWriteGuard get resumeWriteGuard => _s._resumeWriteGuard;
+  @override
+  ValueNotifier<bool> get showBufferingIndicator => _s._showBufferingIndicator;
+  @override
+  bool get sleepStopLatched => _s._sleepStopLatched;
+  @override
+  DeferredStartupSeek get stremioTvStartupSeek => _s._stremioTvStartupSeek;
+  @override
+  ChannelStartupWatch? get stremioTvStartupWatch => _s._stremioTvStartupWatch;
+  @override
+  void createPlayerInstance(AndroidVideoRendererMode rendererMode) =>
+      _s._createPlayerInstance(rendererMode);
+  @override
+  Future<void> cancelPlayerInstanceSubscriptions() =>
+      _s._cancelPlayerInstanceSubscriptions();
+  @override
+  Future<void> openMedia(
+    mk.Media media, {
+    required bool play,
+    bool? desiredPlay,
+    bool liveStream = false,
+    EpisodePlaybackRequest? request,
+    bool Function()? beforeOpen,
+    Torrent? source,
+    int? preserveStartupEpoch,
+  }) => _s._openMedia(
+    media,
+    play: play,
+    desiredPlay: desiredPlay,
+    liveStream: liveStream,
+    request: request,
+    beforeOpen: beforeOpen,
+    source: source,
+    preserveStartupEpoch: preserveStartupEpoch,
+  );
+  @override
+  Future<void> attachAudioEffectSession() =>
+      _s._audioOutput.attachAudioEffectSession();
+  @override
+  Future<void> claimVideoOutput() => _s._videoOutputLease.claimVideoOutput();
+  @override
+  Future<void> configurePlayerAudio(mk.Player player) =>
+      _s._audioOutput.configurePlayerAudio(player);
+  @override
+  void releaseAudioEffectSession() =>
+      _s._audioOutput.releaseAudioEffectSession();
+  @override
+  void releasePlayerDiagnostic(String fields) =>
+      _s._decoderProbe.releasePlayerDiagnostic(fields);
+  @override
+  Future<void> setExternalAudioTrack(String audioUrl) =>
+      _s._audioOutput.setExternalAudioTrack(audioUrl);
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  BuildContext get context => _s.context;
+  @override
+  void setState(VoidCallback fn) => _s._vpSetState(fn);
+  @override
+  String? get audioUrl => _s.widget.audioUrl;
+  @override
+  bool get isAndroid => VpS2Hooks.isAndroid;
+  @override
+  bool get isAndroidRendererValidation => VpS2Hooks.isAndroidRendererValidation;
+  @override
+  Future<void> disposeSubtitleAutoSync() =>
+      _s._subtitleSync.disposeSubtitleAutoSync();
+  @override
+  void installSubtitleAutoSyncForPlayer(mk.Player player) =>
+      _s._subtitleSync.installSubtitleAutoSyncForPlayer(player);
+  @override
+  Future<void> waitForVideoReady() => _s._mediaWaits.waitForVideoReady();
+  @override
+  Future<void> seekForResume(int targetMs, {bool verifyLanding = false}) =>
+      _s._resumeRestore.seekForResume(targetMs, verifyLanding: verifyLanding);
+  @override
+  Future<void> restoreTrackPreferences() =>
+      _s._trackPreferences.restoreTrackPreferences();
+  @override
+  void watchStremioTvStartup(String url) =>
+      _s._startupGate.watchStremioTvStartup(url);
+  @override
+  Future<void> reportStartupFailure({bool Function()? isCurrent}) =>
+      _s._startupGate.reportStartupFailure(isCurrent: isCurrent);
+}
+
+class _VpDecoderProbeHostAdapter implements VpDecoderProbeHost {
+  _VpDecoderProbeHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  AndroidVideoRendererMode get androidVideoRendererMode =>
+      _s._androidVideoRendererMode;
+  @override
+  int get decoderProbeGeneration => _s._decoderProbeGeneration;
+  @override
+  mk.VideoParams? get decoderProbeParams => _s._decoderProbeParams;
+  @override
+  set decoderProbeParams(mk.VideoParams? v) => _s._decoderProbeParams = v;
+  @override
+  Timer? get decoderProbeTimer => _s._decoderProbeTimer;
+  @override
+  set decoderProbeTimer(Timer? v) => _s._decoderProbeTimer = v;
+  @override
+  int get decoderProbeToken => _s._decoderProbeToken;
+  @override
+  set decoderProbeToken(int v) => _s._decoderProbeToken = v;
+  @override
+  String? get lastDecoderDiagnosticSignature =>
+      _s._lastDecoderDiagnosticSignature;
+  @override
+  set lastDecoderDiagnosticSignature(String? v) =>
+      _s._lastDecoderDiagnosticSignature = v;
+  @override
+  Torrent? get openedWatchSource => _s._openedWatchSource;
+  @override
+  mk.Player get player => _s._player;
+  @override
+  int get playerInstanceGeneration => _s._playerInstanceGeneration;
+  @override
+  int get rendererStartupGuardToken => _s._rendererStartupGuardToken;
+  @override
+  set rendererStartupGuardToken(int v) => _s._rendererStartupGuardToken = v;
+  @override
+  set rendererStartupValidationGeneration(int v) =>
+      _s._rendererStartupValidationGeneration = v;
+  @override
+  TvosDecodeRemedy? get tvosDecodeRemedy => _s._tvosDecodeRemedy;
+  @override
+  MethodChannel get tvReleaseLogChannel =>
+      _VideoPlayerScreenState._tvReleaseLogChannel;
+  @override
+  void resetTvosDisplayMatchForMediaBoundary() =>
+      _s._tvosVideo.resetTvosDisplayMatchForMediaBoundary();
+  @override
+  void scheduleTvosDisplayMatch(mk.VideoParams params) =>
+      _s._tvosVideo.scheduleTvosDisplayMatch(params);
+  @override
+  void scheduleRendererStartupValidation() =>
+      _s._rendererFallback.scheduleRendererStartupValidation();
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  bool get isAndroidRendererValidation => VpS2Hooks.isAndroidRendererValidation;
+}
+
+class _VpTvosVideoHostAdapter implements VpTvosVideoHost {
+  _VpTvosVideoHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  ContentDisplayMatchMode get contentDisplayMatchMode =>
+      _s._contentDisplayMatchMode;
+  @override
+  mk.Player get player => _s._player;
+  @override
+  bool get screenDisposed => _s._screenDisposed;
+  @override
+  TvosDecodeRemedy? get tvosDecodeRemedy => _s._tvosDecodeRemedy;
+  @override
+  set tvosDecodeRemedy(TvosDecodeRemedy? v) => _s._tvosDecodeRemedy = v;
+  @override
+  Timer? get tvosDisplayMatchTimer => _s._tvosDisplayMatchTimer;
+  @override
+  set tvosDisplayMatchTimer(Timer? v) => _s._tvosDisplayMatchTimer = v;
+  @override
+  int get tvosDisplayMatchToken => _s._tvosDisplayMatchToken;
+  @override
+  set tvosDisplayMatchToken(int v) => _s._tvosDisplayMatchToken = v;
+  @override
+  void scheduleDecoderProbe() => _s._decoderProbe.scheduleDecoderProbe();
+  @override
+  bool get mounted => _s.mounted;
+}
+
+class _VpVideoOutputLeaseHostAdapter implements VpVideoOutputLeaseHost {
+  _VpVideoOutputLeaseHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  bool get screenDisposed => _s._screenDisposed;
+}
+
+class _VpAudioOutputHostAdapter implements VpAudioOutputHost {
+  _VpAudioOutputHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  bool get appleMultichannelEnabled => _s._appleMultichannelEnabled;
+  @override
+  bool get audioPassthroughEnabled => _s._audioPassthroughEnabled;
+  @override
+  set audioPassthroughEnabled(bool v) => _s._audioPassthroughEnabled = v;
+  @override
+  mk.Player get player => _s._player;
+  @override
+  bool get systemAudioEffectsEnabled => _s._systemAudioEffectsEnabled;
+  @override
+  bool get tvosForceStereoAudio => _s._tvosForceStereoAudio;
+  @override
+  bool get tvosLegacyAudioOutput => _s._tvosLegacyAudioOutput;
+  @override
+  int get tvosRouteOutputChannels => _s._tvosRouteOutputChannels;
+  @override
+  MediaKitSubtitleAutoSync? get subtitleAutoSync =>
+      _s._subtitleSync.subtitleAutoSync;
+}
+
 class _VpMetadataPreloadHostAdapter implements VpMetadataPreloadHost {
   _VpMetadataPreloadHostAdapter(this._s);
   final _VideoPlayerScreenState _s;
@@ -7851,7 +7202,7 @@ class _VpSourceSwitchHostAdapter implements VpSourceSwitchHost {
   Future<void> waitForVideoReady() => _s._mediaWaits.waitForVideoReady();
   @override
   Future<void> setExternalAudioTrack(String url) =>
-      _s._setExternalAudioTrack(url);
+      _s._audioOutput.setExternalAudioTrack(url);
   @override
   void setState(VoidCallback fn) => _s._vpSetState(fn);
   @override
@@ -7921,7 +7272,7 @@ class _VpStartupGateHostAdapter implements VpStartupGateHost {
   bool canFallbackExplicitRenderer({
     required int instanceGeneration,
     required int mediaGeneration,
-  }) => _s._canFallbackExplicitRenderer(
+  }) => _s._rendererFallback.canFallbackExplicitRenderer(
     instanceGeneration: instanceGeneration,
     mediaGeneration: mediaGeneration,
   );
@@ -9160,7 +8511,7 @@ class _VpPlayerMenuUiHostAdapter implements VpPlayerMenuUiHost {
   SeriesPlaylist? get seriesPlaylist => _s._seriesPlaylist;
   @override
   Future<void> setAudioPassthroughLive(bool enabled) =>
-      _s._setAudioPassthroughLive(enabled);
+      _s._audioOutput.setAudioPassthroughLive(enabled);
   @override
   bool get singleFileImdbFetched => _s._singleFileImdbFetched;
   @override
@@ -10065,9 +9416,10 @@ class VideoPlayerScreenTestHooks {
 /// Platform predicates for the separately reviewed PiP characterization seam.
 @visibleForTesting
 class VpS2Hooks {
-  const VpS2Hooks({this.ios, this.android});
+  const VpS2Hooks({this.ios, this.android, this.androidRendererValidation});
   final bool Function()? ios;
   final bool Function()? android;
+  final bool Function()? androidRendererValidation;
   static VpS2Hooks? _installed;
 
   static void install(VpS2Hooks? hooks) {
@@ -10090,4 +9442,6 @@ class VpS2Hooks {
   static bool get isIOS => _installed?.ios?.call() ?? Platform.isIOS;
   static bool get isAndroid =>
       _installed?.android?.call() ?? Platform.isAndroid;
+  static bool get isAndroidRendererValidation =>
+      _installed?.androidRendererValidation?.call() ?? Platform.isAndroid;
 }
