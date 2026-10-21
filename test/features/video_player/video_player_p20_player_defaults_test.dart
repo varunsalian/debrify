@@ -11,8 +11,10 @@ import 'package:debrify/services/storage/iptv_appearance_storage.dart';
 import 'package:debrify/services/storage/player_appearance_storage.dart';
 import 'package:debrify/services/storage/player_settings_storage.dart';
 import 'package:debrify/services/storage/subtitle_settings_storage.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:media_kit_video/media_kit_video.dart' as mkv;
 
 import 'support/engine_driver.dart';
 import 'support/fake_player.dart';
@@ -323,6 +325,34 @@ void main() {
         expect(seq, ['set:audio-channels=stereo', 'open']);
       } finally {
         await d.close();
+      }
+    },
+  );
+
+  testWidgets(
+    'P20 the stored default aspect reaches the video fit; negative indexes clamp to contain',
+    (t) async {
+      for (final (index, fit) in [
+        (1, BoxFit.cover),
+        (3, BoxFit.fitHeight),
+        (-4, BoxFit.contain),
+      ]) {
+        final d = EngineDriver(t);
+        await d.initialize();
+        try {
+          await d.f.finish<void>(
+            t,
+            PlayerSettingsStorage.setPlayerDefaultAspectIndex(index),
+          );
+          await d.mount();
+          expect(
+            t.widget<mkv.Video>(find.byType(mkv.Video)).fit,
+            fit,
+            reason: 'index $index',
+          );
+        } finally {
+          await d.close();
+        }
       }
     },
   );

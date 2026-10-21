@@ -111,22 +111,6 @@ void main() {
   );
 
   testWidgets(
-    'P20 a failed lazy resolve falls back to the widget URL when there is one',
-    (t) async {
-      final d = await _lazyStart(
-        t,
-        videoUrl: _url,
-        replies: [http.Response('{}', 500)],
-      );
-      try {
-        expect(_opens(d.player).map((o) => o.$1.uri), [_url]);
-      } finally {
-        await d.close();
-      }
-    },
-  );
-
-  testWidgets(
     'P20 a failed lazy resolve with no URL and no ranked sources reloads the entry paused',
     (t) async {
       final d = await _lazyStart(

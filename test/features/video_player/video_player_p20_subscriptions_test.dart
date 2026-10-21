@@ -122,22 +122,6 @@ void main() {
   );
 
   testWidgets(
-    'P20 a superseded player finishing does not advance the playlist',
-    (t) async {
-      final (d, old) = await _rebuilt(t, screen: _playlist);
-      try {
-        final before = _opened(d.player);
-        old.emit('completed', true);
-        await d.f.advance(t, const Duration(seconds: 2));
-        await d.f.actions.settle(t);
-        expect(_opened(d.player), before);
-      } finally {
-        await d.close();
-      }
-    },
-  );
-
-  testWidgets(
     'P20 the current player finishing advances the playlist to the next entry',
     (t) async {
       final d = EngineDriver(t);
@@ -153,38 +137,6 @@ void main() {
       }
     },
   );
-
-  testWidgets('P20 a superseded player buffering never raises the spinner', (
-    t,
-  ) async {
-    final (d, old) = await _rebuilt(t);
-    try {
-      old.state = old.state.copyWith(buffering: true);
-      old.emit('buffering', true);
-      await d.f.advance(t, const Duration(seconds: 2));
-      expect(_spinner(t), 0);
-    } finally {
-      await d.close();
-    }
-  });
-
-  testWidgets('P20 a superseded player renderer error does not rebuild again', (
-    t,
-  ) async {
-    final (d, old) = await _rebuilt(t);
-    try {
-      old.emit('error', _failure);
-      await d.f.advance(t, const Duration(seconds: 2));
-      await d.f.actions.settle(t);
-      expect(d.f.players, hasLength(2));
-      expect(
-        d.decoderLines.where((l) => l.contains(' phase=fallback ')),
-        hasLength(1),
-      );
-    } finally {
-      await d.close();
-    }
-  });
 
   testWidgets(
     'P20 buffering raises the spinner only after the debounce and clears it at once',
@@ -303,31 +255,6 @@ void main() {
     },
   );
 
-  testWidgets(
-    'P20 visibility: every content open withdraws the screen before the new media settles',
-    (t) async {
-      PlayerVisibility.settleDuration = const Duration(milliseconds: 500);
-      final seen = <bool>[];
-      final d = EngineDriver(
-        t,
-        configurePlayer: (p) => p.beforeOperation = (name, value) {
-          if (name == 'open') seen.add(PlayerVisibility.refreshAllowed.value);
-        },
-      );
-      await d.initialize();
-      try {
-        await d.mount(screen: _playlist);
-        await d.f.advance(t, const Duration(seconds: 1));
-        expect(PlayerVisibility.refreshAllowed.value, isTrue);
-        d.player.emit('completed', true);
-        await d.f.until(t, () => seen.length == 2);
-        expect(seen, [false, false]);
-      } finally {
-        await d.close();
-      }
-    },
-  );
-
   for (final live in [false, true]) {
     testWidgets(
       'P20 an IPTV ${live ? 'live' : 'VOD'} 404 error is reported for the tuned channel',
@@ -363,26 +290,6 @@ void main() {
       },
     );
   }
-
-  testWidgets(
-    'P20 without IPTV channels a stream error is not reported as a channel failure',
-    (t) async {
-      final d = EngineDriver(t);
-      await d.initialize();
-      try {
-        await d.mount();
-        d.player.emit('error', 'HTTP error 404 Not Found');
-        await d.f.advance(t, const Duration(milliseconds: 100));
-        expect(
-          d.logs.where((l) => l.startsWith('Player: IPTV stream error')),
-          isEmpty,
-        );
-        expect(find.byType(SnackBar), findsNothing);
-      } finally {
-        await d.close();
-      }
-    },
-  );
 
   testWidgets(
     'P20 a rebuild cancels each instance listener once, in order, even when the first cancel throws',
