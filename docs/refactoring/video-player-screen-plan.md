@@ -10004,6 +10004,59 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
     video-output slot stays a Follow-up.
 - Next: merge into `refactor/codebase`, then phase 20.
 
+### 2026-10-21 — Phase 19 merged; Phase 20 design and Step T (executor: Claude)
+
+- **Phase 19 merged** as `0f5bfb161` (`merge --no-ff`) after the re-sample
+  fixes `acc7e3df6` and the re-sample verification ("No P1s"). Merge checks
+  on `refactor/codebase` (`p19/merge/checks.log`): format 2,831 files, 0
+  changed; sizes, storage keys, search and vplayer architecture pass; P19
+  current and P18 history at `46bc00ce7` 0 differences; CI analyze 609,
+  allowlist nothing new, vplayer comparator 214 scoped, 0 additions. Pushed
+  to `private`.
+- **Phase 20 design** `fdbf09b2f`, reviewed by a review agent: round 1 four
+  P1s (S2b hook sites, private test-hook factories, the 500-line CI cap,
+  underscored stack-trace matchers), all resolved (`f12a82545`); round 2
+  "No P1s" with six P3 notes adopted.
+- **Step T.** Generator `dev/tool/draft_vplayer_engine2_moves.py`
+  (PROVISIONAL, base `0f5bfb161`) writes evidence plus the provisional
+  manifest `vplayer_p20.json`. **Zero comparison differences.**
+  - 14 moved declarations (10 methods, 4 fields) into six files; formatted
+    sizes: defaults 117, instance 122, subscriptions 424, tuning 81, media
+    open 270, **startup 623** (the documented exception); facade 9,447 →
+    8,986. Subscriptions are under 500, so the cancel stays with them
+    (resolution P2-2).
+  - Hosts frozen (names/declarations): defaults 16/20, instance 26/27,
+    subscriptions 74/94, tuning 1/1, media open 34/42, startup 70/75
+    (`p20/stepT/deps-section.md`). `isAndroid`/`isIOS` are live
+    `VpS2Hooks` forwarders; `createPlayer`/`createVideoController` forward
+    to the private hooks; `visibilityOwner => _s` uses the P8
+    `host_owner_identity` guard (`this` substitution only).
+  - 15 retained references (`p20/stepT/retained.txt`): `initState` 1498 and
+    the 14 forwarders of 12 patched adapters (P19 renderer fallback ×3, P16–P18
+    `openMedia` ×11).
+  - **Prototype analyzer** (CI command on a scratch copy): 0 errors; 625
+    issues against 609. By identity: 13 newly unused facade imports
+    (including the `kIsWeb` shown name), three formatter `if` wraps from
+    longer receivers (instance, tuning, media open); one existing wrap
+    moves from the facade to startup. Registered at Step 1.
+  - On the probe copy the search architecture check fails only on the
+    startup file's 623 lines (resolution P1-3, Step 1).
+  - **Test scan** (`p20/stepT/test-scan.txt`, `source-readers.txt`):
+    stack matchers to retarget at Step 0 — `video_player_resume_late_entry_test`
+    (`'._initializePlayer'`), `video_player_identify_early_test`
+    (`'_loadPlayerDefaults'`), `video_player_source_overlap_test`
+    (`'_bindPlayerInstanceSubscriptions'`); already un-prefixed and
+    unaffected: `subtitle_sources_restore_races` (`initializePlayer`),
+    `p17_transition_timer` and `iptv_review2_transition_timer_ownership`
+    (`bindPlayerInstanceSubscriptions`). Source readers to retarget at Step
+    1: `media_server_service_test` (`_openMedia` declaration),
+    `media_server_watch_player_wiring_test` (`commitOpen`, watch epoch,
+    `_serverWatch` literals), the platform seam proof and its guard test
+    (`_initializePlayer` S2b site), and `vplayer_seam_proof.py` (`ready:`
+    callback).
+- Next: Step 0 characterization of the design's gap list, the three
+  matcher retargets, per-test mutation proofs and the sweep.
+
 ## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
 
 Reviewed at `c5c8e3500` (facade byte-identical to `be4cd78aa`; split,
