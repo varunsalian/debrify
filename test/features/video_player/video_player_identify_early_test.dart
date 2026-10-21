@@ -84,7 +84,7 @@ void main() {
     (t) async {
       final d = IdentifyTitleDriver(t);
       await d.setupIdentity();
-      final reads = CompletionDelivery('_loadPlayerDefaults', (v) => v is int);
+      final reads = CompletionDelivery('loadPlayerDefaults', (v) => v is int);
       final original = source(
         'Original',
         'https://player.test/early-guide.mp4',
@@ -127,6 +127,11 @@ void main() {
         );
         await d.f.until(t, () => reads.pending.isNotEmpty);
         expect(d.f.players, isEmpty);
+        expect(
+          reads.values,
+          hasLength(1),
+          reason: 'One defaults read is intercepted before any player exists',
+        );
         await d.f.key(t, LogicalKeyboardKey.keyG);
         expect(find.byType(StremioTvGuideSheet), findsOneWidget);
         final dynamic callback = t

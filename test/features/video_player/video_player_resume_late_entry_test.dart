@@ -20,7 +20,7 @@ void main() {
       );
       await t.runAsync(f.initialize);
       final initial = CompletionDelivery(
-        '._initializePlayer',
+        'initializePlayer',
         (v) =>
             v == null &&
             f.players.isNotEmpty &&
@@ -66,6 +66,11 @@ void main() {
           ),
         );
         await f.until(t, () => initial.pending.isNotEmpty);
+        expect(
+          initial.values,
+          [isNull],
+          reason: 'The startup continuation await is intercepted exactly once',
+        );
         playerControls(t).onShowStremioSources!();
         await f.advance(t, const Duration(milliseconds: 300));
         final sheet = t.widget<SourceSheet>(find.byType(SourceSheet));

@@ -195,17 +195,22 @@ void main() {
               .toList();
           expect(finalTimers, hasLength(1));
           final finalTimer = finalTimers.single.$2;
+          bool listenerTimer((Duration, Timer) r) =>
+              (r.$1 == const Duration(milliseconds: 1500) ||
+                  r.$1 == const Duration(seconds: 3)) &&
+              (d.timerOrigins[r.$2]?.contains(
+                    'bindPlayerInstanceSubscriptions',
+                  ) ??
+                  false);
           expect(
-            d.timers.where(
-              (r) =>
-                  r.$2.isActive &&
-                  (r.$1 == const Duration(milliseconds: 1500) ||
-                      r.$1 == const Duration(seconds: 3)) &&
-                  (d.timerOrigins[r.$2]?.contains(
-                        '_bindPlayerInstanceSubscriptions',
-                      ) ??
-                      false),
-            ),
+            d.timers.where(listenerTimer),
+            isNotEmpty,
+            reason:
+                'The play listener armed its overlay phase timers, so the '
+                'inactive check below is not vacuous',
+          );
+          expect(
+            d.timers.where((r) => r.$2.isActive && listenerTimer(r)),
             isEmpty,
           );
           final overlay = t.widget<TransitionOverlay>(
