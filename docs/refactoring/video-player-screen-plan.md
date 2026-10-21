@@ -5133,6 +5133,27 @@ systematic sweep and the independent sample (≥ 75 %). Known gaps:
 
 ## Follow-ups
 
+- **P20 Step 0 (characterized; no fixes):**
+  - A ranked or direct start that fails (`reportStartupFailure` then
+    `return`) never arms the 6 s autosave timer or the episode preload
+    (design hazard 4). Pinned by "a failed ranked start reports the failure
+    and never arms the autosave". Likely intended; confirm before Phase 21.
+  - The Android recording probes (`canPublishRecordings().then`,
+    `engineEnabled().then`) have no error handlers: a throwing probe is an
+    unhandled zone error (hazard P3-7; on the host a forced probe surfaces
+    as an uncaught downloader-channel error).
+  - The PikPak startup continuation is an unawaited `.then`; an exception
+    inside it is unhandled (hazard 5; not exercised).
+  - `_transitionPhase` and `_transitionPhase2Started` are written by the
+    play listener and five collaborators but read nowhere (dead state).
+  - The per-listener `isCurrent()` checks only matter between the renderer
+    fallback's generation bump and its subscription cancellation; the two
+    mask each other, so no single fault is observable (as P19 F21/F18).
+  - `IptvTuneDiagnostics` stall-suspect lines use `DateTime.now`, so they
+    cannot be characterized under fake time.
+  - `_loadPlayerDefaults`' doc comment ("Load default player settings
+    (aspect)") is attached to `_dockBand` (design follow-up candidate).
+
 - P19 renderer fallback (characterized by the strengthened F35 case; no
   fix): Next pressed while the old player is still disposing opens the next
   item on that disposing player. The fallback then returns at its epoch
@@ -10056,6 +10077,123 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
     callback).
 - Next: Step 0 characterization of the design's gap list, the three
   matcher retargets, per-test mutation proofs and the sweep.
+
+### 2026-10-21 — Phase 20 Step 0 complete (executor: Claude)
+
+- **Stack-trace matcher retargets** (resolution P1-4/R5, `8526cf03d`):
+  `video_player_resume_late_entry_test` (`'initializePlayer'`),
+  `video_player_identify_early_test` (`'loadPlayerDefaults'`) and
+  `video_player_source_overlap_test` (`'bindPlayerInstanceSubscriptions'`)
+  now use the un-prefixed names. Each gained a witness that the intercept
+  fired on the original (one intercepted startup continuation, one
+  intercepted defaults read before any player). The source-overlap filter
+  gained the non-vacuity precondition: listener phase timers are created on
+  the original (counted regardless of activity), so no vacuity is recorded.
+  All three suites (14 cases) pass on the original.
+- **Inventory** (`p20/step0/existing-suites.json`, `inventory.json`): the
+  15 moved declarations (11 methods and 4 fields; the design's "14" counts
+  fields short) give 901 AST points, 831 with a candidate. The design's
+  `network_tuning_test` does not exist; tuning had no executable coverage.
+- **Systematic sweep** on the original `615ca6ffe`
+  (`p20/step0/mutation_batches.py`, `systematic.json`, serial, each
+  invocation under `p20/suite.lock`): 289 killed, 346 survived, 52 runtime/
+  timeout, 139 compile-invalid, 5 invalid-selector (the lifecycle-guard
+  negation `point_535` hangs its whole batch).
+- **Closure** (every file set first passed a control run on the original):
+  - Part 1 (`closure_plan.py`, 341 points) widened with the P20 gap suites
+    written during triage: +147. The zone-free `mount_paths` suite runs
+    first so a mount that never opens fails a plain expectation.
+  - Part 2 (`closure_part2.py`, 189) ran legacy suites alone: +36. Legacy
+    suites after P20 files fail their controls in one isolate (decoder
+    probe, PiP lifecycle, audio output), so part 2 is legacy-only
+    (`closure2-controls-run1/2`).
+  - Part 3 (`closure_part3.py`, 153) reran the cases written or
+    strengthened after their part-1 batch: +19.
+  - Part 4 (`closure_part4.py`, 21) ran single suites or single cases in
+    their own isolates (renderer-mode read, lease close, lazy reload, decoder
+    probe, wakelock, iOS PiP push): +9.
+  - Ordering fixes found by the controls: every P20 file that is not an
+    `EngineDriver` suite drains the shared wakelock cursor in the real zone,
+    and the Trakt suites install `TraktTestTransport` at registration.
+- **Accounting** (`closure-summary.json`, `dispositions.json`; P17 policy):
+  **500 killed, 93 survived, 26 runtime/timeout, 140 compile-invalid,
+  50 equivalent, 22 device-pending — 80.8%** of the 619 valid points that are
+  neither equivalent nor device-pending (84.3% without the 26 crash-only or
+  hang-only mutants, which the first-assertion policy never credits). Below
+  the ~90% target; the open points are the Step 0b candidates below.
+  - Equivalents, argued per point: the instance `isReady` reset (the
+    fallback resets it first); the outer TV pre-check (the post-frame
+    callback re-checks visibility); the live-launch hide-timer cancel;
+    unreachable index fallbacks (first episode `-1`, empty main group,
+    post-clamp `<=`, the redundant inner playlist guards, an empty lazy
+    resolve); the `initialUrl` no-op; `!mounted && _screenDisposed`;
+    write-only `_transitionPhase`/`_transitionPhase2Started` and the
+    phase-two timer; the buffering early-return variants (the debounce
+    callback re-checks); the subscription field nulling (re-bound at once,
+    double cancel is a no-op); the validation sentinel; the unreachable
+    `liveStream` default (every call site passes it); the watch-epoch
+    decrement; the diagnostic search-text prefix; the implicit trailing
+    `return null`; the route-count `0` fallback; the PikPak readiness wait.
+  - Device-pending: the Android recording probe and audio-effect session
+    (real `Platform.isAndroid`), the Android passthrough/effects preloads,
+    and the TV post-frame focus re-check (needs a second instance on a
+    television).
+  - **Open (Step 0b candidates):**
+    - startup: IPTV live-recovery tune start `232`; PikPak still-current
+      checks `270`/`271`/`285`; the failed-watch early return `347`; the
+      null-watch failure report `391`/`392`; the late-throw tracking re-arm
+      `395`; debounced autosave `404`; episode preload `405`; crash-only
+      bounds `228`/`281`/`397`;
+    - subscriptions: stale-generation guards masked by the cancellation
+      (`406`, `615`); IPTV diagnostics/recovery progress (`447`, `475`–`479`,
+      real-clock stall detection); position fan-out to episode fetch, MDBList
+      and skip (`482`–`485`, `516`, `523`–`525`); the MDBList duration edge
+      (`508`, `517`–`521`, masked by the startup gate's tracking replay);
+      the play-listener tracker matrix (`542`, `543`, `551`, `564`, `572`–
+      `594`); the duration-listener repaint `529`; the transition stop-timer
+      writes `616`–`618`; hang-only `498`–`501`, `535`/`536`;
+    - media generation: the decoder/renderer token and probe resets, the
+      Stremio TV startup seek/watch resets, the clock and skip-UI resets
+      (`687`–`709`);
+    - media open: media-server source matching and watch commit (`752`–
+      `765`), the resume epoch and guard clear (`767`–`769`), tvOS remedy
+      supersession (`791`–`793`), authorization `814`/`850`, `818`, the
+      paused-flag reset `837`, the open-time visibility reset `839`/`840`
+      (masked by the outgoing pause), the request-commit return `845`;
+    - `'Unknown Series'` `853`, preferred audio `871`, decoder observers `15`,
+      the Debrify banner raise `51`.
+- **Per-test proofs** (`proofs.py`). All 123 P20 test declarations are the
+  first clean assertion kill of at least one mutant. 15 needed single-case
+  witnesses (`generate_witness_proofs.py`, `witness-proofs/`, controls
+  first; 14 killed). Removed because no single fault reaches them on the
+  original: three "superseded player" cases (finishing, buffering, renderer
+  error — the cancellation and the generation guard mask each other),
+  "every content open withdraws the screen" (the outgoing pause already
+  withdraws it), "without IPTV channels a stream error is not reported"
+  (the IPTV handler returns without channels), the TV live-launch focus
+  case (the hidden bar refuses focus), the widget-URL lazy fallback
+  (`initialUrl` already holds it) and the stream-check overlay case (only a
+  legacy P16 case observes that gate release).
+- **New suites** (18 files, 166 cases, all passing on the original; format
+  and analyze clean): `video_player_p20_{listener_gaps, media_open_gaps,
+  media_server, mount_paths, network_tuning, player_defaults,
+  player_instance, ready_edge, scrobble, startup_gaps, startup_index,
+  startup_landing, startup_open, startup_pikpak, startup_watch,
+  subscriptions, subtitle_failure, transition}_test.dart`. They are in the
+  reduced-gate inventory `dev/tool/vplayer_p20_test_inventory.txt` (487
+  files: the 469 P19 files plus these) and the CI behaviour list.
+  `dev/tool/check_storage_references.py` (red since Phase 5) gains 8
+  findings of the existing kind from four of them (they seed or read
+  physical resume maps through `PlaybackStateStore`), covered by the
+  existing storage-guard Follow-up.
+- **Follow-ups** recorded, not fixed (see Follow-ups): a failed ranked or
+  direct start never arms the autosave or the episode preload (hazard 4,
+  pinned); the recording-probe `.then` chains have no error handlers;
+  `_transitionPhase`/`_transitionPhase2Started` are write-only; the
+  listener `isCurrent()` guards only matter between the generation bump and
+  the cancellation; the IPTV stall-suspect line uses the real clock.
+- Next: an independent mutation sample by a review agent (≥75%), then
+  Step 0b and Step 1.
 
 ## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
 
