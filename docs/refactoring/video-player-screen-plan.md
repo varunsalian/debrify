@@ -9576,6 +9576,42 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
 - Next: a review agent reruns the sample's survivors against the 14 P19
   files, then Step 1.
 
+### 2026-10-21 — Phase 19 Step 1 + reduced gate (executor: Claude)
+
+- **Step 1 (`a38f99bf1`).** The generator was flipped to FINAL and run with
+  the Step T parser package (`p19/step1/final/`): zero differences, and sizes
+  equal the Step T prototypes (VpAudioOutput 205 / VpVideoOutputLease 94 /
+  VpTvosVideo 149 / VpDecoderProbe 349 / VpRendererFallback 355, 15 retained
+  references). The output was copied unchanged into `lib/`. The manifest
+  status is `applied`. Facade **10,096 → 9,447** (ratchet).
+- **Move checks** (`p19/step1/move-checks*.log`): P19 current and
+  `--self-test`, and P18 history at `46bc00ce7`, all report exhaustive
+  ownership with 0 differences. The platform seam self-test passes with
+  `p19_relocated_sites=3`; the seam self-test and the architecture check
+  pass. CI now selects P19 for both runs and adds the P18 history line.
+- **Analyzer.** CI analyze: 609 issues, as in the Step T probe. The
+  allowlist reports nothing new. The `isHeld` entry moves to
+  `vp_video_output_lease.dart`. The P9 entry for
+  `media_kit_subtitle_auto_sync.dart` is removed, because the new
+  `subtitleAutoSync` Host forwarder uses that import again. The four newly
+  unused facade imports are recorded for phase 21 cleanup. The
+  P19 inventory (`vplayer_p19_analyzer.json`) records six receiver-probe
+  identities: one `use_build_context_synchronously` in
+  `_fallbackExplicitRendererToAutomatic`, one `curly_braces` in
+  `_scheduleTvosDisplayMatch`, and the four unused imports. The comparator
+  reports 214 scoped diagnostics and 0 additions.
+- **Reduced gate** (`p19/gate/compare.txt`). The 469-file inventory ran
+  serially on the original (Step 0b head `8b8039a3c`) and on `a38f99bf1`.
+  All 469 suites loaded in both runs. **3,256 cases, identical outcomes by
+  (suite, name)**: 3,255 successes plus the single pre-existing PiP
+  startup-shield source-text failure (also present in the P17 and P18 gates).
+- **Mechanical checks.** Format (2,831 files, 0 changed), file sizes,
+  search/vplayer architecture and the theme/source-guard lists pass.
+  `check_storage_references.py` self-test fails identically on `46bc00ce7`
+  (the Follow-up series test debt).
+- Next: independent post-gate review, the re-sample verdict, merge, then
+  phase 20.
+
 ## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
 
 Reviewed at `c5c8e3500` (facade byte-identical to `be4cd78aa`; split,
