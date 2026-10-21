@@ -22,6 +22,11 @@ def main():
     assert checker.VIDEO_PLAYER_BRIDGE == bridge
     assert bridge in checker.LEGACY_PLAYBACK_BRIDGES
     assert checker.VIDEO_PLAYER_FILE_CAP == 500
+    assert checker.VIDEO_PLAYER_SIZE_CEILING == 800
+    startup = bridge + 'vp_player_startup.dart'
+    assert list(checker.VIDEO_PLAYER_SIZE_EXCEPTIONS) == [startup]
+    exact = checker.VIDEO_PLAYER_SIZE_EXCEPTIONS[startup]
+    assert 500 < exact <= 800, exact
     common = Path(subprocess.check_output(
         ['git', 'rev-parse', '--path-format=absolute', '--git-common-dir'],
         cwd=root, text=True).strip())
@@ -96,6 +101,13 @@ def main():
               "import 'package:http/http.dart';\n", 'view directly imports data/platform API')
         probe('501-line extraction rejected', base + 'presentation/probe.dart',
               '\n' * 501, '500-line video-player extraction limit')
+        probe('exact startup exception allowed', startup, '\n' * exact)
+        probe('startup exception plus one rejected', startup, '\n' * (exact + 1),
+              f'does not match the exact {exact}-line video-player size exception')
+        probe('startup exception minus one rejected', startup, '\n' * (exact - 1),
+              f'does not match the exact {exact}-line video-player size exception')
+        probe('unlisted bridge file at the exception size rejected', bridge + 'probe.dart',
+              '\n' * exact, '500-line video-player extraction limit')
         code, output = run()
         assert code == 0, output
         print(json.dumps(results, indent=2))

@@ -147,6 +147,45 @@ ENGINE_PROJECTIONS = {
     '_VpDecoderProbeHostAdapter': (VALIDATION,),
 }
 
+# P20 resolution P1-1/R2: startup projects live isAndroid (S2b site);
+# subscriptions and media open project live isIOS (frozen S2 sites).
+P20_DIR = 'lib/features/video_player/presentation/legacy_video_player/'
+P20_SITES = [
+    ('_initializePlayer', P20_DIR + 'vp_player_startup.dart', 'isAndroid'),
+    ('_bindPlayerInstanceSubscriptions', P20_DIR + 'vp_player_subscriptions.dart', 'isIOS'),
+    ('_openMedia', P20_DIR + 'vp_media_open.dart', 'isIOS'),
+]
+P20_PROJECTIONS = {
+    '_VpPlayerStartupHostAdapter': ('isAndroid',),
+    '_VpPlayerSubscriptionsHostAdapter': ('isIOS',),
+    '_VpMediaOpenHostAdapter': ('isIOS',),
+}
+
+
+def p20_projection_errors(adapters):
+    """Relocated P20 owners read each predicate live through the facade."""
+    errors = []
+    for adapter, predicates in P20_PROJECTIONS.items():
+        members = adapters.get(adapter, {})
+        for predicate in predicates:
+            expected = ['@', 'override', 'bool', 'get', predicate, '=>', HOOK, '.', predicate, ';']
+            if members.get(predicate) != expected:
+                errors.append('P20 live Host projection changed: ' + adapter + '.' + predicate)
+        for predicate in {'isAndroid', 'isIOS', VALIDATION} - set(predicates):
+            if predicate in members:
+                errors.append('P20 unexpected Host projection: ' + adapter + '.' + predicate)
+    return errors
+
+
+def p20_site_errors(bodies):
+    """Each relocated P20 site reads its live projection exactly once."""
+    errors = []
+    for site, _, predicate in P20_SITES:
+        body = bodies.get(site, [])
+        if len(includes(body, ['_host', '.', predicate])) != 1 or HOOK in body:
+            errors.append('P20 relocated site predicate count changed: ' + site)
+    return errors
+
 
 def engine_projection_errors(adapters):
     """Relocated S2b/S2f owners read each predicate live through the facade."""
@@ -451,6 +490,37 @@ def prove(package, self_test=False):
                 n['name']: [t['text'] for t in n['tokens'] if not t['comment']]
                 for n in adapter['members']}
         errors += engine_projection_errors(engine_projection_members)
+    # P20 relocates the S2b `_initializePlayer` site and the two S2 isIOS
+    # sites. Same procedure: validating reader, asserted destination, the
+    # exact once-only live projection; S2b then restores the original
+    # condition for the unchanged site proof. Counted separately (R2).
+    p20_relocated_sites = 0
+    p20_bodies = {}
+    p20_projection_members = None
+    for site, path, predicate in P20_SITES:
+        if site in {n['name'] for n in state['members']}:
+            continue
+        resolved = read('_VideoPlayerScreenState.' + site, package)
+        assert resolved['path'] == path, (site, resolved['path'])
+        moved = parse({'live': resolved['source']}, package, ownership=True)['live']['declarations'][0]
+        body = [t['text'] for t in moved['tokens'] if not t['comment']]
+        p20_bodies[site] = list(body)
+        if site in S2B_SITES:
+            hits = includes(body, ['_host', '.', predicate])
+            assert len(hits) == 1, (site, hits)
+            body[hits[0]:hits[0] + 3] = [HOOK, '.', predicate]
+            renderer_members[site] = body
+        p20_relocated_sites += 1
+    if p20_relocated_sites:
+        assert p20_relocated_sites == 3, p20_relocated_sites
+        errors += p20_site_errors(p20_bodies)
+        p20_projection_members = {}
+        for adapter_name in P20_PROJECTIONS:
+            adapter = next(n for n in unit['declarations'] if n['name'] == adapter_name)
+            p20_projection_members[adapter_name] = {
+                n['name']: [t['text'] for t in n['tokens'] if not t['comment']]
+                for n in adapter['members']}
+        errors += p20_projection_errors(p20_projection_members)
     errors += renderer_site_errors(renderer_members)
     recording_members = {n['name']: [t['text'] for t in n['tokens'] if not t['comment']]
                          for n in state['members'] if n['name'] in S2D_PATCHES}
@@ -637,6 +707,41 @@ def prove(package, self_test=False):
             assert engine_projection_errors(mutated) == [
                 'P19 unexpected Host projection: _VpDecoderProbeHostAdapter.isAndroid']
             negatives.append('P19 probe Host gains isAndroid')
+        if p20_projection_members is not None:
+            for adapter, predicates in P20_PROJECTIONS.items():
+                for predicate in predicates:
+                    other = 'isIOS' if predicate == 'isAndroid' else 'isAndroid'
+                    for name, before, after in [
+                        ('wrong hook predicate', [HOOK, '.', predicate], [HOOK, '.', other]),
+                        ('override bypassed', [HOOK], ['Platform']),
+                        ('cached predicate', [HOOK, '.', predicate], ['_cachedPredicate']),
+                        ('predicate twice', [HOOK, '.', predicate],
+                         [HOOK, '.', predicate, '&&', HOOK, '.', predicate]),
+                    ]:
+                        mutated = copy.deepcopy(p20_projection_members)
+                        body = mutated[adapter][predicate]
+                        hits = includes(body, before)
+                        assert len(hits) == 1, (adapter, predicate, name, hits)
+                        body[hits[0]:hits[0] + len(before)] = after
+                        assert p20_projection_errors(mutated) == [
+                            'P20 live Host projection changed: ' + adapter + '.' + predicate], name
+                        negatives.append('P20 ' + adapter + '.' + predicate + ': ' + name)
+            mutated = copy.deepcopy(p20_projection_members)
+            mutated['_VpMediaOpenHostAdapter']['isAndroid'] = [
+                '@', 'override', 'bool', 'get', 'isAndroid', '=>', HOOK, '.', 'isAndroid', ';']
+            assert p20_projection_errors(mutated) == [
+                'P20 unexpected Host projection: _VpMediaOpenHostAdapter.isAndroid']
+            negatives.append('P20 media open Host gains isAndroid')
+            for site, _, predicate in P20_SITES:
+                for name, edit in [
+                    ('projection twice', lambda b: b.__setitem__(slice(0, 0), ['_host', '.', predicate])),
+                    ('projection removed', lambda b: b.__setitem__(slice(includes(b, ['_host', '.', predicate])[0], includes(b, ['_host', '.', predicate])[0] + 3), ['false'])),
+                    ('raw hook', lambda b: b.__setitem__(slice(includes(b, ['_host', '.', predicate])[0], includes(b, ['_host', '.', predicate])[0] + 3), [HOOK, '.', predicate])),
+                ]:
+                    mutated = copy.deepcopy(p20_bodies)
+                    edit(mutated[site])
+                    assert p20_site_errors(mutated), 'P20 site guard accepted ' + site + ': ' + name
+                    negatives.append('P20 ' + site + ': ' + name)
         for name, before, after in [
             ('wrong predicate', [HOOK, '.', 'isAndroid'], [HOOK, '.', 'isIOS']),
             ('override bypassed', [HOOK], ['Platform']),
@@ -755,7 +860,7 @@ def prove(package, self_test=False):
                         s2e_valid_operand_order_negatives=2 if self_test else 0,
                         s2f_sites=len(S2F_PATCHES), s2f_classified_spans=len(validation['declarations']),
                         s2f_patched_declarations=len(validation_patches), s2f_hook_insertions=len(S2F_HOOK_PATCHES),
-                        p19_relocated_sites=relocated_sites)
+                        p19_relocated_sites=relocated_sites, p20_relocated_sites=p20_relocated_sites)
 
 
 def main():

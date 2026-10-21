@@ -2,7 +2,7 @@
   "schema": 1,
   "series": "vplayer",
   "phase": 20,
-  "status": "provisional",
+  "status": "applied",
   "base": "0f5bfb161",
   "source": "lib/screens/video_player_screen.dart",
   "feature": "lib/features/video_player",
@@ -14775,14 +14775,14 @@
     "_VpIptvGuideCatchupHostAdapter"
   ],
   "finalization": {
-    "label": "PROVISIONAL",
+    "label": "FINAL",
     "preparation_base": "0f5bfb161",
     "accepted_p19": "0f5bfb161",
     "seam_original": "0f5bfb161",
     "history": "All nineteen applied phases; every earlier destination derived without a whitelist."
   },
   "provisional": {
-    "label": "PROVISIONAL",
+    "label": "FINAL",
     "preparation_base": "0f5bfb161",
     "pending": [],
     "host_contracts": {

@@ -14,6 +14,31 @@ from check_settings_moves import tokens
 
 SOURCE = 'lib/screens/video_player_screen.dart'
 MANIFEST = 'dev/tool/dart_moves/vplayer_p1_seam.json'
+# P20 relocates `_createPlayerInstance` (resolution P1-2/R6). The private
+# hooks stay facade-only; the instance reaches them through two plain Host
+# forwarders, each used exactly once, in the original creation order.
+INSTANCE = 'lib/features/video_player/presentation/legacy_video_player/vp_player_instance.dart'
+INSTANCE_ADAPTER = '_VpPlayerInstanceHostAdapter'
+FACTORY_FORWARDERS = {
+    'createPlayer': ['@', 'override', 'mk', '.', 'Player', 'createPlayer', '(', '{', 'required',
+                     'mk', '.', 'PlayerConfiguration', 'configuration', '}', ')', '=>',
+                     'VideoPlayerScreenTestHooks', '.', '_createPlayer', '(', 'configuration', ':',
+                     'configuration', ')', ';'],
+    'createVideoController': ['@', 'override', 'mkv', '.', 'VideoController', 'createVideoController',
+                              '(', 'mk', '.', 'Player', 'player', ',', '{', 'required', 'mkv', '.',
+                              'VideoControllerConfiguration', 'configuration', '}', ')', '=>',
+                              'VideoPlayerScreenTestHooks', '.', '_createVideoController', '(', 'player',
+                              ',', 'configuration', ':', 'configuration', ')', ';'],
+}
+# Ordered once-only sites in the relocated `createPlayerInstance` body
+# (parser tokens drop trailing commas).
+INSTANCE_ORDER = [
+    ['_host', '.', 'createPlayer', '('],
+    ['ready', ':', '(', ')', '=>', 'onPlayerInstanceReady', '(', 'instanceGeneration', ')'],
+    ['_host', '.', 'player', '=', 'player', ';'],
+    ['_host', '.', 'playerCreated', '=', 'true', ';'],
+    ['_host', '.', 'videoController', '=', '_host', '.', 'createVideoController', '('],
+]
 
 
 def installation_errors(sources):
@@ -23,6 +48,40 @@ def installation_errors(sources):
             errors.append('test hook reference outside its facade: ' + path)
     # All facade hook code is frozen by the exhaustive token check. This
     # separately forbids references in all other application files.
+    return errors
+
+
+def _hits(body, seq):
+    return [i for i in range(len(body)) if body[i:i + len(seq)] == seq]
+
+
+def relocation_errors(sources, package):
+    """P20: once-only ordered factory/ready sites and exact facade forwarders."""
+    if INSTANCE not in sources:
+        return []
+    errors = []
+    unit = parse({'i': sources[INSTANCE]}, package, ownership=True)['i']
+    owner = next((n for n in unit['declarations'] if n['name'] == 'VpPlayerInstance'), None)
+    member = next((m for m in (owner or {}).get('members', []) if m['name'] == 'createPlayerInstance'), None)
+    body = tokens(member) if member else []
+    starts = []
+    for seq in INSTANCE_ORDER:
+        hits = _hits(body, seq)
+        if len(hits) != 1:
+            errors.append('P20 relocated instance site missing/duplicated: ' + ' '.join(seq))
+        else:
+            starts.append(hits[0])
+    if len(starts) == len(INSTANCE_ORDER) and starts != sorted(starts):
+        errors.append('P20 relocated instance creation order changed')
+    for name in FACTORY_FORWARDERS:
+        if len(_hits(body, ['_host', '.', name, '('])) != 1 or sources[INSTANCE].count(name + '(') != 2:
+            errors.append('P20 factory forwarder use count changed: ' + name)
+    facade = parse({'f': sources[SOURCE]}, package, ownership=True)['f']
+    adapter = next((n for n in facade['declarations'] if n['name'] == INSTANCE_ADAPTER), None)
+    members = {m['name']: tokens(m) for m in (adapter or {}).get('members', [])}
+    for name, expected in FACTORY_FORWARDERS.items():
+        if members.get(name) != expected:
+            errors.append('P20 factory forwarder changed: ' + INSTANCE_ADAPTER + '.' + name)
     return errors
 
 
@@ -46,6 +105,8 @@ def prove(package, self_test=False):
     owned = {path: sources[path] for path in [SOURCE, *manifest['destinations']]}
     errors = run_current_manifest(active_path, package)
     errors += installation_errors(sources)
+    errors += relocation_errors(sources, package)
+    relocated = INSTANCE in sources
     patched = [r for r in seam_ledger['declarations'] if r['fate'] == 'patched']
     assert {r['original'] for r in patched} == {
         '_VideoPlayerScreenState.initState', '_VideoPlayerScreenState._createPlayerInstance'}
@@ -91,12 +152,33 @@ def prove(package, self_test=False):
             'missing flag': current.replace("'DEBRIFY_VP_TEST_HOOKS'", "'OTHER_FLAG'"),
             'twice default': current.replace('MediaKitInit.ensureInitialized();', 'MediaKitInit.ensureInitialized(); MediaKitInit.ensureInitialized();'),
             'configuration twice': current.replace('mk.Player(configuration: configuration)', 'mk.Player(configuration: mk.PlayerConfiguration())'),
-            'ready removed': current.replace('ready: () => _onPlayerInstanceReady(instanceGeneration),', ''),
-            'assignment order': current.replace('_player = player;\n    _playerCreated = true;', '_playerCreated = true;\n    _player = player;'),
         }.items():
             assert check(manifest, original, dict(owned, **{SOURCE: text}), package), 'accepted ' + name
+        if not relocated:
+            for name, text in {
+                'ready removed': current.replace('ready: () => _onPlayerInstanceReady(instanceGeneration),', ''),
+                'assignment order': current.replace('_player = player;\n    _playerCreated = true;', '_playerCreated = true;\n    _player = player;'),
+            }.items():
+                assert text != current, 'negative did not apply: ' + name
+                assert check(manifest, original, dict(owned, **{SOURCE: text}), package), 'accepted ' + name
+        else:
+            instance = sources[INSTANCE]
+            for name, path, text in [
+                ('ready removed', INSTANCE, instance.replace('ready: () => onPlayerInstanceReady(instanceGeneration),', '')),
+                ('ready rerouted', INSTANCE, instance.replace('ready: () => onPlayerInstanceReady(instanceGeneration),', 'ready: () => _host.setState(() {}),')),
+                ('assignment order', INSTANCE, instance.replace('_host.player = player;\n    _host.playerCreated = true;', '_host.playerCreated = true;\n    _host.player = player;')),
+                ('factory twice', INSTANCE, instance.replace('    _host.player = player;\n', '    _host.player = player;\n    _host.createPlayer(configuration: mk.PlayerConfiguration());\n')),
+                ('forwarder bypassed', SOURCE, current.replace('VideoPlayerScreenTestHooks._createPlayer(configuration: configuration);', 'mk.Player(configuration: configuration);')),
+                ('controller forwarder bypassed', SOURCE, current.replace('}) => VideoPlayerScreenTestHooks._createVideoController(', '}) => VideoPlayerScreenTestHooks._createVideoController(\n    mk.Player(),\n    configuration: configuration,\n  );\n  mkv.VideoController unused(\n    mk.Player player, {\n    required mkv.VideoControllerConfiguration configuration,\n  }) => VideoPlayerScreenTestHooks._createVideoController(', 1)),
+            ]:
+                assert text != sources[path], 'negative did not apply: ' + name
+                mutated = dict(sources, **{path: text})
+                assert relocation_errors(mutated, package), 'relocation accepted ' + name
+                assert check(manifest, original, dict(owned, **{path: text}), package), 'accepted ' + name
         assert installation_errors({SOURCE: current, 'lib/other.dart': 'VideoPlayerScreenTestHooks.install(null);'})
-    return errors, dict(patched_declarations=2, interception_patches=3,
+        if relocated:
+            assert installation_errors(dict(sources, **{INSTANCE: sources[INSTANCE] + '\n// VideoPlayerScreenTestHooks\n'}))
+    return errors, dict(p20_relocated_instance=relocated, patched_declarations=2, interception_patches=3,
                         original_spans=len(manifest['declarations']), ownership_phase=manifest['phase'],
                         frozen_scaffolding=list(seam_ledger['scaffolding'][SOURCE]),
                         default_operations_once=True, original_configuration_once=True,

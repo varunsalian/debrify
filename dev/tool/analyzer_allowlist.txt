@@ -173,3 +173,18 @@ warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 
 warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../utils/player_audio_config.dart'. Try removing the import directive
 warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../widgets/video_output_lease.dart'. Try removing the import directive
 warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'video_player/utils/language_mapping.dart'. Try removing the import directive
+# Phase 20 frozen move/probe: preserved facade directives left unused by the engine II moves (12 imports and the
+# kIsWeb shown name; end-state cleanup in phase 21).
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/episode_resume_storage.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/iptv_appearance_storage.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/player_network_storage.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/subtitle_settings_storage.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/video_progress_storage.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/source_selection_diagnostics.dart'. Try removing the import directive
+warning | unused_shown_name | lib/screens/video_player_screen.dart | The name kIsWeb is shown, but isn't used. Try removing the name from the list of shown members
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/direct_source_authorization.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../models/profiles/profile_policy.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/profiles/profile_policy_guard.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/live_recording_service.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/profiles/profile_runtime.dart'. Try removing the import directive
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'video_player/services/android_renderer_startup_fallback.dart'. Try removing the import directive
