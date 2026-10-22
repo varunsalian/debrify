@@ -5153,6 +5153,22 @@ systematic sweep and the independent sample (≥ 75 %). Known gaps:
     cannot be characterized under fake time.
   - `_loadPlayerDefaults`' doc comment ("Load default player settings
     (aspect)") is attached to `_dockBand` (design follow-up candidate).
+- **P20 Step 0b (characterized; no fixes):**
+  - A show-shuffle candidate whose native open starts and then throws keeps
+    its new identity (`request.commit` marks the open started, so
+    `restorePlaylist` refuses). Shuffle then treats the failed episode as
+    current and picks the next candidate, which can be the outgoing episode:
+    the viewer is returned to the episode they were already watching,
+    reopened from the start (`suppressResume`). Pinned by "a shuffle
+    candidate whose native open fails keeps its new identity".
+  - `_openMedia`'s entry check `request?.isCurrent == false` is defence in
+    depth only: every request-bearing caller (playlist load, PikPak retry)
+    checks `isCurrent` synchronously right before the call (sample M01).
+  - The outgoing `observeServerWatch()` before `commit(null)` is a no-op on
+    every current handoff path (each runs under `_isTransitioning` or the
+    validation gate), so the final outgoing observation is the listener's
+    last one (sample M09). A future path that switches server sources
+    outside both would need this call.
 
 - P19 renderer fallback (characterized by the strengthened F35 case; no
   fix): Next pressed while the old player is still disposing opens the next
@@ -10192,8 +10208,119 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
   `_transitionPhase`/`_transitionPhase2Started` are write-only; the
   listener `isCurrent()` guards only matter between the generation bump and
   the cancellation; the IPTV stall-suspect line uses the real clock.
+- **Amended after the independent sample (Step 0b, below).** The 80.8% is a
+  systematic single-token sweep whose closure allowed the legacy suites
+  (`allow_legacy`). It overstates how well the P20 files alone pin the open
+  path: in the sample's multi-site mutants the 18 P20 files killed
+  `_openMedia` 12/40 (30%) and `_beginMediaGeneration` 1/10 (10%); the
+  behavioural legacy kills raise that to 17/40 and 4/10. Those legacy suites
+  carry part of the credit and must stay in the Step 1 gate.
+  `test/media_server_watch_player_wiring_test.dart` has three source-text
+  cases (`vpSourceDeclaration`/`readAsStringSync`) that validate the whole
+  facade against its manifest, so they fail on **any** edit of
+  `video_player_screen.dart`. They "killed" 25 sample mutants with no
+  behavioural failure and are not coverage of `_openMedia`. They are
+  retargeted by the Step 1 tooling commit `492db3747` on
+  `refactor/vplayer-p20-tools`; this branch leaves the file unchanged. The
+  device-pending TV focus points 28/29/31 are re-dispositioned in Step 0b.
 - Next: an independent mutation sample by a review agent (≥75%), then
   Step 0b and Step 1.
+
+### 2026-10-22 — Phase 20 Step 0b complete (executor: Claude)
+
+- **Independent sample** (review agent, worktree `vp20-mut` at `237159fa9`;
+  `p20/step0b/independent-sample.md`): 230 multi-site semantic mutants, 11
+  excluded with reasons, 218 valid. **124/218 = 56.9%** from the 18 P20
+  files, **147/218 = 67.4%** with the behavioural legacy kills (the 25
+  source-text "kills" of `media_server_watch_player_wiring_test` are not
+  credited). Media open 30%, media generation 10%. Verdict: **9 P1s**
+  (resume epoch/guard clear; post-authorization ownership checks and
+  explicit-source re-authorization; media-server watch handoff; tvOS remedy
+  await and supersession; media-generation resets; tuning serialization and
+  supersession; stale startup failures and the PikPak continuation;
+  listener gate and PiP latch; plus the disputed TV focus points 28/29/31).
+- **New suites** (7 files, 29 cases, all passing on the original, format and
+  analyze clean; commit `8beeaeaac`), P1 → case:
+  1. M12/M13: `open_guards` "a Stremio TV channel switch releases the
+     outgoing resume guard" (M13); M12 by the two stale-failure cases.
+  2. M46/M47/M50/M01/M59/M62: `open_guards` "superseded during server watch
+     preparation never arms its startup watch" (M50), "a startup candidate
+     is re-authorized at its open" (M62, an `iptv:` source without a
+     ticket), "a shuffle candidate whose native open fails keeps its new
+     identity" (M59).
+  3. M04/M06–M09/M11: `open_guards` "a plain Stremio source … is not a
+     media-server watch source" (M06), "a next slot on another URL closes
+     the outgoing server watch session" (M04, M11, M07), "a renderer rebuild
+     reopening the same server source keeps its watch session" (M07, M08).
+  4. M29–M32: `remedy_boundary` (tvOS, held `hwdec-image-format` restore):
+     the open waits for the restore; a superseded open stops at it.
+  5. G01/G04/G05/G11: `media_generation`: a channel switch disposes the
+     pending startup watch (G04); a replaced AIOStreams watch stops gating
+     progress (G05); a boundary drops the probe params (G11, Android
+     renderer-validation hook); also the clock reset (G14, P2).
+  6. N01/N02/N08/N14/M17: `tuning_chain`: a newer open waits behind a held
+     capture (N01, N02); a queued apply superseded before it runs does
+     nothing (N08); a restore superseded mid-write stops (N14); an open
+     superseded during its lavf write applies no VOD tuning (M17); presets
+     read once per screen (M18, P2).
+  7. O44/O47/K11/K07/K08/K21: `open_guards` "a superseded Stremio TV startup
+     open that throws after a renderer rebuild" (O44, M12) and "a startup
+     rejection is abandoned when a channel switch lands during its report"
+     (O47); `pikpak_continuation`: a cancelled retry commits nothing (K11),
+     a close during the start seek restores no tracks (K21), a continuation
+     outlived by a renderer rebuild (K07).
+  8. B77/B88/B96/B67: `listener_gate` "a play edge inside a manual source
+     validation restarts no Trakt or Simkl heartbeat" (B77, B88) and "a play
+     edge while PiP is up is not paused by the background latch" (B67).
+  9. Points 28/29/31 (R07): `listener_gate` "on TV a live IPTV launch keeps
+     focus off the bar it hides at the ready edge".
+  - P2s closed: M18, G14, M35 and R14 and S35 (`open_presentation`: iOS
+    PiP-starting subtitles, VOD IPTV ready presentation, tvOS audio config
+    before the first open). `ResumeServerDriver` gains an optional request
+    barrier; `support/stremio_tv_pick.dart` drives the Stremio TV guide.
+- **Proofs** (`p20/step0b-fix/`, `README.md`, `proofs.jsonl`, `raw/`): each
+  targeted mutant's exact before/after from `mutants.json`, in the detached
+  worktree `vp20-0b`, serial under `suite.lock`, file restored after each.
+  **All 35 killable targeted mutants KILLED by an assertion** (none runtime
+  or timeout). Every non-killed targeted mutant also survived all 25 P20
+  files. The sample's other 51 non-killed mutants rerun against the new
+  files: +7 (I10, I13, O46, B17, B42, M41, M43). **P20-only rate
+  166/218 = 76.1%** (78.7% of 211 with the dispositions below excluded);
+  the review agent's re-sample is still to come.
+- **Not killed, argued** (all survive all 25 P20 files, as predicted):
+  - G01 equivalent: `_openMedia` bumps `_resumeVerifyEpoch` before the
+    boundary and `DeferredStartupSeek.take` cancels on an epoch mismatch,
+    as does `carryTo`.
+  - M47 and K08 equivalent: `dispose` bumps `_watchOpenEpoch` (L3026) and
+    `_playerInstanceGeneration` (L3154) synchronously with `_screenDisposed`
+    and unmount, so every continuation sees them flip together (as the
+    reviewer's B02).
+  - M01 equivalent on current callers, M09 a no-op on current handoff paths
+    (both recorded in Follow-ups).
+  - B96 equivalent: `mdblistPlay` returns on the same validation gate.
+  - R07 and points 28–31 (re-dispositioned from device-pending to
+    equivalent): every overlay opener hides the bar and nothing raises it
+    while one is open, and the bar cannot hold focus before the first ready
+    (controls render only when ready; TV keys are inert before it), so the
+    only reachable divergence is a ready edge that hides the bar (live IPTV
+    launch). There the mutated `requestFocus` targets a node under
+    `ExcludeFocus` and is a no-op — host-tested by the case in item 9.
+    Point 30 (the generation operand) is as the reviewer's R09.
+  - **M46 not closed** (P2): a request going stale during the server-watch
+    awaits without a newer `_openMedia` needs a server-backed request flow
+    (episode fetch or shuffle over a server pack) plus a sleep-stop or
+    navigation that has not reached its open. `request.commit` still
+    refuses the native open; the mutant only publishes the stale open's
+    state and log.
+  - Other P2s left open: G15, S28, O04, B33, B36, B43, B52/B58, B66, B78,
+    B81, B107, B121/B122, M56, M57, R04, R21, D03, D16; O22 and I13 are P3
+    (crash-only; I13 is now killed by the probe-params case).
+- **Step 1 gate note:** keep the legacy suites that pin O36/O42/O49/O57/
+  G02/G03/G13/B41/B60/B87/B97/B101/D15/D20 in the gate inventory, and
+  retarget the wiring suite's source-text cases (tooling commit
+  `492db3747`).
+- Follow-ups: see "P20 Step 0b" in Follow-ups.
+- Next: the review agent's re-sample, then Step 1.
 
 ## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
 
