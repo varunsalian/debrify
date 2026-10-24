@@ -12,7 +12,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:screen_brightness_platform_interface/screen_brightness_platform_interface.dart';
 
 import 'support/p21_controls_driver.dart';
-import 'support/trakt_player_driver.dart';
 import 'support/trakt_transport.dart';
 import 'support/video_player_environment.dart';
 
@@ -761,40 +760,4 @@ void main() {
       },
     );
   });
-
-  // Last in the file: the Trakt driver leaves the shared wakelock cursor in
-  // this case's fake zone, which later P21Driver cases would wait on.
-  group('trakt', () {
-    testWidgets(
-      'P21 a double tap reports its seek to Trakt only after the player seek completes',
-      (t) async {
-        final f = VideoPlayerEnvironment();
-        final trakt = TraktPlayerDriver(t, f);
-        final seek = Completer<void>();
-        await trakt.initialize();
-        try {
-          await trakt.mount(traktScreen());
-          await trakt.position(300000);
-          final before = trakt.requests.length;
-          f.player.delays['seek'] = seek;
-          displayGestureLayer(t).onDoubleTapDown!(
-            TapDownDetails(localPosition: const Offset(1000, 400)),
-          );
-          await f.advance(t, const Duration(milliseconds: 200));
-          expect(trakt.requests, hasLength(before));
-          seek.complete();
-          await trakt.drain();
-          expect(trakt.requests, hasLength(before + 1));
-          trakt.expectRequest(before, 'start', 310000 / 1200000 * 100);
-        } finally {
-          if (!seek.isCompleted) seek.complete();
-          await trakt.close();
-        }
-      },
-    );
-  });
 }
-
-GestureDetector displayGestureLayer(WidgetTester t) => t
-    .widgetList<GestureDetector>(find.byType(GestureDetector))
-    .firstWhere((w) => w.onPanStart != null && w.onDoubleTapDown != null);

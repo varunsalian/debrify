@@ -21,16 +21,21 @@ void p21Timeouts() {
   }
 }
 
-/// The Debrify channel guide's row overflows by one pixel under the test
-/// fonts whenever its focus styling changes (a fixture artifact, not a
-/// controls-runtime behaviour). Drops exactly that layout report for the rest
-/// of the case; every other error still fails it.
+/// The Debrify channel guide row's name-and-status Column (created at
+/// `channel_guide.dart:441:22`) overflows by one pixel under the test fonts
+/// whenever its focus styling changes (a fixture artifact, not a
+/// controls-runtime behaviour). Drops exactly that layout report, identified
+/// by its message and the Column's creation site, for the rest of the case;
+/// every other error, including any other overflow in that file, still fails
+/// it.
 void p21IgnoreGuideRowOverflow() {
   final previous = FlutterError.onError;
   FlutterError.onError = (details) {
     final text = details.toString();
     if (text.contains('A RenderFlex overflowed by 1.00 pixels on the bottom') &&
-        text.contains('channel_guide.dart')) {
+        RegExp(
+          r'Column:file://\S*/channel_guide\.dart:441:22\b',
+        ).hasMatch(text)) {
       return;
     }
     previous?.call(details);
@@ -105,8 +110,12 @@ class P21Driver extends TvEpisodeDriver {
   }
 
   /// Mounts the screen up to its player instance but withholds the ready
-  /// callback, so nothing is ready yet. [ready] completes the startup.
-  Future<void> mountUnready(VideoPlayerScreen screen) async {
+  /// callback, so nothing is ready yet. [ready] completes the startup. With
+  /// [over] the player is pushed over a home route (see [mountOver]).
+  Future<void> mountUnready(
+    VideoPlayerScreen screen, {
+    bool over = false,
+  }) async {
     await observe(() async {
       t.view.physicalSize = const Size(1280, 800);
       t.view.devicePixelRatio = 1;
@@ -114,9 +123,14 @@ class P21Driver extends TvEpisodeDriver {
         MaterialApp(
           navigatorKey: f.navigator,
           theme: ThemeData.dark(),
-          home: screen,
+          home: over ? const SizedBox(key: ValueKey('p21-home')) : screen,
         ),
       );
+      if (over) {
+        f.navigator.currentState!.push(
+          MaterialPageRoute<void>(builder: (_) => screen),
+        );
+      }
       await f.until(t, () => f.controllers.isNotEmpty);
       await f.advance(t, const Duration(milliseconds: 100));
     });

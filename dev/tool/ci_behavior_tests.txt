@@ -916,3 +916,7 @@ test/features/video_player/video_player_p21_tv_keys_test.dart
 test/features/video_player/video_player_p21_tv_scrub_test.dart
 test/features/video_player/video_player_p21_visibility_test.dart
 test/features/video_player/video_player_p21_tracker_seeks_test.dart
+test/features/video_player/video_player_p21_bar_paths_test.dart
+test/features/video_player/video_player_p21_dock_bands_test.dart
+test/features/video_player/video_player_p21_pan_races_test.dart
+test/features/video_player/video_player_p21_remote_edges_test.dart

@@ -123,32 +123,43 @@ void main() {
     },
   );
 
-  testWidgets('P21 a sub-pixel viewport change keeps the dock measurement', (
-    t,
-  ) async {
-    final d = P21Driver(t);
-    await d.initialize();
-    try {
-      await _prefs(d);
-      await d.mount(screen: P21Driver.screen());
-      await _rebuild(d, P21Driver.screen());
-      final before = _generations(d);
-      t.view.physicalSize = const Size(1280.4, 800.3);
-      await d.wait(50);
-      expect(_generations(d), before, reason: 'rounded to whole pixels');
-      // Text scale is compared as a rounded percentage of 100.
-      t.platformDispatcher.textScaleFactorTestValue = 1.00496;
-      await d.wait(50);
-      expect(_generations(d), before, reason: '100.496 rounds to 100');
-      t.platformDispatcher.textScaleFactorTestValue = 1.006;
-      await d.wait(50);
-      expect(_generations(d).$1, before.$1 + 1);
-      expect(d.errors, isEmpty);
-    } finally {
-      t.platformDispatcher.clearTextScaleFactorTestValue();
-      await d.close();
-    }
-  });
+  testWidgets(
+    'P21 a sub-pixel viewport change keeps the dock measurement until it rounds to a new pixel',
+    (t) async {
+      final d = P21Driver(t);
+      await d.initialize();
+      try {
+        await _prefs(d);
+        await d.mount(screen: P21Driver.screen());
+        await _rebuild(d, P21Driver.screen());
+        final before = _generations(d);
+        t.view.physicalSize = const Size(1280.4, 800.3);
+        await d.wait(50);
+        expect(_generations(d), before, reason: 'rounded to whole pixels');
+        // Past the half pixel the width rounds up to 1281: a new viewport.
+        t.view.physicalSize = const Size(1280.6, 800.3);
+        await d.wait(50);
+        expect(_generations(d).$1, before.$1 + 1, reason: '1280.6 rounds up');
+        final rounded = _generations(d);
+        // The height alike: 800.3 to 800.7 rounds 800 to 801.
+        t.view.physicalSize = const Size(1280.6, 800.7);
+        await d.wait(50);
+        expect(_generations(d).$1, rounded.$1 + 1, reason: '800.7 rounds up');
+        final settled = _generations(d);
+        // Text scale is compared as a rounded percentage of 100.
+        t.platformDispatcher.textScaleFactorTestValue = 1.00496;
+        await d.wait(50);
+        expect(_generations(d), settled, reason: '100.496 rounds to 100');
+        t.platformDispatcher.textScaleFactorTestValue = 1.006;
+        await d.wait(50);
+        expect(_generations(d).$1, settled.$1 + 1);
+        expect(d.errors, isEmpty);
+      } finally {
+        t.platformDispatcher.clearTextScaleFactorTestValue();
+        await d.close();
+      }
+    },
+  );
 
   testWidgets(
     'P21 loading default dock preferences still forces one re-measure on the next rebuild',

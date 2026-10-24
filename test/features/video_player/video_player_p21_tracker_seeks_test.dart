@@ -19,6 +19,36 @@ void main() {
   p21Timeouts();
   TraktTestTransport.install();
 
+  testWidgets(
+    'P21 a double tap reports its seek to Trakt only after the player seek completes',
+    (t) async {
+      final f = VideoPlayerEnvironment();
+      final d = TraktPlayerDriver(t, f);
+      final seek = Completer<void>();
+      await d.initialize();
+      try {
+        await d.mount(traktScreen());
+        await d.position(300000);
+        final before = d.requests.length;
+        f.player.delays['seek'] = seek;
+        displayGesture(t).onDoubleTapDown!(
+          TapDownDetails(localPosition: const Offset(1000, 400)),
+        );
+        // Everything else settles while the seek is still held: no report.
+        await d.drain();
+        expect(f.player.calls.where((c) => c.$1 == 'seek'), hasLength(1));
+        expect(d.requests, hasLength(before));
+        seek.complete();
+        await d.drain();
+        expect(d.requests, hasLength(before + 1));
+        d.expectRequest(before, 'start', 310000 / 1200000 * 100);
+      } finally {
+        if (!seek.isCompleted) seek.complete();
+        await d.close();
+      }
+    },
+  );
+
   testWidgets('P21 a pan end reports its target to Trakt', (t) async {
     final f = VideoPlayerEnvironment();
     final d = TraktPlayerDriver(t, f);
