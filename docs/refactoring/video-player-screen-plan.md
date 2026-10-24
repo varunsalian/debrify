@@ -6267,8 +6267,8 @@ a release device. No device runs happen now. P21 items:
       `DEBRIFY_VP_TEST_HOOKS=true` or `--concurrency=1`, which would be a
       second heavy run and would make the 37 hook suites throw
       `StateError`;
-    - its nonzero exit from the stale `test/known_failures.txt` (11 entries,
-      none for video_player) is expected and is **not** the verdict. The
+    - its nonzero exit from the stale `test/known_failures.txt` (11 lines,
+      9 entries, none for video_player) is expected and is **not** the verdict. The
       observed identity comparison is the verdict;
     - `--record` is never used.
   - `flutter build apk --release --no-pub` (Android Studio JBR, JDK 21),
