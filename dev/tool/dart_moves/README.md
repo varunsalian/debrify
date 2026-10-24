@@ -345,3 +345,18 @@ records the Step T receiver-probe additions (four unused facade imports, also
 allowlisted pending phase 21; one formatter `if` wrap on
 `_scheduleTvosDisplayMatch`; one unrelated-`mounted` guard on
 `_fallbackExplicitRendererToAutomatic`). Facade ratchet 9,447.
+
+Phase 20 Step 1 applies `vplayer_p20.json` (FINAL, `draft_vplayer_engine2_moves.py`
+on the phase-19 merge `0f5bfb161`): startup orchestration, player instance,
+instance subscriptions, network tuning, media open and player defaults move into
+six `legacy_video_player/` files. CI checks P20 current and `--self-test` and adds
+P19 history at `0f5bfb161`. `this` in moved bodies is the `PlayerVisibility` owner
+and becomes `_host.visibilityOwner` (`host_owner_identity`, as the P8 `pipOwner`).
+The platform seam proof restores the relocated S2b `_initializePlayer` site and
+checks the two relocated S2 `isIOS` sites and their live projections
+(`p20_relocated_sites=3`, counted apart from P19); the S proof checks the
+relocated instance's ordered factory/`ready:` sites and the two private-hook
+forwarders. `vp_player_startup.dart` carries an exact-count size exception
+(`VIDEO_PLAYER_SIZE_EXCEPTIONS`). The P20 analyzer inventory records the Step T
+receiver-probe additions (13 unused facade directives, also allowlisted pending
+phase 21; three formatter `if` wraps). Facade ratchet 8,986.

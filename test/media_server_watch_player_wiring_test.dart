@@ -12,6 +12,14 @@ bool _p18Applied() =>
         as Map)['status'] ==
     'applied';
 
+/// Phase 20 moved `_openMedia` into `VpMediaOpen`; State members are reached
+/// through its Host.
+bool _p20Applied() {
+  final manifest = File('dev/tool/dart_moves/vplayer_p20.json');
+  return manifest.existsSync() &&
+      (jsonDecode(manifest.readAsStringSync()) as Map)['status'] == 'applied';
+}
+
 String between(String source, String start, String end) {
   final first = source.indexOf(start);
   expect(first, isNonNegative);
@@ -34,24 +42,23 @@ void main() {
   test(
     'Flutter prepares before opening, arms validation after asynchronous work',
     () {
+      // P20: the validated declaration, wherever its owner now lives.
+      final host = _p20Applied() ? '_host.' : '_';
       final open = between(
-        flutter,
+        vpSourceDeclaration('_VideoPlayerScreenState._openMedia'),
         'Future<void> commitOpen()',
         '// Startup direct fallbacks',
       );
-      expect(
-        open.indexOf('_serverWatch.prepare'),
-        lessThan(open.indexOf('_player.open')),
-      );
-      expect(
-        open.indexOf('beforeOpen()'),
-        greaterThan(open.indexOf('_serverWatch.prepare')),
-      );
-      expect(
-        open.indexOf('beforeOpen()'),
-        greaterThan(open.indexOf('DirectSourceAuthorization.authorize')),
-      );
-      expect(open, contains('watchEpoch != _watchOpenEpoch'));
+      final prepare = open.indexOf('${host}serverWatch.prepare');
+      final playerOpen = open.indexOf('${host}player.open');
+      final authorize = open.indexOf('DirectSourceAuthorization.authorize');
+      expect(prepare, isNonNegative);
+      expect(playerOpen, isNonNegative);
+      expect(authorize, isNonNegative);
+      expect(prepare, lessThan(playerOpen));
+      expect(open.indexOf('beforeOpen()'), greaterThan(prepare));
+      expect(open.indexOf('beforeOpen()'), greaterThan(authorize));
+      expect(open, contains('watchEpoch != ${host}watchOpenEpoch'));
       final commit = vpSourceDeclaration(
         '_VideoPlayerScreenState._commitValidatedStremioSource',
       );

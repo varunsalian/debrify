@@ -14,6 +14,8 @@ void main() {
       '${Directory.current.path}/.dart_tool/vplayer_parser/seam_guard/.dart_tool/package_config.json',
     ]);
     expect(result.exitCode, 0, reason: '${result.stdout}\n${result.stderr}');
+    // P20: the relocated instance branch is active (resolution P1-2/R6).
+    expect(result.stdout, contains('"p20_relocated_instance": true'));
   });
 
   test('installation requires the explicit test-only compile-time flag', () {

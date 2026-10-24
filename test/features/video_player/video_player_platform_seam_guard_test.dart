@@ -33,6 +33,37 @@ void main() {
     expect(result.stdout, contains('"s2f_sites": 2'));
     expect(result.stdout, contains('"s2f_patched_declarations": 3'));
     expect(result.stdout, contains('"s2f_hook_insertions": 3'));
+    // P19 and P20 relocations are counted separately (P20 resolution R2).
+    expect(result.stdout, contains('"p19_relocated_sites": 3'));
+    expect(result.stdout, contains('"p20_relocated_sites": 3'));
+    for (final adapter in [
+      '_VpPlayerStartupHostAdapter.isAndroid',
+      '_VpPlayerSubscriptionsHostAdapter.isIOS',
+      '_VpMediaOpenHostAdapter.isIOS',
+    ]) {
+      for (final negative in [
+        'wrong hook predicate',
+        'override bypassed',
+        'cached predicate',
+        'predicate twice',
+      ]) {
+        expect(result.stdout, contains('P20 $adapter: $negative'));
+      }
+    }
+    expect(result.stdout, contains('P20 media open Host gains isAndroid'));
+    for (final site in [
+      '_initializePlayer',
+      '_bindPlayerInstanceSubscriptions',
+      '_openMedia',
+    ]) {
+      for (final negative in [
+        'projection twice',
+        'projection removed',
+        'raw hook',
+      ]) {
+        expect(result.stdout, contains('P20 $site: $negative'));
+      }
+    }
     for (final site in [
       '_installDecoderObservers',
       '_scheduleRendererStartupValidation',

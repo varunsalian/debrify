@@ -33,6 +33,11 @@ class ResumeServerDriver {
   final closed = <int>[];
   int clients = 0;
   Future<void> Function(http.Request)? beforeReport;
+
+  /// Optional barrier at every synthetic server request, e.g. to hold the
+  /// watch preparation reads; [heldRequest] marks the held ones for settle.
+  Future<void> Function(http.Request)? beforeRequest;
+  bool Function(http.Request)? heldRequest;
   final previousService = MediaServerService.clientFactory;
   final previousWatch = MediaServerWatchSync.clientFactory;
   late List<Torrent> sources;
@@ -43,9 +48,10 @@ class ResumeServerDriver {
         client: ResumeServerClient((request) async {
           final activity = f.actions.begin(
             'server:${request.method} ${request.url.path}',
-            held: beforeReport != null,
+            held: beforeReport != null || (heldRequest?.call(request) ?? false),
           );
           try {
+            await beforeRequest?.call(request);
             Object response;
             final path = request.url.path;
             if (path.endsWith('/AuthenticateByName')) {

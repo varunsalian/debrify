@@ -230,6 +230,12 @@ import '../features/video_player/presentation/legacy_video_player/vp_video_outpu
 import '../features/video_player/presentation/legacy_video_player/vp_tvos_video.dart';
 import '../features/video_player/presentation/legacy_video_player/vp_decoder_probe.dart';
 import '../features/video_player/presentation/legacy_video_player/vp_renderer_fallback.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_player_defaults.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_player_instance.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_player_subscriptions.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_network_tuning.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_media_open.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_player_startup.dart';
 
 /// A full-featured video player screen with playlist support and navigation controls.
 ///
@@ -508,6 +514,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _rendererFallback = VpRendererFallback(
       _VpRendererFallbackHostAdapter(this),
     );
+    _playerDefaults = VpPlayerDefaults(_VpPlayerDefaultsHostAdapter(this));
+    _playerInstance = VpPlayerInstance(_VpPlayerInstanceHostAdapter(this));
+    _playerSubscriptions = VpPlayerSubscriptions(
+      _VpPlayerSubscriptionsHostAdapter(this),
+    );
+    _networkTuner = VpNetworkTuning(_VpNetworkTuningHostAdapter(this));
+    _mediaOpen = VpMediaOpen(_VpMediaOpenHostAdapter(this));
+    _playerStartup = VpPlayerStartup(_VpPlayerStartupHostAdapter(this));
   }
   void _vpSetState(VoidCallback fn) => setState(fn);
 
@@ -547,7 +561,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _tvosForceStereoAudio = false;
   bool _tvosLegacyAudioOutput = false;
   int _playerInstanceGeneration = 0;
-  bool _playerPresentationInitialized = false;
 
   // Explicit Android renderers can be rejected by a vendor codec, GPU, or
   // surface implementation. The startup guard is deliberately
@@ -1178,6 +1191,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   late final VpTvosVideo _tvosVideo;
   late final VpDecoderProbe _decoderProbe;
   late final VpRendererFallback _rendererFallback;
+  late final VpPlayerDefaults _playerDefaults;
+  late final VpPlayerInstance _playerInstance;
+  late final VpPlayerSubscriptions _playerSubscriptions;
+  late final VpNetworkTuning _networkTuner;
+  late final VpMediaOpen _mediaOpen;
+  late final VpPlayerStartup _playerStartup;
 
   // The quiet bottom-right auto-sync surface: a 5s announce line, then
   // nothing until a real event — statuses during passes, word-only results.
@@ -1495,7 +1514,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // System volume UI not modified
 
     // Initialize the player asynchronously
-    _playerInitializationFuture = _initializePlayer();
+    _playerInitializationFuture = _playerStartup.initializePlayer();
 
     // Init rainbow animation
     _rainbowController = AnimationController(
@@ -1595,1083 +1614,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// for the rest of the session.
   bool _screenDisposed = false;
 
-  void _createPlayerInstance(AndroidVideoRendererMode rendererMode) {
-    final instanceGeneration = ++_playerInstanceGeneration;
-    _isReady = false;
-    final player = VideoPlayerScreenTestHooks._createPlayer(
-      configuration: mk.PlayerConfiguration(
-        logLevel: mk.MPVLogLevel.error,
-        ready: () => _onPlayerInstanceReady(instanceGeneration),
-      ),
-    );
-    _player = player;
-    _playerCreated = true;
-    _videoController = VideoPlayerScreenTestHooks._createVideoController(
-      player,
-      configuration: mkv.VideoControllerConfiguration(
-        vo: rendererMode.videoOutput,
-        // The tvOS escape hatch outranks the renderer mode (which is an
-        // Android concept; its decoder string is null off-Android anyway).
-        hwdec: PlatformUtil.isTvOS && _tvosForceSoftwareDecode
-            ? 'no'
-            : rendererMode.hardwareDecoder,
-      ),
-    );
-    _tvosVideo.installTvosDecodeRemedy(player);
-    _bindPlayerInstanceSubscriptions(instanceGeneration, player);
-    unawaited(
-      _decoderProbe.installDecoderObservers(instanceGeneration, player),
-    );
-    unawaited(_display.applyAspectVideoZoom());
-  }
-
-  void _onPlayerInstanceReady(int instanceGeneration) {
-    if (!mounted || instanceGeneration != _playerInstanceGeneration) return;
-    _isReady = true;
-    _pip.armPipAutoEnter();
-    if (PlatformUtil.isTelevision && _controlsVisible.value) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        // Never while a guide/sheet is up: on tvOS IPTV the instance becomes
-        // ready SECONDS after a zap (and again on remedy-ladder restarts), so
-        // this fired after the sheet's one-shot focus claim and silently
-        // yanked the remote off it — the guide's focus went dead at random.
-        if (mounted &&
-            instanceGeneration == _playerInstanceGeneration &&
-            _controlsVisible.value &&
-            !_anyPlayerOverlayOpen &&
-            !_tvBarScope.hasFocus) {
-          _tvPlayPauseFocus.requestFocus();
-        }
-      });
-    }
-    setState(() {});
-
-    // These are screen-presentation side effects, not player-instance setup.
-    // Re-running them during the compatibility restart would re-raise launch
-    // banners and reset guide context while preserving the same media item.
-    if (_playerPresentationInitialized) return;
-    _playerPresentationInitialized = true;
-    final iptvChannel = _currentIptvChannel;
-    if (iptvChannel != null && iptvChannel.isLive) {
-      _hideTimer?.cancel();
-      _controlsVisible.value = false;
-      _iptvBanner.prepareIptvBannerData(iptvChannel);
-      _iptvBanner.raiseIptvZapBanner();
-      _iptvGuide.anchorIptvGuideCategory(iptvChannel);
-      _zapRing.ensureIptvZapPagingArmed();
-    } else {
-      _debrifyBanner.raiseDebrifyBanner();
-    }
-  }
-
-  Future<void> _initializePlayer() async {
-    // Load default player settings
-    await _loadPlayerDefaults();
-    unawaited(_loadDockPrefs());
-    if (VpS2Hooks.isAndroid && !PlatformUtil.isAndroidTvCached) {
-      _androidVideoRendererMode =
-          await PlayerSettingsStorage.getAndroidVideoRendererMode();
-    }
-
-    // Determine the initial URL and index
-    String initialUrl = widget.videoUrl;
-    var initialRankedAttemptFailed = false;
-    int initialIndex = 0;
-
-    if (_activePlaylist != null && _activePlaylist!.isNotEmpty) {
-      // Initialize playlist
-
-      // If auto-resume is disabled, use startIndex directly
-      if (widget.disableAutoResume) {
-        initialIndex = widget.startIndex ?? 0;
-        debugPrint(
-          'VideoPlayer: auto-resume disabled, using startIndex=$initialIndex',
-        );
-      } else {
-        // Check if this is a series and we should find the first episode by season/episode
-        final seriesPlaylist = _seriesPlaylist;
-        if (seriesPlaylist != null && seriesPlaylist.isSeries) {
-          // If a specific target episode was requested (e.g. quick play from Trakt),
-          // jump directly to it instead of resuming from last played.
-          bool targetEpisodeResolved = false;
-          final hadExplicitTarget =
-              widget.contentSeason != null && widget.contentEpisode != null;
-          if (hadExplicitTarget) {
-            final targetIndex = seriesPlaylist.findOriginalIndexBySeasonEpisode(
-              widget.contentSeason!,
-              widget.contentEpisode!,
-            );
-            if (targetIndex != -1) {
-              initialIndex = targetIndex;
-              targetEpisodeResolved = true;
-              debugPrint(
-                'VideoPlayer: target episode S${widget.contentSeason}E${widget.contentEpisode} → index=$initialIndex',
-              );
-            }
-          }
-
-          if (!targetEpisodeResolved) {
-            // Only resume from the last-played episode when NO specific episode
-            // was requested. If a target WAS requested but isn't in this pack
-            // (e.g. "Next" with no bound source landed on a source that lacks
-            // that episode), resuming would replay the last-played — usually the
-            // episode the user just finished — which is the "Next replays the
-            // same episode" bug. In that case skip straight to the first episode.
-            final lastEpisode = hadExplicitTarget
-                ? null
-                : await _getLastPlayedEpisode(seriesPlaylist);
-            if (lastEpisode != null) {
-              debugPrint(
-                'VideoPlayer: resume series "${seriesPlaylist.seriesTitle}" at S${lastEpisode['season']}E${lastEpisode['episode']} originalIndex=${lastEpisode['originalIndex']}',
-              );
-              initialIndex = lastEpisode['originalIndex'] as int;
-            } else {
-              // Find the first episode (lowest season, lowest episode)
-              final firstEpisodeIndex = seriesPlaylist
-                  .getFirstEpisodeOriginalIndex();
-              if (firstEpisodeIndex != -1) {
-                initialIndex = firstEpisodeIndex;
-              } else {
-                initialIndex = widget.startIndex ?? 0;
-              }
-              debugPrint(
-                'VideoPlayer: no resume target for "${seriesPlaylist.seriesTitle}"'
-                '${hadExplicitTarget ? ' (requested S${widget.contentSeason}E${widget.contentEpisode} not in pack)' : ''}, defaulting to index=$initialIndex',
-              );
-            }
-          }
-        } else {
-          // For non-series playlists, try to restore the last played video
-          if (_activePlaylist != null && _activePlaylist!.isNotEmpty) {
-            // Try to find the last played video by checking each playlist entry
-            int lastPlayedIndex = -1;
-            Map<String, dynamic>? lastPlayedState;
-
-            for (int i = 0; i < _activePlaylist!.length; i++) {
-              final entry = _activePlaylist![i];
-              final resumeId = _resumeKeys.resumeIdForEntry(entry);
-              debugPrint(
-                'Resume: checking entry[$i] title="${entry.title}" resumeId=$resumeId',
-              );
-              final state = await VideoProgressStorage.getVideoPlaybackState(
-                videoTitle: resumeId,
-              );
-              if (state != null) {
-                debugPrint(
-                  'Resume: found state for entry[$i] resumeId=$resumeId updatedAt=${state['updatedAt']}',
-                );
-                final updatedAt = state['updatedAt'] as int? ?? 0;
-                if (lastPlayedState == null ||
-                    updatedAt > (lastPlayedState['updatedAt'] as int? ?? 0)) {
-                  lastPlayedState = state;
-                  lastPlayedIndex = i;
-                }
-              }
-            }
-
-            if (lastPlayedIndex != -1) {
-              debugPrint('Resume: restoring playlist index $lastPlayedIndex');
-              initialIndex = lastPlayedIndex;
-            } else {
-              debugPrint(
-                'Resume: no prior playback state found, using default ordering',
-              );
-              // Pick the first item from Main group (by year asc then size desc)
-              final indices = _episodeAdjacent.getMainGroupIndices(
-                _activePlaylist!,
-              );
-              initialIndex = indices.isNotEmpty
-                  ? indices.first
-                  : (widget.startIndex ?? 0);
-            }
-          } else {
-            // Not a series or no series playlist, use the provided startIndex
-            initialIndex = widget.startIndex ?? 0;
-          }
-        }
-      }
-    } else {}
-
-    // A stale launch index (resume record from a longer pack, negative
-    // startIndex) must not reach list indexing: _currentIndex is used
-    // unconditionally below and in later playback paths.
-    if (_activePlaylist != null && _activePlaylist!.isNotEmpty) {
-      initialIndex = initialIndex.clamp(0, _activePlaylist!.length - 1);
-    }
-
-    // Get the initial URL from the determined index
-    if (_activePlaylist != null &&
-        _activePlaylist!.isNotEmpty &&
-        initialIndex < _activePlaylist!.length) {
-      final entry = _activePlaylist![initialIndex];
-      if (entry.url.isNotEmpty) {
-        initialUrl = entry.url;
-      } else {
-        try {
-          final resolvedUrl = await _playlistEntryResolve
-              .resolvePlaylistEntryUrl(initialIndex);
-          if (resolvedUrl.isNotEmpty) {
-            initialUrl = resolvedUrl;
-          } else if (widget.videoUrl.isNotEmpty) {
-            initialUrl = widget.videoUrl;
-          } else {
-            initialRankedAttemptFailed = true;
-          }
-        } catch (e) {
-          // Only fall back to widget.videoUrl if resolution fails
-          if (widget.videoUrl.isNotEmpty) {
-            initialUrl = widget.videoUrl;
-          } else {
-            initialRankedAttemptFailed = true;
-          }
-        }
-      }
-    }
-
-    _currentIndex = initialIndex;
-    _dynamicTitle = widget.title;
-    await _videoOutputLease.claimVideoOutput();
-    if (!mounted) return;
-    _createPlayerInstance(_androidVideoRendererMode);
-    await _audioOutput.configurePlayerAudio(_player);
-    _subtitleSync.installSubtitleAutoSyncForPlayer(_player);
-    // libmpv exposes `stream-record`; the web backend does not. Gate the
-    // record control on having a native player — and, on Android, on the
-    // finished file being publishable at all. Below API 29 there is no
-    // MediaStore.Downloads and no WRITE_EXTERNAL_STORAGE, so a recording
-    // could only sit in app-private storage the user can't reach — offering
-    // the button would just be a way to lose footage.
-    //
-    // Deny-by-default: Android starts unsupported and flips true only on a
-    // positive probe. The opposite order would leave a rebuild window where
-    // an API 21–28 device shows Record, and a tap in that window starts a
-    // recording whose Stop button the probe then hides.
-    final nativeBackend = _player.platform is mk.NativePlayer;
-    // A profile without the recordings feature never sees Record — the
-    // platform probe below must not be able to flip it back on.
-    final recordingsAllowed = ProfilePolicyGuard.allowsSync(
-      ProfileFeature.recordings,
-    );
-    _recordingSupported =
-        recordingsAllowed && nativeBackend && !Platform.isAndroid;
-    if (recordingsAllowed && nativeBackend && Platform.isAndroid) {
-      unawaited(
-        AndroidNativeDownloader.canPublishRecordings().then((canPublish) {
-          if (!canPublish || !mounted) return;
-          setState(() => _recordingSupported = true);
-        }),
-      );
-      // Engine flag + any capture of this channel already running (a recording
-      // started in an earlier player session survives into this one).
-      unawaited(
-        LiveRecordingService.engineEnabled().then((on) {
-          if (!mounted) return;
-          _engineFlagOn = on || ProfileRuntime.isProfileCommitted;
-          if (_engineFlagOn)
-            unawaited(_recording.refreshEngineRecordingState());
-        }),
-      );
-    }
-
-    // Must happen before the first open() — mpv reads both audio options when
-    // it creates the audio output, which is on first playback.
-    await _audioOutput.attachAudioEffectSession();
-
-    _currentStreamUrl = initialUrl.isNotEmpty ? initialUrl : null;
-    if (_activePlaylist != null &&
-        _currentIndex >= 0 &&
-        _currentIndex < _activePlaylist!.length) {
-      _activeHttpHeaders =
-          _activePlaylist![_currentIndex].httpHeaders ?? widget.httpHeaders;
-    }
-
-    // IPTV launch: the first tune starts here, before either open branch
-    // below (IPTV is never PikPak). Zaps re-arm this in _switchToIptvChannel.
-    var launchIsLiveIptv = false;
-    final launchIptvChannels = _effectiveIptvChannels;
-    if (launchIptvChannels != null && initialUrl.isNotEmpty) {
-      final launchIdx = widget.iptvStartIndex ?? 0;
-      final launchChannel =
-          (launchIdx >= 0 && launchIdx < launchIptvChannels.length)
-          ? launchIptvChannels[launchIdx]
-          : null;
-      _iptvDiag.onTuneStart(
-        launchChannel?.name,
-        initialUrl,
-        isLive: launchChannel?.isLive ?? true,
-      );
-      _iptvLiveRecovery.onTuneStarted();
-      launchIsLiveIptv = launchChannel?.isLive ?? true;
-    }
-
-    final canAttemptRankedStartup =
-        initialRankedAttemptFailed &&
-        (_effectiveContentType == 'movie' ||
-            _effectiveContentType == 'series') &&
-        _effectiveSources?.isNotEmpty == true;
-
-    // An empty initial URL caused by a failed lazy resolution is itself the
-    // first failed candidate. Enter the ranked ladder so remaining sources
-    // still get their configured attempts.
-    if (initialUrl.isNotEmpty || canAttemptRankedStartup) {
-      // For PikPak videos from playlist or any PikPak URL, use cold storage retry logic
-      final currentEntry = _activePlaylist?[_currentIndex];
-      final isPikPak =
-          currentEntry?.provider?.toLowerCase() == 'pikpak' ||
-          currentEntry?.pikpakFileId != null;
-      // For non-playlist flows (Debrify TV, Stremio TV, etc.), detect PikPak by URL
-      final isPikPakUrl =
-          _activePlaylist == null && initialUrl.contains('mypikpak.com');
-      final isDebrifyTV = isPikPakUrl && widget.requestMagicNext != null;
-
-      if (initialUrl.isNotEmpty &&
-          ((isPikPak && _activePlaylist != null) || isPikPakUrl)) {
-        // The continuation can sleep up to 10s in _waitForVideoReady; the
-        // screen may be left (player disposed) or the player replaced by a
-        // renderer fallback in that window, so it must re-check before every
-        // touch of _player.
-        final pikpakGeneration = _playerInstanceGeneration;
-        bool pikpakStillCurrent() =>
-            mounted &&
-            !_screenDisposed &&
-            pikpakGeneration == _playerInstanceGeneration;
-        final launchSource =
-            _effectiveSources != null &&
-                _currentSourceIndex >= 0 &&
-                _currentSourceIndex < _effectiveSources!.length
-            ? _effectiveSources![_currentSourceIndex]
-            : null;
-        _pikPakRetry
-            .playPikPakVideoWithRetry(initialUrl, isDebrifyTV: isDebrifyTV)
-            .then((loaded) async {
-              if (!pikpakStillCurrent()) return;
-              if (!loaded) return;
-              // PikPak uses its own cold-storage readiness gate instead of the
-              // ranked VOD gate. Report the winner only after that gate confirms
-              // duration, otherwise a queued-but-unplayable file would be pinned.
-              unawaited(
-                _startupCandidates.commitValidatedStremioSource(launchSource),
-              );
-              // Wait for the video to load and duration to be available
-              await _mediaWaits.waitForVideoReady();
-              if (!pikpakStillCurrent()) return;
-              // Random start takes precedence over resume, then startAtPercent.
-              // Same initial-open shape as the ranked branch below — and PikPak
-              // cold-storage streams are the slowest remote opens in the app, the
-              // likeliest to answer the startup seek with a restart at 0 — so the
-              // same guarded, landing-verified seeks apply.
-              if (widget.startFromRandom) {
-                final offset = _randomStartOffset(_duration);
-                if (offset != null) {
-                  // A random start has no bookmark to protect — plain seek.
-                  await _player.seek(offset);
-                } else {
-                  await _resumeRestore.maybeRestoreResume(verifyLanding: true);
-                }
-              } else if (widget.startAtPercent != null) {
-                final offset = _percentStartOffset(_duration);
-                if (offset != null) {
-                  await _resumeRestore.seekForResume(
-                    offset.inMilliseconds,
-                    verifyLanding: true,
-                  );
-                }
-              } else {
-                await _resumeRestore.maybeRestoreResume(verifyLanding: true);
-              }
-              if (!pikpakStillCurrent()) return;
-              // Restore audio and subtitle track preferences
-              await _trackPreferences.restoreTrackPreferences();
-            });
-      } else {
-        // High-res YouTube serves video and audio as separate streams. Open
-        // PAUSED, attach the external audio track, then start — so both tracks
-        // are loaded before the first frame and play in sync from the start.
-        // (Attaching audio mid-playback makes mpv resync, causing a few seconds
-        // of A/V drift.)
-        final hasExternalAudio =
-            widget.audioUrl != null && widget.audioUrl!.isNotEmpty;
-        final isStremioTv = _effectiveStremioTvChannels?.isNotEmpty == true;
-        final deferStremioTvStart =
-            isStremioTv && initialUrl.isNotEmpty && !widget.startFromRandom;
-        var directOpenCompleted = false;
-        int? directOpenEpoch;
-        try {
-          final opened = await StartupStreamPolicy.openInitialMedia(
-            hasResolvedUrl: initialUrl.isNotEmpty,
-            hasExternalAudio: hasExternalAudio,
-            isLiveIptv: launchIsLiveIptv,
-            // Stremio TV owns channel selection and slot changes. As on native
-            // TV, a slow channel must not hit the VOD gate's one-attempt limit.
-            isStremioTv: isStremioTv,
-            openDirect: () async {
-              final opening = _openMedia(
-                mk.Media(initialUrl, httpHeaders: _activeHttpHeaders),
-                play: !hasExternalAudio,
-                desiredPlay: true,
-                liveStream: launchIsLiveIptv,
-                // Subscribe before open: media-kit reports failures later.
-                beforeOpen: isStremioTv
-                    ? () {
-                        _startupGate.watchStremioTvStartup(initialUrl);
-                        if (deferStremioTvStart) {
-                          _stremioTvStartupSeek.arm(
-                            widget.startAtPercent,
-                            epoch: _resumeVerifyEpoch,
-                          );
-                        }
-                        return true;
-                      }
-                    : null,
-              );
-              directOpenEpoch = _resumeVerifyEpoch;
-              await opening;
-              directOpenCompleted = true;
-            },
-            openValidated: () => _startupFailover.openInitialVodWithFailover(
-              initialUrl,
-              httpHeaders: _activeHttpHeaders,
-              initialAttemptAlreadyFailed: initialRankedAttemptFailed,
-            ),
-          );
-          if (!opened) {
-            await _startupGate.reportStartupFailure();
-            return;
-          }
-          // Wait for duration-dependent resume and random-start calculations.
-          await _mediaWaits.waitForVideoReady();
-          if (!mounted ||
-              _screenDisposed ||
-              (isStremioTv && _stremioTvStartupWatch?.hasFailed == true)) {
-            return;
-          }
-          if (hasExternalAudio) {
-            await _audioOutput.setExternalAudioTrack(widget.audioUrl!);
-          }
-          // Random start takes precedence over resume, then startAtPercent.
-          if (widget.startFromRandom) {
-            final offset = _randomStartOffset(_duration);
-            if (offset != null) {
-              // A random start has no bookmark to protect and no "correct"
-              // position to verify against — plain seek, as before.
-              await _player.seek(offset);
-            } else {
-              await _resumeRestore.maybeRestoreResume(verifyLanding: true);
-            }
-          } else if (widget.startAtPercent != null) {
-            final offset = deferStremioTvStart
-                ? null
-                : _percentStartOffset(_duration);
-            if (offset != null) {
-              // An explicit promised start position, exposed to the same
-              // startup seek failure as a stored resume.
-              await _resumeRestore.seekForResume(
-                offset.inMilliseconds,
-                verifyLanding: true,
-              );
-            }
-          } else {
-            await _resumeRestore.maybeRestoreResume(verifyLanding: true);
-          }
-          _scheduleAutoHide();
-          await _trackPreferences.restoreTrackPreferences();
-          if (hasExternalAudio) await _player.play();
-          // The candidate is now decoded, resume has been applied, and track
-          // restoration is complete. Only now may progress escape to local
-          // completion or remote scrobblers.
-          _startupGate.setStartupGateActive(false);
-          _startupGate.resumeTrackingAfterValidationGate();
-        } catch (e) {
-          if (isStremioTv &&
-              !directOpenCompleted &&
-              directOpenEpoch == _resumeVerifyEpoch) {
-            final watch = _stremioTvStartupWatch;
-            if (watch != null) {
-              watch.fail();
-            } else {
-              await _startupGate.reportStartupFailure(
-                isCurrent: () => directOpenEpoch == _resumeVerifyEpoch,
-              );
-            }
-          }
-          _startupGate.setStartupGateActive(false);
-          // A late throw (seek/track restore) can land after a successful
-          // open — playback proceeds, so re-arm tracking or the start
-          // scrobble stays swallowed until the next play/pause transition.
-          _startupGate.resumeTrackingAfterValidationGate();
-          debugPrint('VideoPlayer: initial open failed: $e');
-        }
-      }
-    } else {
-      // If no valid URL, try to load the first playlist entry
-      if (_activePlaylist != null && _activePlaylist!.isNotEmpty) {
-        _playlistLoad.loadPlaylistIndex(_currentIndex, autoplay: false);
-      }
-    }
-    _autosaveTimer = Timer.periodic(
-      const Duration(seconds: 6),
-      (_) => _resumeSave.saveResume(debounced: true),
-    );
-
-    // Preload episode information if this is a series
-    _episodeMetadataReady ??= _metadataPreload.preloadEpisodeInfo();
-  }
-
-  void _bindPlayerInstanceSubscriptions(
-    int instanceGeneration,
-    mk.Player player,
-  ) {
-    bool isCurrent() =>
-        mounted && instanceGeneration == _playerInstanceGeneration;
-
-    _subtitleDiagnosticLogSub = player.stream.log.listen((log) {
-      if (!isCurrent()) return;
-      final searchable = '${log.prefix} ${log.text}'.toLowerCase();
-      if (!searchable.contains('sub') &&
-          !searchable.contains('libass') &&
-          !searchable.contains('track')) {
-        return;
-      }
-      debugPrint('[SubtitleDiag] mpv[${log.level}] ${log.prefix}: ${log.text}');
-      final level = log.level.toLowerCase();
-      final subtitleFailure =
-          (level == 'error' || level == 'fatal') &&
-          (log.prefix.toLowerCase().startsWith('sub') ||
-              searchable.contains('subtitle decoder') ||
-              searchable.contains('subtitle converter'));
-      final attempt = _activeSubtitleApplyAttempt;
-      if (subtitleFailure && attempt != null) {
-        unawaited(_subtitleApply.handleSubtitleApplyFailure(attempt, log.text));
-      }
-    });
-    // Subscribe before open() so fast local media and immediate renderer
-    // failures are visible to both diagnostics and the startup guard.
-    _paramsSub = player.stream.videoParams.listen((params) {
-      if (!isCurrent()) return;
-      // First sized params ≈ first decoded frame — close enough for the
-      // zap-speed number, and it avoids one more subscription slot.
-      if ((params.w ?? 0) > 0) {
-        _iptvDiag.onFirstFrame();
-        _iptvLiveRecovery.onFirstFrame();
-      }
-      _decoderProbe.handleDecoderProbeParams(params);
-    });
-    _rendererStartupErrorSub = player.stream.error.listen((error) {
-      final source = _openedWatchSource;
-      if (isCurrent() && source != null) {
-        // mpv errors can contain credential-bearing URLs; record only category.
-        logSourceSelection(
-          'media_server_player_error',
-          source: source,
-          player: 'mpv',
-          reason: mediaServerPlayerErrorCategory(error),
-        );
-      }
-      // mpv also emits nonfatal decoder/stream log errors here. Re-evaluate
-      // actual state; healthy playback may not emit another state event.
-      if (isCurrent()) {
-        PlayerVisibility.playbackState(
-          this,
-          ready: player.state.playing && !player.state.buffering,
-        );
-      }
-      if (!isCurrent() ||
-          !AndroidRendererStartupFallback.isRendererFailure(error)) {
-        return;
-      }
-      unawaited(
-        _rendererFallback.fallbackExplicitRendererToAutomatic(
-          instanceGeneration: instanceGeneration,
-          mediaGeneration: _decoderProbeGeneration,
-          reason: 'renderer_error',
-        ),
-      );
-    });
-    _posSub = player.stream.position.listen((d) {
-      if (!isCurrent()) return;
-      if (VpS2Hooks.isIOS && d.inSeconds != _pip.lastIosPipPositionSecond) {
-        _pip.lastIosPipPositionSecond = d.inSeconds;
-        _pip.pushPipState();
-      }
-      _subtitleSync.subtitleAutoSync?.observePosition(d.inMilliseconds);
-      _iptvDiag.onProgress(d, playing: _isPlaying);
-      // _isPlaying tracks mpv's pause property: a cache-stall keeps it true
-      // (stall detector armed), a user pause flips it false (excluded).
-      if (_effectiveIptvChannels != null) {
-        _iptvLiveRecovery.onProgress(d, wantsPlayback: _isPlaying);
-      }
-      _position = d;
-      _resumeSave.observeServerWatch();
-      _episodeFetch.prepareNextDirectEpisode();
-      _mdblist.updateMdblistPosition();
-      _playbackUiClock.updatePosition(d);
-      _skip.syncSkipSegmentsForCurrentContent();
-      _skip.syncActiveSkipSegmentUi();
-      _completion.checkAndApplyLocalCompletion();
-    });
-    if (_subtitleSync.subtitleAutoSyncEnabled || _hasSubtitlePolicy) {
-      var lastAudioTrackId = player.state.track.audio.id;
-      var lastAudioLanguage = player.state.track.audio.language;
-      _trackSub = player.stream.track.listen((track) {
-        if (!isCurrent()) return;
-        final audioTrackId = track.audio.id;
-        if (audioTrackId != lastAudioTrackId ||
-            track.audio.language != lastAudioLanguage) {
-          lastAudioTrackId = audioTrackId;
-          lastAudioLanguage = track.audio.language;
-          unawaited(_subtitleLanguage.refreshSubtitleAudioPolicy());
-          _subtitleSync.subtitleAutoSync?.audioTrackChanged();
-        }
-      });
-    }
-    _durSub = player.stream.duration.listen((d) {
-      if (!isCurrent()) return;
-      final hadDuration = _duration > Duration.zero;
-      _duration = d;
-      final startupOffset = _stremioTvStartupSeek.take(
-        d,
-        epoch: _resumeVerifyEpoch,
-      );
-      if (startupOffset != null) {
-        unawaited(
-          _resumeRestore
-              .seekForResume(startupOffset.inMilliseconds, verifyLanding: true)
-              .catchError((Object error) {
-                debugPrint('Player: Stremio TV startup seek failed: $error');
-              }),
-        );
-      }
-      _mdblist.updateMdblistPosition();
-      // `playing=true` commonly arrives before libmpv publishes duration. In
-      // that ordering the playing listener cannot arm MDBList, and no second
-      // playing event is guaranteed. Treat the first usable duration as the
-      // missing edge so the initial durable pause checkpoint is sent.
-      if (!hadDuration && d > Duration.zero && _isPlaying) {
-        _mdblist.mdblistPlay();
-      }
-      _playbackUiClock.updateDuration(d);
-      if (d > Duration.zero) _skip.skipSegmentsMediaReady = true;
-      _skip.syncSkipSegmentsForCurrentContent();
-      _skip.syncActiveSkipSegmentUi();
-      setState(() {});
-    });
-    _playSub = player.stream.playing.listen((p) {
-      if (!isCurrent()) return;
-      PlayerVisibility.playbackState(this, ready: p && !player.state.buffering);
-      if (p && _pausedByLifecycle && !_isPipActive) {
-        unawaited(player.pause());
-        return;
-      }
-      final wasPlaying = _isPlaying;
-      _isPlaying = p;
-      _resumeSave.observeServerWatch();
-      ProfileLockController.instance.setPlaybackActive(p);
-      _pip.syncWakelock(p);
-      _pip.pushPipState();
-      if (p) _iptvMemory.noteLiveChannelPlaying();
-      if (!_validationGateActive && p && _duration > Duration.zero) {
-        _trakt.traktScrobble('start');
-        if (_trakt.traktLastScrobbleAction == 'start') {
-          _trakt.startTraktHeartbeat();
-        }
-      } else if (!_validationGateActive &&
-          !p &&
-          wasPlaying &&
-          !_isTransitioning &&
-          _trakt.traktLastScrobbleAction != 'stop') {
-        _trakt.traktScrobble('pause');
-        _trakt.stopTraktHeartbeat();
-      }
-      if (!_validationGateActive &&
-          _simkl.simklScrobbleEnabled &&
-          p &&
-          _duration > Duration.zero) {
-        _simkl.simklLastScrobbleAction = 'start';
-        _simkl.startSimklHeartbeat();
-      } else if (!_validationGateActive &&
-          !p &&
-          wasPlaying &&
-          !_isTransitioning &&
-          _simkl.simklLastScrobbleAction != 'stop') {
-        _simkl.simklScrobble('pause');
-        _simkl.stopSimklHeartbeat();
-      }
-      if (!_validationGateActive && p && _duration > Duration.zero) {
-        _mdblist.mdblistPlay();
-      } else if (!_validationGateActive &&
-          !p &&
-          wasPlaying &&
-          !_isTransitioning) {
-        _mdblist.mdblistPause();
-      }
-      if (p && _transitionRunning) {
-        _transitionStopTimer?.cancel();
-        _transitionPhaseTimer?.cancel();
-        _transitionPhase = 1;
-        _transitionPhase2Started = null;
-        debugPrint(
-          'Player: Playback started; overlay phase 1 (static) 1500ms.',
-        );
-        _transitionPhaseTimer = Timer(const Duration(milliseconds: 1500), () {
-          if (!isCurrent()) return;
-          _transitionPhase = 2;
-          _transitionPhase2Started = DateTime.now();
-          setState(() {});
-          debugPrint('Player: Overlay phase 2 (cinematic bars) 1500ms.');
-        });
-        _transitionStopTimer = Timer(const Duration(milliseconds: 3000), () {
-          if (!isCurrent()) return;
-          _rainbowController.stop();
-          _transitionRunning = false;
-          _rainbowActive = false;
-          setState(() {});
-          debugPrint('Player: Transition overlay stopped (3s complete).');
-        });
-      }
-      setState(() {});
-    });
-    _completedSub = player.stream.completed.listen((done) {
-      if (done && isCurrent()) {
-        PlayerVisibility.playbackState(this, ready: false);
-        _iptvDiag.onPlaybackEnded(_position);
-        _playbackEnded.onPlaybackEnded();
-      }
-    });
-    _bufferingSub = player.stream.buffering.listen((isBuffering) {
-      if (isCurrent()) {
-        PlayerVisibility.playbackState(
-          this,
-          ready: !isBuffering && player.state.playing,
-        );
-      }
-      if (isCurrent()) _iptvDiag.onBuffering(isBuffering, _position);
-      if (!isCurrent() || !_isReady || _isTransitioning) return;
-      if (isBuffering) {
-        _bufferingDebounceTimer?.cancel();
-        _bufferingDebounceTimer = Timer(
-          VideoPlayerTimingConstants.bufferingDebounceDelay,
-          () {
-            if (isCurrent() &&
-                player.state.buffering &&
-                _isReady &&
-                !_isTransitioning &&
-                !_isPikPakRetrying) {
-              _showBufferingIndicator.value = true;
-            }
-          },
-        );
-      } else {
-        _bufferingDebounceTimer?.cancel();
-        _showBufferingIndicator.value = false;
-      }
-    });
-    if (_effectiveIptvChannels != null) {
-      _iptvErrorSub = player.stream.error.listen((error) {
-        if (isCurrent()) _iptvSources.onIptvStreamError(error);
-      });
-    }
-  }
-
-  Future<void> _cancelPlayerInstanceSubscriptions() async {
-    final subscriptions = <StreamSubscription?>[
-      _posSub,
-      _durSub,
-      _playSub,
-      _paramsSub,
-      _trackSub,
-      _completedSub,
-      _bufferingSub,
-      _iptvErrorSub,
-      _rendererStartupErrorSub,
-      _subtitleDiagnosticLogSub,
-    ];
-    _posSub = null;
-    _durSub = null;
-    _playSub = null;
-    _paramsSub = null;
-    _trackSub = null;
-    _completedSub = null;
-    _bufferingSub = null;
-    _iptvErrorSub = null;
-    _rendererStartupErrorSub = null;
-    _subtitleDiagnosticLogSub = null;
-    for (final subscription in subscriptions) {
-      if (subscription == null) continue;
-      try {
-        await subscription.cancel();
-      } catch (_) {
-        // A broken listener must not strand the old native player during the
-        // compatibility restart.
-      }
-    }
-  }
-
-  void _beginMediaGeneration({int? preserveStartupEpoch}) {
-    if (preserveStartupEpoch == null) {
-      _stremioTvStartupSeek.cancel();
-    } else {
-      _stremioTvStartupSeek.carryTo(
-        fromEpoch: preserveStartupEpoch,
-        toEpoch: _resumeVerifyEpoch,
-      );
-    }
-    _stremioTvStartupWatch?.dispose();
-    _stremioTvStartupWatch = null;
-    _decoderProbeGeneration++;
-    _decoderProbeToken++;
-    _rendererStartupGuardToken++;
-    _rendererStartupValidationGeneration = -1;
-    _decoderProbeTimer?.cancel();
-    _decoderProbeTimer = null;
-    _decoderProbeParams = null;
-    _lastDecoderDiagnosticSignature = null;
-    // This is the guaranteed boundary for every playlist item, IPTV zap,
-    // startup candidate, and manual source switch. VideoParams normally emits
-    // an invalid value too, but display correctness must not depend on it.
-    _tvosVideo.resetTvosDisplayMatchForMediaBoundary();
-    _playbackUiClock.beginMedia();
-    _activeSkipSegmentUi.clear();
-  }
-
-  /// The user's Network & Buffering presets, loaded once per screen. A
-  /// mid-session settings change applies on the next playback — accurate
-  /// today because Settings isn't reachable without popping the player; an
-  /// in-player settings entry point would have to re-read this.
-  NetworkTuning? _networkTuning;
-
-  /// Stock values of exactly the player-global properties [_networkTuning]
-  /// has overridden, captured before the first override. A later live open
-  /// on the same player (mixed playlist) restores these, so the tuned live
-  /// IPTV pipeline can never inherit VOD tuning. Null until tuning has
-  /// actually touched the player — the Standard path never populates it and
-  /// so never sets a single property.
-  Map<String, String>? _networkTuningDefaults;
-
-  /// Serializes tuning applies: a rapid zap starts a newer [_openMedia]
-  /// while an older one is suspended mid-capture, and interleaved property
-  /// writes could land VOD tuning on the newer open's live stream. Each
-  /// apply runs WHOLE, in order, and bails via its generation check when a
-  /// newer open owns the player.
-  Future<void> _networkTuningChain = Future<void>.value();
-
-  Future<void> _applyNetworkTuning(
-    mk.NativePlayer platform,
-    NetworkTuning tuning, {
-    required bool liveStream,
-    required int generation,
-  }) {
-    return _networkTuningChain = _networkTuningChain.then(
-      (_) => _applyNetworkTuningInner(
-        platform,
-        tuning,
-        liveStream: liveStream,
-        generation: generation,
-      ),
-    );
-  }
-
-  Future<void> _applyNetworkTuningInner(
-    mk.NativePlayer platform,
-    NetworkTuning tuning, {
-    required bool liveStream,
-    required int generation,
-  }) async {
-    final want = liveStream ? const <String, String>{} : tuning.mpvProperties;
-    // Standard (and live-before-any-tuning): nothing was ever applied,
-    // nothing to restore — the player is untouched.
-    if (want.isEmpty && _networkTuningDefaults == null) return;
-    if (generation != _decoderProbeGeneration) return; // superseded in queue
-    try {
-      if (want.isNotEmpty && _networkTuningDefaults == null) {
-        final defaults = <String, String>{};
-        for (final key in want.keys) {
-          final value = await platform.getProperty(key);
-          // The vendored getProperty returns '' instead of throwing when mpv
-          // has no value. An empty "default" would silently fail to restore
-          // later — refuse to tune rather than capture poison.
-          if (value.isEmpty) {
-            debugPrint('Player: network tuning skipped — $key unreadable');
-            return;
-          }
-          defaults[key] = value;
-        }
-        if (generation != _decoderProbeGeneration) return;
-        _networkTuningDefaults = defaults;
-      }
-      for (final entry in _networkTuningDefaults!.entries) {
-        if (generation != _decoderProbeGeneration) return;
-        await platform.setProperty(entry.key, want[entry.key] ?? entry.value);
-      }
-    } catch (e) {
-      debugPrint('Player: network tuning apply failed: $e');
-    }
-  }
-
-  Future<void> _openMedia(
-    mk.Media media, {
-    required bool play,
-    bool? desiredPlay,
-    bool liveStream = false,
-    EpisodePlaybackRequest? request,
-    bool Function()? beforeOpen,
-    Torrent? source,
-    int? preserveStartupEpoch,
-  }) async {
-    if (request?.isCurrent == false) return;
-    final watchEpoch = ++_watchOpenEpoch;
-    final sources = _effectiveSources;
-    final indexedSource =
-        sources != null &&
-            _currentSourceIndex >= 0 &&
-            _currentSourceIndex < sources.length
-        ? sources[_currentSourceIndex]
-        : null;
-    final candidate =
-        source ??
-        (indexedSource?.directUrl == media.uri ? indexedSource : null);
-    final watchSource = MediaServerWatchController.isServerSource(candidate)
-        ? candidate
-        : null;
-    if (!identical(watchSource, _openedWatchSource)) {
-      _resumeSave.observeServerWatch();
-      _serverWatch.commit(null);
-    }
-    // EVERY content open invalidates the outgoing media's resume protection —
-    // the one choke point all switch paths share, so no path (Stremio TV
-    // channel, Magic TV next, zap, source switch, startup ladder) can leave a
-    // stale guard suppressing the new media's saves or a live verifier
-    // re-seeking the old target against it. Ordering is safe by construction:
-    // every outgoing checkpoint save runs BEFORE its new open, and every path
-    // that re-protects (_seekForResume) re-arms AFTER it.
-    _resumeVerifyEpoch++;
-    _resumeWriteGuard.clear();
-    _beginMediaGeneration(preserveStartupEpoch: preserveStartupEpoch);
-    // Live IPTV (Phase 2, Layer 1): ffmpeg-level reconnect. mpv's default
-    // reconnect covers only seekable inputs — a live/streamed input NEVER
-    // reconnects without reconnect_streamed. Repairs happen inside the
-    // protocol layer while the demuxer cache plays through, so the common
-    // connection drop is invisible. Cleared for non-live opens: the
-    // property is player-global and reconnect-on-error semantics are wrong
-    // for finite files (mpv's own defaults handle those).
-    final platform = _player.platform;
-    if (platform is mk.NativePlayer) {
-      final tuningGeneration = _decoderProbeGeneration;
-      NetworkTuning tuning;
-      try {
-        tuning = _networkTuning ??= await NetworkTuning.load();
-      } catch (e) {
-        // Profile storage refusing a read must degrade to "no tuning", never
-        // block playback — this line is on the Standard path too.
-        debugPrint('Player: network tuning load failed: $e');
-        tuning = _networkTuning = const NetworkTuning(
-          patience: NetworkTuning.standard,
-          buffer: NetworkTuning.standard,
-        );
-      }
-      try {
-        await platform.setProperty(
-          'stream-lavf-o',
-          // reconnect_on_http_error=5xx covers server-side hiccups at the
-          // protocol layer. Deliberately narrow: NOT auth-class 4xx (same
-          // answer every time — must surface), and not 429 (a comma-list
-          // value can't ride mpv's key-value list safely, and escalating a
-          // rate limit to the slower ladder is politer to the origin).
-          //
-          // VOD opens carry the user's Network & Buffering patience preset
-          // ('' at Standard — today's exact behavior).
-          liveStream
-              ? 'reconnect=1,reconnect_streamed=1,'
-                    'reconnect_on_network_error=1,'
-                    'reconnect_on_http_error=5xx,'
-                    'reconnect_delay_max=5'
-              : tuning.vodLavfOptions,
-        );
-      } catch (e) {
-        debugPrint('Player: stream-lavf-o set failed: $e');
-      }
-      await _applyNetworkTuning(
-        platform,
-        tuning,
-        liveStream: liveStream,
-        generation: tuningGeneration,
-      );
-    }
-    final remedy = _tvosDecodeRemedy;
-    if (remedy != null) {
-      // AWAITED before open: remedy properties are ordinary runtime options
-      // on a reused native player — this is the boundary that restores them
-      // (and pre-applies the session hint) so a previous file's ladder can
-      // never leak into this one.
-      final generation = _decoderProbeGeneration;
-      await remedy.onNewMedia(generation);
-      // A rapid zap can start a newer open while the restore ran; the newer
-      // call owns the player now.
-      if (_screenDisposed || generation != _decoderProbeGeneration) return;
-    }
-    // `sub-visibility` is player-global. Reset it before a reused player opens
-    // new media so a previous bitmap track cannot make auto-selected text draw
-    // both natively and in Flutter. Restored bitmap selections re-enable it.
-    if (platform is mk.NativePlayer) {
-      try {
-        if (_hasSubtitlePolicy) {
-          await platform.setProperty('sid', 'no');
-        }
-        await platform.setProperty(
-          'sub-visibility',
-          VpS2Hooks.isIOS && (_isPipActive || _pip.iosPipStarting)
-              ? 'yes'
-              : 'no',
-        );
-      } catch (error) {
-        debugPrint('Player: subtitle visibility reset failed: $error');
-      }
-    }
-    Future<void> commitOpen() async {
-      // Final ownership check after setup AND asynchronous authorization.
-      if (_screenDisposed || !mounted) return;
-      if (watchSource != null) {
-        await _serverWatch.prepare(
-          watchSource,
-          contentTitle: _effectiveContentTitle,
-        );
-        await DirectSourceAuthorization.authorize(watchSource);
-      }
-      if (_screenDisposed ||
-          !mounted ||
-          watchEpoch != _watchOpenEpoch ||
-          request?.isCurrent == false) {
-        return;
-      }
-      // This callback arms candidate validation. Never arm it while the old
-      // media could still emit events during a server watch-state request.
-      if (beforeOpen != null && !beforeOpen()) return;
-      if (watchSource != null) {
-        logSourceSelection(
-          'media_server_open',
-          source: watchSource,
-          player: 'mpv',
-        );
-      }
-      _openedWatchSource = watchSource;
-      _activeOpenedMedia = media;
-      _activeMediaShouldPlay = desiredPlay ?? play;
-      _activeMediaUserPaused = false;
-      PlayerVisibility.playbackState(this, ready: false);
-      if (request != null) {
-        await request.commit(() => _player.open(media, play: play));
-        return;
-      }
-      return _player.open(media, play: play);
-    }
-
-    // Startup direct fallbacks bypass URL resolvers. Recheck their captured
-    // capability here so revoked/disabled/reconnected sources cannot open.
-    if (source != null) {
-      return DirectSourceAuthorization.runIfAuthorized(source, commitOpen);
-    }
-    return commitOpen();
-  }
-
   @override
   void didUpdateWidget(covariant VideoPlayerScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -2692,40 +1634,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         });
       }
     }
-  }
-
-  /// Get the last played episode for a series
-  Future<Map<String, dynamic>?> _getLastPlayedEpisode(
-    SeriesPlaylist seriesPlaylist,
-  ) async {
-    try {
-      final lastEpisode = await EpisodeResumeStorage.getLastPlayedEpisode(
-        seriesTitle: seriesPlaylist.seriesTitle ?? 'Unknown Series',
-      );
-
-      if (lastEpisode != null) {
-        final season = lastEpisode['season'] as int;
-        final episode = lastEpisode['episode'] as int;
-        debugPrint(
-          'VideoPlayer: StorageService returned resume S${season}E$episode for "${seriesPlaylist.seriesTitle}"',
-        );
-
-        // Find the original index for this episode
-        final originalIndex = seriesPlaylist.findOriginalIndexBySeasonEpisode(
-          season,
-          episode,
-        );
-        if (originalIndex != -1) {
-          return {...lastEpisode, 'originalIndex': originalIndex};
-        }
-        debugPrint(
-          'VideoPlayer: resume entry S${season}E$episode not found in playlist for "${seriesPlaylist.seriesTitle}"',
-        );
-      }
-    } catch (e) {
-      debugPrint('VideoPlayer: failed to read last episode resume: $e');
-    }
-    return null;
   }
 
   void _startTransitionOverlay() {
@@ -2809,80 +1717,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // seed would never be corrected. 0 means `_dockBand` yields the legacy
       // constant, which is exactly right for both.
     });
-  }
-
-  Future<void> _loadPlayerDefaults() async {
-    _subtitleOnlyForeignAudio =
-        await SubtitleSettingsStorage.getSubtitleOnlyForeignAudio();
-    _subtitleForcedOnly = await SubtitleSettingsStorage.getSubtitleForcedOnly();
-    _subtitlePreferredAudio =
-        await SubtitleSettingsStorage.getDefaultAudioLanguage();
-    _subtitleSync.subtitleAutoSyncEnabled =
-        await SubtitleSettingsStorage.getSubtitleAutoSyncEnabled();
-    debugPrint(
-      'SubtitleAutoSync: pref loaded, enabled=${_subtitleSync.subtitleAutoSyncEnabled}',
-    );
-    // Load default aspect index
-    final aspectIndex =
-        await PlayerSettingsStorage.getPlayerDefaultAspectIndex();
-    const aspects = AspectMode.values;
-    _display.aspectMode = aspects[aspectIndex.clamp(0, aspects.length - 1)];
-
-    // In-player guide look. `_initializePlayer` awaits this before playback
-    // setup, so every IPTV surface that can actually appear (first tune,
-    // zap, guide) already has the real value.
-    _playerGuideStyle = PlayerGuideStyle.fromPref(
-      await IptvAppearanceStorage.getIptvPlayerGuideStyle(),
-    );
-    _playerGuideTokens = PlayerGuideTokens.of(_playerGuideStyle);
-
-    if (PlatformUtil.isTvOS) {
-      _tvosForceSoftwareDecode =
-          await PlayerSettingsStorage.getTvosForceSoftwareDecode();
-      _contentDisplayMatchMode =
-          await PlayerNetworkStorage.getContentDisplayMatchMode();
-      if (!_contentDisplayMatchMode.requestsMatching) {
-        try {
-          await TvosDisplayMatchService.clear();
-        } catch (error) {
-          debugPrint('DisplayMatch: tvOS clear failed: $error');
-        }
-      }
-    }
-
-    // Audio-output settings, preloaded for [_configurePlayerAudio] — the
-    // single owner of ao / audio-spdif / audio-channels
-    // (AUDIO_FIDELITY_PLAN.md).
-    if (!kIsWeb && Platform.isAndroid) {
-      _audioPassthroughEnabled =
-          await PlayerSettingsStorage.getAudioPassthroughEnabled();
-      _systemAudioEffectsEnabled =
-          await PlayerSettingsStorage.getPlayerSystemAudioEffects();
-    } else if (PlatformUtil.isTvOS || PlatformUtil.isIosMobile) {
-      _appleMultichannelEnabled =
-          await PlayerSettingsStorage.getAppleMultichannelAudio();
-    }
-    if (PlatformUtil.isTvOS) {
-      _tvosForceStereoAudio =
-          await PlayerSettingsStorage.getTvosForceStereoAudio();
-      _tvosLegacyAudioOutput =
-          await PlayerSettingsStorage.getTvosLegacyAudioOutput();
-      // What the CURRENT output route can take. ao_avfoundation passes the
-      // file's native layout through, so a 5.1 track on a two-channel route
-      // (AirPods, Bluetooth, stereo TV) folds badly; PlayerAudioConfig caps
-      // those to stereo. 0 means "unknown" and leaves mpv's default alone.
-      try {
-        _tvosRouteOutputChannels =
-            await _tvReleaseLogChannel.invokeMethod<int>(
-              'outputChannelCount',
-            ) ??
-            0;
-      } catch (_) {
-        _tvosRouteOutputChannels = 0;
-      }
-    }
-
-    debugPrint('VideoPlayer: Loaded defaults - aspect=${_display.aspectMode}');
   }
 
   /// Overlays inside the player share its route scope, which already has a
@@ -5340,6 +4174,711 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 }
 
+class _VpPlayerStartupHostAdapter implements VpPlayerStartupHost {
+  _VpPlayerStartupHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  Map<String, String>? get activeHttpHeaders => _s._activeHttpHeaders;
+  @override
+  set activeHttpHeaders(Map<String, String>? v) => _s._activeHttpHeaders = v;
+  @override
+  List<PlaylistEntry>? get activePlaylist => _s._activePlaylist;
+  @override
+  AndroidVideoRendererMode get androidVideoRendererMode =>
+      _s._androidVideoRendererMode;
+  @override
+  set androidVideoRendererMode(AndroidVideoRendererMode v) =>
+      _s._androidVideoRendererMode = v;
+  @override
+  set autosaveTimer(Timer? v) => _s._autosaveTimer = v;
+  @override
+  int get currentIndex => _s._currentIndex;
+  @override
+  set currentIndex(int v) => _s._currentIndex = v;
+  @override
+  int get currentSourceIndex => _s._currentSourceIndex;
+  @override
+  set currentStreamUrl(String? v) => _s._currentStreamUrl = v;
+  @override
+  Duration get duration => _s._duration;
+  @override
+  set dynamicTitle(String v) => _s._dynamicTitle = v;
+  @override
+  String? get effectiveContentType => _s._effectiveContentType;
+  @override
+  List<IptvChannel>? get effectiveIptvChannels => _s._effectiveIptvChannels;
+  @override
+  List<Torrent>? get effectiveSources => _s._effectiveSources;
+  @override
+  List<Map<String, dynamic>>? get effectiveStremioTvChannels =>
+      _s._effectiveStremioTvChannels;
+  @override
+  bool get engineFlagOn => _s._engineFlagOn;
+  @override
+  set engineFlagOn(bool v) => _s._engineFlagOn = v;
+  @override
+  Future<void>? get episodeMetadataReady => _s._episodeMetadataReady;
+  @override
+  set episodeMetadataReady(Future<void>? v) => _s._episodeMetadataReady = v;
+  @override
+  IptvTuneDiagnostics get iptvDiag => _s._iptvDiag;
+  @override
+  IptvLiveRecovery get iptvLiveRecovery => _s._iptvLiveRecovery;
+  @override
+  mk.Player get player => _s._player;
+  @override
+  int get playerInstanceGeneration => _s._playerInstanceGeneration;
+  @override
+  set recordingSupported(bool v) => _s._recordingSupported = v;
+  @override
+  int get resumeVerifyEpoch => _s._resumeVerifyEpoch;
+  @override
+  bool get screenDisposed => _s._screenDisposed;
+  @override
+  SeriesPlaylist? get seriesPlaylist => _s._seriesPlaylist;
+  @override
+  DeferredStartupSeek get stremioTvStartupSeek => _s._stremioTvStartupSeek;
+  @override
+  ChannelStartupWatch? get stremioTvStartupWatch => _s._stremioTvStartupWatch;
+  @override
+  Future<void> loadDockPrefs() => _s._loadDockPrefs();
+  @override
+  Duration? randomStartOffset(Duration duration) =>
+      _s._randomStartOffset(duration);
+  @override
+  Duration? percentStartOffset(Duration duration) =>
+      _s._percentStartOffset(duration);
+  @override
+  void scheduleAutoHide() => _s._scheduleAutoHide();
+  @override
+  Future<void> loadPlayerDefaults() => _s._playerDefaults.loadPlayerDefaults();
+  @override
+  void createPlayerInstance(AndroidVideoRendererMode rendererMode) =>
+      _s._playerInstance.createPlayerInstance(rendererMode);
+  @override
+  Future<void> openMedia(
+    mk.Media media, {
+    required bool play,
+    bool? desiredPlay,
+    bool liveStream = false,
+    EpisodePlaybackRequest? request,
+    bool Function()? beforeOpen,
+    Torrent? source,
+    int? preserveStartupEpoch,
+  }) => _s._mediaOpen.openMedia(
+    media,
+    play: play,
+    desiredPlay: desiredPlay,
+    liveStream: liveStream,
+    request: request,
+    beforeOpen: beforeOpen,
+    source: source,
+    preserveStartupEpoch: preserveStartupEpoch,
+  );
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  void setState(VoidCallback fn) => _s._vpSetState(fn);
+  @override
+  String? get audioUrl => _s.widget.audioUrl;
+  @override
+  int? get contentEpisode => _s.widget.contentEpisode;
+  @override
+  int? get contentSeason => _s.widget.contentSeason;
+  @override
+  bool get disableAutoResume => _s.widget.disableAutoResume;
+  @override
+  Map<String, String>? get httpHeaders => _s.widget.httpHeaders;
+  @override
+  int? get iptvStartIndex => _s.widget.iptvStartIndex;
+  @override
+  Future<Map<String, String>?> Function()? get requestMagicNext =>
+      _s.widget.requestMagicNext;
+  @override
+  double? get startAtPercent => _s.widget.startAtPercent;
+  @override
+  bool get startFromRandom => _s.widget.startFromRandom;
+  @override
+  int? get startIndex => _s.widget.startIndex;
+  @override
+  String get title => _s.widget.title;
+  @override
+  String get videoUrl => _s.widget.videoUrl;
+  @override
+  bool get isAndroid => VpS2Hooks.isAndroid;
+  @override
+  Future<void> attachAudioEffectSession() =>
+      _s._audioOutput.attachAudioEffectSession();
+  @override
+  Future<void> configurePlayerAudio(mk.Player player) =>
+      _s._audioOutput.configurePlayerAudio(player);
+  @override
+  Future<void> setExternalAudioTrack(String audioUrl) =>
+      _s._audioOutput.setExternalAudioTrack(audioUrl);
+  @override
+  List<int> getMainGroupIndices(List<PlaylistEntry> entries) =>
+      _s._episodeAdjacent.getMainGroupIndices(entries);
+  @override
+  Future<void> waitForVideoReady() => _s._mediaWaits.waitForVideoReady();
+  @override
+  Future<void> preloadEpisodeInfo() => _s._metadataPreload.preloadEpisodeInfo();
+  @override
+  Future<bool> playPikPakVideoWithRetry(
+    String videoUrl, {
+    String? overrideProvider,
+    String? overridePikPakFileId,
+    bool isDebrifyTV = false,
+    bool showFailure = true,
+    EpisodePlaybackRequest? request,
+  }) => _s._pikPakRetry.playPikPakVideoWithRetry(
+    videoUrl,
+    overrideProvider: overrideProvider,
+    overridePikPakFileId: overridePikPakFileId,
+    isDebrifyTV: isDebrifyTV,
+    showFailure: showFailure,
+    request: request,
+  );
+  @override
+  Future<String> resolvePlaylistEntryUrl(int index) =>
+      _s._playlistEntryResolve.resolvePlaylistEntryUrl(index);
+  @override
+  Future<bool> loadPlaylistIndex(
+    int index, {
+    bool autoplay = false,
+    EpisodePlaybackRequest? request,
+    bool skipInitialSave = false,
+    bool preferLocalResume = false,
+    bool suppressResume = false,
+    Torrent? manualValidationSource,
+    int? manualValidationSourceIndex,
+  }) => _s._playlistLoad.loadPlaylistIndex(
+    index,
+    autoplay: autoplay,
+    request: request,
+    skipInitialSave: skipInitialSave,
+    preferLocalResume: preferLocalResume,
+    suppressResume: suppressResume,
+    manualValidationSource: manualValidationSource,
+    manualValidationSourceIndex: manualValidationSourceIndex,
+  );
+  @override
+  Future<void> refreshEngineRecordingState() =>
+      _s._recording.refreshEngineRecordingState();
+  @override
+  String resumeIdForEntry(PlaylistEntry entry) =>
+      _s._resumeKeys.resumeIdForEntry(entry);
+  @override
+  Future<void> maybeRestoreResume({
+    bool preferLocalResume = false,
+    bool verifyLanding = false,
+  }) => _s._resumeRestore.maybeRestoreResume(
+    preferLocalResume: preferLocalResume,
+    verifyLanding: verifyLanding,
+  );
+  @override
+  Future<void> seekForResume(int targetMs, {bool verifyLanding = false}) =>
+      _s._resumeRestore.seekForResume(targetMs, verifyLanding: verifyLanding);
+  @override
+  Future<void> saveResume({
+    bool debounced = false,
+    Duration? positionOverride,
+  }) => _s._resumeSave.saveResume(
+    debounced: debounced,
+    positionOverride: positionOverride,
+  );
+  @override
+  Future<void> commitValidatedStremioSource(Torrent? source) =>
+      _s._startupCandidates.commitValidatedStremioSource(source);
+  @override
+  Future<bool> openInitialVodWithFailover(
+    String initialUrl, {
+    Map<String, String>? httpHeaders,
+    bool initialAttemptAlreadyFailed = false,
+  }) => _s._startupFailover.openInitialVodWithFailover(
+    initialUrl,
+    httpHeaders: httpHeaders,
+    initialAttemptAlreadyFailed: initialAttemptAlreadyFailed,
+  );
+  @override
+  Future<void> reportStartupFailure({bool Function()? isCurrent}) =>
+      _s._startupGate.reportStartupFailure(isCurrent: isCurrent);
+  @override
+  void resumeTrackingAfterValidationGate() =>
+      _s._startupGate.resumeTrackingAfterValidationGate();
+  @override
+  void setStartupGateActive(bool active) =>
+      _s._startupGate.setStartupGateActive(active);
+  @override
+  void watchStremioTvStartup(String url) =>
+      _s._startupGate.watchStremioTvStartup(url);
+  @override
+  void installSubtitleAutoSyncForPlayer(mk.Player player) =>
+      _s._subtitleSync.installSubtitleAutoSyncForPlayer(player);
+  @override
+  Future<void> restoreTrackPreferences() =>
+      _s._trackPreferences.restoreTrackPreferences();
+  @override
+  Future<void> claimVideoOutput() => _s._videoOutputLease.claimVideoOutput();
+}
+
+class _VpMediaOpenHostAdapter implements VpMediaOpenHost {
+  _VpMediaOpenHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  set activeMediaShouldPlay(bool v) => _s._activeMediaShouldPlay = v;
+  @override
+  set activeMediaUserPaused(bool v) => _s._activeMediaUserPaused = v;
+  @override
+  set activeOpenedMedia(mk.Media? v) => _s._activeOpenedMedia = v;
+  @override
+  SkipSegmentUiController get activeSkipSegmentUi => _s._activeSkipSegmentUi;
+  @override
+  int get currentSourceIndex => _s._currentSourceIndex;
+  @override
+  int get decoderProbeGeneration => _s._decoderProbeGeneration;
+  @override
+  set decoderProbeGeneration(int v) => _s._decoderProbeGeneration = v;
+  @override
+  set decoderProbeParams(mk.VideoParams? v) => _s._decoderProbeParams = v;
+  @override
+  Timer? get decoderProbeTimer => _s._decoderProbeTimer;
+  @override
+  set decoderProbeTimer(Timer? v) => _s._decoderProbeTimer = v;
+  @override
+  int get decoderProbeToken => _s._decoderProbeToken;
+  @override
+  set decoderProbeToken(int v) => _s._decoderProbeToken = v;
+  @override
+  String? get effectiveContentTitle => _s._effectiveContentTitle;
+  @override
+  List<Torrent>? get effectiveSources => _s._effectiveSources;
+  @override
+  bool get hasSubtitlePolicy => _s._hasSubtitlePolicy;
+  @override
+  bool get isPipActive => _s._isPipActive;
+  @override
+  set lastDecoderDiagnosticSignature(String? v) =>
+      _s._lastDecoderDiagnosticSignature = v;
+  @override
+  Torrent? get openedWatchSource => _s._openedWatchSource;
+  @override
+  set openedWatchSource(Torrent? v) => _s._openedWatchSource = v;
+  @override
+  PlaybackUiClockController get playbackUiClock => _s._playbackUiClock;
+  @override
+  mk.Player get player => _s._player;
+  @override
+  int get rendererStartupGuardToken => _s._rendererStartupGuardToken;
+  @override
+  set rendererStartupGuardToken(int v) => _s._rendererStartupGuardToken = v;
+  @override
+  set rendererStartupValidationGeneration(int v) =>
+      _s._rendererStartupValidationGeneration = v;
+  @override
+  int get resumeVerifyEpoch => _s._resumeVerifyEpoch;
+  @override
+  set resumeVerifyEpoch(int v) => _s._resumeVerifyEpoch = v;
+  @override
+  ResumeWriteGuard get resumeWriteGuard => _s._resumeWriteGuard;
+  @override
+  bool get screenDisposed => _s._screenDisposed;
+  @override
+  MediaServerWatchController get serverWatch => _s._serverWatch;
+  @override
+  DeferredStartupSeek get stremioTvStartupSeek => _s._stremioTvStartupSeek;
+  @override
+  ChannelStartupWatch? get stremioTvStartupWatch => _s._stremioTvStartupWatch;
+  @override
+  set stremioTvStartupWatch(ChannelStartupWatch? v) =>
+      _s._stremioTvStartupWatch = v;
+  @override
+  TvosDecodeRemedy? get tvosDecodeRemedy => _s._tvosDecodeRemedy;
+  @override
+  int get watchOpenEpoch => _s._watchOpenEpoch;
+  @override
+  set watchOpenEpoch(int v) => _s._watchOpenEpoch = v;
+  @override
+  Future<void> applyNetworkTuning(
+    mk.NativePlayer platform,
+    NetworkTuning tuning, {
+    required bool liveStream,
+    required int generation,
+  }) => _s._networkTuner.applyNetworkTuning(
+    platform,
+    tuning,
+    liveStream: liveStream,
+    generation: generation,
+  );
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  bool get isIOS => VpS2Hooks.isIOS;
+  @override
+  bool get iosPipStarting => _s._pip.iosPipStarting;
+  @override
+  void observeServerWatch({bool completed = false}) =>
+      _s._resumeSave.observeServerWatch(completed: completed);
+  @override
+  void resetTvosDisplayMatchForMediaBoundary() =>
+      _s._tvosVideo.resetTvosDisplayMatchForMediaBoundary();
+  @override
+  Object get visibilityOwner => _s;
+}
+
+class _VpNetworkTuningHostAdapter implements VpNetworkTuningHost {
+  _VpNetworkTuningHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  int get decoderProbeGeneration => _s._decoderProbeGeneration;
+}
+
+class _VpPlayerSubscriptionsHostAdapter implements VpPlayerSubscriptionsHost {
+  _VpPlayerSubscriptionsHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  VpSubtitleApplyAttempt? get activeSubtitleApplyAttempt =>
+      _s._activeSubtitleApplyAttempt;
+  @override
+  Timer? get bufferingDebounceTimer => _s._bufferingDebounceTimer;
+  @override
+  set bufferingDebounceTimer(Timer? v) => _s._bufferingDebounceTimer = v;
+  @override
+  StreamSubscription? get bufferingSub => _s._bufferingSub;
+  @override
+  set bufferingSub(StreamSubscription? v) => _s._bufferingSub = v;
+  @override
+  StreamSubscription? get completedSub => _s._completedSub;
+  @override
+  set completedSub(StreamSubscription? v) => _s._completedSub = v;
+  @override
+  int get decoderProbeGeneration => _s._decoderProbeGeneration;
+  @override
+  StreamSubscription? get durSub => _s._durSub;
+  @override
+  set durSub(StreamSubscription? v) => _s._durSub = v;
+  @override
+  Duration get duration => _s._duration;
+  @override
+  set duration(Duration v) => _s._duration = v;
+  @override
+  List<IptvChannel>? get effectiveIptvChannels => _s._effectiveIptvChannels;
+  @override
+  bool get hasSubtitlePolicy => _s._hasSubtitlePolicy;
+  @override
+  IptvTuneDiagnostics get iptvDiag => _s._iptvDiag;
+  @override
+  StreamSubscription? get iptvErrorSub => _s._iptvErrorSub;
+  @override
+  set iptvErrorSub(StreamSubscription? v) => _s._iptvErrorSub = v;
+  @override
+  IptvLiveRecovery get iptvLiveRecovery => _s._iptvLiveRecovery;
+  @override
+  bool get isPikPakRetrying => _s._isPikPakRetrying;
+  @override
+  bool get isPipActive => _s._isPipActive;
+  @override
+  bool get isPlaying => _s._isPlaying;
+  @override
+  set isPlaying(bool v) => _s._isPlaying = v;
+  @override
+  bool get isReady => _s._isReady;
+  @override
+  bool get isTransitioning => _s._isTransitioning;
+  @override
+  Torrent? get openedWatchSource => _s._openedWatchSource;
+  @override
+  StreamSubscription? get paramsSub => _s._paramsSub;
+  @override
+  set paramsSub(StreamSubscription? v) => _s._paramsSub = v;
+  @override
+  bool get pausedByLifecycle => _s._pausedByLifecycle;
+  @override
+  StreamSubscription? get playSub => _s._playSub;
+  @override
+  set playSub(StreamSubscription? v) => _s._playSub = v;
+  @override
+  PlaybackUiClockController get playbackUiClock => _s._playbackUiClock;
+  @override
+  int get playerInstanceGeneration => _s._playerInstanceGeneration;
+  @override
+  StreamSubscription? get posSub => _s._posSub;
+  @override
+  set posSub(StreamSubscription? v) => _s._posSub = v;
+  @override
+  Duration get position => _s._position;
+  @override
+  set position(Duration v) => _s._position = v;
+  @override
+  set rainbowActive(bool v) => _s._rainbowActive = v;
+  @override
+  AnimationController get rainbowController => _s._rainbowController;
+  @override
+  StreamSubscription? get rendererStartupErrorSub =>
+      _s._rendererStartupErrorSub;
+  @override
+  set rendererStartupErrorSub(StreamSubscription? v) =>
+      _s._rendererStartupErrorSub = v;
+  @override
+  int get resumeVerifyEpoch => _s._resumeVerifyEpoch;
+  @override
+  ValueNotifier<bool> get showBufferingIndicator => _s._showBufferingIndicator;
+  @override
+  DeferredStartupSeek get stremioTvStartupSeek => _s._stremioTvStartupSeek;
+  @override
+  StreamSubscription<mk.PlayerLog>? get subtitleDiagnosticLogSub =>
+      _s._subtitleDiagnosticLogSub;
+  @override
+  set subtitleDiagnosticLogSub(StreamSubscription<mk.PlayerLog>? v) =>
+      _s._subtitleDiagnosticLogSub = v;
+  @override
+  StreamSubscription? get trackSub => _s._trackSub;
+  @override
+  set trackSub(StreamSubscription? v) => _s._trackSub = v;
+  @override
+  set transitionPhase(int v) => _s._transitionPhase = v;
+  @override
+  set transitionPhase2Started(DateTime? v) => _s._transitionPhase2Started = v;
+  @override
+  Timer? get transitionPhaseTimer => _s._transitionPhaseTimer;
+  @override
+  set transitionPhaseTimer(Timer? v) => _s._transitionPhaseTimer = v;
+  @override
+  bool get transitionRunning => _s._transitionRunning;
+  @override
+  set transitionRunning(bool v) => _s._transitionRunning = v;
+  @override
+  Timer? get transitionStopTimer => _s._transitionStopTimer;
+  @override
+  set transitionStopTimer(Timer? v) => _s._transitionStopTimer = v;
+  @override
+  bool get validationGateActive => _s._validationGateActive;
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  void setState(VoidCallback fn) => _s._vpSetState(fn);
+  @override
+  bool get isIOS => VpS2Hooks.isIOS;
+  @override
+  void checkAndApplyLocalCompletion() =>
+      _s._completion.checkAndApplyLocalCompletion();
+  @override
+  void handleDecoderProbeParams(mk.VideoParams params) =>
+      _s._decoderProbe.handleDecoderProbeParams(params);
+  @override
+  void prepareNextDirectEpisode() =>
+      _s._episodeFetch.prepareNextDirectEpisode();
+  @override
+  void noteLiveChannelPlaying() => _s._iptvMemory.noteLiveChannelPlaying();
+  @override
+  void onIptvStreamError(String error) =>
+      _s._iptvSources.onIptvStreamError(error);
+  @override
+  void mdblistPause() => _s._mdblist.mdblistPause();
+  @override
+  void mdblistPlay() => _s._mdblist.mdblistPlay();
+  @override
+  void updateMdblistPosition() => _s._mdblist.updateMdblistPosition();
+  @override
+  int get lastIosPipPositionSecond => _s._pip.lastIosPipPositionSecond;
+  @override
+  set lastIosPipPositionSecond(int v) => _s._pip.lastIosPipPositionSecond = v;
+  @override
+  void pushPipState() => _s._pip.pushPipState();
+  @override
+  void syncWakelock(bool playing) => _s._pip.syncWakelock(playing);
+  @override
+  Future<void> onPlaybackEnded() => _s._playbackEnded.onPlaybackEnded();
+  @override
+  Future<void> fallbackExplicitRendererToAutomatic({
+    required int instanceGeneration,
+    required int mediaGeneration,
+    required String reason,
+  }) => _s._rendererFallback.fallbackExplicitRendererToAutomatic(
+    instanceGeneration: instanceGeneration,
+    mediaGeneration: mediaGeneration,
+    reason: reason,
+  );
+  @override
+  Future<void> seekForResume(int targetMs, {bool verifyLanding = false}) =>
+      _s._resumeRestore.seekForResume(targetMs, verifyLanding: verifyLanding);
+  @override
+  void observeServerWatch({bool completed = false}) =>
+      _s._resumeSave.observeServerWatch(completed: completed);
+  @override
+  String? get simklLastScrobbleAction => _s._simkl.simklLastScrobbleAction;
+  @override
+  set simklLastScrobbleAction(String? v) =>
+      _s._simkl.simklLastScrobbleAction = v;
+  @override
+  void simklScrobble(String action) => _s._simkl.simklScrobble(action);
+  @override
+  bool get simklScrobbleEnabled => _s._simkl.simklScrobbleEnabled;
+  @override
+  void startSimklHeartbeat() => _s._simkl.startSimklHeartbeat();
+  @override
+  void stopSimklHeartbeat() => _s._simkl.stopSimklHeartbeat();
+  @override
+  set skipSegmentsMediaReady(bool v) => _s._skip.skipSegmentsMediaReady = v;
+  @override
+  void syncActiveSkipSegmentUi() => _s._skip.syncActiveSkipSegmentUi();
+  @override
+  void syncSkipSegmentsForCurrentContent() =>
+      _s._skip.syncSkipSegmentsForCurrentContent();
+  @override
+  Future<void> handleSubtitleApplyFailure(
+    VpSubtitleApplyAttempt attempt,
+    String reason,
+  ) => _s._subtitleApply.handleSubtitleApplyFailure(attempt, reason);
+  @override
+  Future<void> refreshSubtitleAudioPolicy({bool reselect = true}) =>
+      _s._subtitleLanguage.refreshSubtitleAudioPolicy(reselect: reselect);
+  @override
+  MediaKitSubtitleAutoSync? get subtitleAutoSync =>
+      _s._subtitleSync.subtitleAutoSync;
+  @override
+  bool get subtitleAutoSyncEnabled => _s._subtitleSync.subtitleAutoSyncEnabled;
+  @override
+  set subtitleAutoSyncEnabled(bool v) =>
+      _s._subtitleSync.subtitleAutoSyncEnabled = v;
+  @override
+  void startTraktHeartbeat() => _s._trakt.startTraktHeartbeat();
+  @override
+  void stopTraktHeartbeat() => _s._trakt.stopTraktHeartbeat();
+  @override
+  String? get traktLastScrobbleAction => _s._trakt.traktLastScrobbleAction;
+  @override
+  void traktScrobble(String action) => _s._trakt.traktScrobble(action);
+  @override
+  Object get visibilityOwner => _s;
+}
+
+class _VpPlayerInstanceHostAdapter implements VpPlayerInstanceHost {
+  _VpPlayerInstanceHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  bool get anyPlayerOverlayOpen => _s._anyPlayerOverlayOpen;
+  @override
+  ValueNotifier<bool> get controlsVisible => _s._controlsVisible;
+  @override
+  IptvChannel? get currentIptvChannel => _s._currentIptvChannel;
+  @override
+  Timer? get hideTimer => _s._hideTimer;
+  @override
+  set isReady(bool v) => _s._isReady = v;
+  @override
+  set player(mk.Player v) => _s._player = v;
+  @override
+  set playerCreated(bool v) => _s._playerCreated = v;
+  @override
+  int get playerInstanceGeneration => _s._playerInstanceGeneration;
+  @override
+  set playerInstanceGeneration(int v) => _s._playerInstanceGeneration = v;
+  @override
+  FocusScopeNode get tvBarScope => _s._tvBarScope;
+  @override
+  FocusNode get tvPlayPauseFocus => _s._tvPlayPauseFocus;
+  @override
+  bool get tvosForceSoftwareDecode => _s._tvosForceSoftwareDecode;
+  @override
+  set videoController(mkv.VideoController v) => _s._videoController = v;
+  @override
+  void bindPlayerInstanceSubscriptions(
+    int instanceGeneration,
+    mk.Player player,
+  ) => _s._playerSubscriptions.bindPlayerInstanceSubscriptions(
+    instanceGeneration,
+    player,
+  );
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  void setState(VoidCallback fn) => _s._vpSetState(fn);
+  @override
+  mk.Player createPlayer({required mk.PlayerConfiguration configuration}) =>
+      VideoPlayerScreenTestHooks._createPlayer(configuration: configuration);
+  @override
+  mkv.VideoController createVideoController(
+    mk.Player player, {
+    required mkv.VideoControllerConfiguration configuration,
+  }) => VideoPlayerScreenTestHooks._createVideoController(
+    player,
+    configuration: configuration,
+  );
+  @override
+  void raiseDebrifyBanner() => _s._debrifyBanner.raiseDebrifyBanner();
+  @override
+  Future<void> installDecoderObservers(
+    int instanceGeneration,
+    mk.Player player,
+  ) => _s._decoderProbe.installDecoderObservers(instanceGeneration, player);
+  @override
+  Future<void> applyAspectVideoZoom() => _s._display.applyAspectVideoZoom();
+  @override
+  void prepareIptvBannerData(IptvChannel channel) =>
+      _s._iptvBanner.prepareIptvBannerData(channel);
+  @override
+  void raiseIptvZapBanner() => _s._iptvBanner.raiseIptvZapBanner();
+  @override
+  void anchorIptvGuideCategory(IptvChannel channel, {Object? categories}) =>
+      _s._iptvGuide.anchorIptvGuideCategory(channel, categories: categories);
+  @override
+  void armPipAutoEnter() => _s._pip.armPipAutoEnter();
+  @override
+  void installTvosDecodeRemedy(mk.Player player) =>
+      _s._tvosVideo.installTvosDecodeRemedy(player);
+  @override
+  void ensureIptvZapPagingArmed() => _s._zapRing.ensureIptvZapPagingArmed();
+}
+
+class _VpPlayerDefaultsHostAdapter implements VpPlayerDefaultsHost {
+  _VpPlayerDefaultsHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  set appleMultichannelEnabled(bool v) => _s._appleMultichannelEnabled = v;
+  @override
+  set audioPassthroughEnabled(bool v) => _s._audioPassthroughEnabled = v;
+  @override
+  ContentDisplayMatchMode get contentDisplayMatchMode =>
+      _s._contentDisplayMatchMode;
+  @override
+  set contentDisplayMatchMode(ContentDisplayMatchMode v) =>
+      _s._contentDisplayMatchMode = v;
+  @override
+  PlayerGuideStyle get playerGuideStyle => _s._playerGuideStyle;
+  @override
+  set playerGuideStyle(PlayerGuideStyle v) => _s._playerGuideStyle = v;
+  @override
+  set playerGuideTokens(IptvStyleTokens? v) => _s._playerGuideTokens = v;
+  @override
+  set subtitleForcedOnly(bool v) => _s._subtitleForcedOnly = v;
+  @override
+  set subtitleOnlyForeignAudio(bool v) => _s._subtitleOnlyForeignAudio = v;
+  @override
+  set subtitlePreferredAudio(String? v) => _s._subtitlePreferredAudio = v;
+  @override
+  set systemAudioEffectsEnabled(bool v) => _s._systemAudioEffectsEnabled = v;
+  @override
+  set tvosForceSoftwareDecode(bool v) => _s._tvosForceSoftwareDecode = v;
+  @override
+  set tvosForceStereoAudio(bool v) => _s._tvosForceStereoAudio = v;
+  @override
+  set tvosLegacyAudioOutput(bool v) => _s._tvosLegacyAudioOutput = v;
+  @override
+  set tvosRouteOutputChannels(int v) => _s._tvosRouteOutputChannels = v;
+  @override
+  MethodChannel get tvReleaseLogChannel =>
+      _VideoPlayerScreenState._tvReleaseLogChannel;
+  @override
+  AspectMode get aspectMode => _s._display.aspectMode;
+  @override
+  set aspectMode(AspectMode v) => _s._display.aspectMode = v;
+  @override
+  bool get subtitleAutoSyncEnabled => _s._subtitleSync.subtitleAutoSyncEnabled;
+  @override
+  set subtitleAutoSyncEnabled(bool v) =>
+      _s._subtitleSync.subtitleAutoSyncEnabled = v;
+}
+
 class _VpRendererFallbackHostAdapter implements VpRendererFallbackHost {
   _VpRendererFallbackHostAdapter(this._s);
   final _VideoPlayerScreenState _s;
@@ -5421,10 +4960,10 @@ class _VpRendererFallbackHostAdapter implements VpRendererFallbackHost {
   ChannelStartupWatch? get stremioTvStartupWatch => _s._stremioTvStartupWatch;
   @override
   void createPlayerInstance(AndroidVideoRendererMode rendererMode) =>
-      _s._createPlayerInstance(rendererMode);
+      _s._playerInstance.createPlayerInstance(rendererMode);
   @override
   Future<void> cancelPlayerInstanceSubscriptions() =>
-      _s._cancelPlayerInstanceSubscriptions();
+      _s._playerSubscriptions.cancelPlayerInstanceSubscriptions();
   @override
   Future<void> openMedia(
     mk.Media media, {
@@ -5435,7 +4974,7 @@ class _VpRendererFallbackHostAdapter implements VpRendererFallbackHost {
     bool Function()? beforeOpen,
     Torrent? source,
     int? preserveStartupEpoch,
-  }) => _s._openMedia(
+  }) => _s._mediaOpen.openMedia(
     media,
     play: play,
     desiredPlay: desiredPlay,
@@ -5685,7 +5224,7 @@ class _VpPikPakRetryHostAdapter implements VpPikPakRetryHost {
     bool Function()? beforeOpen,
     Torrent? source,
     int? preserveStartupEpoch,
-  }) => _s._openMedia(
+  }) => _s._mediaOpen.openMedia(
     media,
     play: play,
     desiredPlay: desiredPlay,
@@ -5845,7 +5384,7 @@ class _VpPlaylistLoadHostAdapter implements VpPlaylistLoadHost {
     bool Function()? beforeOpen,
     Torrent? source,
     int? preserveStartupEpoch,
-  }) => _s._openMedia(
+  }) => _s._mediaOpen.openMedia(
     media,
     play: play,
     desiredPlay: desiredPlay,
@@ -6235,7 +5774,7 @@ class _VpEpisodeNextHostAdapter implements VpEpisodeNextHost {
     bool Function()? beforeOpen,
     Torrent? source,
     int? preserveStartupEpoch,
-  }) => _s._openMedia(
+  }) => _s._mediaOpen.openMedia(
     media,
     play: play,
     desiredPlay: desiredPlay,
@@ -6708,7 +6247,7 @@ class _VpStremioTvChannelsHostAdapter implements VpStremioTvChannelsHost {
     bool Function()? beforeOpen,
     Torrent? source,
     int? preserveStartupEpoch,
-  }) => _s._openMedia(
+  }) => _s._mediaOpen.openMedia(
     media,
     play: play,
     desiredPlay: desiredPlay,
@@ -6837,7 +6376,7 @@ class _VpDebrifyTvChannelsHostAdapter implements VpDebrifyTvChannelsHost {
     bool Function()? beforeOpen,
     Torrent? source,
     int? preserveStartupEpoch,
-  }) => _s._openMedia(
+  }) => _s._mediaOpen.openMedia(
     media,
     play: play,
     desiredPlay: desiredPlay,
@@ -6983,7 +6522,7 @@ class _VpSourcePlaylistSwitchHostAdapter implements VpSourcePlaylistSwitchHost {
     bool Function()? beforeOpen,
     Torrent? source,
     int? preserveStartupEpoch,
-  }) => _s._openMedia(
+  }) => _s._mediaOpen.openMedia(
     media,
     play: play,
     desiredPlay: desiredPlay,
@@ -7138,7 +6677,7 @@ class _VpSourceSwitchHostAdapter implements VpSourceSwitchHost {
     bool Function()? beforeOpen,
     Torrent? source,
     int? preserveStartupEpoch,
-  }) => _s._openMedia(
+  }) => _s._mediaOpen.openMedia(
     media,
     play: play,
     desiredPlay: desiredPlay,
@@ -7431,7 +6970,7 @@ class _VpStartupCandidatesHostAdapter implements VpStartupCandidatesHost {
     bool Function()? beforeOpen,
     Torrent? source,
     int? preserveStartupEpoch,
-  }) => _s._openMedia(
+  }) => _s._mediaOpen.openMedia(
     media,
     play: play,
     desiredPlay: desiredPlay,
@@ -7555,7 +7094,7 @@ class _VpIptvLiveSourcesHostAdapter implements VpIptvLiveSourcesHost {
     bool Function()? beforeOpen,
     Torrent? source,
     int? preserveStartupEpoch,
-  }) => _s._openMedia(
+  }) => _s._mediaOpen.openMedia(
     media,
     play: play,
     desiredPlay: desiredPlay,
@@ -7680,7 +7219,7 @@ class _VpIptvChannelSwitchHostAdapter implements VpIptvChannelSwitchHost {
     bool Function()? beforeOpen,
     Torrent? source,
     int? preserveStartupEpoch,
-  }) => _s._openMedia(
+  }) => _s._mediaOpen.openMedia(
     media,
     play: play,
     desiredPlay: desiredPlay,
@@ -7828,7 +7367,7 @@ class _VpIptvGuideCatchupHostAdapter implements VpIptvGuideCatchupHost {
     bool Function()? beforeOpen,
     Torrent? source,
     int? preserveStartupEpoch,
-  }) => _s._openMedia(
+  }) => _s._mediaOpen.openMedia(
     media,
     play: play,
     desiredPlay: desiredPlay,

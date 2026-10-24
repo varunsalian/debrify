@@ -102,6 +102,14 @@ VIDEO_PLAYER_FACADE = "lib/screens/video_player_screen.dart"
 # and per-session Riverpod migration in video-player-screen-plan.md.
 VIDEO_PLAYER_BRIDGE = "lib/features/video_player/presentation/legacy_video_player/"
 VIDEO_PLAYER_FILE_CAP = 500
+# P20 resolution P1-3: `_initializePlayer` (453 lines) cannot be split by a
+# verbatim move. Exact formatted count, no headroom; it must be lowered when
+# the file shrinks. Exit: the Follow-up "startup orchestration decomposition"
+# (tracked as an open exception in the phase-21 completion audit).
+VIDEO_PLAYER_SIZE_EXCEPTIONS = {
+    VIDEO_PLAYER_BRIDGE + "vp_player_startup.dart": 623,
+}
+VIDEO_PLAYER_SIZE_CEILING = 800
 # Exact Phase-1 compatibility/type imports. Pure files cannot acquire other
 # legacy dependencies merely because they live in models/ or application/.
 VIDEO_PLAYER_PURE_IMPORTS = {
@@ -1009,8 +1017,11 @@ def violations(path: Path) -> list[str]:
             problems.append(f"handwritten part directive: {part}")
 
     if relative.startswith("lib/features/video_player/"):
-        if lines > VIDEO_PLAYER_FILE_CAP:
+        exception = VIDEO_PLAYER_SIZE_EXCEPTIONS.get(relative)
+        if exception is None and lines > VIDEO_PLAYER_FILE_CAP:
             problems.append(f"{lines} lines exceeds the {VIDEO_PLAYER_FILE_CAP}-line video-player extraction limit")
+        elif exception is not None and (exception > VIDEO_PLAYER_SIZE_CEILING or lines != exception):
+            problems.append(f"{lines} lines does not match the exact {exception}-line video-player size exception")
         if relative.startswith(("lib/features/video_player/models/", "lib/features/video_player/application/")) and re.search(r"\b(?:BuildContext|WidgetRef|ProviderContainer|Ref)\b", source):
             problems.append("pure video-player declaration references UI/state context")
 
