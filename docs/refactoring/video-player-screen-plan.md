@@ -5162,9 +5162,10 @@ systematic sweep and the independent sample (≥ 75 %). Known gaps:
     reopened from the start (`suppressResume`). Pinned by "a shuffle
     candidate whose native open fails keeps its new identity".
   - `_openMedia`'s entry check `request?.isCurrent == false` (sample M01) is
-    not an equivalent: it is unreachable today because every request-bearing
-    caller (playlist load, PikPak retry) checks `isCurrent` synchronously
-    right before the call. Without it a stale request would still bump
+    accepted as equivalent for current callers only: it is unreachable today
+    because every request-bearing caller (playlist load, PikPak retry;
+    reached from shuffle, episode fetch and source-playlist switch, 12 paths
+    in all) checks `isCurrent` synchronously right before the call. Without it a stale request would still bump
     `_watchOpenEpoch` (superseding a newer pending open), bump the resume
     epoch, clear the resume guard and begin a media generation for media it
     never opens. Keep it when moving; a caller that awaits between its own
@@ -10340,16 +10341,22 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
 
 - **Re-sample result** (`p20/step0b-resample/`, `table.md`, `results.jsonl`,
   `fresh_mutants.json`): the original 218-mutant sample is **76.1%** from the
-  P20 files only, **78.7%** with the accepted equivalents excluded and
+  P20 files only, **78.7%** (166/211) with the seven accepted equivalents excluded (M01,
+  M47, M09, G01, K08, B96, R07; from the reviewer's report) and
   **83.9%** with the behavioural legacy kills. A fresh sample (X01–X42) is
-  **42.9%** (47% with no-op mutants excluded). Honest note: the media
+  **42.9%** (18/42; 18/38 = 47% with the reviewer's no-op mutants X16, X18,
+  X24 and X40 excluded). Honest note: the media
   generation, remedy boundary and listener gate cases are narrowly fitted to
   the sampled mutants, which the fresh sample exposes. The equivalence
-  verdicts are accepted except M46 (reachable; closed below).
+  verdicts are accepted (M01 for current callers only, see Follow-ups)
+  except M46 (reachable; closed below).
   `test/media_server_player_resume_test.dart` is also a source-text suite:
   its kills are not credited (as `media_server_watch_player_wiring_test`).
-  M15/M16/M48 are killed only by `video_player_startup_watch_test`, which is
-  in the Step 1 gate inventory.
+  M15/M16 are killed only by `video_player_startup_watch_test`, and M48 only
+  by the P15 review2 Start Over suites
+  (`video_player_iptv_review2_catchup_ownership_test`,
+  `video_player_iptv_review2_start_over_identity_test`); all three are in the
+  Step 1 gate inventory.
 - **Step 0c cases** (tests only, commit `9d3e7df24`, existing files, no new
   registrations), proofs in `p20/step0c/` (`README.md`, `proofs.jsonl`,
   `raw/`; detached worktree `vp20-0c` at `b5889694e`, exact before/after,
@@ -10361,7 +10368,7 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
     no open, no second `media_server_open`, and a later player error is
     attributed to the playing item's source. **Both KILLED by assertion.**
     The case also pins that the playing item's server session was already
-    stopped at the cancelled open's entry (Follow-up below), so the
+    stopped at the cancelled open's entry (see `## Follow-ups`, P20 Step 0b block), so the
     reviewer's expected "continued `/Progress` for the current item" does
     not hold on the original.
   - **X27**: `remedy_boundary` "tvOS a live channel zap also restores the
@@ -10388,7 +10395,15 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
   X16, X17, X18, X23, X24, X25, X26, X29, X30, X31, X32, X33, X40, X41; and
   from the original sample those listed under Step 0b (G15, S28, O04, B33,
   B36, B43, B52/B58, B66, B78, B81, B107, B121/B122, M56, M57, R04, R21, D03,
-  D16). M01 moves to Follow-ups (below).
+  D16). M01 moves to `## Follow-ups` (P20 Step 0b block).
+- **Verification** (review agent, read-only): the proof mutants are byte-identical
+  to the sample files; M46, X05, X27, X34 and X35 v2 each fail exactly one
+  P20 case on an `Expected:` assertion; `9d3e7df24` changes no `lib/` file;
+  the claim that the cancelled open already stopped the playing item's
+  server session holds (`_openMedia` entry commits `null` before
+  `commitOpen`'s await). No P1s; five P3s folded into this entry (M01
+  wording, M48 suites, rate sources, cross-references, test hashes recorded
+  in `p20/step0c/README.md`).
 
 ## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
 
