@@ -5142,15 +5142,19 @@ Base: the phase-20 merge `5214f7a7e` on `refactor/codebase`. Branch
 in `refactor-evidence/vplayer/p21/` (21a) and `p21b/` (21b). Line numbers
 below are at `5214f7a7e`, where the facade is **8,986 lines**. The member
 inventory is `p21/design/members.txt`, made by the P20 `members.py` against
-this base. Its convention is `prev_end span_lines name`: a span covers the
-lines after the previous declaration's end through this declaration's end,
-so attached comments and blank lines count with the declaration that follows
-them. Tables give the declaration line and the span length.
+this base. Its header labels the columns `span_start span_start span_lines
+name`, but column 1 is really the previous declaration's end line (441 for
+the State, whose declaration is line 442): a span covers the lines after
+the previous declaration's end through this declaration's end, so attached
+comments and blank lines count with the declaration that follows them.
+Tables give the declaration line (from `decl.txt`) and the span length.
 
 **M5** (the P20 integration milestone: full suite and apk/macos release
 builds) is running while this is written. 21a Step 1 does not start until
 the M5 record is committed. If M5 adds only docs, 21a rebases onto it and
-these line numbers still hold.
+these line numbers still hold. If M5 produces any non-docs fix, Step T
+re-baselines every table, line number and evidence file in this section on
+the M5 record before anything else (review P3-8).
 
 ### Recommendation in brief
 
@@ -5189,8 +5193,10 @@ these line numbers still hold.
 | 4177–8893 | 60 `_Vp*HostAdapter` classes (1,675 `@override` members; the largest are startup 246, subscriptions 219, menu UI 190, playlist load 188) | 4,717 |
 | 8895–8986 | `VideoPlayerScreenTestHooks`, `VpS2Hooks` | 92 |
 
-The 380 State members fall into four classes. Each class is listed
-exhaustively in `p21/design/decl.txt`.
+The 380 State members fall into four classes. The per-member
+classification is in `p21/design/classes.txt` (`class decl_line span_lines
+kind name`; class totals a 38/658, b 12/1,549, lifecycle 7/490, shared
+derivations 36/368, fields 287/668), derived from `decl.txt`.
 
 **(a) Controls runtime, to move in 21a.** 38 members (25 methods or
 getters, 13 fields), 658 span lines:
@@ -5271,7 +5277,7 @@ Back/Escape and `S` key sites and `_buildTvControls` `onShowSources`.
 - **Outside the State:** the widget, the two re-exports plus the
   `IptvCatchupRequestGate` export, all 60 adapters and the two hook classes.
 
-**(d) Dead or unused remnants.**
+**(d) Unused remnants and retained duplicates.**
 - **Unused imports in the facade:** 76 `unused_import` and 2
   `unused_shown_name` (`kIsWeb`, `listEquals` at line 42), all allowlisted.
   These are the ones the verbatim moves of P15–P20 left behind.
@@ -5280,8 +5286,14 @@ Back/Escape and `S` key sites and `_buildTvControls` `onShowSources`.
   1323, `_transitionPhase` 1328 and `_transitionPhase2Started` 1329. Their
   writes are executable statements in `dispose`, in `initState`, inside
   `build` and in six collaborators.
-- **`_isAnyOverlayOpen` 4113** has the same body as `_anyPlayerOverlayOpen`
-  2393. P17 resolution 5 retained the duplicate "until phase 21".
+- **`_isAnyOverlayOpen` 4113** is a **live duplicate**, not dead code: its
+  body equals `_anyPlayerOverlayOpen` 2393, and it is read by `build` 4096
+  (`hideCursor`) and by `_wakeControlsOnPointer` 4126. It stays (removing a
+  duplicate is a behaviour-neutral but non-move change) and is registered
+  as an open exception in the completion audit (review P2-4).
+- **The duplicated transition-cleanup blocks** in the P15–P17
+  collaborators (reserved "until phase 21" by P15 open question 5 and P17
+  resolution 5). They stay, as a registered open exception (below).
 
 No State member is unreferenced outside its own span (checked with
 `p21/design/refs.py`).
@@ -5373,11 +5385,16 @@ it.
 | transition fields (`_rainbowController`, `_rainbowActive`, `_transitionRunning`, both transition timers, `_transitionPhase`, `_tvStaticMessage`, `_tvStaticSubtext`), `_bufferingDebounceTimer`, `_showBufferingIndicator` | State | build, `dispose`, subscriptions and six adapters |
 | `_iptvSheetKey`, `_playerMenuKey` | State | `build` mounts them; the controls runtime reads `currentState` through Host getters |
 
-**Scaffolding.** The five collaborators are assigned eagerly in the State
-constructor, after P20's six, in this order: `_transitionOverlay`,
-`_dockLayout`, `_controlsRuntime`, `_tvRemote`, `_gestures`. The
-constructors are inert. No construction-time callback is handed to a
-non-collaborator.
+**Scaffolding.** The five collaborators are declared `late final` (like
+the existing 60, for example 1116 and 1148) and assigned eagerly in the
+State constructor, after P20's six, in this order: `_transitionOverlay`,
+`_dockLayout`, `_controlsRuntime`, `_tvRemote`, `_gestures`. `late final`
+is required, not stylistic: hazard 7's tear-off equality between the
+`initState` add and the `dispose` remove depends on the receiver being the
+same object for the screen's lifetime. Step T checks the modifier; a
+negative replaces it with a getter that allocates and must fail the move
+check. The constructors are inert. No construction-time callback is handed
+to a non-collaborator.
 
 ### Hosts (names frozen at Step T)
 
@@ -5505,7 +5522,19 @@ stronger and each proved on the original:
   filters timers with `entry.stack.contains('_scheduleAutoHide')`. It
   becomes `'scheduleAutoHide'`, which matches both the original and the
   moved frame (P20 P1-4 precedent). Its existing `isNotEmpty` assertion
-  keeps the filter from passing vacuously.
+  keeps the filter from passing vacuously. The old filter would really
+  break: adapter frames such as `_VpShuffleHostAdapter.scheduleAutoHide`
+  do not contain `_scheduleAutoHide`.
+- **Timer-owner matchers** (no edit needed, but listed and proved):
+  `video_player_iptv_review2_timeline_lifetime_test.dart:59`
+  (`hasLength(1)`) and `video_player_iptv_review2_tv_transition_state_test.dart:52`
+  (`isEmpty`) filter `d.timerOwners[...]!.contains('scheduleAutoHide')`.
+  `iptv_workflow_driver.dart:130` records the first `package:debrify/`
+  frame, which after the move is `VpControlsRuntime.scheduleAutoHide`, so
+  both keep matching. The `isEmpty` one is a negative whose filter could
+  become vacuous. Step T runs a non-vacuity mutation on the **moved** tree:
+  re-arm the auto-hide timer on that test's path and observe the test fail.
+  The `hasLength(1)` one is non-vacuous by construction.
 - The three theme lists (`theme_surface_manifest.txt`,
   `theme_rendered_set.py`, `test/theme/source_guard_test.dart`) each gain
   the five new files.
@@ -5563,6 +5592,22 @@ stronger and each proved on the original:
 10. **The transition start** picks `math.Random()` messages, so tests pin
     membership in the list, not the message itself. A start on an
     unmounted State does nothing.
+11. **`handleDoubleTap` calls `setState(() {})` after `await player.seek`
+    without a `mounted` check** (2645). Disposal during the seek throws
+    today. `_vpSetState` is a bare `setState(fn)` with no added guard, so
+    routing through it preserves the throw exactly. Characterize, preserve,
+    record as a Follow-up.
+12. **`_tvScrubRepeats` is shared** by hold detection and scrub
+    acceleration, and `tvScrubBegin` does not reset it. The bar-up
+    progress-row entry (2563–2565) can therefore start a scrub mid-ramp
+    after earlier quick taps. Characterize; do not fix.
+13. **`_rainbowOpacity`'s `CurvedAnimation`** (1524) registers a listener on
+    `_rainbowController` and is never disposed. It stays (the field is not
+    moved); noted in the dead-state Follow-up, whose removal is therefore
+    not purely the removal of a write-only field.
+14. **`_loadDockPrefs` brings a direct `PlayerAppearanceStorage` read into a
+    presentation collaborator.** That is allowed for the D1 bridge; the
+    completion audit's D1 entry lists it.
 
 ### Follow-up candidates (pre-existing; confirm at Step 0, preserve, record)
 
@@ -5573,9 +5618,12 @@ stronger and each proved on the original:
 - `onKey`→`onKeyEvent` migration (behaviour change, hazard 4; with the
   build decomposition).
 - *Transition lifecycle owner* (deduplicating the cleanup blocks).
-- P20 Step-0 item "a failed start never arms the autosave": **confirm with
-  the user now**, as P20 asked "before Phase 21". The proposed disposition
-  is intended behaviour, recorded, not fixed.
+- `handleDoubleTap`'s unguarded `setState` after the awaited seek
+  (hazard 11).
+- P20 Step-0 item "a failed start never arms the autosave": recorded as a
+  Follow-up (current behaviour pinned by "a failed ranked start reports the
+  failure and never arms the autosave", not fixed). The user may fix it
+  later as a separate behaviour change. It does not block 21a or 21b.
 
 ### Step T (21a)
 
@@ -5698,10 +5746,12 @@ sweep and the independent sample (≥ 75 %, by a review agent). Known gaps:
 ### 3. D6 — the `build` decision (21b, measured at `5214f7a7e`)
 
 `build` is 2925–4108: 1,187 span lines, 1,184 body lines. It reads:
-- 123 distinct State members (307 occurrences);
+- 123 distinct State members (307 occurrences; the reviewer counts 305
+  excluding comments);
 - 23 widget fields (39 occurrences);
 - 64 collaborator chains on 32 collaborators;
-- `context` 24 times, `mounted` 10 times, `setState` 5 times.
+- `context` 24 times, `mounted` 10 times (8 excluding comments), `setState`
+  5 times.
 
 It writes 10 State fields: `_augmentedSources`, `_autoSyncPillLastShown`,
 `_controlsVisible`, both floating-mount flags, `_dockVolume`,
@@ -5713,7 +5763,7 @@ and 34 chains.
 
 | Option | Facade | New feature file | Host | Rewrites |
 |---|---|---|---|---|
-| **A. Stay** (recommended) | keeps 1,549 lines of build code | none | none | 21 call-site rewrites from the 21a moves only |
+| **A. Stay** (recommended) | keeps 1,549 lines of build code | none | none | the 21 of the 25 21a retained references that sit in `build` (15) and `_buildTvControls` (6); the other 4 are lifecycle sites |
 | B. Move `build` whole to `vp_player_view.dart` (helpers stay) | −1,184 + ≈ 420 adapter ≈ −760 | ≈ 1,600 (1,184 + ≈ 400 Host + scaffold) | ≈ 190 names (≈ 91 own state + 23 widget + 64 chain forwarders + `context`/`mounted`/`setState` + ≈ 10 setters) | ≈ 385 receiver rewrites in `build` |
 | B′. Move `build` and its 11 helpers | ≈ −1,140 net | ≈ 1,980 | ≈ 210 names | ≈ 450 rewrites |
 
@@ -5734,6 +5784,39 @@ This matches the TV series' phase-20 decision about `playbackListener`.
 (as D6 recorded): the Follow-up *`build` decomposition*. It is its own
 goal: behaviour-level layout widgets with goldens, including the `onKey`
 closure as a key dispatcher and the `onKeyEvent` migration.
+
+D6 justifies keeping `build`; each separately movable helper is decided on
+its own (review P3-2). Host cost = new Host names a verbatim move would
+need:
+
+| Helper | Host cost | Decision and reason |
+|---|---|---|
+| `_buildTvControls` (148) | ≈ 90 (53 members, 34 chains) | stays: a giant Host for one widget; it becomes a layout widget in the build decomposition |
+| `_buildStremioTvNextLoadingOverlay` (44) | 1 (`showStremioTvNextLoading`) | stays: a pure widget literal with no behaviour; a widget-returning method on an action collaborator mixes view into the bridge. Its home is a `StremioTvNextLoadingOverlay` widget in the build decomposition |
+| `_infoPanelSignature` (37), `_reservedInfoPanelHeight` (12) | ≈ 11 | stay; see the dock-geometry note below |
+| `_skipButtonBottom` (28) | ≈ 6 (+ `context` parameter) | stays: layout arithmetic over `MediaQuery` for one `Positioned` |
+| `_buildSubtitleViewConfig` (25) | ≈ 4 + the `VpS2Hooks.isIOS` S2 site | stays: moving it relocates an S2 seam site for no ownership gain |
+| `_buildDebrifyTvInfoPanel` (23), `_buildIptvInfoPanel` (15) | ≈ 9 and ≈ 8 | stay: widget builders read by `build`, `_buildTvControls` and `_skipButtonBottom`. **This discharges P15's and P17's "→ phase 21: a pure widget builder" reservations**: kept as build code under D6, exit the build decomposition |
+| `_buildCustomAspectRatioVideo` (14) | ≈ 5 + raw `Platform.isIOS` | stays: video-surface widget |
+| `_buildTransitionOverlay` (9) | 3 (`rainbowController`, `tvStaticMessage`, `tvStaticSubtext`) | stays: a 9-line wrapper around the existing `TransitionOverlay` widget; moving it would put a widget builder in `VpTransitionOverlay`, which owns actions only |
+| `_overlayJustClosed` (7) | 0 | stays: a side-effecting `TvOverlayBack.consume()` read only by the root `onKey` closure, so it must stay next to that closure |
+
+**Dock geometry ownership (review P3-2).** `_reservedInfoPanelHeight`
+(build-only) and the moved `refreshDockGeometry` both write
+`_infoPanelGeneration`, `_infoPanelHeight` and `_lastInfoPanelSignature`.
+The panel invalidation stays a build-time derivation on purpose:
+- it is evaluated in the middle of `build` (3623), against a signature of
+  eleven build-only identity inputs;
+- the measured-height reporter that corrects `_infoPanelHeight` is also in
+  `build` (3634–3636);
+- the moved invalidation is triggered by lifecycle (dependency or widget
+  changes), not by panel structure.
+
+Both writers run synchronously on the UI isolate, so they cannot race. The
+three fields stay State-owned, written by these two paths only. The split
+is recorded in the completion audit's open exception for the facade. It
+resolves in the build decomposition, where the reservation, the reporter
+and the invalidation become one layout widget's state.
 
 ### 4. End-state exception and the host adapters
 
@@ -5790,6 +5873,22 @@ So the adapters stay. They are the composition root's wiring cost.
   member fails. Removing one requires removing it from the frozen list, so
   the guard is shrink-only at declaration level. New behaviour must land in
   a collaborator.
+- **Reviewed raise procedure** (review P2-5; AGENTS "do not require an
+  unrelated whole-file rewrite for a small fix; record the exception and
+  scope"). A small fix inside retained facade code (`build`, a lifecycle
+  step, an adapter) that must add lines or a State member may raise the
+  cap. The rules:
+  - it is one reviewed commit that changes, together: the facade, the cap
+    in `check_search_architecture.py`, the baseline line (raised by hand,
+    since `--update` never raises), and, if a member is added, the frozen
+    list in `vplayer_end_state.py`;
+  - it appends a row to an "End-state exception changes" table in this
+    plan: date, commit, reason, scope, old → new exact count, and members
+    added;
+  - the reviewer confirms the fix cannot reasonably land in a collaborator
+    instead;
+  - the ratchet stays exact afterwards (`lines != cap`).
+  The same procedure governs the `vp_player_startup.dart` exact exception.
 
 **Exits (named, tracked as open exceptions in the completion audit):**
 1. **`build` decomposition** (D6 exit): about −1,549 lines.
@@ -5800,41 +5899,88 @@ So the adapters stay. They are the composition root's wiring cost.
 3. **Startup orchestration decomposition**: retires the
    `vp_player_startup.dart` 623-line exception.
 
-The milestone after exits 1 and 2: a facade that holds only the widget,
-the lifecycle in its frozen order, and composition (target ≤ 800). The
-exception grants no growth allowance and is reassessed whenever the file is
-extended.
+**Exit order and milestones (review P2-6):**
+1. **Startup orchestration decomposition first.** It is the smallest and
+   independent of the facade. Milestone: `vp_player_startup.dart` ≤ 500,
+   with its entry removed from `VIDEO_PLAYER_SIZE_EXCEPTIONS`.
+2. **`build` decomposition second.** **Interim milestone: facade ≤ 7,000
+   lines** (≈ 8,550 − 1,549 + the widget wiring), with all 12 build members
+   replaced by layout widgets under goldens. That also retires the
+   dock-geometry split, `_isAnyOverlayOpen` (its readers move with build)
+   and the `onKey` deprecations.
+3. **D1 per collaborator third.** Each migrated collaborator deletes its
+   Host and adapter and lowers the exact cap in the same commit.
+   **Milestone: facade ≤ 800** (widget, lifecycle in frozen order,
+   composition only).
+
+**Reassessment trigger:** any commit that changes the facade's line count
+or frozen declaration list (the raise procedure above), and the completion
+of each exit. The exception grants no growth allowance outside the
+reviewed raise procedure.
 
 ### 5. Cleanup in 21b (source changes; separate commits; never mixed with moves)
 
 | Commit | Content | Allowlist / inventory |
 |---|---|---|
 | C1 | Delete the 76 unused facade imports plus those newly unused after 21a, and drop `kIsWeb` and `listEquals` from the `show` list | the allowlist loses those lines (about 80); the inventory removes the same identities |
-| C2 | Add braces at every `curly_braces_in_flow_control_structures` site in `lib/features/video_player/**` (28 occurrences in 17 bridge files at the P20 merge, plus the 21a additions) and the facade's one at 1107 (`_currentSeriesImdbId`) | infos removed from the inventory |
+| C2 | Add braces at every `curly_braces_in_flow_control_structures` site in `lib/features/video_player/**` (28 occurrences in 17 bridge files at the P20 merge, plus the 21a additions) and the facade's one at 1107 (`_currentSeriesImdbId`), **except `vp_player_startup.dart:340–341`** (`if (_host.engineFlagOn)` / `unawaited(...)`): braces there make the file 624 lines and break the exact 623 exception. That site stays allowlisted, with a note naming the exception (review P2-1) | infos removed from the inventory, except the startup one |
 | C3 | Comment-only edits: comments naming moved private members (`p20/retained.txt`: facade 519, 533, 542; `vp_audio_output.dart:71`, `vp_decoder_probe.dart:54`, `vp_mdblist_scrobbler.dart:69`, `network_tuning.dart:17/22`; the moved docs 2442/2450; plus a full P21 scan of facade and bridge comments for `_name` tokens that the manifests map to moved members). Also P20's misattached "Load default player settings (aspect)" (1663, above `_dockBand`) and the P19 S2f comment "gated on `Platform.isAndroid`" (`vp_decoder_probe.dart:96`) | none |
 
 - The inventory is regenerated as `vplayer_p21b_analyzer.json` with the
   removed identities deleted, so they cannot come back.
+- Step T(b) measures the post-C2 formatted size of every touched bridge
+  file. The closest to the 500 cap are `vp_iptv_recording.dart` (463) and
+  `vp_resume_save.dart` (457). A file that would exceed 500 keeps its sites
+  allowlisted instead.
+- C1 sanity check: `lib/` has no `vm:entry-point` pragma (0 hits at
+  `5214f7a7e`), so removing an import cannot drop a natively referenced
+  entry point. Only `import` directives change; the three exports are
+  untouched.
 - **Out of scope:**
-  - the 5 `unused_field` entries and `_isAnyOverlayOpen`: removing them is
-    dead-code removal, which the Goal excludes;
+  - the 5 `unused_field` entries and the live duplicate
+    `_isAnyOverlayOpen`: removing them is dead-code or duplicate removal,
+    which the Goal excludes. They are registered open exceptions (§6, item
+    5);
   - `deprecated_member_use` (a behaviour change, hazard 4);
   - `use_build_context_synchronously`, `avoid_print` and `empty_catches`
     (behaviour-adjacent);
   - `directives_ordering` and `unnecessary_import` (open question 8).
-- **Proof:** the final-tree move check must pass after the cleanup, so
-  `check_dart_moves.py` gains a declared-edit section on the P21 manifest
-  with three kinds of edit:
-  - `remove_directive` (by URI);
-  - `insert_braces` (by file, enclosing declaration and ordinal);
-  - `replace_comment` (by file, declaration and comment ordinal, with the
-    exact before and after text).
-  The checker projects the declared edits out before comparing. Negatives:
-  an undeclared brace; an extra removed import; an export removal; a code
-  token hidden in a comment replacement; a declared site that no longer
-  matches. P1–P20 `--at` history checks are unaffected. If the reviewer
-  prefers, a standalone token-diff `vplayer_cleanup_proof.py` with the same
-  negatives is acceptable (open question 8).
+- **Proof (review P2-2).** Verified against the tools:
+  - In current mode, `run_manifest` → `check_earlier`
+    (`dart_move_history.py:60`) token-compares every earlier destination
+    against the manifest base. `unitTokens` include comments (the scanner
+    emits `precedingComments` as tokens, `verbatim_ast.dart.txt:503–517,
+    737–744`), so a C3 comment edit in an earlier destination is seen too.
+  - `vplayer_source_reader.py:68` calls `run_current_manifest` on every
+    `vpSourceDeclaration` read. Every source-text test would go red after
+    C1–C3 unless the current-check path itself accepts the edits.
+
+  So the cleanup is proved in two layers, both required:
+  1. **A standalone token-diff proof** `dev/tool/vplayer_cleanup_proof.py`
+     over the whole C1–C3 diff. Its base is the 21a merge and its file set
+     is the facade plus every `lib/features/video_player/**` file. It
+     declares edits of three kinds: `remove_directive` (by URI);
+     `insert_braces` (file, enclosing declaration, ordinal);
+     `replace_comment` (file, declaration, comment ordinal, exact before
+     and after text). Everything else must be token-identical, comments
+     included. Negatives: an undeclared brace; an extra removed import; an
+     export removal; a code token hidden in a comment replacement; a
+     declared site that no longer matches; the excluded startup site
+     braced; an edit in a file outside the set.
+  2. **The current check accepts exactly those edits**, by file class:
+
+     | File class | Checker that sees the edit | Mechanism |
+     |---|---|---|
+     | facade | P21 manifest, retained/patched declarations and directives | C1 directive removals as declared directive fates and C2/C3 facade edits as exact declaration `patches`; Step T(b) confirms the existing directive-fate support and, if a removal fate is missing, adds it with negatives |
+     | the five P21 destinations | P21 manifest, moved-body comparison | declared moved-body patches (the existing per-declaration patch support) |
+     | earlier destinations (P1–P20 files) | `check_earlier` | **`earlier_patches`** (existing: reason, review, exact patches), one entry per touched file, with no parallel mechanism |
+
+     Because the projection lives in the manifest, `run_manifest` and
+     `run_current_manifest`, and therefore the source reader, apply it on
+     every path, not only on the CLI. The cleanup proof's self-test
+     cross-checks that the declared edit lists in both layers are
+     identical.
+  P1–P20 `--at` history checks are unaffected.
 
 ### 6. Storage guard, CI structure, completion audit, device checklist (21b)
 
@@ -5845,23 +5991,39 @@ extended.
 - 24 `PlaybackStateStore.getPlaybackStateMap`;
 - 1 `PlaybackIdentityStorage.seriesProgressKey`.
 
-CI runs only `--self-test`. **Recommended fix:** a scoped, documented test
-exemption in the guard. The exact member set above is allowed only under
-the path prefix `test/features/video_player/`, with a count ceiling of 61
-that may only shrink. The exemption gets self-test negatives: the same
-member in `lib/`; in another test directory; a fourth member; the count
-ceiling + 1. It keeps the physical-map assertions, which are the
-profile-write evidence, and does not weaken the production rule. A
-test-only inspection seam inside `lib/services/storage/` would change
-production code for test convenience. The `file-sizes` job then runs the
-full check, not only `--self-test`.
+**Correction (review P2-3, verified):** `check_storage_references.py
+--self-test` runs `self_test()` and then falls through to the full scan
+(`check()`, lines 61–76). The existing CI step in `file-sizes` is therefore
+already the full check, and it is red. The fix makes that step green; no CI
+step is added or widened.
+
+**Fix: one test-support file with an exact exemption.**
+- A new `test/features/video_player/support/physical_resume_store.dart`
+  owns the three storage-internal calls (`getPlaybackStateMap`,
+  `savePlaybackStateMap`, `seriesProgressKey`) behind thin test helpers.
+- The 33 files call it. This is a test-only call-site substitution; each
+  physical-map assertion keeps its operands and expectations unchanged.
+- The guard exempts exactly that one path and exactly that three-member
+  set. There is no path prefix and no global ceiling.
+- `self_test()` gains negatives: the same member in `lib/`; in another
+  test file under `test/features/video_player/`; in another test
+  directory; a fourth member in the support file; a new file using a
+  member.
+- **Evidence:** the 33 suites run before and after on the same tree
+  revision, with identical outcomes by (suite, name). The full suite at
+  the final checks covers them again.
+
+No inspection seam is added to `lib/`. The fallback, only if the support
+file proves impractical for a specific suite, is an exact per-file
+(path → member → count) table that may only shrink.
 
 **CI structure job.** A new `vplayer-structure` job in `checks.yml`, on
 every push with no gate-message filter, like `tvplayer-structure`. It needs
 `fetch-depth: 0`, Flutter 3.44.8 and `flutter pub get` for the parser
 packages. It **takes over** the vplayer steps now in `search-architecture`:
 - the P21 move check `--self-test` and the final-tree check (with the
-  declared cleanup edits);
+  declared cleanup edits), and `vplayer_cleanup_proof.py` (with
+  `--self-test`);
 - the P1–P20 `--at` history checks;
 - `vplayer_seam_proof.py` and `vplayer_platform_seam_proof.py` self-tests;
 - `vplayer_architecture_test.py`;
@@ -5874,8 +6036,9 @@ GitHub Actions has run no job since billing stopped. So "required in CI"
 means: the job is defined, every step is run locally at the final gate
 with its output archived, and the first green run on the pushed final SHA,
 plus making it a required check on `main` (a repository setting, the
-user's action), stays **pending**. It is reported as pending, never as
-done.
+user's action), stays **pending**. It is reported as "defined, run
+locally, first CI run pending", never as done. The steps are moved, not
+duplicated.
 
 **Completion audit** (AGENTS "migrated slice complete"; written to the
 plan, evidence `p21b/audit/`):
@@ -5911,9 +6074,9 @@ plan, evidence `p21b/audit/`):
    every `Vp*Host` member is used by its collaborator, either accessor
    counting for a property; and every adapter member overrides a declared
    Host member. Negatives: an unused Host member; an adapter-only member.
-   Known exceptions are listed exactly. The retained duplicate
-   `_isAnyOverlayOpen` and the five write-only fields are listed as
-   recorded dead state with a Follow-up.
+   Known exceptions are listed exactly. The result is stated as "no
+   duplicates or unused scaffolds **except the registered open exceptions
+   in item 5**".
 4. **Sizes.** Every new handwritten app file is ≤ 500, except the
    `vp_player_startup.dart` exception. Test helpers are organized by
    behaviour, none over 800.
@@ -5922,7 +6085,30 @@ plan, evidence `p21b/audit/`):
    - `vp_player_startup.dart` (623; exit: startup decomposition);
    - D1, which keeps the bridge layering (services, storage, channels and
      the player called from presentation; exit: the data-contract and
-     Riverpod migration).
+     Riverpod migration). This includes the P21 `loadDockPrefs` read of
+     `PlayerAppearanceStorage` (hazard 14);
+   - **`_isAnyOverlayOpen`**, the live duplicate of `_anyPlayerOverlayOpen`.
+     Condition: identical bodies, readers `build` 4096 and
+     `wakeControlsOnPointer`. Exit: the build decomposition (the pointer
+     wake reads the canonical getter). Verification: the end-state guard
+     freezes both, and the Host-usage audit lists it;
+   - **the duplicated transition-cleanup blocks** in the P15–P17
+     collaborators. Condition: verbatim copies forwarded by four Hosts.
+     Exit: the Follow-up *transition lifecycle owner* (into
+     `VpTransitionOverlay`, under D1). Verification: the move checks pin
+     the copies;
+   - **the five write-only fields** (`_pikPakRetryCount`,
+     `_isSeekingWithSlider`, `_rainbowOpacity`, `_transitionPhase`,
+     `_transitionPhase2Started`). Condition: written, never read;
+     `_rainbowOpacity` also holds an undisposed `CurvedAnimation` listener
+     (hazard 13). Exit: the post-series dead-state removal. Verification:
+     `unused_field` allowlist entries;
+   - **the dock-geometry split** (§3). Exit: the build decomposition.
+
+   **Completion wording:** "Video player slice complete with registered
+   open exceptions (facade, startup, D1, the duplicates above); the first
+   CI run, the iOS/tvOS/Windows/Linux builds and the device pass are
+   pending." Never "series complete" without that qualification.
 6. **Final-tree evidence is kept apart from history.** The P21 manifest
    runs without `--at` on the final tree (including the cleanup edits),
    and a mutation confined to one final destination must fail it. The
@@ -5970,6 +6156,26 @@ a release device. No device runs happen now. P21 items:
 - **All platforms:** dock style, palette and size apply at launch; the
   retro static transition shows on next episode and channel switch; the
   buffering spinner clears on switch.
+- **Added after review (P3-7):**
+  - the PiP play/pause action (the `togglePlay` adapter path), on Android
+    and iOS;
+  - pause, then kill or relaunch, then resume at the paused position (the
+    `togglePlay` checkpoint save);
+  - after a sleep-timer stop, play clears the stop and playback continues
+    into the next item;
+  - on tvOS and Android TV: BACK walks menu panes and IPTV guide panes
+    before closing, with focus kept on the pane;
+  - the Record button state refreshes when the bar rises (engine flag on);
+  - the IPTV zap banner and the Debrify TV banner vanish instantly when
+    the dock opens;
+  - desktop window resize, split-screen and foldable posture changes
+    re-validate the dock band (gestures and skip button);
+  - L/R zap during a stalled IPTV tune with the bar up.
+- **Consolidation completeness:** the consolidation step must include
+  every phase's list. That is the "Device checklist (end of series)"
+  sections from plan line 597 through the Phase 20 section, plus this one.
+  The checklist document cites each source section so the audit can
+  confirm none is missing.
 
 ### 21b steps and final checks
 
@@ -5984,7 +6190,9 @@ a release device. No device runs happen now. P21 items:
   1. C1;
   2. C2;
   3. C3;
-  4. the storage-guard exemption plus the full CI run;
+  4. the storage-guard support file and exact exemption, with the 33
+     suites before/after and `python3 dev/tool/check_storage_references.py
+     --self-test` green;
   5. the end-state guards, `VIDEO_PLAYER_COMPLETE`, the exact facade cap,
      the baseline comment and the CI job;
   6. the completion audit, the end-state exception text and the device
@@ -5994,13 +6202,15 @@ a release device. No device runs happen now. P21 items:
   CI uses to select the full suite (see AGENTS).
   - The full Flutter suite (`suite_evidence.py run vplayer/final/...
     --no-pub --dart-define=DEBRIFY_VP_TEST_HOOKS=true --concurrency=1`),
-    compared by identity against M5's JSONL with
-    `python3 dev/tool/test_baseline.py`-style identity rules. It must show
-    0 new failures, 0 missing and 0 newly skipped tests; the only added
-    identities are the P21 suites.
-  - `flutter build apk --release --no-pub` (Android Studio JBR, JDK 21)
-    and `flutter build macos --release --no-pub`. Nothing is installed or
-    run.
+    compared by identity against M5's JSONL. It must show 0 new failures,
+    0 missing and 0 newly skipped tests; the only added identities are the
+    P21 suites. **And** `python3 dev/tool/test_baseline.py` itself (the
+    AGENTS-mandated helper) on the same run, never with `--record`.
+  - `flutter build apk --release --no-pub` (Android Studio JBR, JDK 21),
+    `flutter build macos --release --no-pub` and
+    `flutter build ios --release --no-codesign --no-pub` on the Mac.
+    Nothing is installed or run. **tvOS, Windows and Linux compilation are
+    recorded as pending** (they build only in their CI/VM pipelines).
   - The analyzer shows no additions; the allowlist only shrinks.
   - Format; size and architecture checks; all move checks (P1–P20 history
     and P21 final-tree); the seam proofs; the full storage references
@@ -6014,6 +6224,10 @@ a release device. No device runs happen now. P21 items:
   `main` and the device pass are the user's decision after the series.**
 
 ### Open questions for the design reviewer
+
+> Answered in the Phase 21 design review resolution (round 1) at the end
+> of this file: all twelve adopted as the reviewer answered, except
+> question 12, which follows the coordinator's direction.
 
 1. **D6:** `build` and its 11 helpers stay (A), with the measured case
    against B/B′, and the facade exception at about 8,550 with exits 1–3.
@@ -6063,7 +6277,9 @@ a release device. No device runs happen now. P21 items:
   - A ranked or direct start that fails (`reportStartupFailure` then
     `return`) never arms the 6 s autosave timer or the episode preload
     (design hazard 4). Pinned by "a failed ranked start reports the failure
-    and never arms the autosave". Likely intended; confirm before Phase 21.
+    and never arms the autosave". **Phase 21 disposition:** a Follow-up.
+    Current behaviour is pinned and not fixed; the user may fix it later as
+    a separate behaviour change. It does not block 21a or 21b.
   - The Android recording probes (`canPublishRecordings().then`,
     `engineEnabled().then`) have no error handlers: a throwing probe is an
     unhandled zone error (hazard P3-7; on the host a forced probe surfaces
@@ -11892,3 +12108,49 @@ activity; if none is ever created on the original, the vacuity is
 recorded as pre-existing instead. R6 the relocated S check asserts
 `ready:` calls the collaborator's own `onPlayerInstanceReady` and each
 factory forwarder is used exactly once.
+
+## Phase 21 design review resolution (review agent, 2026-10-24) — round 1
+
+> Supersedes the Phase 21 section where they differ (the folds below are
+> also applied in that section). Report: `p21/design-review.md` (No P1s;
+> 6 P2s; 8 P3s). Each finding was checked against the tree at `5214f7a7e`
+> before it was folded.
+
+| Finding | Resolution |
+|---|---|
+| **P2-1** C2 braces at `vp_player_startup.dart:340–341` would make the file 624 lines and break the exact 623 exception | Verified (`if (_host.engineFlagOn)` / `unawaited(_host.refreshEngineRecordingState());`). The site is excluded from C2 and stays allowlisted, with a note naming the exception. Step T(b) measures every touched bridge file after C2; a file that would pass 500 keeps its sites allowlisted (`vp_iptv_recording.dart` 463 and `vp_resume_save.dart` 457 are the closest). |
+| **P2-2** the cleanup proof does not reach earlier destinations or the source-reader path | Verified: `check_earlier` (`dart_move_history.py:60`) compares `unitTokens`, which include comments (`verbatim_ast.dart.txt:503–517, 737–744`), and `vplayer_source_reader.py:68` calls `run_current_manifest`. The fix has two layers. (1) A standalone `vplayer_cleanup_proof.py` over the whole C1–C3 diff (facade plus every feature file), with negatives. (2) A per-file-class mechanism in the manifest: facade directive fates and patches, moved-body patches for the P21 destinations, and the existing **`earlier_patches`** for P1–P20 destinations. So `run_manifest`/`run_current_manifest` (and therefore every source reader) accept exactly the declared edits. The proof cross-checks that both edit lists are identical. |
+| **P2-3** storage guard: the CI premise is wrong and the exemption is too coarse | Verified: `--self-test` falls through to `check()`, so the CI step is already the full check, and it is red (61 findings, 33 files). Text corrected. The fix is one test-support file `test/features/video_player/support/physical_resume_store.dart` owning the three members, exempted by exact path and exact member set; the 33 files call it, and the assertions are unchanged. The `self_test()` negatives are added. The fallback is an exact per-file table; there is no `lib/` seam. |
+| **P2-4** "No duplicates" is false; `_isAnyOverlayOpen` is live | Verified: build 4096 (`hideCursor`) and `_wakeControlsOnPointer` 4126 read it. Section (d) is renamed "Unused remnants and retained duplicates". `_isAnyOverlayOpen`, the transition-cleanup duplicates, the five write-only fields and the dock-geometry split are listed under completion-audit item 5 as open exceptions, each with condition, exit and verification. Item 3 now reads "except the registered open exceptions". |
+| **P2-5** no procedure for a small fix under the exact cap and the declaration freeze | Added a reviewed raise procedure. One commit changes the facade, the cap, the hand-raised baseline line and the frozen list together; it appends a row (reason, scope, old → new count, members) to an "End-state exception changes" table; the reviewer confirms a collaborator could not take the change; the ratchet stays exact. The same procedure applies to the startup exception. |
+| **P2-6** exits have no order or milestone | Ordered: (1) startup decomposition (milestone ≤ 500, exception removed); (2) `build` decomposition (**interim milestone: facade ≤ 7,000**); (3) D1 per collaborator (milestone: facade ≤ 800). Reassessment is triggered by any facade line or declaration change, and by each exit. Completion wording: "slice complete with registered open exceptions; first CI run, iOS/tvOS/Windows/Linux builds and the device pass pending". |
+| P3-1 timer-owner matchers | Verified `timeline_lifetime_test:59` (`hasLength(1)`), `tv_transition_state_test:52` (`isEmpty`) and `iptv_workflow_driver.dart:130` (first `package:debrify/` frame). Both are listed in the retargets section. A non-vacuity mutation for the `isEmpty` one runs on the moved tree. |
+| P3-2 dock geometry ownership; the small helpers | The panel invalidation stays a build-time derivation, with the reasons stated (evaluated mid-`build` at 3623, a reporter at 3634–3636, synchronous UI writers, no race). It is registered as an open exception that the build decomposition retires. A per-helper table gives the Host cost and the decision for all 11 helpers; `_buildTransitionOverlay` and `_buildStremioTvNextLoadingOverlay` stay (widget builders do not belong in action collaborators). This discharges the P15/P17 builder reservations. **Not adopted:** moving `_infoPanelSignature`/`_reservedInfoPanelHeight` into `VpDockLayout`. The reviewer offered it as one of two options; keeping them with their only caller avoids about 11 Host names and a build rewrite, and the build decomposition unifies ownership later. |
+| P3-3 missing hazards | Hazards 11–14 added. Verified the unguarded `setState(() {})` at 2645 (after the awaited seek) and that `_vpSetState` adds no guard; the shared `_tvScrubRepeats` (2563–2565); the undisposed `CurvedAnimation` at 1524; and `loadDockPrefs`' storage read, listed under the D1 open exception. Hazard 11 is also a Follow-up. |
+| P3-4 figures and labels | The D6 table now says "21 of the 25 retained references (15 build + 6 `_buildTvControls`; 4 are lifecycle)". The reviewer's comment-free counts (305, `mounted` 8) are noted. `p21/design/classes.txt` is committed to the evidence directory (class totals match). The `members.txt` header and column 1 meaning are corrected. The composition table stays "≈", measured exactly in 21b (the reviewer agreed it is not material). |
+| P3-5 `late final` | Required for the five new fields (hazard 7), checked at Step T with a negative. |
+| P3-6 final checks | `python3 dev/tool/test_baseline.py` runs itself at the final run (never `--record`), next to the identity comparison against M5. `flutter build ios --release --no-codesign --no-pub` is added on the Mac. tvOS, Windows and Linux builds are recorded as pending. Commit 4 now names its command. |
+| P3-7 device checklist gaps | The eight items are added, plus a consolidation-completeness rule (each phase's section is cited). |
+| P3-8 M5 contingency | Step T re-baselines every table and evidence file on the M5 record if M5 produces a non-docs fix. |
+| C1 sanity (open question 8) | Verified: 0 `vm:entry-point` in `lib/`. Recorded. |
+
+**Open questions:** all twelve are adopted as the reviewer answered, with
+one exception:
+- Q1 (A): stay, conditional on P2-5, P2-6 and P3-2.
+- Q2: the base class goes to D1.
+- Q3: split.
+- Q4: five separate collaborators.
+- Q5: bar raise/lower in the controls runtime.
+- Q6: shared derivations stay; `_isAnyOverlayOpen` is an open exception.
+- Q7: the `onKey` closure stays.
+- Q8: C1–C3 with P2-1/P2-2; the ordering and unnecessary-import lints are
+  excluded.
+- Q9: the support file, no `lib/` seam.
+- Q10: an exact cap with the raise procedure.
+- Q11: move the steps, do not duplicate them.
+- **Q12 (P20 hazard 4) — the exception.** It follows the coordinator's
+  direction and is recorded as a **Follow-up**: current behaviour is pinned
+  and not fixed; the user may fix it later as a separate behaviour change.
+  It blocks neither 21a nor 21b. This differs from the reviewer, who
+  required user confirmation or an open audit item before 21b's final
+  record; the Follow-up entry is the record.
