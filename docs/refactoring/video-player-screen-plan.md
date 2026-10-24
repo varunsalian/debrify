@@ -5313,6 +5313,9 @@ header and closing that is the State's 3,736 lines.
 
 Size estimates use the P20 rule: about 2 lines per Host name plus about 20
 lines of scaffold. Step T proves each formatted prototype. None is near 500.
+**Step T measured** (formatted probe, `p21/stepT/gen.log`): controls
+runtime 255, TV remote 277, gestures 176, dock layout 84, transition
+overlay 60 lines. All are below the estimates.
 If any measures over 500, the phase stops for redesign. No new size
 exception is admitted.
 
@@ -5448,6 +5451,15 @@ facade. Facade after 21a: 8,986 − 658 + ≈ 290 (adapters) + ≈ 10 (fields,
 constructor) + 5 (imports) ≈ **8,630**. The exact figure comes from the
 Step-1 generator output and the ratchet.
 
+**Frozen at Step T** (`EXPECTED_HOSTS` in the generator; names /
+declarations): controls runtime 38 / 39, TV remote 33 / 34, gestures
+14 / 14, dock layout 13 / 17, transition overlay 12 / 12. That is 110 names
+and 116 declarations. The bullet lists above name exactly these members; the
+≈ 40 and ≈ 35 were rounded up from lists of 38 and 33, and the dock's ≈ 16
+counted part of its four get/set pairs as names. The five new adapters are
+272 lines (277 with separators), and the formatted probe facade is
+**8,639** lines (`p21/stepT/deps-section.md`).
+
 ### Platform seams
 
 No new seam. No moved member reads `VpS2Hooks`; the S2 sites in
@@ -5474,7 +5486,7 @@ receiver changes to `_s._<collaborator>.<name>`.
 | `startTransitionOverlay` | 5762, 6237, 6366, 6544, 6735, 7268 |
 | `clearBufferingIndicator` | 5652, 5760, 6235, 6364, 6546, 6737, 7153 |
 
-Step T measures these into `p21/patched.txt`.
+Step T measures these into `p21/stepT/patched.txt` (measured: exactly these 30).
 
 ### Retained references (call-site rewrites only)
 
@@ -5640,7 +5652,11 @@ stronger and each proved on the original:
   imports left unused by the move (at least `player_appearance_storage`),
   `curly_braces` formatter wraps, and `use_build_context_synchronously`
   from `_host.mounted` guards. They are registered as
-  `p21_receiver_probe_additions`.
+  `p21_receiver_probe_additions`. **Measured:** two additions, the facade's
+  `player_appearance_storage` `unused_import` warning and one
+  `curly_braces_in_flow_control_structures` info in
+  `VpTvRemote.tvScrubBegin`'s post-frame callback. No
+  `use_build_context_synchronously` appeared.
 - Seam and platform-seam proofs run on the probe.
 - The test inventory `dev/tool/vplayer_p21_test_inventory.txt` is P20's
   494 files plus the new P21 suites and the retargeted readers.
@@ -11664,6 +11680,104 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
   "gate"; the design names a `network_tuning_test` that does not exist
   (network tuning is covered by `video_player_p20_network_tuning_test` and
   `video_player_p20_tuning_chain_test`); the size-baseline comment date.
+
+### 2026-10-24 — Phase 21a Step T (executor: Claude)
+
+- **Base** `5214f7a7e` (the P20 merge); `refactor/vplayer-p21` changes no
+  `lib/` file. M5 is still running. If it lands a non-docs fix, Step T is
+  redone on the M5 record (review P3-8). Evidence: `p21/stepT/`; parser
+  package `.dart_tool/vplayer_parser/p21_stepT`.
+- **Step T.** Generator `dev/tool/draft_vplayer_controls_moves.py`
+  (PROVISIONAL, base `5214f7a7e`) writes evidence plus the provisional
+  manifest `vplayer_p21.json` (status `provisional`, 17 patched rows).
+  **Zero comparison differences.**
+  - 38 moved declarations (25 methods or getters, 13 fields; 658 span
+    lines, `p21/stepT/members.txt`) into five files. Formatted sizes:
+    controls runtime 255, TV remote 277, gestures 176, dock layout 84,
+    transition overlay 60. The facade goes from 8,986 to 8,639 (design
+    ≈ 8,630). All five are under 500, so no redesign.
+  - Hosts frozen (names / declarations): controls runtime 38 / 39, TV
+    remote 33 / 34, gestures 14 / 14, dock layout 13 / 17, transition
+    overlay 12 / 12. That is 110 names against the design's ≈ 117; the
+    design's member lists already had 38 and 33, and the dock's ≈ 16
+    counted get/set pairs (Phase 21 "Hosts" updated;
+    `p21/stepT/deps-section.md`). The remote reaches `scheduleAutoHide`,
+    `tvShowBar`, `tvHideBar` and `togglePlay` through facade routing to
+    `_controlsRuntime`. The gestures Host forwards the retained `dockBand`.
+    The widget selectors are `hideOptions`/`hideSeekbar` (dock) and
+    `requestChannelById` (remote). No moved body contains `this`, a static
+    or a hook class.
+  - 55 rewrites (`retained.txt`, `patched.txt`), equal by line to the
+    design's lists: 25 retained sites (lifecycle 4, `build` 15,
+    `_buildTvControls` 6) and 30 forwarder sites in 16 patched adapters.
+    The five `late final` fields follow `_playerStartup`. The constructor
+    gains five inert assignments after P20's six, in the frozen order.
+  - **Negatives** (`negatives.log`): replacing `late final` with an
+    allocating getter, with `late`, or with an inline-initialized
+    `late final`; swapping the constructor order; and turning the `dispose`
+    `removeListener` tear-off into a closure (hazard 7). Each one fails
+    `check()`; the unmutated probe passes.
+  - **Prototype analyzer** (CI command on a scratch copy, `probe.sh`):
+    0 errors; 627 issues against 625 (`p20/merge/analyze.txt`). By identity
+    (`analyzer-additions.txt`): +1 `unused_import` of
+    `player_appearance_storage` in the facade (a warning, and the only
+    allowlist miss, `allowlist.txt`), and +1
+    `curly_braces_in_flow_control_structures` in `VpTvRemote.tvScrubBegin`
+    (a formatter wrap from the longer receiver). No
+    `use_build_context_synchronously`. Both are registered at Step 1. One
+    scaffold import was trimmed during Step T: a redundant
+    `flutter/foundation.dart` in the transition file raised
+    `unnecessary_import`.
+  - On the probe copy: search architecture passes (1,727 files); sizes show
+    no growth (the facade shrank; the other six "shrank" entries are native
+    files absent from the scratch copy); storage keys pass; format 0
+    changed. On the branch tree with the provisional manifest:
+    `vplayer_architecture_test.py` and the search architecture check pass.
+  - **Seam proofs on the applied probe** (`p21/stepT/seam/`; a `--shared`
+    scratch clone with the probe overlaid and P21 marked applied there only):
+    `vplayer_seam_proof.py` and `vplayer_platform_seam_proof.py`
+    `--self-test` PASS. Their outputs equal the base run's except the
+    active phase (20 → 21) and the seam proof's ownership-base span count
+    (672 → 675). Every `s2*_sites` and relocated-site key is unchanged. No
+    moved member names `VpS2Hooks` or `VideoPlayerScreenTestHooks`
+    (`scan.json`). The moved platform reads are `PlatformUtil.isTelevision`
+    (four, controls runtime) and `PlayerDisplayControls` (three, gestures).
+    **Step 1 needs no relocation branch.**
+  - **Test scan** (`test-scan.txt`). Retargets as designed:
+    `playback_checkpoint_contract_test.dart:23–36` (its `_togglePlay`
+    declaration read, `startsWith` and regex; the `onSeekBarChangeEnd` slice
+    markers are still in the probe facade) and
+    `video_player_menu_window_test.dart:46` (`'_scheduleAutoHide'` →
+    `'scheduleAutoHide'`). The timer-owner matchers
+    `iptv_review2_timeline_lifetime_test:59` and
+    `iptv_review2_tv_transition_state_test:52` match the moved first frame
+    `VpControlsRuntime.scheduleAutoHide` recorded by
+    `iptv_workflow_driver.dart:130`; they need no edit. No
+    `CompletionDelivery`/`StackTrace.current` matcher names a moved member,
+    and nothing reads the log literal. A sweep of every facade/vplayer
+    source reader's string literals finds only the playback checkpoint
+    reader losing a facade literal. The three theme lists gain the five
+    files at Step 1. Not readers: the `onPanStart`/`onPanUpdate`/`onPanEnd`
+    hits in the menu and seek-input tests are `GestureDetector` callbacks,
+    and `_mode` in `video_player_p20_player_instance_test` is a local
+    helper.
+  - **Static suite map** (`suite-map.txt`, regex indicators over the 452
+    player suites; not an execution result): gestures are driven only by
+    `video_player_menu_test` and the Trakt/secondary seek-input tests. No
+    player suite drives `onDoubleTapDown`, which confirms the double-tap
+    gap. The transition overlay is driven by the P17/P18/P20 transition
+    and source-overlap suites.
+  - `dev/tool/vplayer_p21_test_inventory.txt` is P20's 494 files; the four
+    readers above are already in it. Step 0 appends the P21 suites.
+- **Open for Step 0:**
+  - the `isEmpty` non-vacuity mutation on the moved tree, which needs
+    `flutter test` and so waits for M5 to finish;
+  - the two retargets, proved on the original;
+  - the gap suites with per-test mutation proofs, then the sweep.
+
+  The Step T(b) checker-extension dry run belongs to 21b's Step T(b), not
+  to 21a.
+
 ## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
 
 Reviewed at `c5c8e3500` (facade byte-identical to `be4cd78aa`; split,
