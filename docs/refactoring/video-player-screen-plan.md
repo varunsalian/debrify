@@ -5131,6 +5131,919 @@ systematic sweep and the independent sample (≥ 75 %). Known gaps:
    startup past 700).
 5. **`visibilityOwner`** returning the State for `PlayerVisibility`.
 
+## Phase 21 — controls runtime, the `build` decision (D6), end-state exception and series completion
+
+> Design (Claude, 2026-10-24) for review by a review agent. A review
+> resolution, once written, goes at the end of this file and supersedes this
+> section where they differ.
+
+Base: the phase-20 merge `5214f7a7e` on `refactor/codebase`. Branch
+`refactor/vplayer-p21`, worktree `../debrify-wt/vplayer-p21`. Evidence goes
+in `refactor-evidence/vplayer/p21/` (21a) and `p21b/` (21b). Line numbers
+below are at `5214f7a7e`, where the facade is **8,986 lines**. The member
+inventory is `p21/design/members.txt`, made by the P20 `members.py` against
+this base. Its convention is `prev_end span_lines name`: a span covers the
+lines after the previous declaration's end through this declaration's end,
+so attached comments and blank lines count with the declaration that follows
+them. Tables give the declaration line and the span length.
+
+**M5** (the P20 integration milestone: full suite and apk/macos release
+builds) is running while this is written. 21a Step 1 does not start until
+the M5 record is committed. If M5 adds only docs, 21a rebases onto it and
+these line numbers still hold.
+
+### Recommendation in brief
+
+1. **Split into 21a and 21b.**
+   - **21a** is the last move phase: the controls runtime goes into five
+     collaborators, about 658 member lines. It uses P20's full machinery
+     (Step T, Step 0, Step 0b, Step 1, reduced gate, post-gate review).
+   - **21b** moves no declarations, like the TV series' phase 20. It
+     records the D6 decision and the end-state exception, makes three
+     separately proved cleanup commits, resolves the storage guard, adds the
+     CI structure job and end-state guards, writes the completion audit and
+     the device checklist, and runs the final full suite and both release
+     builds.
+2. **D6: `build` stays in the facade**, together with its build-only
+   helpers (1,549 lines). Moving it whole to a builder would create a file
+   of about 1,600–2,000 lines behind a Host of about 190 names. That breaks
+   the 800-line ceiling by more than double and exposes essentially the
+   whole State. The facade would shrink by only about 1,140 net lines while
+   the total code grows by about 840.
+3. **The host adapters stay in the facade.** That is 60 adapters, 4,717
+   lines and 1,675 overridden Host members today, about 5,010 lines after
+   21a. They need the State's library-private members, and AGENTS forbids
+   `part` files and mixins. Their exit is D1: each collaborator migrates to
+   explicit contracts and its Host and adapter are deleted.
+4. **The facade end state is about 8,550 lines**, measured exactly at 21b.
+   It is registered as an exact, shrink-only exception with three named
+   exits.
+
+### 1. Facade inventory at `5214f7a7e`
+
+| Lines | Part | Size |
+|---|---|---|
+| 1–239 | header and directives: 228 directive lines (225 imports, 3 exports) | 239 |
+| 240–438 | public `VideoPlayerScreen` (doc comment, 60+ constructor parameters, `readLocalResume`) | 199 |
+| 440–4175 | `_VideoPlayerScreenState`: **380 members** (300 fields / 703 lines, 49 methods incl. the constructor / 2,758, 31 getters / 272) | 3,736 |
+| 4177–8893 | 60 `_Vp*HostAdapter` classes (1,675 `@override` members; the largest are startup 246, subscriptions 219, menu UI 190, playlist load 188) | 4,717 |
+| 8895–8986 | `VideoPlayerScreenTestHooks`, `VpS2Hooks` | 92 |
+
+The 380 State members fall into four classes. Each class is listed
+exhaustively in `p21/design/decl.txt`.
+
+**(a) Controls runtime, to move in 21a.** 38 members (25 methods or
+getters, 13 fields), 658 span lines:
+
+| Group | Members (declaration line, span lines) | Σ |
+|---|---|---|
+| Auto-hide, bar raise/lower, overlay dispatch, play toggle | `_tvAutoHideBlocked` 2067 (5), `_scheduleAutoHide` 2069 (53), `_tvShowBar` 2126 (20), `_tvHideBar` 2144 (9), `_closeTopPlayerOverlay` 2403 (34), `_toggleControls` 2575 (9), `_onControlsVisibilityChanged` 2584 (29), `_togglePlay` 2749 (17), `_wakeControlsOnPointer` 4123 (12), `_tvReleaseFocusForOverlay` 1726 (9) | 197 |
+| TV remote: key routing and cinema scrub | `_tvLastArrowAt` 697 (5), `_tvScrubWasPlaying` 700 (1), `_tvScrubRepeats` 701 (1), `_tvScrubStartedAtGeneration` 709 (3), `_tvScrubBegin` 2154 (16), `_tvScrubStep` 2167 (20), `_tvScrubCommit` 2187 (23), `_tvAbandonScrub` 2213 (9), `_tvScrubCancel` 2219 (9), `_openTvGuide` 2438 (19), `_handleTvKey` 2455 (121) | 227 |
+| Touch/pointer gestures | `_panIgnore` 742 (1), `_mode` 1285 (3), `_gestureStartPosition` 1286, `_gestureStartVideoPosition` 1287, `_gestureStartVolume` 1288, `_gestureStartBrightness` 1289 (1 each), `_handleDoubleTap` 2613 (38), `_onPanStart` 2651 (26), `_onPanUpdate` 2677 (54), `_onPanEnd` 2731 (18) | 144 |
+| Dock preferences and geometry invalidation | `_dockGeometrySignature` 903 (15), `_lastDockGeometrySignature` 915 (2), `_refreshDockGeometry` 926 (18), `_loadDockPrefs` 1701 (21) | 56 |
+| Transition/buffering overlay actions | `_tvStaticMessages` 1334 (10), `_startTransitionOverlay` 1639 (19), `_clearBufferingIndicator` 1658 (5) | 34 |
+
+This covers every non-build behaviour that earlier phases reserved for
+phase 21:
+- P20's `_loadDockPrefs`;
+- P18's `_startTransitionOverlay` and `_clearBufferingIndicator`;
+- P17's `_openTvGuide`, `_closeTopPlayerOverlay`,
+  `_onControlsVisibilityChanged` and `_tvReleaseFocusForOverlay`;
+- the auto-hide, TV bar/scrub, key, gesture and pointer runtime from the
+  phase map.
+
+**(b) `build` and build-only helpers, kept in the facade under D6.**
+12 members, 1,549 lines:
+
+| Member | Line, span |
+|---|---|
+| `build` | 2925 (1,187) |
+| `_buildTvControls` | 2231 (148) |
+| `_buildStremioTvNextLoadingOverlay` | 2814 (44) |
+| `_infoPanelSignature` | 857 (37) |
+| `_skipButtonBottom` | 1678 (28) |
+| `_buildSubtitleViewConfig` | 2776 (25) |
+| `_buildDebrifyTvInfoPanel` | 2865 (23) |
+| `_buildIptvInfoPanel` | 2888 (15) |
+| `_buildCustomAspectRatioVideo` | 2792 (14) |
+| `_reservedInfoPanelHeight` | 944 (12) |
+| `_buildTransitionOverlay` | 2806 (9) |
+| `_overlayJustClosed` | 2391 (7) |
+
+Each one is read only by `build`, by another member of this list, or (for
+`_buildIptvInfoPanel` and `_buildDebrifyTvInfoPanel`) by
+`_skipButtonBottom` and `_buildTvControls`.
+
+These members carry the build-resident reservations: P15's
+`_buildIptvInfoPanel`; P17's `_buildDebrifyTvInfoPanel`,
+`_buildStremioTvNextLoadingOverlay` and `_buildTransitionOverlay`; and
+P16's source-sheet overlay with its "Load more" lambda, startup overlay,
+Back/Escape and `S` key sites and `_buildTvControls` `onShowSources`.
+
+**(c) Facade by contract and shared state, retained.**
+- **Lifecycle and wiring** (7 members, 490 lines): the constructor 442
+  (84), `_vpSetState` 526, `initState` 1383 (153), `didChangeDependencies`
+  918 (7), `didUpdateWidget` 1618 (22), `dispose` 1855 (208), and
+  `_startAnalyticsHeartbeat` 1588 (15), which only `initState` calls and
+  whose timer `dispose` cancels.
+- **Shared derivations and reset helpers** (36 members, 368 lines). Each is
+  read by retained code (build, lifecycle) and/or by up to 11 adapters,
+  under the rule "Shared state that stays State-owned":
+  - session identity: `_effective*` ×8, `_currentSeriesImdbId`,
+    `_seriesPlaylist`, `_constructPlaylistItemData`, `_traktSeasonEpisode`,
+    `_persistablePosition`, `_bindEpisodeTrackerProgressIdentity`,
+    `_findSeriesEpisodeForCurrentIndex`;
+  - IPTV: `_currentIptvChannel`, `_effectiveIptvChannels`,
+    `_iptvZapBannerOwnsIdentity`, `_hasIptvNext`, `_hasIptvPrevious`,
+    `_isIptvSeriesContext`;
+  - navigation: `_hasStremioTvGuide`, `_hasStremioTvNext`, `_hasAnyNext`,
+    `_canFetchEpisodes`;
+  - start offsets: `_randomStartOffset`, `_percentStartOffset`;
+  - presentation predicates: `_tvNoTimeline`, `_anyPlayerOverlayOpen`,
+    `_isAnyOverlayOpen`, `_debrifyTvOwnsIdentity`, `_dockBand`,
+    `_startsInPortrait`;
+  - gates: `_validationGateActive`, `_hasSubtitlePolicy`;
+  - content-switch reset: `_resetSubtitleState`, called by five adapters.
+    It writes 19 State-owned fields.
+- **Fields** (287 fields, 668 lines): shared engine and session state, the
+  60 collaborator fields, the focus nodes, the HUD notifiers, the GlobalKeys
+  (`_iptvSheetKey`, `_playerMenuKey`), and the state that `build` reads.
+- **Outside the State:** the widget, the two re-exports plus the
+  `IptvCatchupRequestGate` export, all 60 adapters and the two hook classes.
+
+**(d) Dead or unused remnants.**
+- **Unused imports in the facade:** 76 `unused_import` and 2
+  `unused_shown_name` (`kIsWeb`, `listEquals` at line 42), all allowlisted.
+  These are the ones the verbatim moves of P15–P20 left behind.
+- **Five write-only fields** (`unused_field`, allowlisted):
+  `_pikPakRetryCount` 601, `_isSeekingWithSlider` 715, `_rainbowOpacity`
+  1323, `_transitionPhase` 1328 and `_transitionPhase2Started` 1329. Their
+  writes are executable statements in `dispose`, in `initState`, inside
+  `build` and in six collaborators.
+- **`_isAnyOverlayOpen` 4113** has the same body as `_anyPlayerOverlayOpen`
+  2393. P17 resolution 5 retained the duplicate "until phase 21".
+
+No State member is unreferenced outside its own span (checked with
+`p21/design/refs.py`).
+
+Sum: 658 + 1,549 + 490 + 368 + 668 = 3,733 member lines. With the class
+header and closing that is the State's 3,736 lines.
+
+### 2. 21a destinations
+
+| Destination (class, receiver) | Members | ≈ file |
+|---|---|---|
+| `vp_controls_runtime.dart` (`VpControlsRuntime`, `_controlsRuntime`): chrome visibility and inactivity auto-hide, TV bar raise/lower with focus hand-back, top-overlay close for BACK, overlay focus release, play/pause toggle, pointer wake, the visibility listener | the auto-hide group (197) | ≈ 300 |
+| `vp_tv_remote.dart` (`VpTvRemote`, `_tvRemote`): the remote's key routing (`handleTvKey`, `openTvGuide`) and cinema scrub (begin/step/commit/abandon/cancel), with hold detection | the TV remote group (227) | ≈ 320 |
+| `vp_player_gestures.dart` (`VpPlayerGestures`, `_gestures`): double-tap seek with ripple; pan seek, volume and brightness with HUDs | the gesture group (144) | ≈ 195 |
+| `vp_dock_layout.dart` (`VpDockLayout`, `_dockLayout`): dock preference load and the geometry-signature invalidation | the dock group (56) | ≈ 110 |
+| `vp_transition_overlay.dart` (`VpTransitionOverlay`, `_transitionOverlay`): starting the retro static overlay and clearing the buffering indicator | the transition group (34) | ≈ 80 |
+
+Size estimates use the P20 rule: about 2 lines per Host name plus about 20
+lines of scaffold. Step T proves each formatted prototype. None is near 500.
+If any measures over 500, the phase stops for redesign. No new size
+exception is admitted.
+
+Grouping rationale:
+- **Controls runtime and TV remote are separate files.**
+  `_scheduleAutoHide` and `_tvShowBar` call each other, and auto-hide calls
+  `_tvHideBar`, so the visibility owner keeps all three. Touch and desktop
+  use them too. The remote is TV-only state: four private fields that only
+  the remote reads, plus a 121-line key router. It reaches bar raise/lower,
+  auto-hide and play toggle through Host forwarders, not a sibling import.
+  Merged, the file would be about 600 lines.
+- **`_togglePlay` belongs to the controls runtime.** Every input path
+  dispatches it (build ×4, the TV bar, the remote, the PiP action adapter),
+  and it ends by rescheduling auto-hide.
+- **Gestures** form one input workflow, with six private fields that no
+  other code reads. `_ripple`, `_seekHud` and `_verticalHud` stay
+  State-owned, because `build` paints them and `dispose` disposes the HUDs.
+- **The dock layout** owns the load and the signature check, and takes the
+  one field only it writes (`_lastDockGeometrySignature`). The dock
+  geometry fields stay State-owned, because `build` reads them all.
+  `_dockBand` stays State-owned: it is a pure derivation that build,
+  gestures and the display adapter all read, and moving it would rewrite
+  build for no gain.
+- **The transition overlay** is small but separate. Six P15–P18 adapters
+  call it, and it is the natural receiver for the duplicated
+  transition-cleanup blocks once they are deduplicated (below).
+
+**Not in this phase (with evidence):**
+- **The shared derivations and reset helpers in (c).** Moving any of them
+  makes it a routed sibling of 2–11 adapters with no ownership transfer.
+  This matches P15–P20 practice (`_randomStartOffset` and
+  `_percentStartOffset` stayed in P20). `_resetSubtitleState` writes 19
+  State-owned fields that subtitle collaborators, the menu and build all
+  read.
+- **The root `onKey` closure inside `build`** (2941–3274, 334 lines). It
+  holds the overlay key precedence and the desktop keyboard map, and calls
+  `_handleTvKey`. Lifting a closure out of a method is not a declaration
+  move. It would need a new "lifted closure" fate, and its `context` would
+  be the build parameter. It stays in `build` with D6; its exit is the
+  build decomposition. Migrating `onKey`/`RawKeyDownEvent` (the two
+  `deprecated_member_use` infos) to `onKeyEvent`/`KeyDownEvent` would
+  **change behaviour**: hold-to-scrub depends on repeated down events,
+  which `KeyDownEvent` excludes. So that migration belongs to the same
+  goal, behind characterization tests.
+- **The duplicated transition-cleanup blocks** in P15–P17 collaborators
+  (P15 open question 5, P17 open question 6 and resolution 5). They stay
+  verbatim; deduplicating them is behaviour-level work. Exit: Follow-up
+  *transition lifecycle owner*, which replaces the inline blocks with
+  `VpTransitionOverlay` methods under characterization, within D1.
+
+### Frozen field ownership (21a)
+
+A field moves only to its single writing collaborator, and only when no
+retained code, build, lifecycle step, adapter or other collaborator reads
+it.
+
+| Field | Fate | Reason / inertness |
+|---|---|---|
+| `_tvAutoHideBlocked` 2067 | controls | only `_scheduleAutoHide` and `_tvShowBar`; `= false` |
+| `_tvLastArrowAt` 697, `_tvScrubWasPlaying` 700, `_tvScrubRepeats` 701, `_tvScrubStartedAtGeneration` 709 | remote | only scrub members and `_handleTvKey`; null / `false` / `0` / `0` |
+| `_panIgnore`, `_mode`, `_gestureStart*` ×4 | gestures | only the four gesture handlers; `false` / `GestureMode.none` / `Offset.zero` / `Duration.zero` / `0.0` |
+| `_lastDockGeometrySignature` 915 | dock | only `_refreshDockGeometry` and `_loadDockPrefs`; `''` |
+| `_tvStaticMessages` 1334 | transition | only `_startTransitionOverlay`; a list literal (allocation only) |
+| `_tvScrubTarget` | State | `_buildTvControls` reads it (PopScope `canPop` and the scrub preview); the remote writes it through a Host setter |
+| `_tvScrubGeneration` | State | `dispose` 1969 and the eight transition-cleanup adapters bump it |
+| `_hideTimer` | State | `dispose` 1963; read by the instance, shuffle, menu, PiP and sleep adapters |
+| `_tvBarScope`, `_tvPlayPauseFocus`, `_tvProgressFocus`, `_tvRootFocus` | State | created as field initializers and disposed in `dispose` (1970–1974); `build` and the TV bar read them |
+| `_controlsVisible`, `_seekHud`, `_verticalHud`, `_ripple`, `_lastTapLocal` | State | `build`, `dispose` and 11 adapters |
+| dock fields (`_dockStyle`, `_dockPalette`, `_dockSize`, `_dockExtent`, `_infoPanelHeight`, `_infoPanelGeneration`, `_lastInfoPanelSignature`, `_dockGeometryGeneration`, `_dockVolume`) | State | `build` and its helpers |
+| transition fields (`_rainbowController`, `_rainbowActive`, `_transitionRunning`, both transition timers, `_transitionPhase`, `_tvStaticMessage`, `_tvStaticSubtext`), `_bufferingDebounceTimer`, `_showBufferingIndicator` | State | build, `dispose`, subscriptions and six adapters |
+| `_iptvSheetKey`, `_playerMenuKey` | State | `build` mounts them; the controls runtime reads `currentState` through Host getters |
+
+**Scaffolding.** The five collaborators are assigned eagerly in the State
+constructor, after P20's six, in this order: `_transitionOverlay`,
+`_dockLayout`, `_controlsRuntime`, `_tvRemote`, `_gestures`. The
+constructors are inert. No construction-time callback is handed to a
+non-collaborator.
+
+### Hosts (names frozen at Step T)
+
+Siblings are reached through facade routing, never by importing each other.
+Every cross-collaborator forwarder is a plain non-`async` expression, so the
+callee's synchronous prefix runs in the caller's turn. `setState` goes
+through `_vpSetState`; `context` and `mounted` are live getters on the
+State; widget reads are live selectors. Estimated names:
+
+- **Controls runtime (≈ 40):** `mounted`, `context`; `controlsVisible`,
+  `hideTimer` (get/set), `tvScrubTarget`, `isPlaying`, `isReady`,
+  `position`, `player`, `anyPlayerOverlayOpen`, `isAnyOverlayOpen`,
+  `tvBarScope`, `tvPlayPauseFocus`, `tvRootFocus`,
+  `activeMediaUserPaused` (set), `activeMediaShouldPlay` (set),
+  `sleepStopLatched` (set), `engineFlagOn`; overlay flags `showPlayerMenu`,
+  `showSyncOverlay`, `showChannelGuide`, `showIptvChannelSheet`,
+  `showSourceSheet`, `showStremioTvGuide`; keys `playerMenuKey`,
+  `iptvSheetKey`; chains `saveResume({positionOverride})`,
+  `hidePlayerMenu`, `hideSyncOverlay`, `hideChannelGuideOverlay`,
+  `hideIptvChannelSheet`, `hideSourceSheet`, `hideStremioTvGuide`,
+  `syncPlaybackClockVisibility`, `hideIptvZapBanner({immediate})`,
+  `hideDebrifyBanner({immediate})`, `refreshEngineRecordingState`,
+  `syncIptvBannerTicker`.
+- **TV remote (≈ 35):** `mounted`, `setState`; `tvScrubTarget`
+  (get/set), `tvScrubGeneration`, `tvNoTimeline`, `isPlaying`, `isReady`,
+  `isTransitioning`, `position`, `duration`, `player`, `controlsVisible`,
+  `tvProgressFocus`, `tvPlayPauseFocus`, `anyPlayerOverlayOpen`,
+  `channelEntries`, `requestChannelById` (widget), `hasStremioTvGuide`,
+  `effectiveIptvChannels`; routed `tvShowBar`, `tvHideBar`,
+  `scheduleAutoHide`, `togglePlay`; chains `trakt`/`simkl`/`mdblist`
+  `ScrobbleSeek`, `canZapIptvChannel`, `zapIptvChannel(int)`,
+  `activeSkipSegment`, `skipActiveSegment`, `showChannelGuideOverlay`,
+  `showStremioTvGuideOverlay`, `showIptvChannelSheetOverlay`.
+- **Gestures (≈ 14):** `mounted`, `context`, `setState`;
+  `controlsVisible`, `dockBand(double)`, `position`, `duration`, `player`,
+  `ripple` (set), `seekHud`, `verticalHud`; chains the three
+  `ScrobbleSeek`s.
+- **Dock layout (≈ 16):** `mounted`, `context`, `setState`; `dockStyle`
+  (get/set), `dockPalette` (set), `dockSize` (get/set),
+  `dockGeometryGeneration` (get/set), `dockExtent`, `infoPanelGeneration`
+  (get/set), `infoPanelHeight` (set), `lastInfoPanelSignature` (set);
+  widget `hideOptions`, `hideSeekbar`.
+- **Transition overlay (≈ 12):** `mounted`, `setState`; `rainbowActive`
+  (set), `transitionRunning` (set), `transitionStopTimer`,
+  `transitionPhaseTimer`, `transitionPhase` (set), `tvStaticMessage`
+  (set), `tvStaticSubtext` (set), `rainbowController`,
+  `bufferingDebounceTimer`, `showBufferingIndicator`.
+
+That is about 117 Host names and about 290 lines of new adapters in the
+facade. Facade after 21a: 8,986 − 658 + ≈ 290 (adapters) + ≈ 10 (fields,
+constructor) + 5 (imports) ≈ **8,630**. The exact figure comes from the
+Step-1 generator output and the ratchet.
+
+### Platform seams
+
+No new seam. No moved member reads `VpS2Hooks`; the S2 sites in
+`_buildSubtitleViewConfig` and `initState` stay in the facade. The moved
+platform reads are `PlatformUtil.isTelevision` (auto-hide, close-top
+overlay, visibility listener, overlay focus release) and
+`PlayerDisplayControls.instance` (gesture brightness). Both already have
+test overrides and characterized host paths. Step T runs both seam proofs
+on the probe to confirm `s2*_sites` and the relocated-site keys are
+unchanged.
+
+### Patched facade adapters (receiver rewrites only)
+
+30 sites in 16 adapters. Each forwarder keeps its signature; only the
+receiver changes to `_s._<collaborator>.<name>`.
+
+| Forwarder | Adapter lines |
+|---|---|
+| `scheduleAutoHide` | startup 4252, shuffle 5557, IPTV guide/catch-up 7391, display 8793, sleep 8882 |
+| `loadDockPrefs` | startup 4244 |
+| `tvReleaseFocusForOverlay` | menu 7890, subtitle auto-sync 8523 |
+| `togglePlay` | PiP 8563 |
+| `tvAbandonScrub` | playlist load 5374, episode adjacent 5654, episode next 5764, Stremio TV 6233, Debrify TV 6362, source playlist 6542, source switch 6733, IPTV switch 7295 |
+| `startTransitionOverlay` | 5762, 6237, 6366, 6544, 6735, 7268 |
+| `clearBufferingIndicator` | 5652, 5760, 6235, 6364, 6546, 6737, 7153 |
+
+Step T measures these into `p21/patched.txt`.
+
+### Retained references (call-site rewrites only)
+
+25 sites. None gains or loses an `await`.
+- **Lifecycle:**
+  - `initState` 1397
+    `_controlsVisible.addListener(_onControlsVisibilityChanged)` and
+    `dispose` 1975 `removeListener(...)`. Both become the tear-off
+    `_controlsRuntime.onControlsVisibilityChanged`. Two tear-offs of the
+    same method on the same receiver are equal, so the removal still
+    matches.
+  - `didChangeDependencies` 921 and `didUpdateWidget` 1622
+    `_refreshDockGeometry()`.
+- **`build`** (15 sites):
+  - 3012 `_handleTvKey(key)`;
+  - `_togglePlay` at 3060, 3134, 3190, 3678;
+  - `_scheduleAutoHide()` at 3080, 3107, 3717;
+  - `_toggleControls` at 3136, 3541;
+  - gesture tear-offs at 3544, 3547, 3548, 3549;
+  - `_wakeControlsOnPointer` at 4101.
+- **`_buildTvControls`** (6 sites): 2257 `_tvScrubCancel()`, 2261
+  `_closeTopPlayerOverlay()`, 2264 `_tvHideBar()`, 2272 and 2308
+  `_scheduleAutoHide`, 2310 `_togglePlay`.
+
+Comments in retained code that name moved members (for example 1395
+"never go through _toggleControls") stay verbatim. They join cleanup C3
+(§5).
+
+### Source-text guards and stack matchers
+
+Step T scans every `readAsStringSync`/`vpSource*` reader and every stack
+consumer (`CompletionDelivery(`, `StackTrace.current`, `.stack.contains(`,
+`timerOrigins`, `timerOwners`, `Trace.from`). It also scans for the moved
+names and the only log literal in moved code, `Player: Transition overlay
+started.`, and records the inventory. Known retargets, each equal or
+stronger and each proved on the original:
+- `test/services/webdav_sync/playback_checkpoint_contract_test.dart:23–36`
+  reads `vpSourceDeclaration('_VideoPlayerScreenState._togglePlay')`. It
+  becomes the `VpControlsRuntime.togglePlay` declaration, with
+  `startsWith('void togglePlay()')` and the regex
+  `_host\.saveResume\(positionOverride: _host\.position\)`. The
+  `onSeekBarChangeEnd` slice stays on the facade, because `build` stays.
+  This test is in the CI format list.
+- `test/features/video_player/video_player_menu_window_test.dart:46`
+  filters timers with `entry.stack.contains('_scheduleAutoHide')`. It
+  becomes `'scheduleAutoHide'`, which matches both the original and the
+  moved frame (P20 P1-4 precedent). Its existing `isNotEmpty` assertion
+  keeps the filter from passing vacuously.
+- The three theme lists (`theme_surface_manifest.txt`,
+  `theme_rendered_set.py`, `test/theme/source_guard_test.dart`) each gain
+  the five new files.
+
+### Async, focus and timing hazards (characterize, never fix)
+
+1. **Auto-hide is a one-shot `Timer(controlsAutoHideDuration = 3 s)`.**
+   - On a TV it re-arms while blocked by a scrub, a pause, a non-current
+     route or an overlay. The first tick after the blocker clears grants a
+     fresh full interval. A TV with the bar hidden lets the timer lapse.
+   - `ModalRoute.of(context)` inside the callback must keep resolving the
+     **State's** context: `_host.context`, read live.
+   - `_hideTimer` stays State-owned. Every reschedule cancels the previous
+     timer through the Host getter before it assigns the new one.
+2. **Post-frame focus claims** in `tvShowBar` and `tvScrubBegin` re-check
+   `mounted`, visibility, overlays and scope focus when they run. They
+   capture `_host`, not values.
+3. **BACK precedence** is split across three places. `_buildTvControls`'
+   `PopScope` (retained) and `canPop` read `_tvScrubTarget`, visibility and
+   overlays, then dispatch to remote cancel, controls close-top or bar hide.
+   The tvOS Menu press arrives only through that `PopScope`. The root
+   `onKey` (retained) gives the overlay flags precedence before
+   `handleTvKey`. `closeTopPlayerOverlay` hands BACK to the menu's and the
+   IPTV sheet's `handleHostBack()`, and returns early, keeping focus, when
+   the press only changed pane.
+4. **Hold detection** uses `DateTime.now()` with a 400 ms window: the third
+   quick repeat enters the scrub. This cannot be faked with
+   `FakeAsync`-only time, so characterization drives repeated
+   `RawKeyDownEvent`s through the root `Focus` and asserts outcomes, not
+   wall-clock thresholds (as P20 did for `IptvTuneDiagnostics`). Scrub
+   acceleration is 10/30/60 s, with boundaries at repeats < 8 and < 16;
+   targets are clamped to `[0, duration]`.
+5. **Scrub generation.** The commit compares the generation captured at
+   begin with the live `_tvScrubGeneration`, which `dispose` and the eight
+   transition adapters bump. A stale or unmounted commit seeks nothing.
+   Abandon never calls `setState` or play.
+6. **Gestures.** `handleDoubleTap` is `async`: it awaits `player.seek`
+   before the three scrobbles, then clears the ripple after 450 ms.
+   `onPanStart` is `async void`: it awaits brightness, then checks
+   `mounted`. The HUDs clear after 250 ms. The edge guard is 24, the bars
+   72, and the band uses `dockBand(72.0)` while controls are visible.
+7. **Listener identity** (`_controlsVisible` add/remove). A mismatch is not
+   observable by behaviour, because `removeListener` of an unknown listener
+   is silent and the notifier is disposed next. The move check covers it
+   instead (the same tear-off expression at both sites), plus a negative.
+8. **`_refreshDockGeometry` calls `MediaQuery.of(context)`** in
+   `didChangeDependencies` and `didUpdateWidget`. That registers the
+   State's inherited dependency, and `_host.context` must be the same
+   element. Characterize: a metrics change, `hideOptions` or `hideSeekbar`
+   resets the extent, the panel height and the generations. An identical
+   signature is a no-op.
+9. **`_loadDockPrefs`** is unawaited from startup. Its `setState` runs
+   after the `mounted` check and resets the signature, so the next build
+   refreshes.
+10. **The transition start** picks `math.Random()` messages, so tests pin
+    membership in the list, not the message itself. A start on an
+    unmounted State does nothing.
+
+### Follow-up candidates (pre-existing; confirm at Step 0, preserve, record)
+
+- `_isAnyOverlayOpen` duplicates `_anyPlayerOverlayOpen` (dead-duplicate
+  removal; post-series).
+- The five write-only fields (post-series dead-state removal; P20 already
+  recorded `_transitionPhase` and `_transitionPhase2Started`).
+- `onKey`→`onKeyEvent` migration (behaviour change, hazard 4; with the
+  build decomposition).
+- *Transition lifecycle owner* (deduplicating the cleanup blocks).
+- P20 Step-0 item "a failed start never arms the autosave": **confirm with
+  the user now**, as P20 asked "before Phase 21". The proposed disposition
+  is intended behaviour, recorded, not fixed.
+
+### Step T (21a)
+
+- Generator `dev/tool/draft_vplayer_controls_moves.py`, modelled on
+  `draft_vplayer_engine2_moves.py`:
+  - `BASE='5214f7a7e'` (or the M5 record) and
+    `EVIDENCE='refactor-evidence/vplayer/p21'`;
+  - five `GROUPS`, the single-writer `FIELDS` above, the `TYPES` for the
+    new Host names, and `ACTIONS` for routed and retained forwarders;
+  - it never writes `lib/`, only the probe.
+- Probe sizes and Host names frozen; `p21/members.txt`, `retained.txt`,
+  `patched.txt`, `scan.json`.
+- The probe analyzer run uses the CI command. Expected additions: facade
+  imports left unused by the move (at least `player_appearance_storage`),
+  `curly_braces` formatter wraps, and `use_build_context_synchronously`
+  from `_host.mounted` guards. They are registered as
+  `p21_receiver_probe_additions`.
+- Seam and platform-seam proofs run on the probe.
+- The test inventory `dev/tool/vplayer_p21_test_inventory.txt` is P20's
+  494 files plus the new P21 suites and the retargeted readers.
+
+### Step 0 — characterization of the original
+
+Step T maps which existing suites pin each moved member. Candidates:
+- `video_player_display_controls_test` and
+  `video_player_display_gestures_test`;
+- `video_player_trakt_seek_inputs_test` and
+  `video_player_secondary_seek_inputs_test`;
+- `video_player_iptv_review2_scrub_handoff_test`,
+  `video_player_iptv_review2_timeline_focus_test` and
+  `video_player_iptv_tv_test`;
+- `video_player_p17_tv_callers_test` and
+  `video_player_p17_guide_dispatch_test`;
+- `video_player_menu_window_test` and
+  `video_player_subtitle_sync_overlay_test`;
+- the transition suites (`p17_transition_timer`, `p20_transition`,
+  `iptv_review2_transition_timer_ownership`,
+  `iptv_review2_tv_transition_state`).
+
+New suites (named `video_player_p21_*`) are added only for gaps. Each test
+gets a per-test mutation proof on the original, followed by the systematic
+sweep and the independent sample (≥ 75 %, by a review agent). Known gaps:
+
+- **Auto-hide:**
+  - the non-TV hide after 3 s;
+  - TV: no-op while hidden; re-arm while scrubbing, paused, under a route
+    or under an overlay; a full interval after the blocker clears;
+  - hide hands focus to the root, except under an overlay;
+  - a reschedule cancels the previous timer;
+  - an unmounted tick does nothing.
+- **Bar:**
+  - raise clears the blocked flag and focuses Play/Pause post-frame,
+    unless an overlay is open or the scope is already focused;
+  - lower focuses the root, except under an overlay;
+  - toggle;
+  - the visibility listener: immediate banner hides, engine refresh only
+    with the engine flag, TV focus return only when the bar scope had focus
+    and no overlay is open, ticker sync.
+- **Close-top:**
+  - the precedence order (menu, sync, channel guide, IPTV sheet, source
+    sheet, Stremio guide);
+  - a pane change from the menu or the IPTV sheet keeps it open with no
+    focus move;
+  - TV root focus after a real close.
+- **Play toggle:**
+  - not-ready no-op;
+  - pause: writes user-paused and should-play, saves with the position
+    override, unawaited;
+  - play: clears the sleep latch;
+  - both paths reschedule auto-hide;
+  - the PiP action path.
+- **Remote:**
+  - the full `handleTvKey` matrix: scrub in flight; not ready or
+    transitioning (BACK → null, L/R zap only when zappable); bar hidden
+    (OK with skip precedence, DOWN, UP guide order else raise, no-timeline
+    L/R, hold → scrub only with duration > 0); bar up (BACK, L/R on the
+    progress row, everything else reschedules and returns ignored);
+  - scrub begin/step/commit/cancel/abandon, including stale-generation
+    commits after a source switch and commits after dispose;
+  - one seek and one scrobble set per commit;
+  - the `openTvGuide` order.
+- **Gestures:**
+  - double tap: edge guard, bands with the classic and the styled dock,
+    clamp, the scrobble order after the awaited seek, the ripple lifetime;
+  - pan: ignore in the bands, the mode thresholds, unsupported brightness
+    on the left half, the seek mapping `min(120 s, duration)`, the volume
+    and brightness HUDs, the end-of-pan seek and scrobbles, the 250 ms
+    clear, an unmounted brightness await.
+- **Dock:**
+  - the three preference reads reach their fields;
+  - an unmounted load;
+  - signature invalidation on a metrics change, a widget-flag change, and
+    a style or size change after load;
+  - an identical signature is a no-op.
+- **Transition:**
+  - the fields set by a start, the message drawn from the list, the
+    rainbow repeat period, unmounted no-op;
+  - clear cancels the debounce and lowers the indicator.
+
+### Step 0b, Step 1, gate (21a)
+
+- **Step 0b:** independent sample closure and the systematic sweep, as in
+  P20 (Step 0c fixes if the re-sample finds survivors).
+- **Step 1:** the generator output is copied unchanged into `lib/` and the
+  facade ratchet is lowered.
+  - Move checks: P21 current and `--self-test`; P20 history
+    `--at 5214f7a7e`.
+  - CI switches the current check to `vplayer_p21.json`.
+  - The analyzer inventory `vplayer_p21_analyzer.json` adds the probe
+    additions; the allowlist gains the newly unused facade imports, to be
+    removed in 21b C1.
+  - Format, size, architecture and storage keys.
+- **Reduced gate:** the P21 inventory runs serially on the original
+  (original `lib/` plus the final behaviour tests) and on the moved tree,
+  with identical outcomes by (suite, name). The single pre-existing PiP
+  startup-shield source-text failure is expected on both sides.
+- **Post-gate review** by a review agent, then merge `--no-ff` into
+  `refactor/codebase` and push to `private`.
+
+### 3. D6 — the `build` decision (21b, measured at `5214f7a7e`)
+
+`build` is 2925–4108: 1,187 span lines, 1,184 body lines. It reads:
+- 123 distinct State members (307 occurrences);
+- 23 widget fields (39 occurrences);
+- 64 collaborator chains on 32 collaborators;
+- `context` 24 times, `mounted` 10 times, `setState` 5 times.
+
+It writes 10 State fields: `_augmentedSources`, `_autoSyncPillLastShown`,
+`_controlsVisible`, both floating-mount flags, `_dockVolume`,
+`_infoPanelHeight`, `_isSeekingWithSlider`, `_lastSliderSeekPos` and
+`_lastTapLocal`. Its biggest blocks are the root `onKey` closure (334
+lines; 35 members, 24 chains) and the controls overlay 3578–3852 (275
+lines; 60 members, 39 chains). `_buildTvControls` alone reads 53 members
+and 34 chains.
+
+| Option | Facade | New feature file | Host | Rewrites |
+|---|---|---|---|---|
+| **A. Stay** (recommended) | keeps 1,549 lines of build code | none | none | 21 call-site rewrites from the 21a moves only |
+| B. Move `build` whole to `vp_player_view.dart` (helpers stay) | −1,184 + ≈ 420 adapter ≈ −760 | ≈ 1,600 (1,184 + ≈ 400 Host + scaffold) | ≈ 190 names (≈ 91 own state + 23 widget + 64 chain forwarders + `context`/`mounted`/`setState` + ≈ 10 setters) | ≈ 385 receiver rewrites in `build` |
+| B′. Move `build` and its 11 helpers | ≈ −1,140 net | ≈ 1,980 | ≈ 210 names | ≈ 450 rewrites |
+
+B and B′ fail on every axis that matters:
+- The builder breaks the 800-line ceiling by 2–2.5× and needs an exception
+  above `VIDEO_PLAYER_SIZE_CEILING`, which weakens a check.
+- A 190-name Host is the State's whole presentation surface, which AGENTS
+  forbids ("do not replace a giant screen with a giant controller, expose
+  its entire state").
+- The total code grows by about 840 lines.
+- The facade stays far above 800 either way, because of the adapters.
+- Every closure's `context` would be rebound to the build parameter.
+- It rewrites 385 receivers for no ownership gain.
+
+This matches the TV series' phase-20 decision about `playbackListener`.
+
+**Decision: `build` and its 11 build-only helpers stay in the facade.** Exit
+(as D6 recorded): the Follow-up *`build` decomposition*. It is its own
+goal: behaviour-level layout widgets with goldens, including the `onKey`
+closure as a key dispatcher and the `onKeyEvent` migration.
+
+### 4. End-state exception and the host adapters
+
+**Facade composition after 21b** (estimated; 21b Step T measures it exactly
+with disjoint spans, like the TV series' composition table):
+
+| Part | ≈ lines |
+|---|---|
+| directives (≈ 228 + 5 − ≈ 80 unused) | 152 |
+| public widget | 199 |
+| State: fields (≈ 673, incl. 65 collaborator fields) | 673 |
+| State: constructor, lifecycle, heartbeat | 495 |
+| State: `build` and build-only helpers | 1,549 |
+| State: shared derivations and reset helpers | 368 |
+| host adapters (65 adapters, ≈ 1,790 members) | 5,010 |
+| test and platform hooks | 92 |
+| **total** | **≈ 8,550** |
+
+**Why the adapters stay.** Each adapter needs `_VideoPlayerScreenState`'s
+library-private members. There are three ways to get them out of the
+facade, and all three are excluded:
+- `part` files and mixins are banned by AGENTS;
+- making the State's members public, or having the State implement all 65
+  Hosts, would expose its whole surface (about 1,800 members);
+- a shared adapter base class for `mounted`/`context`/`setState`/`player`
+  (46/18/33/32 uses) would save only about 260 lines (3 %) and needs new
+  proof tooling.
+
+So the adapters stay. They are the composition root's wiring cost.
+
+**Exception registration (21b):**
+- `dev/tool/file_size_baseline.txt`: the facade line is set to the exact
+  measured count. That ratchet is already shrink-only; `--update` never
+  raises a count. A comment line names the exits.
+- `check_search_architecture.py`:
+  - `VIDEO_PLAYER_COMPLETE = True`;
+  - `VIDEO_PLAYER_FACADE_CAP` set to the exact count, with `lines != cap`
+    failing. That is stronger than the `>` used by the other facades, and
+    the same exactness as `VIDEO_PLAYER_SIZE_EXCEPTIONS`;
+  - a top-level declaration check: only `VideoPlayerScreen`,
+    `_VideoPlayerScreenState`, `VideoPlayerScreenTestHooks`, `VpS2Hooks`,
+    and `_Vp*HostAdapter` classes that each implement an existing bridge
+    `Vp*Host`;
+  - exactly the three exports;
+  - no top-level functions, enums or typedefs;
+  - `VIDEO_PLAYER_SIZE_EXCEPTIONS` stays exactly
+    `{vp_player_startup.dart: 623}`.
+- `vplayer_architecture_test.py` gains cases: exact cap passes; cap + 1
+  fails; cap − 1 without lowering fails; a new top-level class fails; a
+  fourth export fails.
+- The end-state declaration guard `dev/tool/vplayer_end_state.py`
+  (parser-based, `--self-test`) freezes the facade's declaration set:
+  top-level declarations, State members and adapter classes. Adding a
+  member fails. Removing one requires removing it from the frozen list, so
+  the guard is shrink-only at declaration level. New behaviour must land in
+  a collaborator.
+
+**Exits (named, tracked as open exceptions in the completion audit):**
+1. **`build` decomposition** (D6 exit): about −1,549 lines.
+2. **D1 per-collaborator migration** (Riverpod and the data-contract
+   exit): each collaborator that moves to explicit contracts deletes its
+   Host and adapter. That is the bulk of about −5,010 lines, plus the
+   shared fields it comes to own.
+3. **Startup orchestration decomposition**: retires the
+   `vp_player_startup.dart` 623-line exception.
+
+The milestone after exits 1 and 2: a facade that holds only the widget,
+the lifecycle in its frozen order, and composition (target ≤ 800). The
+exception grants no growth allowance and is reassessed whenever the file is
+extended.
+
+### 5. Cleanup in 21b (source changes; separate commits; never mixed with moves)
+
+| Commit | Content | Allowlist / inventory |
+|---|---|---|
+| C1 | Delete the 76 unused facade imports plus those newly unused after 21a, and drop `kIsWeb` and `listEquals` from the `show` list | the allowlist loses those lines (about 80); the inventory removes the same identities |
+| C2 | Add braces at every `curly_braces_in_flow_control_structures` site in `lib/features/video_player/**` (28 occurrences in 17 bridge files at the P20 merge, plus the 21a additions) and the facade's one at 1107 (`_currentSeriesImdbId`) | infos removed from the inventory |
+| C3 | Comment-only edits: comments naming moved private members (`p20/retained.txt`: facade 519, 533, 542; `vp_audio_output.dart:71`, `vp_decoder_probe.dart:54`, `vp_mdblist_scrobbler.dart:69`, `network_tuning.dart:17/22`; the moved docs 2442/2450; plus a full P21 scan of facade and bridge comments for `_name` tokens that the manifests map to moved members). Also P20's misattached "Load default player settings (aspect)" (1663, above `_dockBand`) and the P19 S2f comment "gated on `Platform.isAndroid`" (`vp_decoder_probe.dart:96`) | none |
+
+- The inventory is regenerated as `vplayer_p21b_analyzer.json` with the
+  removed identities deleted, so they cannot come back.
+- **Out of scope:**
+  - the 5 `unused_field` entries and `_isAnyOverlayOpen`: removing them is
+    dead-code removal, which the Goal excludes;
+  - `deprecated_member_use` (a behaviour change, hazard 4);
+  - `use_build_context_synchronously`, `avoid_print` and `empty_catches`
+    (behaviour-adjacent);
+  - `directives_ordering` and `unnecessary_import` (open question 8).
+- **Proof:** the final-tree move check must pass after the cleanup, so
+  `check_dart_moves.py` gains a declared-edit section on the P21 manifest
+  with three kinds of edit:
+  - `remove_directive` (by URI);
+  - `insert_braces` (by file, enclosing declaration and ordinal);
+  - `replace_comment` (by file, declaration and comment ordinal, with the
+    exact before and after text).
+  The checker projects the declared edits out before comparing. Negatives:
+  an undeclared brace; an extra removed import; an export removal; a code
+  token hidden in a comment replacement; a declared site that no longer
+  matches. P1–P20 `--at` history checks are unaffected. If the reviewer
+  prefers, a standalone token-diff `vplayer_cleanup_proof.py` with the same
+  negatives is acceptable (open question 8).
+
+### 6. Storage guard, CI structure, completion audit, device checklist (21b)
+
+**Storage-boundary guard** (Follow-up "red since Phase 5"). The full
+`check_storage_references.py` reports **61 findings in 33 files**, all in
+`test/features/video_player/**`:
+- 36 `PlaybackStateStore.savePlaybackStateMap`;
+- 24 `PlaybackStateStore.getPlaybackStateMap`;
+- 1 `PlaybackIdentityStorage.seriesProgressKey`.
+
+CI runs only `--self-test`. **Recommended fix:** a scoped, documented test
+exemption in the guard. The exact member set above is allowed only under
+the path prefix `test/features/video_player/`, with a count ceiling of 61
+that may only shrink. The exemption gets self-test negatives: the same
+member in `lib/`; in another test directory; a fourth member; the count
+ceiling + 1. It keeps the physical-map assertions, which are the
+profile-write evidence, and does not weaken the production rule. A
+test-only inspection seam inside `lib/services/storage/` would change
+production code for test convenience. The `file-sizes` job then runs the
+full check, not only `--self-test`.
+
+**CI structure job.** A new `vplayer-structure` job in `checks.yml`, on
+every push with no gate-message filter, like `tvplayer-structure`. It needs
+`fetch-depth: 0`, Flutter 3.44.8 and `flutter pub get` for the parser
+packages. It **takes over** the vplayer steps now in `search-architecture`:
+- the P21 move check `--self-test` and the final-tree check (with the
+  declared cleanup edits);
+- the P1–P20 `--at` history checks;
+- `vplayer_seam_proof.py` and `vplayer_platform_seam_proof.py` self-tests;
+- `vplayer_architecture_test.py`;
+- `vplayer_end_state.py` (with `--self-test`);
+- the Host-usage audit (below).
+
+`search-architecture` keeps the generic checks, the format list and the
+analyze step with `check_vplayer_analyzer.py`, which needs `analyze.txt`.
+GitHub Actions has run no job since billing stopped. So "required in CI"
+means: the job is defined, every step is run locally at the final gate
+with its output archived, and the first green run on the pushed final SHA,
+plus making it a required check on `main` (a repository setting, the
+user's action), stays **pending**. It is reported as pending, never as
+done.
+
+**Completion audit** (AGENTS "migrated slice complete"; written to the
+plan, evidence `p21b/audit/`):
+1. **Declaration trace.** Every declaration of the formatted original
+   `31a347ad2` is traced through manifests p1–p21 to a destination or to
+   the facade end-state classes (b)/(c). Zero untraced. Counts per
+   destination.
+2. **Responsibility map:**
+
+   | Original responsibility | Replacement |
+   |---|---|
+   | player instance, renderer/decoder fallback | `vp_player_instance`, `vp_player_subscriptions`, `vp_renderer_fallback`, `vp_decoder_probe`, `vp_tvos_video`, `vp_video_output_lease`, `vp_audio_output` (P19–P20) |
+   | open/startup pipeline (debrid direct, VOD failover, gate) | `vp_player_startup` (open exception), `vp_media_open`, `vp_network_tuning`, `vp_player_defaults`, `vp_startup_candidates`, `vp_startup_failover`, `vp_startup_gate` (P16, P20) |
+   | source switching | `vp_source_switch`, `vp_source_playlist_switch`, `vp_iptv_live_sources` (P15–P16) |
+   | IPTV live pipeline and recording | `vp_iptv_zap_ring`, `vp_iptv_zap_ladder`, `vp_iptv_guide_catchup`, `vp_iptv_channel_switch`, `vp_iptv_watch_memory`, `vp_iptv_zap_banner`, `vp_iptv_recording`, `vp_iptv_recording_resources`, models `vp_iptv_zap_page`, `iptv_catchup_request_gate` (P1, P13, P15) |
+   | Stremio TV / Debrify TV | `vp_stremio_tv_channels`, `vp_debrify_tv_channels`, `vp_debrify_tv_banner` (P17) |
+   | playlist load/resolve, PikPak, preload | `vp_playlist_load`, `vp_playlist_entry_resolve`, `vp_pikpak_retry`, `vp_media_waits`, `vp_metadata_preload` (P18) |
+   | episode navigation, shuffle, fetch | `vp_episode_next`, `vp_episode_adjacent`, `vp_playback_ended`, `vp_shuffle`, `vp_episode_title_info`, `vp_episode_fetch`, `vp_episode_guide`, `vp_random_choice_tile`, `vp_season_episode_selection` (P1, P17, P18) |
+   | resume | `vp_resume_keys`, `vp_resume_restore`, `vp_resume_save` (P14) |
+   | trackers and local completion | `vp_trakt_scrobbler`, `vp_simkl_scrobbler`, `vp_mdblist_scrobbler`, `vp_local_completion` (P5–P7) |
+   | subtitles | `vp_subtitle_auto_sync`, `vp_subtitle_apply`, `vp_subtitle_language_policy`, `vp_track_preferences`, `vp_addon_subtitles`, `vp_identify_title`, `vp_identify_title_ui`, `vp_subtitle_apply_attempt`, application `vp_subtitle_identity`/`vp_identity_text`/`vp_filename_hash` (P1, P9–P12) |
+   | PiP/background | `vp_pip_lifecycle` (P8) |
+   | sleep, skip, speed/aspect/orientation | `vp_sleep_timer_controller` (P2), `vp_skip_segment_controller` (P3), `vp_display_mode_controller` (P4) |
+   | tracks sheet, unified menu | `vp_player_menu`, `vp_player_menu_ui` (P13) |
+   | controls, TV keys, gestures, banners | `vp_controls_runtime`, `vp_tv_remote`, `vp_player_gestures`, `vp_dock_layout`, `vp_transition_overlay` (P21a); banners P15/P17; the root key map and TV bar widget stay in `build` (D6) |
+   | formatting, manual-source failure | `vp_format`, `vp_manual_source_validation_failure` (P1) |
+   | widget, exports, lifecycle, shared state, `build`, adapters | facade end-state exception (§4) |
+
+3. **No duplicates or unused scaffolds.** No moved implementation remains
+   in the facade (the move checks and the declaration trace). A
+   **Host-usage audit** (`dev/tool/vplayer_host_usage.py`, modelled on
+   `check_tvplayer_host_usage.py`, with `--self-test`) checks two things:
+   every `Vp*Host` member is used by its collaborator, either accessor
+   counting for a property; and every adapter member overrides a declared
+   Host member. Negatives: an unused Host member; an adapter-only member.
+   Known exceptions are listed exactly. The retained duplicate
+   `_isAnyOverlayOpen` and the five write-only fields are listed as
+   recorded dead state with a Follow-up.
+4. **Sizes.** Every new handwritten app file is ≤ 500, except the
+   `vp_player_startup.dart` exception. Test helpers are organized by
+   behaviour, none over 800.
+5. **Open exceptions**, which do not count as completed structure:
+   - the facade (exact count; exits 1–3);
+   - `vp_player_startup.dart` (623; exit: startup decomposition);
+   - D1, which keeps the bridge layering (services, storage, channels and
+     the player called from presentation; exit: the data-contract and
+     Riverpod migration).
+6. **Final-tree evidence is kept apart from history.** The P21 manifest
+   runs without `--at` on the final tree (including the cleanup edits),
+   and a mutation confined to one final destination must fail it. The
+   P1–P20 `--at` checks remain history evidence.
+
+**End-of-series device checklist.** A new consolidated
+`docs/refactoring/video-player-device-checklist.md` (precedent:
+`tv-player-activity-device-checklist.md`). It collects every phase's
+"Device checklist (end of series)" items, from phases 1–20 and 21 below,
+into one ordered session per platform: Android phone, Android TV (Flutter
+player), tvOS, iOS, macOS and Windows/Linux desktop. It records the
+pending M5/final CI items and the rule never to install a debug build over
+a release device. No device runs happen now. P21 items:
+- **TV (Android TV with the Flutter player, and tvOS):**
+  - OK toggles and raises the bar; with a skip offered, OK skips;
+  - DOWN raises the bar; UP opens the session's guide (Debrify TV,
+    Stremio TV, IPTV) or raises the bar;
+  - holding LEFT/RIGHT enters the cinema scrub on the third repeat and
+    accelerates 10/30/60 s; OK commits one seek (trackers see one jump);
+    BACK/DOWN cancels and resumes;
+  - a scrub left open across a source or channel switch never seeks the
+    new item;
+  - live or `hideSeekbar` sessions never scrub; L/R zaps with the bar
+    hidden;
+  - the bar hides after 3 s of inactivity only while playing, stays up
+    while paused, and after a sheet closes gets a full interval;
+  - BACK precedence: scrub, then overlay, then bar, then exit, including
+    the tvOS Menu press;
+  - closing an overlay returns focus to the player root, and the remote is
+    never dead.
+- **Phone:**
+  - double-tap left/right seeks ±10 s with the ripple, not inside the
+    top/bottom bands;
+  - left-half vertical drag sets brightness (where supported), right half
+    sets volume, horizontal drag seeks with the HUD;
+  - with the styled `two_tier` dock, after rotation and a text-scale
+    change, gestures in the dock band are ignored and the skip button sits
+    above the dock.
+- **Desktop:**
+  - mouse movement wakes the controls and the cursor; the cursor stays
+    visible under overlays;
+  - the keyboard map works: Space, ←/→ seek, ↑/↓ volume with the HUD, A,
+    G, C, S, N, media keys;
+  - F/F11 and Esc on Windows/Linux leave fullscreen first, then close.
+- **All platforms:** dock style, palette and size apply at launch; the
+  retro static transition shows on next episode and channel switch; the
+  buffering spinner clears on switch.
+
+### 21b steps and final checks
+
+- **Step T(b):**
+  - the composition measurement (disjoint spans, exact total);
+  - the cleanup inventories `p21b/cleanup/{imports,braces,comments}.txt`;
+  - the declared-edit checker extension with its negatives;
+  - the storage-guard exemption with its negatives;
+  - `vplayer_end_state.py` and `vplayer_host_usage.py` with self-tests;
+  - the `vplayer-structure` job draft.
+- **Commits, in order, each with its own proof and check log:**
+  1. C1;
+  2. C2;
+  3. C3;
+  4. the storage-guard exemption plus the full CI run;
+  5. the end-state guards, `VIDEO_PLAYER_COMPLETE`, the exact facade cap,
+     the baseline comment and the CI job;
+  6. the completion audit, the end-state exception text and the device
+     checklist (docs);
+  7. the final record.
+- **Final checks on the clean tree.** The commit message carries the word
+  CI uses to select the full suite (see AGENTS).
+  - The full Flutter suite (`suite_evidence.py run vplayer/final/...
+    --no-pub --dart-define=DEBRIFY_VP_TEST_HOOKS=true --concurrency=1`),
+    compared by identity against M5's JSONL with
+    `python3 dev/tool/test_baseline.py`-style identity rules. It must show
+    0 new failures, 0 missing and 0 newly skipped tests; the only added
+    identities are the P21 suites.
+  - `flutter build apk --release --no-pub` (Android Studio JBR, JDK 21)
+    and `flutter build macos --release --no-pub`. Nothing is installed or
+    run.
+  - The analyzer shows no additions; the allowlist only shrinks.
+  - Format; size and architecture checks; all move checks (P1–P20 history
+    and P21 final-tree); the seam proofs; the full storage references
+    check; the end-state guard; the Host-usage audit.
+  - At most two heavy jobs at a time; suites run serially.
+- **Review:** one independent review agent covers the completion audit,
+  the exception text, the cleanup diffs and the proofs. There is no
+  mutation sample, because nothing moves. A planted undeclared token change
+  must fail the cleanup proof.
+- Then merge into `refactor/codebase` and push to `private`. **Merging into
+  `main` and the device pass are the user's decision after the series.**
+
+### Open questions for the design reviewer
+
+1. **D6:** `build` and its 11 helpers stay (A), with the measured case
+   against B/B′, and the facade exception at about 8,550 with exits 1–3.
+2. **Host adapters stay in the facade.** Is the adapter base class rightly
+   left to D1 (≈ 260 lines, 3 %)?
+3. **The 21a/21b split**, with 21b as a decision-only phase that also
+   carries C1–C3.
+4. **Five collaborators.** Should the transition overlay (≈ 80) or the
+   dock layout (≈ 110) merge into the controls runtime (it would stay
+   under 500)?
+5. **`tvShowBar`/`tvHideBar` in the controls runtime** (they are coupled
+   to auto-hide), not in the TV remote.
+6. **The shared derivations stay State-owned** (36 members, 368 lines),
+   including `_resetSubtitleState`, `_dockBand`, `_anyPlayerOverlayOpen`,
+   `_tvNoTimeline` and the duplicate `_isAnyOverlayOpen`. Or should a pure
+   session-identity reader take about 160 lines, at the cost of about 35
+   adapter forwarder rewrites?
+7. **The root `onKey` closure stays in `build`** (no closure-lift fate).
+8. **Cleanup scope and proof.** C1–C3 as proposed; `directives_ordering`
+   and `unnecessary_import` excluded; a declared-edit section in
+   `check_dart_moves.py` or a standalone token-diff proof.
+9. **Storage guard:** the scoped test exemption with a shrink-only count,
+   or a test inspection seam in `lib/services/storage/`.
+10. **Facade cap exactness** (`!=`, recommended) or `>` as the other
+    facades use.
+11. **Moving the vplayer steps** out of `search-architecture` into
+    `vplayer-structure` (or duplicating them).
+12. **P20 hazard 4** (a failed start never arms the autosave): record it as
+    intended and ask the user to confirm before 21a Step 1.
+
 ## Follow-ups
 
 - **P20 Step 1 / post-gate review:**
