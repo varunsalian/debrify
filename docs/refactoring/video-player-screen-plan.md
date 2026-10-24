@@ -5161,9 +5161,23 @@ systematic sweep and the independent sample (≥ 75 %). Known gaps:
     the viewer is returned to the episode they were already watching,
     reopened from the start (`suppressResume`). Pinned by "a shuffle
     candidate whose native open fails keeps its new identity".
-  - `_openMedia`'s entry check `request?.isCurrent == false` is defence in
-    depth only: every request-bearing caller (playlist load, PikPak retry)
-    checks `isCurrent` synchronously right before the call (sample M01).
+  - `_openMedia`'s entry check `request?.isCurrent == false` (sample M01) is
+    not an equivalent: it is unreachable today because every request-bearing
+    caller (playlist load, PikPak retry) checks `isCurrent` synchronously
+    right before the call. Without it a stale request would still bump
+    `_watchOpenEpoch` (superseding a newer pending open), bump the resume
+    epoch, clear the resume guard and begin a media generation for media it
+    never opens. Keep it when moving; a caller that awaits between its own
+    check and `openMedia` would make it load-bearing.
+  - A request cancelled after `_openMedia` has started (continuous shuffle
+    turned off, or the sleep-stop latch during an auto-advance, while a
+    server-source pick is in `_serverWatch.prepare`/`authorize`) has already
+    run the entry handoff (`observeServerWatch()` + `commit(null)`) when the
+    post-authorization check rejects it: the still-playing server item's
+    session is stopped and it reports no further progress, while
+    `_openedWatchSource` still names it. Pinned by "turning continuous
+    shuffle off while a server-source episode is held in watch preparation
+    publishes nothing for it".
   - The outgoing `observeServerWatch()` before `commit(null)` is a no-op on
     every current handoff path (each runs under `_isTransitioning` or the
     validation gate), so the final outgoing observation is the listener's
@@ -10321,6 +10335,60 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
   `492db3747`).
 - Follow-ups: see "P20 Step 0b" in Follow-ups.
 - Next: the review agent's re-sample, then Step 1.
+
+### 2026-10-24 — Phase 20 re-sample (review agent) and Step 0c fixes (executor: Claude)
+
+- **Re-sample result** (`p20/step0b-resample/`, `table.md`, `results.jsonl`,
+  `fresh_mutants.json`): the original 218-mutant sample is **76.1%** from the
+  P20 files only, **78.7%** with the accepted equivalents excluded and
+  **83.9%** with the behavioural legacy kills. A fresh sample (X01–X42) is
+  **42.9%** (47% with no-op mutants excluded). Honest note: the media
+  generation, remedy boundary and listener gate cases are narrowly fitted to
+  the sampled mutants, which the fresh sample exposes. The equivalence
+  verdicts are accepted except M46 (reachable; closed below).
+  `test/media_server_player_resume_test.dart` is also a source-text suite:
+  its kills are not credited (as `media_server_watch_player_wiring_test`).
+  M15/M16/M48 are killed only by `video_player_startup_watch_test`, which is
+  in the Step 1 gate inventory.
+- **Step 0c cases** (tests only, commit `9d3e7df24`, existing files, no new
+  registrations), proofs in `p20/step0c/` (`README.md`, `proofs.jsonl`,
+  `raw/`; detached worktree `vp20-0c` at `b5889694e`, exact before/after,
+  serial under `suite.lock`, file restored after each):
+  - **M46** (P1) and fresh **X05**: `open_guards` "turning continuous
+    shuffle off while a server-source episode is held in watch preparation
+    publishes nothing for it" — a show-shuffle pick of another server source
+    held in `_serverWatch.prepare`, continuous shuffle turned off, released:
+    no open, no second `media_server_open`, and a later player error is
+    attributed to the playing item's source. **Both KILLED by assertion.**
+    The case also pins that the playing item's server session was already
+    stopped at the cancelled open's entry (Follow-up below), so the
+    reviewer's expected "continued `/Progress` for the current item" does
+    not hold on the original.
+  - **X27**: `remedy_boundary` "tvOS a live channel zap also restores the
+    remedy before resetting subtitles and opening" — KILLED.
+  - **X34**: `media_server` "a pause edge reports the paused position to the
+    server session without a further position tick" — KILLED.
+  - **X35**: `pikpak_continuation` "a PikPak continuation outlived by a
+    renderer rebuild during its ready wait leaves the rebuilt player to the
+    fallback" — KILLED (second version, with `startAtPercent`: the stale
+    continuation's start seek lands on the rebuilt player).
+  - **X14** (pinned, not killed): `open_guards` "a renderer rebuild of a
+    pending Stremio TV launch cancels the outgoing startup watch on the old
+    player" — the old watch's subscriptions are cancelled on the rebuild path
+    even with the mutant.
+  - **X31/X32** (pinned, not killed): `listener_gate` "a pause edge inside a
+    manual source validation sends no Trakt or Simkl pause" — the manual
+    switch raises `_isTransitioning`, which masks the validation operand on
+    that path; killing them needs a pause edge under the startup validation
+    or a Stremio TV `blocksProgress` watch.
+  - The 5 changed files pass on the original (`b5889694e` lib) and on the
+    moved tree (`fbecf3123` lib): `p20/step0c/raw/final-*.jsonl`, 29/29
+    each. Format and analyzer clean for the changed files.
+- **P2s still open** from the fresh sample: X02, X10, X12, X13, X14, X15,
+  X16, X17, X18, X23, X24, X25, X26, X29, X30, X31, X32, X33, X40, X41; and
+  from the original sample those listed under Step 0b (G15, S28, O04, B33,
+  B36, B43, B52/B58, B66, B78, B81, B107, B121/B122, M56, M57, R04, R21, D03,
+  D16). M01 moves to Follow-ups (below).
 
 ## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
 
