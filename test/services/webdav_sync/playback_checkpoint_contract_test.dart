@@ -18,10 +18,12 @@ void main() {
   ).readAsStringSync();
 
   test('pause and settled seek issue explicit persisted checkpoints', () {
-    // The retained declaration itself: phase 18 moved the neighbour that used
-    // to end this slice (_setManualSelectionMode) out of the facade.
+    // The play toggle's live declaration, resolved through the ownership
+    // manifests: `_VideoPlayerScreenState._togglePlay` in the facade until
+    // phase 21 moves it to `VpControlsRuntime.togglePlay`. Each form is
+    // matched exactly; nothing else satisfies these expectations.
     final toggle = vpSourceDeclaration('_VideoPlayerScreenState._togglePlay');
-    expect(toggle, startsWith('void _togglePlay()'));
+    expect(toggle, matches(RegExp(r'^void _?togglePlay\(\) \{')));
     final seek = _between(
       player,
       'onSeekBarChangeEnd: () {',
@@ -31,7 +33,10 @@ void main() {
     expect(
       toggle,
       contains(
-        RegExp(r'_resumeSave\.saveResume\(positionOverride: _position\)'),
+        RegExp(
+          r'unawaited\((?:_resumeSave\.saveResume\(positionOverride: _position\)'
+          r'|_host\.saveResume\(positionOverride: _host\.position\))\)',
+        ),
       ),
     );
     expect(seek, contains('positionOverride: settledPosition'));
