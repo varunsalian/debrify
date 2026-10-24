@@ -163,4 +163,74 @@ void main() {
       }
     },
   );
+
+  testWidgets(
+    'P20 a pause edge inside a manual source validation sends no Trakt or Simkl pause',
+    (t) async {
+      final f = VideoPlayerEnvironment();
+      final d = SecondaryTrackerDriver(t, f);
+      await d.initialize(
+        targets: {
+          TrackingSource.trakt,
+          TrackingSource.simkl,
+          TrackingSource.mdblist,
+        },
+      );
+      final a = startupSource('p20-gate-pa', url: 'https://gate.test/pa.mp4');
+      final b = startupSource('p20-gate-pb', url: 'https://gate.test/pb.mp4');
+      final opened = Completer<void>();
+      try {
+        await d.mount(
+          VideoPlayerScreen(
+            videoUrl: a.directUrl!,
+            title: 'P20 gate pause',
+            contentImdbId: 'tt5100001',
+            contentType: 'series',
+            contentSeason: 2,
+            contentEpisode: 4,
+            traktScrobble: true,
+            simklScrobble: true,
+            mdblistScrobble: true,
+            stremioSources: [a, b],
+            resolveStremioSource: (s) async => s.directUrl,
+          ),
+        );
+        await d.drain();
+        expect(d.trackerActions('trakt'), ['start']);
+        final simkl = d.trackerActions('simkl');
+        f.player.delays['open'] = opened;
+        playerControls(t).onShowStremioSources!();
+        await f.advance(t, const Duration(milliseconds: 300));
+        final sheet = t.widget<SourceSheet>(find.byType(SourceSheet));
+        d.observe(() => sheet.onSourceSelected(1, b.directUrl!));
+        await f.until(
+          t,
+          () => f.player.calls.where((c) => c.$1 == 'open').length == 2,
+        );
+        f.player.state = f.player.state.copyWith(
+          playing: true,
+          duration: const Duration(minutes: 20),
+        );
+        f.player.emit('duration', const Duration(minutes: 20));
+        f.player.emit('playing', true);
+        await d.drain();
+        f.player.state = f.player.state.copyWith(playing: false);
+        f.player.emit('playing', false);
+        await d.drain();
+        expect(d.trackerActions('trakt'), ['start']);
+        expect(d.trackerActions('simkl'), simkl);
+        opened.complete();
+        await d.drain();
+      } finally {
+        if (!opened.isCompleted) opened.complete();
+        await f.close(t);
+        await t.runAsync(
+          () => PlayerDisplayControls.instance.setWakelockOwner(
+            _wakeDrain,
+            false,
+          ),
+        );
+      }
+    },
+  );
 }

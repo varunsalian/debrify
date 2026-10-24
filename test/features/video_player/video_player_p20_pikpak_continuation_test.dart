@@ -172,4 +172,76 @@ void main() {
       }
     },
   );
+
+  testWidgets(
+    'P20 a PikPak continuation outlived by a renderer rebuild during its ready wait leaves the rebuilt player to the fallback',
+    (t) async {
+      var created = 0;
+      final d = EngineDriver(
+        t,
+        configurePlayer: (p) {
+          if (created++ != 0) return;
+          // Metadata lands on the player state only: the cold-storage gate
+          // passes, the screen's duration stream stays empty.
+          p.onOpen = () =>
+              p.state = p.state.copyWith(duration: const Duration(minutes: 20));
+        },
+      );
+      await d.initialize();
+      VpS2Hooks.install(VpS2Hooks(android: () => true));
+      try {
+        await d.f.finish<void>(
+          t,
+          PlayerSettingsStorage.setAndroidVideoRendererMode(
+            AndroidVideoRendererMode.directSurface,
+          ),
+        );
+        await d.mount(
+          screen: const VideoPlayerScreen(
+            videoUrl: _cold,
+            title: 'P20 PikPak ready wait',
+            startAtPercent: .25,
+            playlist: [
+              PlaylistEntry(
+                url: _cold,
+                title: 'Cold.ReadyWait.mkv',
+                provider: 'pikpak',
+              ),
+            ],
+          ),
+          settleInitialization: false,
+        );
+        await d.f.until(
+          t,
+          () => d.logs.any(
+            (l) => l.startsWith('PikPak: Video duration available'),
+          ),
+        );
+        await d.f.advance(t, const Duration(seconds: 2));
+        expect(_lines(d, _restoreEntered), isEmpty);
+        d.player.emit('error', 'fixture MediaCodec video output failure');
+        await d.f.until(t, () => d.f.players.length == 2);
+        d.player.deliverReady();
+        await d.f.until(t, () => d.player.calls.any((c) => c.$1 == 'open'));
+        await d.f.advance(t, const Duration(seconds: 12));
+        await d.f.actions.settle(t);
+        expect(
+          [
+            for (final c in d.player.calls)
+              if (c.$1 == 'seek') c.$2,
+          ],
+          isEmpty,
+          reason:
+              'the stale continuation applies no start seek to the rebuilt player',
+        );
+        expect(
+          _lines(d, _restoreEntered),
+          hasLength(1),
+          reason: 'only the fallback restores tracks on the rebuilt player',
+        );
+      } finally {
+        await d.close();
+      }
+    },
+  );
 }

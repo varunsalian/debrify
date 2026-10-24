@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:debrify/models/android_video_renderer_mode.dart';
+import 'package:debrify/screens/video_player/widgets/player_menu_panel.dart';
 import 'package:debrify/screens/video_player_screen.dart';
 import 'package:debrify/services/media_server_service.dart';
 import 'package:debrify/services/player_display_controls.dart';
@@ -11,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/engine_driver.dart';
+import 'support/fake_player.dart';
 import 'support/player_actions.dart';
 import 'support/resume_server_driver.dart';
 import 'support/startup_driver.dart';
@@ -403,6 +405,49 @@ void main() {
     },
   );
   testWidgets(
+    'P20 a renderer rebuild of a pending Stremio TV launch cancels the outgoing startup watch on the old player',
+    (t) async {
+      final d = StartupDriver(t, native: true);
+      await d.initialize();
+      VpS2Hooks.install(VpS2Hooks(android: () => true));
+      await _directSurface(d);
+      try {
+        await d.begin(
+          const VideoPlayerScreen(
+            videoUrl: 'https://guard.test/rebuilt-watch.mp4',
+            title: 'P20 rebuilt watch',
+            stremioTvChannels: stremioTvPickDirectory,
+            stremioTvCurrentChannelId: 'a',
+            stremioTvChannelSwitchProvider: stremioTvNoSwitch,
+          ),
+        );
+        await d.openEntered();
+        final old = d.player;
+        Iterable<StartupSubscription> watch(FakePlayer p) => d.subscriptions
+            .where((s) => s.owner == 'tv' && identical(s.player, p));
+        expect(watch(old), isNotEmpty);
+        expect(watch(old).where((s) => s.cancelled), isEmpty);
+        old.emit('error', _rendererFailure);
+        await d.f.until(t, () => d.f.players.length == 2);
+        d.player.deliverReady();
+        await d.openEntered(2);
+        expect(watch(d.player), isNotEmpty);
+        expect(
+          watch(old).where((s) => !s.cancelled),
+          isEmpty,
+          reason: 'the rebuild disposes the outgoing startup watch',
+        );
+        d.frame();
+        await d.tick(const Duration(seconds: 2));
+        await d.settle();
+      } finally {
+        await d.close();
+        await _drainWake(t);
+      }
+    },
+  );
+
+  testWidgets(
     'P20 a shuffle candidate whose native open fails keeps its new identity, so shuffle moves on to the other episode',
     (t) async {
       String url(String name) =>
@@ -452,6 +497,116 @@ void main() {
         ]);
       } finally {
         await d.close();
+      }
+    },
+  );
+
+  testWidgets(
+    'P20 turning continuous shuffle off while a server-source episode is held in watch preparation publishes nothing for it',
+    (t) async {
+      final d = TvEpisodeDriver(t);
+      await d.initialize();
+      final server = ResumeServerDriver(t, d.f);
+      await server.prepare();
+      final hold = Completer<void>();
+      var held = false;
+      final launch = server.sources.first;
+      final shuffled = server.sources.last;
+      try {
+        await d.mount(
+          screen: VideoPlayerScreen(
+            videoUrl: launch.directUrl!,
+            title: 'Mix.S01E01.mkv',
+            httpHeaders: launch.httpHeaders,
+            contentType: 'series',
+            contentTitle: 'Mix',
+            contentSeason: 1,
+            contentEpisode: 1,
+            disableAutoResume: true,
+            initialContinuousShuffle: true,
+            stremioSources: [launch],
+            stremioCurrentSourceIndex: 0,
+            seriesSourceFetcher: SeriesSourceFetcher(
+              season: 1,
+              episode: 1,
+              loadCustomEpisodeInventory: () async => [
+                for (final n in [1, 2])
+                  {'season': 1, 'number': n, 'airdate': '2020-01-0$n'},
+              ],
+              searchEpisodes: (s, e) async => [shuffled],
+              searchPacks: (s, e) async => [],
+            ),
+            resolveSourceToPlaylist: (s, {canContinue}) async => [
+              PlaylistEntry(url: s.directUrl!, title: 'Mix.S01E02.mkv'),
+            ],
+          ),
+        );
+        List<String> serverLogs(String event) => [
+          for (final l in d.logs)
+            if (l.startsWith('SourceSelect: event=media_server_$event ')) l,
+        ];
+        String sourceId(String line) =>
+            RegExp(r'sourceId=(\S+)').firstMatch(line)!.group(1)!;
+        expect(serverLogs('open'), hasLength(1));
+        final launchId = sourceId(serverLogs('open').single);
+        d.player.emit('position', const Duration(seconds: 1));
+        await d.f.until(
+          t,
+          () => server.reports.any((r) => r.url.path.endsWith('/Playing')),
+          reason: 'the launch item reports through its server session',
+        );
+        server.heldRequest = (r) => !hold.isCompleted;
+        server.beforeRequest = (r) async {
+          held = true;
+          await hold.future;
+        };
+        final dynamic next = playerControls(t).onNext!;
+        d.observe<dynamic>(() => next());
+        await d.f.until(
+          t,
+          () => held,
+          reason: 'the shuffle pick of the server episode prepares its watch',
+        );
+        playerControls(t).onRandom();
+        await d.f.advance(t, const Duration(milliseconds: 350));
+        final menu = t.widget<PlayerMenuPanel>(find.byType(PlayerMenuPanel));
+        expect(menu.continuousShuffle, isTrue);
+        d.observe(menu.onShuffleContinuousToggle);
+        await d.f.advance(t, const Duration(milliseconds: 300));
+        d.f.navigator.currentState!.maybePop();
+        await d.f.advance(t, const Duration(milliseconds: 400));
+        hold.complete();
+        await d.f.advance(t, const Duration(seconds: 2));
+        await d.f.actions.settle(t);
+        expect(
+          d.opens.map((m) => m.uri),
+          [launch.directUrl],
+          reason: 'the cancelled shuffle request never opens its episode',
+        );
+        expect(
+          serverLogs('open'),
+          hasLength(1),
+          reason: 'no media_server_open for a request that lost ownership',
+        );
+        // The playing item stays the opened watch source: its error is not
+        // attributed to the abandoned shuffle candidate.
+        d.player.emit('error', 'HTTP error 403 Forbidden');
+        await d.f.advance(t);
+        expect(serverLogs('player_error'), hasLength(1));
+        expect(sourceId(serverLogs('player_error').single), launchId);
+        // Pinned current behaviour (P20 Follow-up): the outgoing session was
+        // already closed at the cancelled open's entry, so the still-playing
+        // item stops reporting; no session reports for the candidate either.
+        expect(_stopped(server), isTrue);
+        final reported = server.reports.length;
+        d.player.emit('position', const Duration(seconds: 61));
+        await d.f.advance(t, const Duration(seconds: 12));
+        await d.f.actions.settle(t);
+        expect(server.reports.skip(reported), isEmpty);
+      } finally {
+        hold.completeIfPending();
+        await d.close();
+        server.restoreFactories();
       }
     },
   );

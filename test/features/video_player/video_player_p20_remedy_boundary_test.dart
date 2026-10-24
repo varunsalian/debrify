@@ -143,4 +143,28 @@ void main() {
       }
     },
   );
+
+  testWidgets(
+    'P20 tvOS a live channel zap also restores the remedy before resetting subtitles and opening',
+    (t) async {
+      IptvChannel live(int id) => IptvChannel(
+        name: 'P20 remedy live $id',
+        url: 'https://remedy.test/live$id.ts',
+        contentType: 'live',
+        group: 'News',
+        channelNumber: id,
+      );
+      final channels = [live(1), live(2)];
+      final (d, seq, restore) = await _start(t, channels);
+      try {
+        seq.clear();
+        await _pick(d, channels, 1);
+        await d.f.actions.settle(t);
+        expect(seq, ['nv12', 'sub-visibility', 'open:${channels[1].url}']);
+      } finally {
+        restore.release();
+        await d.close();
+      }
+    },
+  );
 }
