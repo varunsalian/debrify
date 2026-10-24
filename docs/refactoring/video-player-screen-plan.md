@@ -10470,6 +10470,30 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
   "gate"; the design names a `network_tuning_test` that does not exist
   (network tuning is covered by `video_player_p20_network_tuning_test` and
   `video_player_p20_tuning_chain_test`); the size-baseline comment date.
+
+### 2026-10-24 — Milestone M5 (after phase 20) — PASS
+
+- Phase 20 merged `5214f7a7e` and pushed; all 12 merge checks pass
+  (`p20/merge/checks.log`).
+- **Full suite** on `5214f7a7e` (`suite_evidence.py run vplayer/m5/gate/flutter-gate
+  --no-pub --dart-define=DEBRIFY_VP_TEST_HOOKS=true --concurrency=1`), compared
+  by identity against M4's `m4/gate/flutter-gate.jsonl`: **PASS**.
+  - 15,729 successes, with 0 new failures, 0 missing tests and 0 newly skipped
+    tests.
+  - The 13 failures and 28 errors are the same set as M4.
+  - 319 identities were added (the tests from phases 19 and 20).
+- **Release builds** (no install or run):
+  - `flutter build apk --release --no-pub` exited 0 (67 s, Android Studio JBR).
+  - `flutter build macos --release --no-pub` exited 0 (68 s).
+  - Evidence is in `refactor-evidence/vplayer/m5/gate/`: `compare.txt`,
+    `run.sh`, `builds.sh`, `builds.txt` and the build logs.
+- **M5 scenarios** (player replacement, output ownership, subscription and
+  teardown) are covered by the phase 19 and 20 Step 0/0b suites (renderer
+  fallback and teardown, video-output lease, player instance and ready edge,
+  subscriptions, listener gate, open guards, media generation, tuning chain),
+  all passing in the full suite. Device checks stay on the end-of-series
+  checklist.
+- Next: Phase 21a (design approved, Step T `adb94d1b8`, Step 0 running).
 ## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
 
 Reviewed at `c5c8e3500` (facade byte-identical to `be4cd78aa`; split,
