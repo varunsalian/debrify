@@ -5889,6 +5889,12 @@ So the adapters stay. They are the composition root's wiring cost.
     instead;
   - the ratchet stays exact afterwards (`lines != cap`).
   The same procedure governs the `vp_player_startup.dart` exact exception.
+  It also explicitly covers **exit-driven changes** (round-2 R2-P3-2): an
+  exit commit that changes the facade lowers the exact cap in the same
+  commit; if it must raise the cap, it uses this procedure, with the row
+  marked "exit N", and the exit's own milestone must still be met. The
+  "End-state exception changes" table is created empty in 21b step 6, so
+  the first change has a home.
 
 **Exits (named, tracked as open exceptions in the completion audit):**
 1. **`build` decomposition** (D6 exit): about −1,549 lines.
@@ -5900,14 +5906,30 @@ So the adapters stay. They are the composition root's wiring cost.
    `vp_player_startup.dart` 623-line exception.
 
 **Exit order and milestones (review P2-6):**
-1. **Startup orchestration decomposition first.** It is the smallest and
-   independent of the facade. Milestone: `vp_player_startup.dart` ≤ 500,
-   with its entry removed from `VIDEO_PLAYER_SIZE_EXCEPTIONS`.
-2. **`build` decomposition second.** **Interim milestone: facade ≤ 7,000
-   lines** (≈ 8,550 − 1,549 + the widget wiring), with all 12 build members
-   replaced by layout widgets under goldens. That also retires the
-   dock-geometry split, `_isAnyOverlayOpen` (its readers move with build)
-   and the `onKey` deprecations.
+1. **Startup orchestration decomposition first.** It is the smallest exit.
+   It is **not** independent of the facade: the startup Host adapter (246
+   lines) lives there, and splitting the collaborator changes the adapter
+   lines. That commit adjusts the exact facade cap in the same commit,
+   lowering it, or raising it through the reviewed procedure as "exit 1".
+   Milestone: `vp_player_startup.dart` ≤ 500, with its entry removed from
+   `VIDEO_PLAYER_SIZE_EXCEPTIONS`.
+2. **`build` decomposition second.** **Interim milestone, derived from
+   the measured composition (round-2 R2-P2-4):** facade ≤ *T*, where
+   *T* = the 21b-measured exact total − the 21b-measured `build` and
+   helpers span (1,549 at `5214f7a7e`) + the wiring the decomposition plan
+   measures (the replacement `build` that composes the layout widgets,
+   plus any new adapters). *T* is recorded as an exact number in this plan
+   at 21b step 6 and in the decomposition goal's design before it starts.
+   On current estimates (≈ 8,550 total, about 8,552 with headers, − 1,549
+   + ≤ 300 wiring) *T* ≈ **7,300**. The earlier "≤ 7,000" could not be met
+   by its own arithmetic and is withdrawn. All 12 build members are
+   replaced by layout widgets under goldens. This exit also retires the
+   dock-geometry split, the `onKey` deprecations and `_isAnyOverlayOpen`.
+   For the last, `build`'s reader goes with build, but
+   `wakeControlsOnPointer` lives in `VpControlsRuntime` after 21a and
+   reads the flag through its Host. Retiring the duplicate therefore also
+   re-forwards that Host member to `_anyPlayerOverlayOpen`, or removes it
+   with its adapter override (R2-P3-1).
 3. **D1 per collaborator third.** Each migrated collaborator deletes its
    Host and adapter and lowers the exact cap in the same commit.
    **Milestone: facade ≤ 800** (widget, lifecycle in frozen order,
@@ -5923,8 +5945,8 @@ reviewed raise procedure.
 | Commit | Content | Allowlist / inventory |
 |---|---|---|
 | C1 | Delete the 76 unused facade imports plus those newly unused after 21a, and drop `kIsWeb` and `listEquals` from the `show` list | the allowlist loses those lines (about 80); the inventory removes the same identities |
-| C2 | Add braces at every `curly_braces_in_flow_control_structures` site in `lib/features/video_player/**` (28 occurrences in 17 bridge files at the P20 merge, plus the 21a additions) and the facade's one at 1107 (`_currentSeriesImdbId`), **except `vp_player_startup.dart:340–341`** (`if (_host.engineFlagOn)` / `unawaited(...)`): braces there make the file 624 lines and break the exact 623 exception. That site stays allowlisted, with a note naming the exception (review P2-1) | infos removed from the inventory, except the startup one |
-| C3 | Comment-only edits: comments naming moved private members (`p20/retained.txt`: facade 519, 533, 542; `vp_audio_output.dart:71`, `vp_decoder_probe.dart:54`, `vp_mdblist_scrobbler.dart:69`, `network_tuning.dart:17/22`; the moved docs 2442/2450; plus a full P21 scan of facade and bridge comments for `_name` tokens that the manifests map to moved members). Also P20's misattached "Load default player settings (aspect)" (1663, above `_dockBand`) and the P19 S2f comment "gated on `Platform.isAndroid`" (`vp_decoder_probe.dart:96`) | none |
+| C2 | Add braces at every `curly_braces_in_flow_control_structures` site in `lib/features/video_player/**` (28 occurrences in 17 bridge files in the P20 merge's `p20/merge/analyze.txt`, plus the 21a additions; `vplayer_p20_analyzer.json` holds 24 curly symbols whose maxima sum to 37, because maxima are ceilings across runs, not occurrences. Step T(b) states the actual count from the 21a-merge analyzer output, and that count is the C2 list, R2-P3-5) and the facade's one at 1107 (`_currentSeriesImdbId`), **except `vp_player_startup.dart:340–341`** (`if (_host.engineFlagOn)` / `unawaited(...)`): braces there make the file 624 lines and break the exact 623 exception. That site stays allowlisted, with a note naming the exception (review P2-1) | infos removed from the inventory, except the startup one |
+| C3 | Comment-only edits: comments naming moved private members (`p20/retained.txt`: facade 519, 533, 542; `vp_audio_output.dart:71`, `vp_decoder_probe.dart:54`, `vp_mdblist_scrobbler.dart:69`; the non-feature file `lib/screens/video_player/services/network_tuning.dart:17/22` (both name `_openMedia`; proved by layer 1 only, R2-P2-1); the moved docs 2442/2450; plus a full P21 scan of facade and bridge comments for `_name` tokens that the manifests map to moved members). Also P20's misattached "Load default player settings (aspect)" (1663, above `_dockBand`) and the P19 S2f comment "gated on `Platform.isAndroid`" (`vp_decoder_probe.dart:96`) | none |
 
 - The inventory is regenerated as `vplayer_p21b_analyzer.json` with the
   removed identities deleted, so they cannot come back.
@@ -5958,7 +5980,10 @@ reviewed raise procedure.
   So the cleanup is proved in two layers, both required:
   1. **A standalone token-diff proof** `dev/tool/vplayer_cleanup_proof.py`
      over the whole C1–C3 diff. Its base is the 21a merge and its file set
-     is the facade plus every `lib/features/video_player/**` file. It
+     is the facade, every `lib/features/video_player/**` file and exactly
+     one non-feature file, `lib/screens/video_player/services/network_tuning.dart`
+     (the C3 comment target; no manifest lists it, so layer 1 is its only
+     proof). It
      declares edits of three kinds: `remove_directive` (by URI);
      `insert_braces` (file, enclosing declaration, ordinal);
      `replace_comment` (file, declaration, comment ordinal, exact before
@@ -5971,15 +5996,35 @@ reviewed raise procedure.
 
      | File class | Checker that sees the edit | Mechanism |
      |---|---|---|
-     | facade | P21 manifest, retained/patched declarations and directives | C1 directive removals as declared directive fates and C2/C3 facade edits as exact declaration `patches`; Step T(b) confirms the existing directive-fate support and, if a removal fate is missing, adds it with negatives |
-     | the five P21 destinations | P21 manifest, moved-body comparison | declared moved-body patches (the existing per-declaration patch support) |
+     | facade | P21 manifest, retained/patched declarations and directives | C1: the P21 manifest's `facade_directives` list is rewritten to the reduced list (`check()` compares parsed directives to it by exact equality, `check_dart_moves.py:119–122`). That proves only "matches the declared list"; the removal-only property comes from layer 1 (R2-P3-3; no directive fate is added). C2/C3 facade edits: the affected declarations become `patched` rows with `reason`, `test` and exact `patches` (`check_dart_moves.py:91` requires all three) |
+     | the five P21 destinations | P21 manifest, moved-body comparison | **checker extension (round-2 R2-P2-2, option b):** today a `patches` key on a non-`patched` row is an error (`patch outside patched fate`, line 94), and `patched` rows are forced to the facade, so no existing mechanism patches a moved body. `check()` is extended so `moved` rows may carry `patches` with mandatory `reason` and `test`, applied through the same `compare_explicit_tokens` core after `substitutions`. Negatives: a moved patch without `reason`; one without `test`; an undeclared moved-body edit; a moved patch whose before-tokens do not occur. `substitutions` (option a) is not used, because these edits are not receiver rewrites |
+     | `lib/screens/video_player/services/network_tuning.dart` | layer 1 only | non-feature comment target: cleanup proof only |
      | earlier destinations (P1–P20 files) | `check_earlier` | **`earlier_patches`** (existing: reason, review, exact patches), one entry per touched file, with no parallel mechanism |
 
      Because the projection lives in the manifest, `run_manifest` and
      `run_current_manifest`, and therefore the source reader, apply it on
-     every path, not only on the CLI. The cleanup proof's self-test
-     cross-checks that the declared edit lists in both layers are
-     identical.
+     every path, not only on the CLI.
+
+  **Layer cross-check (R2-P3-4).** `vplayer_cleanup_proof.py` runs the
+  cross-check in **normal mode** against the real P21 manifest and the
+  real C1–C3 diff, not only in its self-test. Both layers are normalized
+  to one record set: (file, enclosing declaration, kind, ordinal,
+  before-token text, after-token text).
+  - Layer-1 edits map directly.
+  - Layer-2 counted token patches are expanded per occurrence, in source
+    order, with the enclosing declaration resolved by the parser.
+  - The rewritten `facade_directives` list is diffed against the 21a-merge
+    list into `remove_directive` records.
+  - `earlier_patches` map per file.
+  The two sets must be equal, apart from the `network_tuning.dart` records,
+  which exist in layer 1 only.
+
+  **Step T(b) dry run before C2 (R2-P2-2).** On a scratch copy, one braced
+  guard site is pushed through `check_context` and the guard-scope checks
+  (for example an `if (!_host.mounted) return;` that becomes a block)
+  using the extended checker: once declared, where it must pass, and once
+  undeclared, where it must fail. Results are recorded in
+  `p21b/stepT/dry-run.log`.
   P1–P20 `--at` history checks are unaffected.
 
 ### 6. Storage guard, CI structure, completion audit, device checklist (21b)
@@ -6106,9 +6151,17 @@ plan, evidence `p21b/audit/`):
    - **the dock-geometry split** (§3). Exit: the build decomposition.
 
    **Completion wording:** "Video player slice complete with registered
-   open exceptions (facade, startup, D1, the duplicates above); the first
-   CI run, the iOS/tvOS/Windows/Linux builds and the device pass are
-   pending." Never "series complete" without that qualification.
+   open exceptions (facade, startup, D1, the duplicates above) and recorded
+   open Follow-ups; the first CI run, the tvOS/Windows/Linux builds and the
+   device pass are pending." Never "series complete" without that
+   qualification.
+
+   **Recorded open Follow-ups** (listed in the final record as open, not
+   settled): P20 hazard 4 (a failed start never arms the autosave; pinned,
+   not fixed, the user's decision, R2-P3-5); hazard 11 (`handleDoubleTap`'s
+   unguarded `setState`); the post-series dead-state removal; the
+   *transition lifecycle owner*; the `build` decomposition; D1; the startup
+   decomposition.
 6. **Final-tree evidence is kept apart from history.** The P21 manifest
    runs without `--at` on the final tree (including the cleanup edits),
    and a mutation confined to one final destination must fail it. The
@@ -6195,8 +6248,9 @@ a release device. No device runs happen now. P21 items:
      --self-test` green;
   5. the end-state guards, `VIDEO_PLAYER_COMPLETE`, the exact facade cap,
      the baseline comment and the CI job;
-  6. the completion audit, the end-state exception text and the device
-     checklist (docs);
+  6. the completion audit, the end-state exception text (with the exact
+     interim target *T* and the empty "End-state exception changes" table)
+     and the device checklist (docs);
   7. the final record.
 - **Final checks on the clean tree.** The commit message carries the word
   CI uses to select the full suite (see AGENTS).
@@ -6204,8 +6258,19 @@ a release device. No device runs happen now. P21 items:
     --no-pub --dart-define=DEBRIFY_VP_TEST_HOOKS=true --concurrency=1`),
     compared by identity against M5's JSONL. It must show 0 new failures,
     0 missing and 0 newly skipped tests; the only added identities are the
-    P21 suites. **And** `python3 dev/tool/test_baseline.py` itself (the
-    AGENTS-mandated helper) on the same run, never with `--record`.
+    P21 suites. **`test_baseline.py`** (the AGENTS-mandated helper) is used
+    as the addon-hub and settings precedent does (`addon-hub-plan.md:794`,
+    `settings-screen-plan.md:692`), round-2 R2-P2-3:
+    - its unchanged parser is replayed over the recorded M5 and final JSONL
+      events, and the two outputs are compared;
+    - it is not re-run: its `run()` starts a bare `flutter test` without
+      `DEBRIFY_VP_TEST_HOOKS=true` or `--concurrency=1`, which would be a
+      second heavy run and would make the 37 hook suites throw
+      `StateError`;
+    - its nonzero exit from the stale `test/known_failures.txt` (11 entries,
+      none for video_player) is expected and is **not** the verdict. The
+      observed identity comparison is the verdict;
+    - `--record` is never used.
   - `flutter build apk --release --no-pub` (Android Studio JBR, JDK 21),
     `flutter build macos --release --no-pub` and
     `flutter build ios --release --no-codesign --no-pub` on the Mac.
@@ -12154,3 +12219,24 @@ one exception:
   It blocks neither 21a nor 21b. This differs from the reviewer, who
   required user confirmation or an open audit item before 21b's final
   record; the Follow-up entry is the record.
+
+**Round 2 (review agent, 2026-10-24) — "No P1s".** Report:
+`p21/design-review-r2.md`. It confirms that round-1 P2-1, P2-3, P2-4 and
+P2-5 and P3-1 through P3-8 are resolved, and that the P3-2 non-adoption is
+justified. Each round-2 finding was checked against the tools before it was
+folded.
+
+| Finding | Resolution |
+|---|---|
+| **R2-P2-1** the cleanup proof's file set excludes the C3 target `lib/screens/video_player/services/network_tuning.dart` | Verified: lines 17 and 22 name `_openMedia`, and no manifest lists the path. The file is added to layer 1's file set as its only proof, with a file-class row "non-feature comment target: cleanup proof only". It is excluded from the layer cross-check. |
+| **R2-P2-2** moved-body patches do not exist | Verified: `check_dart_moves.py:91–95` rejects `patches` outside `patched` rows, and `patched` rows are facade-only. **Option (b):** extend `check()` so `moved` rows accept `patches` with mandatory `reason` and `test`, with four negatives. Facade `patched` rows carry `reason`/`test`/`patches`. Step T(b) dry-runs one braced guard through `check_context` and the guard-scope checks, declared (passes) and undeclared (fails). Option (a) is not adopted: `substitutions` are receiver rewrites, and overloading them would blur that ledger. |
+| **R2-P2-3** `test_baseline.py` "on the same run" is unworkable | Verified: `run()` (lines 32–35) is a bare `flutter test --reporter json`. Following `addon-hub-plan.md:794` and `settings-screen-plan.md:692`, the unchanged parser is replayed over the recorded M5 and final JSONL events and the two outputs are compared. Its exit code is not the verdict; the identity comparison is. Never `--record`. |
+| **R2-P2-4** the interim ≤ 7,000 contradicts its derivation | Withdrawn. *T* = measured 21b total − measured build span + measured wiring, recorded exactly at 21b step 6. The current estimate is ≈ 7,300. |
+| R2-P3-1 `_isAnyOverlayOpen` exit wording | Exit 2 now says that `wakeControlsOnPointer` (in `VpControlsRuntime`) reads the flag through its Host, which is re-forwarded or removed together with its adapter override. |
+| R2-P3-2 startup exit vs the facade | It is not independent: the startup adapter lives in the facade. The exit commit adjusts the exact cap (lowering it, or raising it through the procedure as "exit N"). The procedure now explicitly covers exit-driven changes. |
+| R2-P3-3 no directive-fate support | Verified (`check_dart_moves.py:119–122`, exact equality with `facade_directives`). C1 rewrites that list; layer 1 proves the removal-only property. No directive fate is added. |
+| R2-P3-4 layer cross-check | It runs in normal mode against the real manifest and diff, with the normalization defined: (file, declaration, kind, ordinal, before, after). |
+| R2-P3-5 small items | The "End-state exception changes" table is created empty in 21b step 6. The C2 count wording is fixed, with the actual count from the 21a-merge analyzer output (maxima are ceilings). Q12 is listed among the completion audit's recorded open Follow-ups. |
+
+Not adopted: R2-P2-2 option (a) (reason above). Everything else is adopted
+as recommended.
