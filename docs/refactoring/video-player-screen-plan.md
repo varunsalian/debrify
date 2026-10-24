@@ -6365,14 +6365,30 @@ a release device. No device runs happen now. P21 items:
     normal case the report arrives through the resume's `start`.
   - A lowering tap does not cancel the raise's pending auto-hide timer
     (harmless: it sets the same value).
-  - The Debrify channel guide's row (`channel_guide.dart:441`) overflows by
-    one pixel at 1280×800 under the test fonts once its focus styling
-    settles; check on a device whether real fonts clip.
-  - Device checklist: TV focus returns to the player root after an
-    overlay closes by BACK, after the bar hides by inactivity, by tap and
-    by BACK, including when focus had left the bar (points 214, 221, 363,
-    367 are masked on the host); the hold-to-scrub third repeat inside
-    400 ms on Android TV and tvOS remotes.
+  - The Debrify channel guide row's name-and-status Column
+    (`channel_guide.dart:441:22`) overflows by one pixel at 1280×800 under
+    the test fonts once its focus styling settles; check on a device
+    whether real fonts clip. `p21IgnoreGuideRowOverflow()` drops only that
+    report (message plus that creation site), since Step 0b.
+  - Device checklist: the hold-to-scrub third repeat inside 400 ms on
+    Android TV and tvOS remotes (points 317, 318). Points 214, 221, 363 and
+    367 are **not** device questions (reclassified at Step 0b): they are
+    masked by Flutter's own focus handling, which is the same on a device
+    (Step 0b Progress entry).
+  - **Step 1 gate requirement:** `video_player_secondary_seek_inputs_test`
+    is the only suite that kills the scrub commit's Simkl and MDBList seek
+    reports (points 170, 171). It must stay in the Step 1 reduced-gate
+    inventory (`vplayer_p21_test_inventory.txt`) and in CI.
+- **P21 Step 0b (characterized; no fixes):**
+  - A player closed by BACK before its first ready still arms the 6 s
+    resume autosave about ten seconds after the dispose, and nothing
+    cancels it (host fixture: the open never receives ready). Pinned by
+    "TV BACK before the first ready leaves the player even with the
+    controls flagged up". Related to the P20 item "the post-claim return
+    in `_initializePlayer` checks `mounted` only".
+  - A TV tap (air mouse or touch) raises the bar without moving focus off
+    the player root; only the remote's raise focuses Play/Pause. Pinned by
+    "TV a tap raise shows the bar but leaves focus on the player root".
 
 - **P20 Step 1 / post-gate review:**
   - **Startup orchestration decomposition** (exit of the 623-line
@@ -11932,6 +11948,114 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
   (Follow-ups).
 - Next: the independent adversarial sample (multi-site semantic mutants,
   ≥ 75 %) by a review agent, then Step 0b/Step 1.
+
+### 2026-10-25 — Phase 21a Step 0b (executor: Claude)
+
+- **Input.** The independent sample (`p21/step0b/sample-review.md`,
+  72 multi-site mutants) scored **73.9 % P21-only (51/69)**, below 75 %,
+  with two P1s: the rate, and the styled-dock gesture bands (R50, R51 and
+  Step 0 points 14/15) unpinned.
+- **Tests** (commit `2b30e46a1`; tests only, no `lib/` change). Four new
+  suites, 16 cases, registered in `vplayer_p21_test_inventory.txt`
+  (504 → 508) and `ci_behavior_tests.txt`:
+  - `video_player_p21_bar_paths`: desktop expiry under a route keeps the
+    route's focus; a bar lowered by BACK or tap with a countdown pending
+    lets it lapse (no re-arm); a raise after a tap lowered a blocked bar
+    hides on the first poll; a TV tap raise leaves focus on the root; a
+    progress-row scrub abandoned by a transition in its first frame.
+  - `video_player_p21_dock_bands`: double-tap and pan bands against the
+    `cinema` dock at 1280×800 (measured `DockExtentReporter` height) and
+    1280×200 (classic fallback, legacy 72 px), and back; with and without
+    the Debrify TV info panel.
+  - `video_player_p21_pan_races`: the previous HUD stays while the start's
+    brightness read is held; HUD base and direction from the live playhead;
+    a volume pan's end clears its mode; an ignored band pan schedules no HUD
+    clear.
+  - `video_player_p21_remote_edges`: a 300 ms hold window; before the first
+    ready a lowered bar is neither raised nor replaced by the guide; BACK
+    before ready leaves the player; a scrub confirm clears its preview while
+    its seek is held.
+  - Strengthened: the Trakt double-tap case now holds the seek, drains and
+    asserts no report yet (moved to `tracker_seeks`; `gestures` 800 → 763
+    lines); the sub-pixel case adds 1280.6 and 800.7, which round to a new
+    pixel. `p21IgnoreGuideRowOverflow()` now drops only the 1 px report of
+    the Column created at `channel_guide.dart:441:22`.
+- **Proof** (`p21/step0b-fix/`: `mut.py` (the reviewer's runner, paths
+  only), `extra-mutants.json`, `results.jsonl`, `summary.md`,
+  `test-bytes.txt` with the sha256 of the committed test bytes used). Scratch
+  `vp21-fix` at `2b30e46a1`; each mutant applied to
+  `lib/screens/video_player_screen.dart` and restored in `finally` with
+  `git checkout --`; all 14 P21 files, fail-fast; kill = `P21 ` case
+  failing on an `Expected:` assertion that is not an `errors` check.
+  Unmutated: 147/147 twice. Step T moved tree (`vp21-moved`, the
+  `stepT/probe/lib` overlay): 147/147. Format and analyze clean.
+
+| survivor | outcome | killed by (`P21 …`) |
+|---|---|---|
+| R05 | killed | desktop an auto-hide under a route leaves keyboard focus in that route |
+| R07 | killed | TV a bar lowered by BACK with a countdown pending lets it lapse instead of polling |
+| R08 | killed | TV a raise after a tap lowered a blocked bar forgets the block and hides on the first poll |
+| R09 | equivalent | (argued below) |
+| R19 | killed | TV a scrub confirm clears its preview at once, before the seek completes |
+| R26 | killed | TV presses about 300 ms apart are a hold, so the third enters the scrub |
+| R29 | killed | TV before the first ready a lowered bar is neither raised nor replaced by the guide |
+| R38 | masked | (framework focus handling, below) |
+| R41 | killed | TV a tap raise shows the bar but leaves focus on the player root |
+| R48 | killed | a double tap reports its seek to Trakt only after the player seek completes |
+| R50 | killed | a styled dock band follows its measured height on a wide viewport and the legacy band on a short one |
+| R51 | killed | (same case, pan sample) |
+| R52 | killed | a pan start leaves the previous HUD on screen while its brightness read is held |
+| R54 | killed | a seek pan measures its HUD base and direction from the live playhead |
+| R56 | killed | a volume pan end clears its mode, so an update before the next start returns can seek |
+| R57 | killed | an ignored pan in the dock band schedules no HUD clear over the next live pan |
+| R68 | equivalent | (argued below) |
+| R72 | killed | a sub-pixel viewport change keeps the dock measurement until it rounds to a new pixel |
+| point 14 | killed | a styled dock band follows its measured height … (200 px fallback) |
+| point 15 | equivalent | (argued below) |
+| point 18 | equivalent | retested with an info panel; survives (argued below) |
+| points 214, 221, 363, 367 | masked | reclassified from device-pending |
+
+- **Rate.** Sample: 15 of 18 survivors killed, **66/69 = 95.7 %**
+  P21-only with R09, R38 and R68 counted as survivors (66/66 with them as
+  equivalent/masked).
+- **Arguments** (full text and logs in `step0b-fix/summary.md`, probe
+  `focus_masking_probe_test.dart.txt`, `masking/*.log`):
+  - R09: the overlay half is unreachable (every overlay opener lowers the
+    bar first; the root `onKey` never reaches `_handleTvKey` with an
+    overlay flag set). In the in-bar half, the only caller with focus in
+    the bar is a progress-row scrub begin. Its own later post-frame
+    re-targets the row. A same-frame commit or cancel requests Play/Pause
+    itself. A same-frame abandon always comes with `isTransitioning`, which
+    makes every bar button inert (measured).
+  - R38, 221, 214: masked by framework focus handling, the same on a
+    device. A remaining overlay re-claims focus on its next frame, and the
+    last overlay's disposal falls back to the route's previous focus, the
+    root. The probe logs are identical on the original and on all three
+    mutants.
+  - 363, 367: lowering sets `ExcludeFocus`. Its
+    `descendantsAreFocusable = false` unfocuses with
+    `previouslyFocusedChild`, which is the root (identical logs).
+  - R68: by then `SharedPreferences` is loaded, so the three reads and the
+    `setState` complete in one microtask chain. `_refreshDockGeometry` runs
+    only in a build phase, so both orders leave the signature empty before
+    the next frame.
+  - Point 15: every extent consumer clamps (`max(≥72, e)`,
+    `max(28, e + 8 − inset)`, `max(80, e + 12)`), so 0 and 1 are
+    indistinguishable.
+  - Point 18: the same refresh clears `_lastInfoPanelSignature`, so the
+    next `_reservedInfoPanelHeight` read resets the height before any
+    reader. The report callback only accepts the generation that getter
+    bumped.
+- **Step 1 gate requirement.** `video_player_secondary_seek_inputs_test`
+  (the only kill of points 170/171) must stay in the Step 1 reduced-gate
+  inventory; it is now also recorded in the P21 Follow-ups.
+- **Device checklist** shrinks to the 400 ms hold boundary (317, 318);
+  361 stays Android-only.
+- **New Follow-up** (pinned, not fixed): a player closed before its first
+  ready still arms the 6 s autosave after the dispose.
+- Not re-done: the Step 0 98.6 % provenance question (reviewer P2-6) is
+  outside this step. The Step 0 sweep is not re-run on the committed bytes.
+- Next: Step 1 (generator output into `lib/`, ratchet, reduced gate).
 
 ## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
 
