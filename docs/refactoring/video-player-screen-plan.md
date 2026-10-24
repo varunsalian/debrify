@@ -5133,6 +5133,19 @@ systematic sweep and the independent sample (≥ 75 %). Known gaps:
 
 ## Follow-ups
 
+- **P20 Step 1 / post-gate review:**
+  - **Startup orchestration decomposition** (exit of the 623-line
+    `vp_player_startup.dart` size exception): phase 21's completion audit
+    lists it as an open exception, not completed structure.
+  - The post-claim return in `_initializePlayer` (original L1834) checks
+    `mounted` only, not the instance generation.
+  - Moved doc comments still name old private members (`_openMedia`,
+    `_initializePlayer`, …); fix with the phase 21 import/comment cleanup.
+  - The 3 new `curly_braces_in_flow_control_structures` infos
+    (instance, tuning, media open) join the phase 21 cleanup with the 13
+    unused facade imports.
+  - The P20 `isIOS` relocation checks count sites; argument position is
+    covered by the move check only.
 - **P20 Step 0 (characterized; no fixes):**
   - A ranked or direct start that fails (`reportStartupFailure` then
     `return`) never arms the 6 s autosave timer or the episode preload
@@ -10431,11 +10444,32 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
   additions.
 - **Reduced gate** (`p20/gate/compare.txt`). The 494-file inventory
   (`dev/tool/vplayer_p20_test_inventory.txt`) ran serially on the original
-  (`b5889694e` plus the Step 0c test files, i.e. original `lib/` with the
-  final tests) and on `1f5999e2c` (moved `lib/`, docs-only after
+  (`b5889694e` plus the Step 0c test files: original `lib/` with the final
+  behaviour tests; the four tooling-retargeted source-text/guard tests ran in
+  their pre-Step-1 form there, so the retargeted wiring assertions run only
+  on the moved side) and on `1f5999e2c` (moved `lib/`, docs-only after
   `9d3e7df24`). All 494 suites loaded in both runs. **3,458 cases, identical
   outcomes by (suite, name)**: 3,457 successes plus the single pre-existing
   PiP startup-shield source-text failure (also in the P17–P19 gates).
+
+### 2026-10-24 — Phase 20 post-gate review (review agent) — "No P1s"
+
+- `p20/post-gate-review.md`: no P1s or P2s. Move fidelity checked
+  independently of the generator (8 of 15 declarations byte-equivalent after
+  normalisation, 7 differ only by declared Host rewrites, routed calls and
+  formatter wraps); adapters, lifecycle, tooling and analyzer additions
+  confirmed; gate recomputed from the JSON (3,458 cases, 494 suites each
+  side, 0 differences). The reviewer's rerun of the P20 `--self-test` and
+  P19 history move checks was stopped after 30 minutes; those two rely on
+  `p20/step1/checks.log`.
+- P3s folded: the gate's original-side wording, Follow-ups (startup
+  decomposition exit, mounted-only post-claim return, stale doc-comment
+  names, brace infos, `isIOS` argument position). Noted, not changed:
+  `2f1ecbff7` alone would fail size/move checks (tooling preceded the
+  production commit; P19 kept them together); `8beeaeaac`'s body contains
+  "gate"; the design names a `network_tuning_test` that does not exist
+  (network tuning is covered by `video_player_p20_network_tuning_test` and
+  `video_player_p20_tuning_chain_test`); the size-baseline comment date.
 ## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
 
 Reviewed at `c5c8e3500` (facade byte-identical to `be4cd78aa`; split,
