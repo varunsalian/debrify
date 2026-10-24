@@ -10405,6 +10405,37 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
   wording, M48 suites, rate sources, cross-references, test hashes recorded
   in `p20/step0c/README.md`).
 
+
+### 2026-10-24 — Phase 20 Step 1 + reduced gate (executor: Claude)
+
+- **Step 1 (`fbecf3123`, tooling `2f1ecbff7` = cherry-pick of the scratch
+  `492db3747`).** The FINAL generator `draft_vplayer_engine2_moves.py` ran
+  with the Step T parser package (`p20/step1/probe/`, `gen.log`): zero
+  differences, and sizes equal the Step T prototypes (VpPlayerDefaults 117 /
+  VpPlayerInstance 122 / VpPlayerSubscriptions 424 / VpNetworkTuning 81 /
+  VpMediaOpen 270 / VpPlayerStartup 623, the documented size exception; 15
+  retained references). The output was copied unchanged into `lib/` and is
+  byte-identical to the validated scratch tree. Facade **9,447 → 8,986**
+  (ratchet).
+- **Checks** (`p20/step1/checks.sh`, `checks.log`): dart format (P20 lib and
+  `test/features/video_player`), file sizes, storage keys, search and
+  vplayer architecture all pass. Move checks: P20 current and `--self-test`
+  and P19 history at `0f5bfb161` report exhaustive ownership with 0
+  differences. The seam self-test passes with `p20_relocated_instance`; the
+  platform seam self-test passes with `p20_relocated_sites=3` beside
+  `p19_relocated_sites=3`.
+- **Analyzer** (`p20/step1/analyze.txt`): 625 issues, as in the Step T probe
+  (609 + 16 receiver-probe identities: 13 newly unused facade imports and 3
+  `curly_braces_in_flow_control_structures`). The allowlist reports 122
+  recorded, nothing new; the comparator reports 230 scoped diagnostics and 0
+  additions.
+- **Reduced gate** (`p20/gate/compare.txt`). The 494-file inventory
+  (`dev/tool/vplayer_p20_test_inventory.txt`) ran serially on the original
+  (`b5889694e` plus the Step 0c test files, i.e. original `lib/` with the
+  final tests) and on `1f5999e2c` (moved `lib/`, docs-only after
+  `9d3e7df24`). All 494 suites loaded in both runs. **3,458 cases, identical
+  outcomes by (suite, name)**: 3,457 successes plus the single pre-existing
+  PiP startup-shield source-text failure (also in the P17–P19 gates).
 ## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
 
 Reviewed at `c5c8e3500` (facade byte-identical to `be4cd78aa`; split,
