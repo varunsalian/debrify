@@ -6341,6 +6341,39 @@ a release device. No device runs happen now. P21 items:
 
 ## Follow-ups
 
+- **P21 Step 0 (characterized; no fixes):**
+  - `handleDoubleTap` calls `setState(() {})` after `await player.seek`
+    without a `mounted` check (hazard 11): closing the screen during the
+    seek reports "setState() called after dispose()". Pinned by "a screen
+    closed during a double-tap seek still repaints after it and reports the
+    error".
+  - The subtitle sync overlay opened from the menu leaves the menu flagged
+    open beneath it. The first BACK closes the (hidden) menu and moves focus
+    from the stepper to the player root; only the second BACK closes the
+    stepper. Pinned by "the sync overlay opened from the menu sits above a
+    still-open menu, which BACK closes first".
+  - A TV scrub confirm re-arms the auto-hide without clearing the block
+    flag a long scrub left behind, so the bar stays up one extra full
+    interval (6 s instead of 3). Pinned by "a scrub holds the bar up even
+    while the paused player still reports playing".
+  - `_tvScrubRepeats` is shared by hold detection and stride acceleration
+    (hazard 12), and `tvAbandonScrub` returns early without a scrub, so a
+    progress-row scrub after quick hidden taps — or after a channel switch
+    that followed them — reaches the 30 s stride one press early. Pinned.
+  - Trackers hear a scrub confirm's seek only if the player still reports
+    playing when the commit runs (it scrobbles before resuming); in the
+    normal case the report arrives through the resume's `start`.
+  - A lowering tap does not cancel the raise's pending auto-hide timer
+    (harmless: it sets the same value).
+  - The Debrify channel guide's row (`channel_guide.dart:441`) overflows by
+    one pixel at 1280×800 under the test fonts once its focus styling
+    settles; check on a device whether real fonts clip.
+  - Device checklist: TV focus returns to the player root after an
+    overlay closes by BACK, after the bar hides by inactivity, by tap and
+    by BACK, including when focus had left the bar (points 214, 221, 363,
+    367 are masked on the host); the hold-to-scrub third repeat inside
+    400 ms on Android TV and tvOS remotes.
+
 - **P20 Step 1 / post-gate review:**
   - **Startup orchestration decomposition** (exit of the 623-line
     `vp_player_startup.dart` size exception): phase 21's completion audit
@@ -11777,6 +11810,128 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
 
   The Step T(b) checker-extension dry run belongs to 21b's Step T(b), not
   to 21a.
+
+### 2026-10-24 — Phase 21a Step 0 complete (executor: Claude)
+
+- **Base** `adb94d1b8` (Step T); no `lib/` file changes. Evidence:
+  `p21/step0/` (scripts, plans, `runs/*/results.json` with per-mutant
+  JSONL logs, `dispositions.json`, `proofs.json`, `summary.json`). Every
+  mutant was applied in place to `lib/screens/video_player_screen.dart` in
+  the detached worktree `vp21-mut` (UTF-16 span rewrite of exactly its
+  recorded fault, then write-back of the original bytes and
+  `git checkout --`), one serial `flutter test` per mutant through the p21
+  locking wrapper, stopped at its first failure (`sweep.py`). Kill credit
+  only for a first failure that is an `Expected:` assertion; credited as P21
+  only when the failing case's name contains `P21 `. A captured error,
+  framework exception without `Expected:`, rendering error or timeout is
+  crash-only and never credited.
+- **Retargets** (as designed; each proved):
+  - `playback_checkpoint_contract_test`: the toggle's live declaration
+    (still read as `_VideoPlayerScreenState._togglePlay`, which the reader
+    resolves through the manifests) must match `^void _?togglePlay\(\) \{`
+    and `unawaited(` around exactly `_resumeSave.saveResume(positionOverride:
+    _position)` or `_host.saveResume(positionOverride: _host.position)`.
+    Stronger than before (the `unawaited` wrapper is now required).
+    Witness `step0/retargets/matcher_witness.py`: the patterns accept the
+    original declaration and the Step T `VpControlsRuntime.togglePlay` and
+    reject 7 single-edit variants (no `unawaited`, other override, other
+    receiver, renamed, `async`). Passes on the original.
+  - `video_player_menu_window_test:46` `'_scheduleAutoHide'` →
+    `'scheduleAutoHide'`. Original witness (facade-only fault: the menu
+    adapter's `hideTimer` getter returns null) fails the case's
+    `every(!isActive)` assertion. On the moved tree (`vp21-moved`, the Step
+    T probe overlaid) the new filter passes and the old one fails its
+    `isNotEmpty` (`retargets/moved/old-filter.log`), so the retarget is
+    load-bearing.
+  - Timer-owner `isEmpty` non-vacuity
+    (`iptv_review2_tv_transition_state_test:52`): a fault that re-arms the
+    auto-hide on the inactive toggle path (the IPTV guide adapter's
+    `iptvStartOverActive` getter calls `scheduleAutoHide` on every read)
+    fails `isEmpty` with one 3 s timer **on the moved tree**, whose first
+    `package:debrify/` frame is `VpControlsRuntime.scheduleAutoHide`
+    (`retargets/moved/rearm.log`), and on the original. Unmutated moved
+    tree: both timer-owner suites and the menu-window suite pass
+    (`moved/control.log`).
+- **New suites** (10 files, 107 test declarations, 131 cases; support
+  `support/p21_controls_driver.dart`): `video_player_p21_{auto_hide,
+  close_top, dock_layout, gestures, toggle_play, tracker_seeks,
+  transition_overlay, tv_keys, tv_scrub, visibility}_test.dart`. They pin
+  observable behaviour through the real screen: bar/dock visibility
+  (ExcludeFocus / opacity), focus owner, player calls and their order,
+  HUD/ripple widgets and their exact lifetimes (450 ms, 250 ms), the 3 s
+  auto-hide and every blocker (pause, route, scrub with a held pause, the
+  remembered block), DPAD/Select/Back/system-Back matrices (hidden bar, bar
+  up, scrub in flight, transitioning, not ready), stride acceleration
+  10/30/60 with its boundaries, clamps, the shared hold count (hazard 12),
+  a channel switch's scrub abandon and fresh generation, close-top
+  precedence and pane changes (menu, IPTV sheet), dock preference loads
+  and signature invalidation (viewport, safe area, text scale to the
+  rounded percent, widget flags, post-load reset), the transition overlay
+  (message list, 50 ms repeat, subtitle reset, stop-timer cancel,
+  buffering clear), user pause vs live recovery, renderer fallback resume,
+  sleep-stop clearing, the PiP play-pause action, and tracker reports
+  (Trakt, Simkl, MDBList). Wall-clock hold detection uses real 450 ms gaps
+  (hazard 4). All pass on the original twice
+  (`step0/final-original-run{1,2}.jsonl`, 145/145 with the four
+  retargeted/timer-owner readers) and on the moved tree (131/131,
+  `retargets/moved/p21-suites.jsonl`). `dart format` and
+  `flutter analyze` on the changed test files: clean. Registered in
+  `vplayer_p21_test_inventory.txt` (494 → 504) and
+  `ci_behavior_tests.txt`. The storage guard gains no P21 finding.
+- **Sweep** (`inventory.dart`, `make_plan.py`; 38 declarations, 573 AST
+  points, 548 candidates):
+  - systematic (group files): 344 P21 killed, 103 survived, 25 crash-only,
+    76 compile-invalid;
+  - closure part 1 (`closure_plan.py`, all P21 files, after two rounds of
+    new cases) and part 2 (`--legacy`, legacy suites only);
+  - per-test witnesses (`generate_witness_proofs.py`; each case alone):
+    32 cases proved, three removed because no single fault in the moved
+    code reaches them (default dock preferences, a buffering debounce
+    cancelled by a transition — the debounce re-checks `isTransitioning` —
+    and the menu keeping focus when opened from the focused bar);
+  - **final confirmation sweep of record** (`final_plan.py`, `summary.py`):
+    every valid, non-dispositioned point against all ten P21 files on the
+    frozen test set; controls first.
+- **Accounting** (`summary.json`): **420 killed (P21), 2 killed by legacy
+  only, 3 survived, 1 crash-only, 76 compile-invalid, 39 equivalent,
+  7 device-pending.** P21-only **98.6%** (420/426 scored); with legacy
+  99.1%; 98.8% without the crash-only point.
+  - Survived: the dock-extent reset `_dockExtent.value = 0` (points 14,
+    15) and the panel-height reset to the bound (18). Both are re-measured
+    by the dock and panel reporters under the bumped generations in the
+    same frame; a narrow-viewport probe did not reach the classic fallback
+    where the stale extent would show.
+  - Legacy only: the scrub commit's Simkl and MDBList seek reports (170,
+    171), killed by `video_player_secondary_seek_inputs_test` ("Secondary
+    TV scrub confirm sends progress while the native pause is still
+    suspended"); keep it in the Step 1 gate inventory.
+  - Crash-only: pan end `&&` → `||` (533) only dereferences a null HUD.
+  - Equivalent (each argued in `dispositions.json`): initializers always
+    overwritten before a read (scrub flags, pan ignore), signature
+    separator/sentinel strings, six `0.0 → 0.0` no-op candidates,
+    write-only transition phase state (P20 precedent), the buffering cancel
+    and trailing `setState` in `startTransitionOverlay` (all eight callers
+    raise `isTransitioning` in a `setState` in the same turn), clamp
+    `<`/`<=` equalities, returns that fall through to an identical return,
+    the commit's stale-generation conjunction (every bump abandons),
+    unreachable close-top branches, should-play writes on pause (every
+    reader conjoins user-paused).
+  - Device-pending: the 400 ms wall-clock hold boundary (317, 318), the
+    Android-only engine refresh (361), and four television focus hand-backs
+    the host masks because the excluded bar or the closing overlay already
+    restores focus to the root (221, 214, 363, 367) — device checklist.
+- **Per-test proofs** (`proofs.py`): all **107** P21 test declarations are
+  the first clean assertion kill of at least one mutant.
+- **Process notes.** The first group control ran with an empty selection and
+  started the whole test tree; it was killed after a few minutes and
+  `sweep.py` now refuses empty selections. Three superseded scratch run
+  folders under `p21/step0/runs/` were removed with `rm` during development
+  (my own outputs, no other evidence); the brief forbids `rm` under `.git`
+  and this is recorded as a deviation. `p21IgnoreGuideRowOverflow()` drops
+  exactly the Debrify guide's 1-pixel row overflow report in three test declarations
+  (Follow-ups).
+- Next: the independent adversarial sample (multi-site semantic mutants,
+  ≥ 75 %) by a review agent, then Step 0b/Step 1.
 
 ## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
 
