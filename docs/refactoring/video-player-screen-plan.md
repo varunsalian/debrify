@@ -6402,6 +6402,23 @@ a release device. No device runs happen now. P21 items:
     - M52 is equivalent.
 
     Review these as structural checks of the moved code at Step 1.
+- **P21a post-gate review (recorded; no fixes):**
+  - The trailing comment `// Second line for video title` moved with
+    `_tvStaticSubtext` and now sits above `tvStaticMessages` at
+    `vp_transition_overlay.dart:25`; the retained field lost it. Fix in the
+    21b comment cleanup (C3).
+  - The T27 closure argument should also name `VpPlaylistLoad` saving and
+    restoring the user-paused/should-play flags (`vp_playlist_load.dart`
+    162–185). No TV path reads them afterwards, so the closure stands.
+  - The tooling commit `76e706b48` alone is red for the file-size, P21 move
+    and theme-guard checks (as P20 P3-3); it was pushed together with the move
+    `a151e0356`.
+  - The adapter mapping is proved only through the generator's text; a
+    same-name forwarder check (each `_Vp*HostAdapter` getter reads the field
+    or collaborator of its name) is a candidate for the 21b CI structure job.
+    The review checked all 116 forwarders mechanically: none differ.
+  - Step 0c's structural review of S10/S51/S86 on the moved code was done by
+    the post-gate review (they hold); M52 was not reassessed.
 - **P21 re-sample (post Step 0c) P3s (recorded; no fixes):**
   - T05: the overlay half of the visibility listener's root hand-back guard
     is masked by each overlay's mount-time focus claim. Behaviour survives
@@ -12276,6 +12293,26 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
   contains; it is the same pre-existing failure as in the P17–P20 gates.
   **0 new failures.**
 - Next: the post-gate review by a review agent, then the merge.
+
+### 2026-10-25 — Phase 21a post-gate review (review agent) — "No P1s"
+
+- Reviewed `9421ca4fe..dc0d09a09` against base `5214f7a7e`. **No P1s, no
+  P2s, six P3s** (`p21/post-gate-review.md`), folded into Follow-ups
+  ("P21a post-gate review").
+- Move: the 38 members were compared by hand against the base; 29 identical
+  after normalisation, 9 differ only in the call receiver (`_collab.m` to
+  `_host.m`), each mapped to the right collaborator. `context`, `mounted`
+  and `setState` read the State live; timer owners, listener tear-offs,
+  construction and `dispose` order unchanged; nothing became eager. All 116
+  host forwarders read their same-named field or collaborator.
+- Tooling exact (FINAL generator; analyzer 625 to 627 with exactly the two
+  Step T additions; one allowlist line; CI P21 plus P20 history at
+  `5214f7a7e`; ratchet 8,639 equals the real count; theme lists include the
+  five files). Nothing weakened.
+- Gate recomputed from the recorded JSON: 3,680 cases and 517 suites per side,
+  0 differences by (suite, name); the one failure is the pre-existing PiP
+  startup-shield source-text test on both sides.
+- Next: merge into `refactor/codebase`, then 21b.
 
 ## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
 
