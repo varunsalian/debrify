@@ -5,7 +5,6 @@ import 'package:debrify/screens/video_player/widgets/player_menu_panel.dart';
 import 'package:debrify/screens/video_player_screen.dart';
 import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
-import 'package:debrify/services/storage/playback_state_store.dart';
 import 'package:debrify/services/storage/video_resume_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 // Existing resolved transport, not an application dependency change.
@@ -16,6 +15,7 @@ import 'support/local_completion_driver.dart';
 import 'support/player_actions.dart';
 import 'support/sleep_timer_driver.dart';
 import 'support/video_player_environment.dart';
+import 'support/physical_resume_store.dart';
 
 List<Map<String, dynamic>> resumeQueueWrites(SleepResumeWrites store) => [
   for (final (key, value) in store.writes)
@@ -148,7 +148,7 @@ void main() {
           );
           await f.finish(
             t,
-            PlaybackStateStore.savePlaybackStateMap({
+            PhysicalResumeStore.savePlaybackStateMap({
               'video_p14_queue': {
                 'type': 'video',
                 'title': 'P14 queue',
@@ -198,7 +198,7 @@ void main() {
             expect(
               (await f.finish(
                 t,
-                PlaybackStateStore.getPlaybackStateMap(),
+                PhysicalResumeStore.getPlaybackStateMap(),
               ))['video_p14_queue']['positionMs'],
               180000,
             );

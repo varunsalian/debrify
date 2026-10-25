@@ -1,12 +1,12 @@
 import 'package:debrify/features/video_player/application/vp_filename_hash.dart';
 import 'package:debrify/screens/video_player_screen.dart';
-import 'package:debrify/services/storage/playback_state_store.dart';
 import 'package:debrify/services/storage/series_progress_storage.dart';
 import 'package:debrify/services/storage/video_progress_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart' as mk;
 
 import 'support/engine_driver.dart';
+import 'support/physical_resume_store.dart';
 
 const _show = 'P20 Index Show';
 
@@ -187,7 +187,7 @@ void main() {
           await _lastPlayed(d, 1, 2);
           final map = await d.f.finish(
             t,
-            PlaybackStateStore.getPlaybackStateMap(),
+            PhysicalResumeStore.getPlaybackStateMap(),
           );
           for (final raw in map.values) {
             final seasons = (raw as Map)['seasons'] as Map;
@@ -198,7 +198,7 @@ void main() {
               }
             }
           }
-          await d.f.finish(t, PlaybackStateStore.savePlaybackStateMap(map));
+          await d.f.finish(t, PhysicalResumeStore.savePlaybackStateMap(map));
         },
         inspect: (d) => logs.addAll(d.logs),
       );
@@ -264,7 +264,7 @@ void main() {
           }
           final map = await d.f.finish(
             t,
-            PlaybackStateStore.getPlaybackStateMap(),
+            PhysicalResumeStore.getPlaybackStateMap(),
           );
           final updated = {
             vpFilenameHash(movies[0].title): 300,
@@ -275,7 +275,7 @@ void main() {
             final row = raw as Map;
             row['updatedAt'] = updated[row['title']];
           }
-          await d.f.finish(t, PlaybackStateStore.savePlaybackStateMap(map));
+          await d.f.finish(t, PhysicalResumeStore.savePlaybackStateMap(map));
         },
       );
       expect(url, movies[0].url);

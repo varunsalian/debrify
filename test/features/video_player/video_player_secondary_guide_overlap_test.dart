@@ -1,5 +1,4 @@
 import 'package:debrify/models/tracking_source.dart';
-import 'package:debrify/services/storage/playback_state_store.dart';
 import 'package:debrify/services/storage/series_progress_storage.dart';
 import 'package:debrify/services/storage/tracker_episode_progress_storage.dart';
 import 'package:debrify/services/storage/tracking_source_storage.dart';
@@ -12,6 +11,7 @@ import 'support/video_player_environment.dart';
 import 'video_player_secondary_snapshots_test.dart' show saveSecondarySnapshot;
 import 'video_player_trakt_snapshots_test.dart'
     show traktPlaylist, traktBrowser;
+import 'support/physical_resume_store.dart';
 
 void main() {
   TraktTestTransport.install();
@@ -56,9 +56,9 @@ void main() {
               positionMs: 1140000,
               durationMs: 1200000,
             );
-            final map = await PlaybackStateStore.getPlaybackStateMap();
+            final map = await PhysicalResumeStore.getPlaybackStateMap();
             map['__vp_snapshot_case__'] = reads.marker;
-            await PlaybackStateStore.savePlaybackStateMap(map);
+            await PhysicalResumeStore.savePlaybackStateMap(map);
           });
           final older = reads.run(() => browser.onEpisodeSelected(1, 2));
           await f.until(t, () => reads.pending.isNotEmpty);

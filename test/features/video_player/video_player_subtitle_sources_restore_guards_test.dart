@@ -1,6 +1,5 @@
 import 'package:debrify/services/storage/track_preferences_storage.dart';
 import 'package:debrify/services/storage/subtitle_settings_storage.dart';
-import 'package:debrify/services/storage/playback_state_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart' as mk;
 
@@ -13,6 +12,7 @@ import 'video_player_subtitle_apply_wait_test.dart' show TrackPoll;
 import 'video_player_subtitle_sources_language_test.dart'
     show seedLanguagePlayer;
 import 'video_player_subtitle_sources_payload_test.dart' show removeFixture;
+import 'support/physical_resume_store.dart';
 
 void main() {
   testWidgets(
@@ -163,7 +163,7 @@ void main() {
       await d.initialize();
       await d.f.finish(
         t,
-        PlaybackStateStore.savePlaybackStateMap({
+        PhysicalResumeStore.savePlaybackStateMap({
           'video_subtitle_apply_original': {
             'type': 'video',
             'title': applyScreen.title,

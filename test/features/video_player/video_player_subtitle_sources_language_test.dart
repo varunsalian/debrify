@@ -1,5 +1,4 @@
 import 'package:debrify/services/storage/subtitle_settings_storage.dart';
-import 'package:debrify/services/storage/playback_state_store.dart';
 import 'package:debrify/services/storage/iptv_audio_storage.dart';
 import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/models/subtitle_source_priority.dart';
@@ -11,6 +10,7 @@ import 'package:media_kit/media_kit.dart' as mk;
 import 'support/fake_player.dart';
 import 'support/subtitle_apply_driver.dart';
 import 'video_player_subtitle_sources_payload_test.dart' show removeFixture;
+import 'support/physical_resume_store.dart';
 
 const languageTracks = [
   mk.SubtitleTrack('auto', null, null),
@@ -474,7 +474,7 @@ void main() {
           );
           await d.f.finish(
             t,
-            PlaybackStateStore.savePlaybackStateMap({
+            PhysicalResumeStore.savePlaybackStateMap({
               'video_subtitle_apply_original': {
                 'type': 'video',
                 'title': applyScreen.title,

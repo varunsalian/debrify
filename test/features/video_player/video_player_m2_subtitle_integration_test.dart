@@ -11,7 +11,6 @@ import 'package:debrify/screens/video_player/widgets/subtitle_line_picker_overla
 import 'package:debrify/screens/video_player/widgets/sync_stepper_overlay.dart';
 import 'package:debrify/screens/video_player_screen.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
-import 'package:debrify/services/storage/playback_state_store.dart';
 import 'package:debrify/services/storage/player_settings_storage.dart';
 import 'package:debrify/services/storage/subtitle_settings_storage.dart';
 import 'package:flutter/material.dart';
@@ -31,6 +30,7 @@ import 'video_player_subtitle_edges_test.dart' show decoderError;
 import 'video_player_subtitle_sync_overlay_test.dart' show offset;
 import 'video_player_subtitle_sources_language_test.dart'
     show seedLanguagePlayer;
+import 'support/physical_resume_store.dart';
 
 const _screen = VideoPlayerScreen(
   videoUrl: 'https://player.test/m2-first.mp4',
@@ -248,7 +248,7 @@ void main() {
         // the policy change below would intentionally preserve manual choice.
         await f.finish(
           t,
-          PlaybackStateStore.savePlaybackStateMap({
+          PhysicalResumeStore.savePlaybackStateMap({
             'ownerA': {'value': 'A'},
           }),
         );
@@ -345,7 +345,7 @@ void main() {
         expect(b.profileId, isNot(a.profileId));
         await f.finish(
           t,
-          PlaybackStateStore.savePlaybackStateMap({
+          PhysicalResumeStore.savePlaybackStateMap({
             'ownerB': {'value': 'B'},
           }),
         );

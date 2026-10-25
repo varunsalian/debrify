@@ -1,7 +1,6 @@
 import 'package:debrify/models/tracking_source.dart';
 import 'package:debrify/models/custom_series_identity.dart';
 import 'package:flutter/material.dart';
-import 'package:debrify/services/storage/playback_state_store.dart';
 import 'package:debrify/services/storage/series_progress_storage.dart';
 import 'package:debrify/services/storage/tracker_episode_progress_storage.dart';
 import 'package:debrify/services/storage/tracking_source_storage.dart';
@@ -13,6 +12,7 @@ import 'support/trakt_snapshot_reads.dart';
 import 'support/trakt_transport.dart';
 import 'support/video_player_environment.dart';
 import 'video_player_trakt_snapshots_test.dart';
+import 'support/physical_resume_store.dart';
 
 void main() {
   TraktTestTransport.install();
@@ -72,9 +72,9 @@ void main() {
               positionMs: 1140000,
               durationMs: 1200000,
             );
-            final map = await PlaybackStateStore.getPlaybackStateMap();
+            final map = await PhysicalResumeStore.getPlaybackStateMap();
             map['__vp_snapshot_case__'] = reads.marker;
-            await PlaybackStateStore.savePlaybackStateMap(map);
+            await PhysicalResumeStore.savePlaybackStateMap(map);
           });
           await t.runAsync(
             () => TrackerEpisodeProgressStorage.saveEpisodeMdblistProgress(

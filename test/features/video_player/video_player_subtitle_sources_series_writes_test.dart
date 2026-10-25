@@ -1,6 +1,5 @@
 import 'package:debrify/screens/video_player_screen.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
-import 'package:debrify/services/storage/playback_state_store.dart';
 import 'package:debrify/services/storage/track_preferences_storage.dart';
 import 'video_player_subtitle_sources_language_test.dart'
     show seedLanguagePlayer;
@@ -13,6 +12,7 @@ import 'video_player_subtitle_apply_persistence_test.dart' show ApplyWrites;
 import 'video_player_subtitle_sources_payload_test.dart' show removeFixture;
 import 'video_player_trakt_snapshots_test.dart'
     show traktPlaylist, traktBrowser;
+import 'support/physical_resume_store.dart';
 
 void main() {
   for (final handoff in [false, true]) {
@@ -42,7 +42,7 @@ void main() {
           await d.f.advance(t);
           await d.f.finish(
             t,
-            PlaybackStateStore.savePlaybackStateMap({
+            PhysicalResumeStore.savePlaybackStateMap({
               'unrelated-A': {'owner': 'A'},
             }),
           );
@@ -59,7 +59,7 @@ void main() {
             await incomingProfile(t, d.f);
             await d.f.finish(
               t,
-              PlaybackStateStore.savePlaybackStateMap({
+              PhysicalResumeStore.savePlaybackStateMap({
                 'unrelated-B': {'owner': 'B'},
               }),
             );
@@ -123,7 +123,7 @@ void main() {
           expect(d.player.state.track.subtitle.id, '3');
           await d.f.finish(
             t,
-            PlaybackStateStore.savePlaybackStateMap({
+            PhysicalResumeStore.savePlaybackStateMap({
               'unrelated': {'keep': true},
             }),
           );

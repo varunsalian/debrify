@@ -3,7 +3,6 @@ import 'dart:convert';
 
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
-import 'package:debrify/services/storage/playback_state_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
@@ -14,6 +13,7 @@ import 'support/vp_fixture_actions.dart';
 import 'video_player_skip_races_test.dart' show incomingProfile;
 import 'video_player_subtitle_apply_boundaries_test.dart'
     show crossBoundary, boundaryScreen;
+import 'support/physical_resume_store.dart';
 
 const preferenceKey = 'video_subtitle_apply_original';
 
@@ -79,7 +79,7 @@ void main() {
             final panel = await d.menu();
             await d.f.finish(
               t,
-              PlaybackStateStore.savePlaybackStateMap({
+              PhysicalResumeStore.savePlaybackStateMap({
                 'unrelated': {'owner': 'A'},
               }),
             );
@@ -106,7 +106,7 @@ void main() {
               store.armed = false;
               await d.f.finish(
                 t,
-                PlaybackStateStore.savePlaybackStateMap({
+                PhysicalResumeStore.savePlaybackStateMap({
                   'unrelated': {'owner': 'B'},
                 }),
               );
@@ -159,7 +159,7 @@ void main() {
           final panel = await d.menu();
           await d.f.finish(
             t,
-            PlaybackStateStore.savePlaybackStateMap({
+            PhysicalResumeStore.savePlaybackStateMap({
               'unrelated': {'owner': 'A'},
             }),
           );
@@ -234,7 +234,7 @@ void main() {
         final panel = await d.menu();
         await d.f.finish(
           t,
-          PlaybackStateStore.savePlaybackStateMap({
+          PhysicalResumeStore.savePlaybackStateMap({
             'unrelatedA': {'owner': 'A'},
           }),
         );
@@ -248,7 +248,7 @@ void main() {
         final newScope = ProfileRuntime.capture();
         await d.f.finish(
           t,
-          PlaybackStateStore.savePlaybackStateMap({
+          PhysicalResumeStore.savePlaybackStateMap({
             'unrelatedB': {'owner': 'B'},
           }),
         );

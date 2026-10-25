@@ -1,12 +1,12 @@
 import 'package:debrify/models/playback_resume_policy.dart';
 import 'package:debrify/models/custom_series_identity.dart';
 import 'package:debrify/screens/video_player_screen.dart';
-import 'package:debrify/services/storage/playback_state_store.dart';
 import 'package:debrify/services/storage/video_progress_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'support/fake_player.dart';
 import 'support/video_player_environment.dart';
 import 'support/resume_driver.dart';
+import 'support/physical_resume_store.dart';
 
 void main() {
   for (final shape in [
@@ -65,12 +65,12 @@ void main() {
             );
             final map = await f.finish(
               t,
-              PlaybackStateStore.getPlaybackStateMap(),
+              PhysicalResumeStore.getPlaybackStateMap(),
             );
             for (final row in map.values) {
               (row as Map)['updatedAt'] = row['title'] == exact ? 100 : 200;
             }
-            await f.finish(t, PlaybackStateStore.savePlaybackStateMap(map));
+            await f.finish(t, PhysicalResumeStore.savePlaybackStateMap(map));
             await f.mount(
               t,
               VideoPlayerScreen(
@@ -155,14 +155,14 @@ void main() {
           );
           final map = await f.finish(
             t,
-            PlaybackStateStore.getPlaybackStateMap(),
+            PhysicalResumeStore.getPlaybackStateMap(),
           );
           for (final row in map.values) {
             (row as Map)['updatedAt'] = row['title'] == 'Exact movie'
                 ? 100
                 : 200;
           }
-          await f.finish(t, PlaybackStateStore.savePlaybackStateMap(map));
+          await f.finish(t, PhysicalResumeStore.savePlaybackStateMap(map));
           await f.mount(
             t,
             VideoPlayerScreen(

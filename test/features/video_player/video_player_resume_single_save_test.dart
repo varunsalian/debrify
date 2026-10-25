@@ -1,9 +1,9 @@
 import 'package:debrify/screens/video_player_screen.dart';
-import 'package:debrify/services/storage/playback_state_store.dart';
 import 'package:debrify/services/storage/video_resume_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'support/player_actions.dart';
 import 'support/video_player_environment.dart';
+import 'support/physical_resume_store.dart';
 
 void main() {
   for (final shape in [
@@ -39,7 +39,7 @@ void main() {
           await f.actions.settle(t);
           final map = await f.finish(
             t,
-            PlaybackStateStore.getPlaybackStateMap(),
+            PhysicalResumeStore.getPlaybackStateMap(),
           );
           final rows = map.values.whereType<Map>().toList();
           expect(rows, hasLength(1));

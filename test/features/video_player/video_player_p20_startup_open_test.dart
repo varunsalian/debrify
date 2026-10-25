@@ -7,7 +7,6 @@ import 'package:debrify/screens/video_player_screen.dart';
 import 'package:debrify/services/player_display_controls.dart';
 import 'package:debrify/services/profiles/profile_policy_guard.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
-import 'package:debrify/services/storage/playback_state_store.dart';
 import 'package:debrify/services/storage/torbox_storage.dart';
 import 'package:debrify/services/storage/video_progress_storage.dart';
 import 'package:debrify/widgets/video_output_lease.dart';
@@ -21,6 +20,7 @@ import 'support/fake_player.dart';
 import 'support/lease_steps.dart';
 import 'support/player_actions.dart';
 import 'support/startup_driver.dart';
+import 'support/physical_resume_store.dart';
 
 final _wakeDrain = Object();
 const _url = 'https://startup-open.test/movie.mp4';
@@ -302,7 +302,7 @@ void main() {
       Future<int?> saved() async {
         final map = await d.f.finish(
           t,
-          PlaybackStateStore.getPlaybackStateMap(),
+          PhysicalResumeStore.getPlaybackStateMap(),
         );
         return (map['video_p20_autosave'] as Map?)?['positionMs'] as int?;
       }
