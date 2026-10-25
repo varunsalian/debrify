@@ -174,4 +174,88 @@ void main() {
       }
     },
   );
+
+  testWidgets(
+    'P21 the top band stays the legacy 72 pixels under a styled dock and under its classic fallback',
+    (t) async {
+      final d = await _styled(t);
+      try {
+        await d.hover();
+        final wide = _styledExtent(d)!;
+        expect(wide, greaterThan(100));
+        Future<void> expectTop() async {
+          for (final sample in <(double, bool)>[
+            (71.5, false),
+            (72.5, true),
+            // Inside the styled dock's height but far from the bottom.
+            (wide - 1, true),
+          ]) {
+            expect(
+              await _doubleTapSeeks(d, sample.$1),
+              sample.$2,
+              reason: 'double tap y=${sample.$1}',
+            );
+            expect(
+              await _panLive(d, sample.$1),
+              sample.$2,
+              reason: 'pan y=${sample.$1}',
+            );
+          }
+        }
+
+        await expectTop();
+        t.view.physicalSize = const Size(1280, 200);
+        await d.wait(100);
+        await d.hover();
+        await d.wait(100);
+        expect(_styledExtent(d), isNull, reason: 'classic fallback');
+        for (final sample in <(double, bool)>[(71.5, false), (72.5, true)]) {
+          expect(await _doubleTapSeeks(d, sample.$1), sample.$2);
+          expect(await _panLive(d, sample.$1), sample.$2);
+        }
+        t.view.physicalSize = const Size(1280, 800);
+        await d.wait(100);
+        await d.hover();
+        await d.wait(100);
+        await expectTop();
+        expect(d.errors, isEmpty);
+      } finally {
+        await d.close();
+      }
+    },
+  );
+
+  testWidgets(
+    'P21 the classic dock bands are the legacy 72 pixels at the top and the bottom',
+    (t) async {
+      final d = P21Driver(t);
+      await d.initialize();
+      try {
+        await d.mount(screen: P21Driver.screen());
+        await d.at(const Duration(seconds: 300));
+        await d.hover();
+        expect(_styledExtent(d), isNull);
+        for (final sample in <(double, bool)>[
+          (71.5, false),
+          (72.5, true),
+          (727.5, true),
+          (728.5, false),
+        ]) {
+          expect(
+            await _doubleTapSeeks(d, sample.$1),
+            sample.$2,
+            reason: 'double tap y=${sample.$1}',
+          );
+          expect(
+            await _panLive(d, sample.$1),
+            sample.$2,
+            reason: 'pan y=${sample.$1}',
+          );
+        }
+        expect(d.errors, isEmpty);
+      } finally {
+        await d.close();
+      }
+    },
+  );
 }

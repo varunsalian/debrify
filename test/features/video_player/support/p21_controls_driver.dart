@@ -299,6 +299,21 @@ class P21Driver extends TvEpisodeDriver {
     await f.advance(t);
   }
 
+  /// Moves only the native player's reported state and delivers no stream
+  /// event, so the screen's own copies of the playhead, the playing flag and
+  /// the length (written only by delivered events of the current player
+  /// instance) keep their values. Production reaches the same split whenever
+  /// a skip writes the playhead before its seek lands, a replaced instance's
+  /// events are filtered out, or the renderer fallback resets the copies
+  /// while the old state still reports.
+  void playerReports({Duration? position, bool? playing, Duration? duration}) {
+    player.state = player.state.copyWith(
+      position: position,
+      playing: playing,
+      duration: duration,
+    );
+  }
+
   /// Active one-shot timers of [duration] created by the screen.
   int activeTimers(Duration duration) =>
       timers.where((v) => v.timer.isActive && v.duration == duration).length;
