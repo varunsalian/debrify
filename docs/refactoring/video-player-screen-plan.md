@@ -12251,6 +12251,32 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
   Comparator: 232 scoped diagnostics, **0 additions** (self-test passes).
 - Next: the reduced gate.
 
+### 2026-10-25 — Phase 21a reduced gate (executor: Claude)
+
+- **Inventory** `dev/tool/vplayer_p21_test_inventory.txt`: 517 files (P20's
+  494, the 22 P21 suites from Steps 0–0c and `video_player_p21_press_routing`),
+  including `video_player_secondary_seek_inputs_test` (the only kill of Step 0
+  points 170/171). Scripts `p21/gate/run_inventory.sh` and `compare.py`
+  (copies of P20's, paths only); serial, one flutter process, through the p21
+  wrapper.
+- **Original side:** the detached worktree `p21/original` at `27f120620`, the
+  last commit before the Step 1 tooling: original `lib/` with every final
+  behaviour test already committed, so nothing was copied in. The tooling
+  commit's only test edit (`test/theme/source_guard_test.dart`, which gains
+  the five new files) runs there in its pre-Step-1 form; the Step 0 retargets
+  (`221fc43ce`) were proved on the original and run on both sides.
+- **Moved side:** `a0a47e509` (the Step 1 record; `lib/` as in `a151e0356`).
+- **Result** (`p21/gate/compare.txt`): **3,680 cases on each side, 517 suites
+  loaded on each side, 0 load errors; identical outcomes by (suite, name).**
+  3,679 successes plus the single pre-existing failure, on both sides:
+  `playback_startup_view_test` "startup shield remains opaque and
+  noninteractive in PiP". It is a source-text assertion expecting
+  `? const AbsorbPointer(child: ColoredBox(color: Colors.black))` in the
+  facade's startup overlay, which the current overlay source no longer
+  contains; it is the same pre-existing failure as in the P17–P20 gates.
+  **0 new failures.**
+- Next: the post-gate review by a review agent, then the merge.
+
 ## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
 
 Reviewed at `c5c8e3500` (facade byte-identical to `be4cd78aa`; split,
