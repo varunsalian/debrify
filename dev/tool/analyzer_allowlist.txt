@@ -84,7 +84,6 @@ warning | unused_element_parameter | lib/features/recordings/presentation/record
 # rename probe also records the retained time_formatters import becoming unused.
 # Import removal is outside the reviewed move substitutions. No new allowances
 # beyond the original/probe identity inventory (infos/counts enforced separately).
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../utils/time_formatters.dart'. Try removing the import directive
 warning | unused_field | lib/screens/video_player_screen.dart | The value of the field '_pikPakRetryCount' isn't used. Try removing the field, or using it
 warning | unused_field | lib/screens/video_player_screen.dart | The value of the field '_isSeekingWithSlider' isn't used. Try removing the field, or using it
 warning | unused_field | lib/screens/video_player_screen.dart | The value of the field '_rainbowOpacity' isn't used. Try removing the field, or using it
@@ -93,101 +92,23 @@ warning | unused_field | lib/screens/video_player_screen.dart | The value of the
 warning | invalid_use_of_visible_for_testing_member | lib/features/video_player/presentation/legacy_video_player/vp_video_output_lease.dart | The member 'isHeld' can only be used within 'package:debrify/widgets/video_output_lease.dart' or a test
 
 # 2026-10-12 P3: original facade import retained by frozen import list; unused identity recorded in the Step T receiver probe.
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/skip_segments_storage.dart'. Try removing the import directive
 
 # 2026-10-12 video_player P5: exact retained import now unused; frozen Step-T receiver probe.
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/trakt/trakt_service.dart'. Try removing the import directive
 
 # 2026-10-12 video_player P6: five exact retained imports become unused; frozen Step-T probe identities.
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/tracker_episode_progress_storage.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/simkl/simkl_service.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/mdblist/mdblist_models.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/mdblist/mdblist_scrobble_session.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/mdblist/mdblist_service.dart'. Try removing the import directive
 # vplayer P7: original imports retained by the frozen facade directive list.
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/episode_completion_storage.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/local_completion_storage.dart'. Try removing the import directive
 
 # 2026-10-14 vplayer P9: three frozen retained imports become unused; identities recorded in the Step-T receiver probe.
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'video_player/widgets/subtitle_line_picker_overlay.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'video_player/widgets/sync_stepper_overlay.dart'. Try removing the import directive
 
 # 2026-10-14 vplayer P11: seven frozen retained imports become unused; exact identities/counts recorded in the approved Step-T probe.
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/track_preferences_storage.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../models/subtitle_source_priority.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'video_player/utils/subtitle_priority_selection.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'video_player/services/external_subtitle_payload.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'video_player/utils/subtitle_audio_policy.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:http/http.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../features/video_player/application/vp_subtitle_identity.dart'. Try removing the import directive
 # Phase 12 frozen move/probe: preserved facade directives, six now-unused imports.
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../widgets/tv_text_field.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'video_player/widgets/spotlight_dialog.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/stremio_service.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/stremio_subtitle_service.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../utils/tv_search_focus_handoff.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../features/video_player/application/vp_identity_text.dart'. Try removing the import directive
 # Phase 13 frozen move/probe: preserved facade directives, five now-unused imports.
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/iptv_playlist_storage.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:path_provider/path_provider.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../utils/app_storage.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../widgets/recording_limit_dialogs.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'video_player/services/subtitle_track_utils.dart'. Try removing the import directive
 # Phase 14 frozen move/probe: preserved facade directives, six now-unused imports.
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../features/video_player/application/vp_filename_hash.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/tracking_source_policy.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../utils/episode_progress_merge.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/movie_progress_storage.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/series_progress_storage.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'video_player/utils/aspect_mode_utils.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../features/video_player/models/iptv_catchup_request_gate.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../utils/iptv_player_paging.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/iptv_audio_storage.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/iptv_history_storage.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/iptv_last_channel_storage.dart'. Try removing the import directive
-warning | unused_shown_name | lib/screens/video_player_screen.dart | The name listEquals is shown, but isn't used. Try removing the name from the list of shown members
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/quick_play_storage.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../features/video_player/models/vp_manual_source_validation_failure.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'video_player/widgets/playlist_sheet.dart'. Try removing the import directive
 # Phase 18 frozen move/probe: preserved facade directives, sixteen now-unused imports (end-state cleanup in phase 21).
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/alldebrid_storage.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/playlist_artwork_storage.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/playlist_metadata_storage.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/premiumize_storage.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/real_debrid_storage.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/torbox_storage.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../utils/show_shuffle.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/debrid_service.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/premiumize_service.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/alldebrid_service.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../utils/movie_parser.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/movie_metadata_service.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/torbox_service.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/pikpak_api_service.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/next_episode_service.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../features/video_player/presentation/vp_random_choice_tile.dart'. Try removing the import directive
 # Phase 19 frozen move/probe: preserved facade directives, four now-unused imports (end-state cleanup in phase 21); the S2f/P15
 # 'isHeld' read moves with _claimVideoOutput into vp_video_output_lease.dart; the audio-output Host forwarder
 # subtitleAutoSync uses 'media_kit_subtitle_auto_sync.dart' again, so its P9 entry is retired.
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/audio_effect_session_service.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../utils/player_audio_config.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../widgets/video_output_lease.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'video_player/utils/language_mapping.dart'. Try removing the import directive
 # Phase 20 frozen move/probe: preserved facade directives left unused by the engine II moves (12 imports and the
 # kIsWeb shown name; end-state cleanup in phase 21).
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/episode_resume_storage.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/iptv_appearance_storage.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/player_network_storage.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/subtitle_settings_storage.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/video_progress_storage.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/source_selection_diagnostics.dart'. Try removing the import directive
-warning | unused_shown_name | lib/screens/video_player_screen.dart | The name kIsWeb is shown, but isn't used. Try removing the name from the list of shown members
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/direct_source_authorization.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../models/profiles/profile_policy.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/profiles/profile_policy_guard.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/live_recording_service.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/profiles/profile_runtime.dart'. Try removing the import directive
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'video_player/services/android_renderer_startup_fallback.dart'. Try removing the import directive
 # Phase 21a frozen move/probe: the facade directive left unused by the controls-runtime moves
 # (`_loadDockPrefs` moved to VpDockLayout; end-state import cleanup in 21b C1).
-warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/player_appearance_storage.dart'. Try removing the import directive

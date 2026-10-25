@@ -148,7 +148,8 @@ def apply(unit, edits):
         if kind == 'remove_directive':
             hits = [d for d, src in zip(unit.directives, unit.directive_text)
                     if src.startswith('import ') and src.split("'")[1] == edit['uri']]
-            if any(src.startswith('export ') and src.split("'")[1] == edit['uri'] for src in unit.directive_text):
+            if not hits and any(src.startswith('export ') and src.split("'")[1] == edit['uri']
+                                for src in unit.directive_text):
                 raise ValueError('export removal: ' + edit['uri'])
             if len(hits) != 1:
                 raise ValueError('removed import not found exactly once: ' + edit['uri'])
@@ -233,6 +234,12 @@ def layer_one(edits, base, current, package, changed_lib=None):
     outside = sorted({e['file'] for e in edits} - set(base))
     errors += ['edit outside the cleanup file set: ' + p for p in outside]
     errors += ['unknown edit kind: ' + str(e.get('kind')) for e in edits if e.get('kind') not in KINDS]
+    seen = set()
+    for e in edits:
+        key = json.dumps({k: v for k, v in e.items() if k not in ('commit', 'after', 'head')}, sort_keys=True)
+        if key in seen:
+            errors.append('duplicate declared edit: ' + key)
+        seen.add(key)
     if changed_lib is not None:
         errors += ['lib change outside the cleanup file set: ' + p for p in sorted(set(changed_lib) - set(base))]
     if errors:
@@ -425,10 +432,18 @@ def self_test(package, edits, base, current, changed):
     rejected('extra removed import', edits, dict(current, **{FACADE: facade.replace(import_line + '\n', '', 1)}),
              expect='undeclared token change: ' + FACADE)
     # An export removal, declared and applied.
-    export_line = next(l for l in base[FACADE].splitlines() if l.startswith('export '))
-    uri = export_line.split("'")[1]
-    rejected('export removal', edits + [dict(kind='remove_directive', commit='C1', file=FACADE, uri=uri)],
-             dict(current, **{FACADE: facade.replace(export_line + '\n', '', 1)}), expect='export removal')
+    # An export removal: undeclared, and declared (exports are never removable).
+    export_line = next(l for l in facade.splitlines() if l.startswith('export '))
+    without_export = dict(current, **{FACADE: facade.replace(export_line + '\n', '', 1)})
+    rejected('export removal (undeclared)', edits, without_export, expect='undeclared token change: ' + FACADE)
+    exported = dict(base, **{FACADE: base[FACADE].replace("import 'dart:async';\n", "export 'dart:async';\n", 1)})
+    assert exported[FACADE] != base[FACADE]
+    errors, _ = layer_one(edits + [dict(kind='remove_directive', commit='C1', file=FACADE, uri='dart:async')],
+                          exported, current, package, changed)
+    assert any('export removal: dart:async' in e for e in errors), errors
+    print('cleanup proof negative export removal (declared): rejected (export removal)')
+    if edits:
+        rejected('duplicate declared edit', edits + [edits[0]], current, expect='duplicate declared edit')
     # A code token hidden in a comment replacement.
     comment = next((e for e in edits if e['kind'] == 'replace_comment' and e['after']), None)
     if comment:

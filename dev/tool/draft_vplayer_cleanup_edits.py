@@ -110,7 +110,7 @@ def apply_text(path, text, edits, package):
         if edit['kind'] == 'remove_directive':
             node, = [d for d, src in zip(unit.directives, unit.directive_text)
                      if src.startswith('import ') and src.split("'")[1] == edit['uri']]
-            start = text.rindex('\n', 0, node['start']) + 1
+            start = text.rfind('\n', 0, node['start']) + 1
             end = text.index('\n', node['end']) + 1
             assert text[start:node['start']].strip() == '' and text[node['end']:end].strip() == ''
             changes.append((start, end, ''))
@@ -268,7 +268,7 @@ def sync_manifest(package, root=ROOT):
                                  patches=derive(values, expected, None))
     if earlier:
         manifest['earlier_patches'] = earlier
-    manifest_path.write_text(json.dumps(manifest, indent=1, ensure_ascii=False) + '\n')
+    manifest_path.write_text(json.dumps(manifest, indent=2) + '\n')
     return manifest
 
 
