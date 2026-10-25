@@ -2,8 +2,14 @@
 """Phase 21b cleanup proof (layer 1) and its cross-check against the P21 manifest.
 
 Layer 1 compares the whole C1-C3 diff token by token. Its base is the 21a merge
-and its file set is the facade, every lib/features/video_player/** file and
-exactly one non-feature comment target. The declared edits are:
+and its "current" side is the post-C3 commit (HEAD below), both read through
+git, never the working tree; its file set is the facade, every
+lib/features/video_player/** file and exactly one non-feature comment target.
+The outside-the-set rule covers `git diff BASE HEAD -- lib` only. The live
+tree is covered by the P21 current move check (check_dart_moves.py) and the
+end-state guards, so later unrelated lib/ commits do not affect this proof
+(review P1-1). `--head REV` runs the proof against another head (negatives on
+scratch commits). The declared edits are:
 
   remove_directive   (file, uri)                     C1: an unused import;
   remove_shown_name  (file, uri, name)               C1: one name of a show list;
@@ -18,7 +24,7 @@ class split into members.
 
 Layer 2 is the P21 manifest itself (check_dart_moves.py). In normal mode the
 cross-check projects every span both ways (layer-1 edits; the manifest's
-21b-added patches, earlier_patches and directive list) and requires the same
+21b-added patches, earlier_patches and directive list, both read at HEAD) and requires the same
 (file, declaration, ordinal, before, after) record set, apart from the
 non-feature comment target, which only layer 1 covers.
 """
@@ -35,6 +41,8 @@ from dart_move_partition import partition
 from dart_move_history import git_text, load_manifest
 
 BASE = 'b72ff16f8'
+# The post-C3 commit: the proof's pinned "current" side (review P1-1).
+HEAD = '218a5806a'
 EDITS = 'dev/tool/dart_moves/vplayer_p21b_cleanup.json'
 MANIFEST = 'dev/tool/dart_moves/vplayer_p21.json'
 FACADE = 'lib/screens/video_player_screen.dart'
@@ -356,10 +364,14 @@ def manifest_granularity(manifest):
     return key
 
 
-def cross_check(edits, base, projected, package, root=ROOT, manifest=None):
-    """Layer-1 records == layer-2 records (network_tuning.dart is layer 1 only)."""
+def cross_check(edits, base, projected, package, root=ROOT, manifest=None, head=HEAD):
+    """Layer-1 records == layer-2 records (network_tuning.dart is layer 1 only).
+
+    The P21 manifest is read at the pinned head, not from the working tree: a
+    later reviewed facade fix adds a patched row there (raise procedure).
+    """
     base_manifest = json.loads(git_text(BASE, MANIFEST, root))
-    manifest = manifest or load_manifest(root / MANIFEST)
+    manifest = manifest or load_manifest(root / MANIFEST, revision=head, root=root)
     errors, second = manifest_projection(base_manifest, manifest, base, package)
     key = manifest_granularity(manifest)
     one = {r for p, (u, v) in projected.items() if p != EXTRA for r in records(p, u, v, key)}
@@ -378,13 +390,14 @@ def load_edits(root=ROOT):
     return data['edits']
 
 
-def gather(root=ROOT):
+def gather(root=ROOT, head=HEAD):
+    """Base and current texts, both from git (BASE and the pinned head)."""
     paths = file_set(root, BASE)
-    if file_set(root) != paths:
+    if file_set(root, head) != paths:
         return paths, None, None, None
     base = {p: git_text(BASE, p, root) for p in paths}
-    current = {p: (root / p).read_text() for p in paths}
-    changed = subprocess.check_output(['git', '-C', str(root), 'diff', '--name-only', BASE, '--', 'lib'],
+    current = {p: git_text(head, p, root) for p in paths}
+    changed = subprocess.check_output(['git', '-C', str(root), 'diff', '--name-only', BASE, head, '--', 'lib'],
                                       text=True).splitlines()
     return paths, base, current, changed
 
@@ -396,7 +409,7 @@ def summary(edits):
     return counts
 
 
-def self_test(package, edits, base, current, changed):
+def self_test(package, edits, base, current, changed, head=HEAD):
     """Each negative mutates one input; the real diff must stay accepted."""
     def rejected(label, edits_, current_, changed_=None, expect=''):
         errors, _ = layer_one(edits_, base, current_, package, changed if changed_ is None else changed_)
@@ -471,8 +484,8 @@ def self_test(package, edits, base, current, changed):
     # Layer cross-check negatives on the real manifest: a dropped layer-2 edit
     # and a layer-2 edit with no declared layer-1 counterpart.
     _, projected = layer_one(edits, base, current, package, changed)
-    manifest = load_manifest(ROOT / MANIFEST)
-    assert not cross_check(edits, base, projected, package, manifest=manifest)[0]
+    manifest = load_manifest(ROOT / MANIFEST, revision=head)
+    assert not cross_check(edits, base, projected, package, manifest=manifest, head=head)[0]
     if edits:
         dropped = copy.deepcopy(manifest)
         if dropped.get('earlier_patches'):
@@ -498,23 +511,28 @@ def main():
     parser.add_argument('--parser-package', type=Path, required=True)
     parser.add_argument('--self-test', action='store_true')
     parser.add_argument('--no-cross-check', action='store_true', help='layer 1 only (diagnostics)')
+    parser.add_argument('--head', default=HEAD,
+                        help='revision of the current side (default: the post-C3 commit ' + HEAD + ')')
     args = parser.parse_args()
     ensure_parser_package(args.parser_package.parent.parent, args.parser_package)
     edits = load_edits()
-    paths, base, current, changed = gather()
+    head = subprocess.check_output(['git', '-C', str(ROOT), 'rev-parse', '--short=9', args.head + '^{commit}'],
+                                   text=True).strip()
+    paths, base, current, changed = gather(head=head)
     if base is None:
-        print('FAIL: cleanup file set changed since ' + BASE)
+        print('FAIL: cleanup file set changed between ' + BASE + ' and ' + head)
         return 1
     if args.self_test:
-        self_test(args.parser_package, edits, base, current, changed)
+        self_test(args.parser_package, edits, base, current, changed, head=head)
     errors, projected = layer_one(edits, base, current, args.parser_package, changed)
     count = 0
     if not errors and not args.no_cross_check:
-        more, count = cross_check(edits, base, projected, args.parser_package)
+        more, count = cross_check(edits, base, projected, args.parser_package, head=head)
         errors += more
     for error in errors:
         print(error)
-    print(('FAIL' if errors else 'PASS') + ': cleanup proof over ' + str(len(paths)) + ' files; '
+    print(('FAIL' if errors else 'PASS') + ': cleanup proof ' + BASE + '..' + head + ' over '
+          + str(len(paths)) + ' files; '
           + json.dumps(summary(edits)) + '; cross-checked records ' + str(count)
           + '; ' + str(len(errors)) + ' differences')
     return bool(errors)
