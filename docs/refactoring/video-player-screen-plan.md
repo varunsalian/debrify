@@ -5894,8 +5894,8 @@ So the adapters stay. They are the composition root's wiring cost.
   scope"). A small fix inside retained facade code (`build`, a lifecycle
   step, an adapter) that must add lines or a State member may raise the
   cap. The rules:
-  - it is one reviewed commit that changes, together (the artifact list is
-    complete after the P21b review, P2-2):
+  - it is one reviewed commit that changes, together (the artifact list,
+    completed after the P21b review P2-2 and its re-review P3-B):
     - the facade;
     - the cap in `check_search_architecture.py`;
     - the baseline line (raised by hand, since `--update` never raises);
@@ -5908,8 +5908,17 @@ So the adapters stay. They are the composition root's wiring cost.
       destination, or an `earlier_patches` entry for an earlier destination;
     - if a `_Vp*HostAdapter` member or its Host changes, whatever entry
       `vplayer_host_usage.py` then needs (`RENAMED`, `UNUSED_EXCEPTIONS`,
-      `REGISTERED_DUPLICATES`, each exact), so the Host-usage audit stays
-      green;
+      `REGISTERED_DUPLICATES`, `NON_FORWARDERS`, `FORWARDER_COUNTS`, each
+      exact), so the Host-usage audit stays green;
+    - if a seam site changes (an S hook, or an `isIOS`/`isAndroid` site
+      count in `initState`, `_openMedia` and the other frozen sites), the
+      seam manifest that freezes it (`dev/tool/dart_moves/vplayer_p1_seam.json`
+      for `vplayer_seam_proof.py`; `vplayer_p8/p10/p13/p16/p19_seam.json` for
+      `vplayer_platform_seam_proof.py`), since both proofs read the live
+      facade and `lib/`;
+    - if the fix adds or removes an analyzer diagnostic in the video-player
+      files, the analyzer inventory `dev/tool/dart_moves/vplayer_p21b_analyzer.json`
+      read by `check_vplayer_analyzer.py`;
     - **not** the cleanup proof: `vplayer_cleanup_proof.py` is pinned to
       `b72ff16f8..218a5806a` and reads both sides through git, never the
       live tree (review P1-1), so no raise or exit updates or retires it.
@@ -6028,8 +6037,12 @@ reviewed raise procedure.
      braced; an edit in a file outside the set. **Amended (P21b review
      P1-1):** the "current" side is the post-C3 commit `218a5806a`, read
      through git, and the outside-the-set rule covers
-     `b72ff16f8..218a5806a` only; the live tree is covered by the P21
-     current move check and the end-state guards.
+     `b72ff16f8..218a5806a` only; the live feature files and facade are
+     covered by the P21 current move check and the end-state guards.
+     **After C3, `network_tuning.dart` is covered by no video-player guard**
+     (layer 1 was its only proof and is now pinned). This is intentional: it
+     is an ordinary non-feature file, and freezing its live text was the
+     P1-1 bug (P21b re-review P3-D).
   2. **The current check accepts exactly those edits**, by file class:
 
      | File class | Checker that sees the edit | Mechanism |
@@ -6334,6 +6347,14 @@ a release device. No device runs happen now. P21 items:
   `flutter build apk/macos/ios --release` builds and the gate record (the
   commit whose message carries the CI full-suite word). The review of that
   final record is still due. Merge only after commit 7 records these checks.
+- **Pinned revision (P21b re-review P3-E).** `vplayer_cleanup_proof.py`
+  hard-codes the post-C3 commit `218a5806a` (its `HEAD` constant) and the
+  every-push `vplayer-structure` job reads it through git. C1–C3 and
+  `218a5806a` must therefore not be rebased, reworded or squashed, before or
+  at the merge, and the merge into `refactor/codebase` must be `--no-ff`
+  (as for 21a), so `218a5806a` stays reachable. A history rewrite would
+  break the job with a `git show` error unless the same commit updates
+  `HEAD` in the tool.
 
 ### Open questions for the design reviewer
 
@@ -6504,8 +6525,10 @@ a release device. No device runs happen now. P21 items:
   - The device checklist cites plan line numbers at the commit-6 tree; later
     plan edits shift them (each citation also names its section).
 
-- **P21b review (recorded; no fixes).** Report `p21b/review.md`; P1-1 and
-  P2-1 to P2-3 are fixed in the review-fix entry. The P3 notes:
+- **P21b review (P3 notes recorded).** Report `p21b/review.md`. P1-1, P2-1
+  and P2-2 are fixed and P2-3 is recorded in the review-fix entry; P3-4 is
+  fixed in the exception text; the other P3s are recorded here (P21b
+  re-review P3-C). The P3 notes:
   - P3-1: removed imports are proven unused only by the analyzer (expected
     by design). A used import removed and declared in both layers passes the
     cleanup proof and the move check; `flutter analyze` then reports 61
@@ -12719,6 +12742,35 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
   is `final/checks.log`, PASS). The full suite and builds were not run
   (commit 7).
 
+### 2026-10-26 — Phase 21b review-fix re-review (review agent; fixes executor: Claude) — "No P1s"
+
+- Re-review `p21b/rereview.md` of `286a07fdd` and `306e9836e`: P1-1, P2-1,
+  P2-2 and P3-4 verified; P2-3 accurate. One new P2, five P3s. Evidence
+  `p21b/rereview-fix/`. No `lib/` change.
+- **P2-A (fixed):** `vplayer_host_usage.py` skipped adapter members whose
+  shape it did not parse, and did not assert its counts. It now pins
+  `FORWARDER_COUNTS` (1,168 direct, 165 chain, 436 methods; 1,769), lists
+  the 22 non-forwarder members exactly with their bodies (`NON_FORWARDERS`,
+  stale entries fail) and fails any other member as "unrecognised adapter
+  member shape". New self-test negatives, each rejected with that error and
+  the lowered count: a parenthesised getter, a `??` getter, a ternary, a `!`
+  getter, a cascade setter, a parenthesised setter, a block-bodied getter
+  and a block-bodied method; plus a changed non-forwarder body and a stale
+  non-forwarder entry. The earlier negatives still reject.
+- **P3-A:** completion audit item 3 says the audit compares names only, not
+  values or arguments; the P21 move check covers values.
+- **P3-B:** the raise procedure lists the seam manifests and the analyzer
+  inventory.
+- **P3-C:** the "P21b review" Follow-ups heading is corrected.
+- **P3-D:** after C3, `network_tuning.dart` is covered by no video-player
+  guard, intentionally (layer 1 amendment).
+- **P3-E:** `218a5806a` must not be rebased, reworded or squashed, and the
+  merge must be `--no-ff` ("21b steps and final checks").
+- **Checks:** Host-usage self-test and plain run, cleanup proof self-test,
+  end-state guard self-test, format, and `check_vplayer_analyzer` (logs in
+  `p21b/rereview-fix/`). Not run: the full suite, builds, `flutter test`
+  and the moves self-test (commit 7).
+
 ## Video player end state and completion audit (Phase 21b)
 
 > Completion record for `lib/screens/video_player_screen.dart` (phases 1–21).
@@ -12765,7 +12817,8 @@ responsibility lives in a collaborator.
   the frozen list (if a member changes), the P21 manifest (a `patched` row
   or patch with reason, test and exact patches, or the move check fails)
   and, for an adapter or Host change, any entry the Host-usage audit needs,
-  and appends a row below. The cleanup proof is pinned to
+  plus, if a seam site or a diagnostic changes, the seam manifest or the
+  analyzer inventory (P21b re-review P3-B), and appends a row below. The cleanup proof is pinned to
   `b72ff16f8..218a5806a` and needs no change. The reviewer confirms that a
   collaborator could not take the change; the ratchet stays exact. The same
   procedure governs the startup exception and exit-driven changes.
@@ -12840,15 +12893,26 @@ row.)
    differences; item 1). The Host-usage audit: all 1,605 members of the 65
    Hosts are used by their collaborators, no adapter member lacks a Host
    member, all 1,769 single-read/single-call forwarders forward the member of
-   their own name (`setState` → `_vpSetState` is the one rule), and the
-   duplicate `isAnyOverlayOpen` forwarder is listed. The 1,769 are 1,333
+   their own name, **by name only** (`setState` → `_vpSetState` is the one
+   rule), and the duplicate `isAnyOverlayOpen` forwarder is listed. The audit
+   compares names, not values or arguments: it does not check a setter's
+   assigned value, a method's arguments, the middle of a chain or a
+   trailing call. The P21 current move check covers those, because every
+   adapter body is frozen there (`frozen scaffolding changed` /
+   `non-verbatim declaration`; P21b re-review P3-A). The 1,769 are 1,333
    accessors and 436 methods. The 1,333 accessors are 1,168 direct reads or
    writes (`_s.x`) and 165 member chains (152 getters and 13 setters such as
    `_s.widget.f` or `_s._collab.f`); for a chain, the last name is the one
    compared. Until the P21b review (P2-1) the audit compared only the 1,168
    direct accessors, so the earlier "all 1,604" overstated its reach. The
    exception list `RENAMED` is empty: no chain forwarder of another name
-   exists.
+   exists. Since the P21b re-review (P2-A) the counts are pinned exactly
+   (`FORWARDER_COUNTS`: 1,168 direct, 165 chain, 436 methods), the 22
+   adapter members that are not forwarders (19 getters, 3 methods: the
+   `VpS2Hooks` platform reads, the State statics, the `=> _s` owners, the two
+   `VideoPlayerScreenTestHooks` factories and `readLocalResume`) are listed
+   exactly with their bodies in `NON_FORWARDERS`, and any other adapter
+   member fails as "unrecognised adapter member shape".
 4. **Sizes.** Every handwritten file under `lib/features/video_player/` is ≤
    500 lines except `vp_player_startup.dart` (exactly 623, the registered
    exception); the largest others are `vp_identify_title_ui.dart` 470,

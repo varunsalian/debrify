@@ -13,7 +13,12 @@ Parser-based, over the bridge files and the facade:
      forward the member of their own name: the last name of the chain is the
      member's name or `_` + it (`setState` -> `_vpSetState` is the one rule),
      unless listed in RENAMED (exact, reviewed; empty: review P2-1 found no
-     chain forwarder of another name);
+     chain forwarder of another name). Only names are compared, not setter
+     values or method arguments (the P21 move check covers those);
+  4. every other adapter member is listed in NON_FORWARDERS with its exact
+     body; any other shape (parenthesised, `??`, `!`, ternary, cascade,
+     block body, ...) fails as "unrecognised adapter member shape", and the
+     forwarder counts are pinned exactly in FORWARDER_COUNTS (re-review P2-A);
 and each Host has exactly one adapter. Known exceptions are listed exactly.
 This is a lexical call-site audit, not a claim that every branch runs.
 """
@@ -38,6 +43,41 @@ RENAMED = {}
 # forwarded to VpControlsRuntime for the pointer wake. Exit: the build
 # decomposition re-forwards it to `_anyPlayerOverlayOpen` or removes it.
 REGISTERED_DUPLICATES = {'_VpControlsRuntimeHostAdapter.isAnyOverlayOpen': '_isAnyOverlayOpen'}
+# Pinned same-name forwarder counts (re-review P2-A): direct accessors (826
+# getters + 342 setters), chain accessors (152 + 13), methods; 1,769 in total.
+# A forwarder rewritten into another shape lowers a count and fails here.
+FORWARDER_COUNTS = dict(direct=1168, chain=165, method=436)
+# The 22 adapter members that are not forwarders (19 getters, 3 methods):
+# 'Adapter.member' -> its exact code tokens after `=>` (exact; none reads
+# `_s.<x>`). Any other adapter member that is not a recognised forwarder fails.
+NON_FORWARDERS = {
+    '_VpPlayerStartupHostAdapter.isAndroid': 'VpS2Hooks . isAndroid ;',
+    '_VpMediaOpenHostAdapter.isIOS': 'VpS2Hooks . isIOS ;',
+    '_VpMediaOpenHostAdapter.visibilityOwner': '_s ;',
+    '_VpPlayerSubscriptionsHostAdapter.isIOS': 'VpS2Hooks . isIOS ;',
+    '_VpPlayerSubscriptionsHostAdapter.visibilityOwner': '_s ;',
+    '_VpPlayerInstanceHostAdapter.createPlayer':
+        'VideoPlayerScreenTestHooks . _createPlayer ( configuration : configuration ) ;',
+    '_VpPlayerInstanceHostAdapter.createVideoController':
+        'VideoPlayerScreenTestHooks . _createVideoController ( player , configuration : configuration , ) ;',
+    '_VpPlayerDefaultsHostAdapter.tvReleaseLogChannel': '_VideoPlayerScreenState . _tvReleaseLogChannel ;',
+    '_VpRendererFallbackHostAdapter.isAndroid': 'VpS2Hooks . isAndroid ;',
+    '_VpRendererFallbackHostAdapter.isAndroidRendererValidation': 'VpS2Hooks . isAndroidRendererValidation ;',
+    '_VpDecoderProbeHostAdapter.tvReleaseLogChannel': '_VideoPlayerScreenState . _tvReleaseLogChannel ;',
+    '_VpDecoderProbeHostAdapter.isAndroidRendererValidation': 'VpS2Hooks . isAndroidRendererValidation ;',
+    '_VpStartupCandidatesHostAdapter.isAndroid': 'VpS2Hooks . isAndroid ;',
+    '_VpIptvZapLadderHostAdapter.iptvZapPageSize': '_VideoPlayerScreenState . _kIptvZapPageSize ;',
+    '_VpIptvZapRingHostAdapter.iptvZapPageSize': '_VideoPlayerScreenState . _kIptvZapPageSize ;',
+    '_VpResumeRestoreHostAdapter.readLocalResume':
+        'VideoPlayerScreen . readLocalResume ( contentId : contentId , resumeKey : resumeKey ,'
+        ' enhanced : enhanced , ) ;',
+    '_VpIptvRecordingHostAdapter.isIOS': 'VpS2Hooks . isIOS ;',
+    '_VpSubtitleApplyHostAdapter.isIOS': 'VpS2Hooks . isIOS ;',
+    '_VpSubtitleApplyHostAdapter.isAndroid': 'VpS2Hooks . isAndroid ;',
+    '_VpPipLifecycleHostAdapter.pipOwner': '_s ;',
+    '_VpPipLifecycleHostAdapter.isIOS': 'VpS2Hooks . isIOS ;',
+    '_VpPipLifecycleHostAdapter.isAndroid': 'VpS2Hooks . isAndroid ;',
+}
 
 
 def code(node):
@@ -119,13 +159,14 @@ def method_forwarder_errors(adapter, member, errors):
     """`=> _s.a.b.name(...)`: the last name of the chain is the member's own.
 
     The one rule: `setState` forwards to the State's `_vpSetState` wrapper.
+    Returns 1 for a recognised method forwarder, None for any other shape.
     """
     body = code(member)
     if '=>' not in body:
-        return 0
+        return None
     tail = body[body.index('=>') + 1:]
     if tail[:2] != ['_s', '.']:
-        return 0
+        return None
     chain, i = [], 2
     while i < len(tail) and re.fullmatch(r'\w+', tail[i]):
         chain.append(tail[i])
@@ -135,7 +176,7 @@ def method_forwarder_errors(adapter, member, errors):
             break
     name = member['name']
     if not chain:
-        return 0
+        return None
     if chain[-1] not in (name, '_' + name) and (name, chain[-1]) != ('setState', '_vpSetState'):
         errors.append('renamed forwarder: ' + adapter + '.' + name + ' -> _s.' + '.'.join(chain))
     return 1
@@ -161,8 +202,21 @@ def accessor_chain(tail, setter):
     return chain if rest == [';'] else None
 
 
-def adapter_errors(facade, hosts, renamed):
+def adapter_errors(facade, hosts, renamed, non_forwarders=None):
+    non_forwarders = NON_FORWARDERS if non_forwarders is None else non_forwarders
     errors, forwarders, adapters, listed, method_forwarders, chained = [], 0, {}, set(), 0, 0
+    others = {}
+
+    def other(adapter, member, k):
+        """A member that is no recognised forwarder: it must be listed exactly."""
+        body = code(member)
+        key = adapter + '.' + member['name'] + ('@set' if k == 'set' else '')
+        others[key] = ' '.join(body[body.index('=>') + 1:]) if '=>' in body else None
+        if key not in non_forwarders:
+            errors.append('unrecognised adapter member shape: ' + key)
+        elif non_forwarders[key] != others[key]:
+            errors.append('non-forwarder adapter member changed: ' + key)
+
     for node in facade['declarations']:
         if not re.fullmatch(r'_Vp\w+HostAdapter', node['name']):
             continue
@@ -185,16 +239,19 @@ def adapter_errors(facade, hosts, renamed):
                 if want not in declared.get(name, set()):
                     errors.append('adapter-only member: ' + node['name'] + '.' + name)
             if k == 'method':
-                method_forwarders += method_forwarder_errors(node['name'], member, errors)
+                found = method_forwarder_errors(node['name'], member, errors)
+                if found is None:
+                    other(node['name'], member, k)
+                else:
+                    method_forwarders += found
                 continue
             if k not in ('get', 'set'):
+                other(node['name'], member, k)
                 continue
             body = code(member)
-            arrow = body.index('=>') if '=>' in body else None
-            if arrow is None:
-                continue
-            chain = accessor_chain(body[arrow + 1:], k == 'set')
+            chain = accessor_chain(body[body.index('=>') + 1:], k == 'set') if '=>' in body else None
             if chain is None:
+                other(node['name'], member, k)
                 continue
             target = '.'.join(chain)
             forwarders += 1
@@ -210,6 +267,7 @@ def adapter_errors(facade, hosts, renamed):
     stale = [key for key, target in renamed.items()
              if key.split('.')[0] not in adapters.values()]
     errors += ['stale renamed-forwarder exception: ' + key for key in stale]
+    errors += ['stale non-forwarder exception: ' + key for key in sorted(set(non_forwarders) - set(others))]
     expected = {key + ' -> _s.' + target for key, target in REGISTERED_DUPLICATES.items()}
     if listed != expected:
         errors.append('registered duplicate forwarders changed: ' + str(sorted(listed ^ expected)))
@@ -222,17 +280,41 @@ def sources(root=ROOT):
     return files
 
 
-def audit(files, package, exceptions=None, renamed=None):
+def audit(files, package, exceptions=None, renamed=None, non_forwarders=None):
     units = parse(files, package, ownership=True)
     hosts, users = hosts_of(units)
     errors, used = usage_errors(units, hosts, users, UNUSED_EXCEPTIONS if exceptions is None else exceptions)
-    more, forwarders, adapters, listed = adapter_errors(units[FACADE], hosts, RENAMED if renamed is None else renamed)
+    more, forwarders, adapters, listed = adapter_errors(units[FACADE], hosts, RENAMED if renamed is None else renamed,
+                                                       non_forwarders)
+    counts = dict(direct=forwarders[0] - forwarders[2], chain=forwarders[2], method=forwarders[1])
+    if counts != FORWARDER_COUNTS:
+        more.append('forwarder counts changed: ' + json.dumps(counts) + ' (pinned ' + json.dumps(FORWARDER_COUNTS) + ')')
     members = sum(len(h['members']) for h in hosts.values())
     return errors + more, dict(hosts=len(hosts), host_members=members, used=used, adapters=adapters,
                                same_name_forwarders=forwarders[0], same_name_chain_forwarders=forwarders[2],
                                same_name_method_forwarders=forwarders[1],
                                unused_exceptions=UNUSED_EXCEPTIONS,
-                               renamed_forwarders=len(RENAMED), registered_open_exceptions=listed)
+                               renamed_forwarders=len(RENAMED), non_forwarders=len(NON_FORWARDERS),
+                               registered_open_exceptions=listed)
+
+
+# (label, facade text, replacement, the pinned count it lowers): each plant
+# rewrites the first occurrence of a same-name forwarder (re-review P2-A).
+SHAPE_NEGATIVES = [
+    ('parenthesised getter', 'Duration get duration => _s._duration;', 'Duration get duration => (_s._duration);', 'direct'),
+    ('?? getter', 'mk.Player get player => _s._player;', 'mk.Player get player => _s._player ?? _s._player;', 'direct'),
+    ('ternary getter', 'bool get hideSeekbar => _s.widget.hideSeekbar;',
+     'bool get hideSeekbar => _s.mounted ? _s.widget.hideSeekbar : false;', 'chain'),
+    ('! getter', 'Duration get position => _s._position;', 'Duration get position => _s._position!;', 'direct'),
+    ('cascade setter', 'set activeMediaUserPaused(bool v) => _s._activeMediaUserPaused = v;',
+     'set activeMediaUserPaused(bool v) => _s.._activeMediaUserPaused = v;', 'direct'),
+    ('parenthesised setter', 'set sleepStopLatched(bool v) => _s._sleepStopLatched = v;',
+     'set sleepStopLatched(bool v) => (_s._sleepStopLatched = v);', 'direct'),
+    ('block-bodied getter', 'bool get canZapIptvChannel => _s._zapRing.canZapIptvChannel;',
+     'bool get canZapIptvChannel {\n    return _s._zapRing.canZapIptvChannel;\n  }', 'chain'),
+    ('block-bodied method', 'double dockBand(double legacy) => _s._dockBand(legacy);',
+     'double dockBand(double legacy) {\n    return _s._dockBand(legacy);\n  }', 'method'),
+]
 
 
 def self_test(files, package):
@@ -246,11 +328,15 @@ def self_test(files, package):
                                     'class _VpTransitionOverlayHostAdapter implements VpTransitionOverlayHost {\n'
                                     '  int get plantedUnused => 0;\n', 1)
     assert adapter != files[FACADE]
-    found, _ = audit(dict(files, **{path: unused, FACADE: adapter}), package)
+    # The planted adapter members are listed non-forwarders, so each negative
+    # isolates its own rule.
+    planted = lambda name: dict(NON_FORWARDERS, **{'_VpTransitionOverlayHostAdapter.' + name: '0 ;'})
+    found, _ = audit(dict(files, **{path: unused, FACADE: adapter}), package, non_forwarders=planted('plantedUnused'))
     assert found == ['unused Host member: VpTransitionOverlayHost.plantedUnused'], found
     print('host-usage negative unused Host member: rejected')
     found, _ = audit(dict(files, **{FACADE: adapter.replace('  int get plantedUnused => 0;\n',
-                                                            '  int get adapterOnly => 0;\n', 1)}), package)
+                                                            '  int get adapterOnly => 0;\n', 1)}), package,
+                     non_forwarders=planted('adapterOnly'))
     assert found == ['adapter-only member: _VpTransitionOverlayHostAdapter.adapterOnly'], found
     print('host-usage negative adapter-only member: rejected')
     swapped = files[FACADE].replace('set tvStaticMessage(String v) => _s._tvStaticMessage = v;',
@@ -283,6 +369,27 @@ def self_test(files, package):
     assert len(found) == 1 and found[0].startswith('renamed forwarder: ') and found[0].endswith(
         '.scheduleAutoHide -> _s._controlsRuntime.toggleControls'), found
     print('host-usage negative crossed method forwarder: rejected')
+    # Re-review P2-A: a forwarder rewritten into a shape the audit does not
+    # parse fails (and lowers the pinned counts) instead of being skipped.
+    for label, before, after, kind_ in SHAPE_NEGATIVES:
+        assert files[FACADE].count(before) >= 1, before
+        found, _ = audit(dict(files, **{FACADE: files[FACADE].replace(before, after, 1)}), package)
+        name = re.search(r'(?:get|set) (\w+)|(\w+)\(', before)
+        name = (name.group(1) or name.group(2)) + ('@set' if before.startswith('set ') else '')
+        lowered = dict(FORWARDER_COUNTS, **{kind_: FORWARDER_COUNTS[kind_] - 1})
+        assert len(found) == 2 and re.fullmatch(r'unrecognised adapter member shape: _Vp\w+HostAdapter\.'
+                                                + re.escape(name), found[0]) \
+            and found[1] == ('forwarder counts changed: ' + json.dumps(lowered)
+                             + ' (pinned ' + json.dumps(FORWARDER_COUNTS) + ')'), found
+        print('host-usage negative ' + label + ': rejected: ' + found[0] + ' | ' + found[1])
+    listed = files[FACADE].replace('bool get isAndroid => VpS2Hooks.isAndroid;', 'bool get isAndroid => VpS2Hooks.isIOS;', 1)
+    assert listed != files[FACADE]
+    found, _ = audit(dict(files, **{FACADE: listed}), package)
+    assert found == ['non-forwarder adapter member changed: _VpPlayerStartupHostAdapter.isAndroid'], found
+    print('host-usage negative changed non-forwarder body: rejected')
+    found, _ = audit(files, package, non_forwarders=dict(NON_FORWARDERS, **{'_VpPipLifecycleHostAdapter.gone': '_s ;'}))
+    assert found == ['stale non-forwarder exception: _VpPipLifecycleHostAdapter.gone'], found
+    print('host-usage negative stale non-forwarder exception: rejected')
     found, _ = audit(files, package, exceptions={'VpTransitionOverlayHost': ['mounted']})
     assert found == ['stale Host-usage exception: VpTransitionOverlayHost.mounted'], found
     print('host-usage negative stale exception: rejected')

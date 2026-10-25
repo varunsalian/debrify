@@ -6,9 +6,12 @@ and its "current" side is the post-C3 commit (HEAD below), both read through
 git, never the working tree; its file set is the facade, every
 lib/features/video_player/** file and exactly one non-feature comment target.
 The outside-the-set rule covers `git diff BASE HEAD -- lib` only. The live
-tree is covered by the P21 current move check (check_dart_moves.py) and the
-end-state guards, so later unrelated lib/ commits do not affect this proof
-(review P1-1). `--head REV` runs the proof against another head (negatives on
+feature files and facade are covered by the P21 current move check
+(check_dart_moves.py) and the end-state guards, so later unrelated lib/
+commits do not affect this proof (review P1-1). The non-feature comment
+target is intentionally covered by no video-player guard after C3 (re-review
+P3-D). HEAD must stay reachable: do not rebase, reword or squash C1-C3
+(re-review P3-E). `--head REV` runs the proof against another head (negatives on
 scratch commits). The declared edits are:
 
   remove_directive   (file, uri)                     C1: an unused import;
