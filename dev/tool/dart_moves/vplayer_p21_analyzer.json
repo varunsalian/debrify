@@ -1,0 +1,3746 @@
+{
+  "schema": 1,
+  "base": "5214f7a7e",
+  "entries": [
+    {
+      "severity": "info",
+      "rule": "avoid_print",
+      "symbol": "_VideoPlayerScreenState._loadPlaylistIndexAttempt",
+      "message": "Don't invoke 'print' in production code. Try using a logging framework",
+      "maximum": 2
+    },
+    {
+      "severity": "info",
+      "rule": "avoid_print",
+      "symbol": "_VideoPlayerScreenState._playPikPakVideoWithRetry",
+      "message": "Don't invoke 'print' in production code. Try using a logging framework",
+      "maximum": 24
+    },
+    {
+      "severity": "info",
+      "rule": "avoid_print",
+      "symbol": "_VideoPlayerScreenState._saveSeriesPosterToPlaylist",
+      "message": "Don't invoke 'print' in production code. Try using a logging framework",
+      "maximum": 10
+    },
+    {
+      "severity": "info",
+      "rule": "avoid_print",
+      "symbol": "_VideoPlayerScreenState._waitForVideoMetadata",
+      "message": "Don't invoke 'print' in production code. Try using a logging framework",
+      "maximum": 9
+    },
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_VideoPlayerScreenState._adjacentEpisode",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_VideoPlayerScreenState._applyIptvAudioPreference",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_VideoPlayerScreenState._applyNetworkTuningInner",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_VideoPlayerScreenState._applyStremioSubtitleFromTracksSheet",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_VideoPlayerScreenState._currentSeriesImdbId",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_VideoPlayerScreenState._currentSkipSegmentRequest",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 2
+    },
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_VideoPlayerScreenState._enterPip",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 4
+    },
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_VideoPlayerScreenState._fetchAndMaybeAutoSelectAddonSubtitle",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 4
+    },
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_VideoPlayerScreenState._findNextEpisodeIndex",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 2
+    },
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_VideoPlayerScreenState._findPreviousEpisodeIndex",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 2
+    },
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_VideoPlayerScreenState._getEnhancedPlaybackState",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_VideoPlayerScreenState._identifyTitleAndFetchSubtitles",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 2
+    },
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_VideoPlayerScreenState._initializePlayer",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_VideoPlayerScreenState._installIptvZapWindow",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_VideoPlayerScreenState._menuSelectAddonSubtitle",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_VideoPlayerScreenState._onPlayerInstanceReady",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_VideoPlayerScreenState._openMedia",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_VideoPlayerScreenState._prepareNextDirectEpisode",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_VideoPlayerScreenState._refreshEngineRecordingState",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_VideoPlayerScreenState._saveResumeLocked",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_VideoPlayerScreenState._scheduleTvosDisplayMatch",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_VideoPlayerScreenState._showPlaylistSheet",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_VideoPlayerScreenState._startRecording",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_VideoPlayerScreenState._syncSkipSegmentsForCurrentContent",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 4
+    },
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_VideoPlayerScreenState._tvScrubBegin",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "deprecated_member_use",
+      "symbol": "_VideoPlayerScreenState.build",
+      "message": "'RawKeyDownEvent' is deprecated and shouldn't be used. Use KeyDownEvent instead. This feature was deprecated after v3.18.0-2.0.pre. Try replacing the use of the deprecated member with the replacement",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "deprecated_member_use",
+      "symbol": "_VideoPlayerScreenState.build",
+      "message": "'onKey' is deprecated and shouldn't be used. Use onKeyEvent instead. This feature was deprecated after v3.18.0-2.0.pre. Try replacing the use of the deprecated member with the replacement",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "directives_ordering",
+      "symbol": "@directives",
+      "message": "Place 'dart:' imports before other imports. Try sorting the directives",
+      "maximum": 3
+    },
+    {
+      "severity": "info",
+      "rule": "directives_ordering",
+      "symbol": "@directives",
+      "message": "Place 'package:' imports before relative imports. Try sorting the directives",
+      "maximum": 9
+    },
+    {
+      "severity": "info",
+      "rule": "directives_ordering",
+      "symbol": "@directives",
+      "message": "Sort directive sections alphabetically. Try sorting the directives",
+      "maximum": 61
+    },
+    {
+      "severity": "info",
+      "rule": "directives_ordering",
+      "symbol": "@directives",
+      "message": "Specify exports in a separate section after all imports. Try sorting the directives",
+      "maximum": 3
+    },
+    {
+      "severity": "info",
+      "rule": "directives_ordering",
+      "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_display_mode_controller.dart:@directives",
+      "message": "Sort directive sections alphabetically. Try sorting the directives",
+      "maximum": 2
+    },
+    {
+      "severity": "info",
+      "rule": "directives_ordering",
+      "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_local_completion.dart:@directives",
+      "message": "Sort directive sections alphabetically. Try sorting the directives",
+      "maximum": 4
+    },
+    {
+      "severity": "info",
+      "rule": "directives_ordering",
+      "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_mdblist_scrobbler.dart:@directives",
+      "message": "Sort directive sections alphabetically. Try sorting the directives",
+      "maximum": 6
+    },
+    {
+      "severity": "info",
+      "rule": "directives_ordering",
+      "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_resume_keys.dart:@directives",
+      "message": "Sort directive sections alphabetically. Try sorting the directives",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "directives_ordering",
+      "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_resume_restore.dart:@directives",
+      "message": "Sort directive sections alphabetically. Try sorting the directives",
+      "maximum": 3
+    },
+    {
+      "severity": "info",
+      "rule": "directives_ordering",
+      "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_resume_save.dart:@directives",
+      "message": "Sort directive sections alphabetically. Try sorting the directives",
+      "maximum": 2
+    },
+    {
+      "severity": "info",
+      "rule": "directives_ordering",
+      "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_simkl_scrobbler.dart:@directives",
+      "message": "Sort directive sections alphabetically. Try sorting the directives",
+      "maximum": 4
+    },
+    {
+      "severity": "info",
+      "rule": "directives_ordering",
+      "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_skip_segment_controller.dart:@directives",
+      "message": "Sort directive sections alphabetically. Try sorting the directives",
+      "maximum": 4
+    },
+    {
+      "severity": "info",
+      "rule": "directives_ordering",
+      "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_sleep_timer_controller.dart:@directives",
+      "message": "Sort directive sections alphabetically. Try sorting the directives",
+      "maximum": 2
+    },
+    {
+      "severity": "info",
+      "rule": "directives_ordering",
+      "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_subtitle_auto_sync.dart:@directives",
+      "message": "Sort directive sections alphabetically. Try sorting the directives",
+      "maximum": 4
+    },
+    {
+      "severity": "info",
+      "rule": "directives_ordering",
+      "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_track_preferences.dart:@directives",
+      "message": "Sort directive sections alphabetically. Try sorting the directives",
+      "maximum": 4
+    },
+    {
+      "severity": "info",
+      "rule": "directives_ordering",
+      "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_trakt_scrobbler.dart:@directives",
+      "message": "Sort directive sections alphabetically. Try sorting the directives",
+      "maximum": 2
+    },
+    {
+      "severity": "info",
+      "rule": "empty_catches",
+      "symbol": "_VideoPlayerScreenState._getCurrentEpisodeSubtitle",
+      "message": "Empty catch block. Try adding statements to the block, adding a comment to the block, or removing the 'catch' clause",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "empty_catches",
+      "symbol": "_VideoPlayerScreenState._getEnhancedMetadata",
+      "message": "Empty catch block. Try adding statements to the block, adding a comment to the block, or removing the 'catch' clause",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "empty_catches",
+      "symbol": "_VideoPlayerScreenState._getEnhancedPlaybackState",
+      "message": "Empty catch block. Try adding statements to the block, adding a comment to the block, or removing the 'catch' clause",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "empty_catches",
+      "symbol": "_VideoPlayerScreenState._markCurrentEpisodeAsFinished",
+      "message": "Empty catch block. Try adding statements to the block, adding a comment to the block, or removing the 'catch' clause",
+      "maximum": 2
+    },
+    {
+      "severity": "info",
+      "rule": "empty_catches",
+      "symbol": "_VideoPlayerScreenState._saveResumeLocked",
+      "message": "Empty catch block. Try adding statements to the block, adding a comment to the block, or removing the 'catch' clause",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "sort_child_properties_last",
+      "symbol": "_VideoPlayerScreenState._requestSeasonEpisodeForIdentity",
+      "message": "The 'child' argument should be last in widget constructor invocations. Try moving the argument to the end of the argument list",
+      "maximum": 2
+    },
+    {
+      "severity": "info",
+      "rule": "unnecessary_import",
+      "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_iptv_channel_switch.dart:@directives",
+      "message": "The import of 'package:flutter/foundation.dart' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "unnecessary_import",
+      "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_iptv_live_sources.dart:@directives",
+      "message": "The import of 'package:flutter/foundation.dart' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "unnecessary_import",
+      "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_resume_restore.dart:@directives",
+      "message": "The import of 'package:debrify/models/tracking_source.dart' is unnecessary because all of the used elements are also provided by the import of 'package:debrify/services/tracking_source_policy.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "unnecessary_import",
+      "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_resume_save.dart:@directives",
+      "message": "The import of 'package:debrify/models/playback_resume_policy.dart' is unnecessary because all of the used elements are also provided by the import of 'package:debrify/services/local_playback_resume_resolver.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "use_build_context_synchronously",
+      "symbol": "_VideoPlayerScreenState._enterPip",
+      "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+      "maximum": 2
+    },
+    {
+      "severity": "info",
+      "rule": "use_build_context_synchronously",
+      "symbol": "_VideoPlayerScreenState._fallbackExplicitRendererToAutomatic",
+      "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "use_build_context_synchronously",
+      "symbol": "_VideoPlayerScreenState._handleSeriesNextEpisode",
+      "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "use_build_context_synchronously",
+      "symbol": "_VideoPlayerScreenState._identifyTitleAndFetchSubtitles",
+      "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+      "maximum": 6
+    },
+    {
+      "severity": "info",
+      "rule": "use_build_context_synchronously",
+      "symbol": "_VideoPlayerScreenState._loadPlaylistIndexAttempt",
+      "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+      "maximum": 4
+    },
+    {
+      "severity": "info",
+      "rule": "use_build_context_synchronously",
+      "symbol": "_VideoPlayerScreenState._playPikPakVideoWithRetry",
+      "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+      "maximum": 4
+    },
+    {
+      "severity": "info",
+      "rule": "use_build_context_synchronously",
+      "symbol": "_VideoPlayerScreenState._playShowShuffle",
+      "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+      "maximum": 2
+    },
+    {
+      "severity": "info",
+      "rule": "use_build_context_synchronously",
+      "symbol": "_VideoPlayerScreenState._publishRecording",
+      "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "use_build_context_synchronously",
+      "symbol": "_VideoPlayerScreenState._reportStartupFailure",
+      "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+      "maximum": 2
+    },
+    {
+      "severity": "info",
+      "rule": "use_build_context_synchronously",
+      "symbol": "_VideoPlayerScreenState._startIptvProgrammeFromBeginning",
+      "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "use_build_context_synchronously",
+      "symbol": "_VideoPlayerScreenState._startRecording",
+      "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+      "maximum": 2
+    },
+    {
+      "severity": "info",
+      "rule": "use_build_context_synchronously",
+      "symbol": "_VideoPlayerScreenState._stopRecording",
+      "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "use_build_context_synchronously",
+      "symbol": "_VideoPlayerScreenState._switchToSourcePlaylist",
+      "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "use_build_context_synchronously",
+      "symbol": "_VideoPlayerScreenState._switchToSourcePlaylist",
+      "message": "Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "use_build_context_synchronously",
+      "symbol": "_VideoPlayerScreenState._switchToStremioSource",
+      "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "use_build_context_synchronously",
+      "symbol": "_VideoPlayerScreenState._toggleRecording",
+      "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+      "maximum": 7
+    },
+    {
+      "severity": "info",
+      "rule": "use_build_context_synchronously",
+      "symbol": "_VideoPlayerScreenState._toggleRecording",
+      "message": "Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check",
+      "maximum": 4
+    },
+    {
+      "severity": "info",
+      "rule": "use_build_context_synchronously",
+      "symbol": "_VideoPlayerScreenState.build",
+      "message": "Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "invalid_use_of_visible_for_testing_member",
+      "symbol": "_VideoPlayerScreenState._claimVideoOutput",
+      "message": "The member 'isHeld' can only be used within 'package:debrify/widgets/video_output_lease.dart' or a test",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_field",
+      "symbol": "_VideoPlayerScreenState._isSeekingWithSlider",
+      "message": "The value of the field '_isSeekingWithSlider' isn't used. Try removing the field, or using it",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_field",
+      "symbol": "_VideoPlayerScreenState._pikPakRetryCount",
+      "message": "The value of the field '_pikPakRetryCount' isn't used. Try removing the field, or using it",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_field",
+      "symbol": "_VideoPlayerScreenState._rainbowOpacity",
+      "message": "The value of the field '_rainbowOpacity' isn't used. Try removing the field, or using it",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_field",
+      "symbol": "_VideoPlayerScreenState._transitionPhase",
+      "message": "The value of the field '_transitionPhase' isn't used. Try removing the field, or using it",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_field",
+      "symbol": "_VideoPlayerScreenState._transitionPhase2Started",
+      "message": "The value of the field '_transitionPhase2Started' isn't used. Try removing the field, or using it",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../features/video_player/application/vp_filename_hash.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../features/video_player/application/vp_identity_text.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../features/video_player/application/vp_subtitle_identity.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../features/video_player/models/iptv_catchup_request_gate.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../features/video_player/models/vp_manual_source_validation_failure.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../features/video_player/presentation/vp_random_choice_tile.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../models/profiles/profile_policy.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../models/subtitle_source_priority.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../services/alldebrid_service.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../services/audio_effect_session_service.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../services/debrid_service.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../services/direct_source_authorization.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../services/live_recording_service.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../services/mdblist/mdblist_models.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../services/mdblist/mdblist_scrobble_session.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../services/mdblist/mdblist_service.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../services/movie_metadata_service.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../services/next_episode_service.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../services/pikpak_api_service.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../services/premiumize_service.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../services/profiles/profile_policy_guard.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../services/profiles/profile_runtime.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../services/simkl/simkl_service.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../services/source_selection_diagnostics.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../services/stremio_service.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../services/stremio_subtitle_service.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../services/torbox_service.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../services/tracking_source_policy.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../services/trakt/trakt_service.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../utils/app_storage.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../utils/episode_progress_merge.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../utils/iptv_player_paging.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../utils/movie_parser.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../utils/player_audio_config.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../utils/show_shuffle.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../utils/time_formatters.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../utils/tv_search_focus_handoff.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../widgets/recording_limit_dialogs.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../widgets/tv_text_field.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../widgets/video_output_lease.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:debrify/services/storage/alldebrid_storage.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:debrify/services/storage/episode_completion_storage.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:debrify/services/storage/episode_resume_storage.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:debrify/services/storage/iptv_appearance_storage.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:debrify/services/storage/iptv_audio_storage.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:debrify/services/storage/iptv_history_storage.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:debrify/services/storage/iptv_last_channel_storage.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:debrify/services/storage/iptv_playlist_storage.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:debrify/services/storage/local_completion_storage.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:debrify/services/storage/movie_progress_storage.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:debrify/services/storage/player_appearance_storage.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:debrify/services/storage/player_network_storage.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:debrify/services/storage/playlist_artwork_storage.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:debrify/services/storage/playlist_metadata_storage.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:debrify/services/storage/premiumize_storage.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:debrify/services/storage/quick_play_storage.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:debrify/services/storage/real_debrid_storage.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:debrify/services/storage/series_progress_storage.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:debrify/services/storage/skip_segments_storage.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:debrify/services/storage/subtitle_settings_storage.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:debrify/services/storage/torbox_storage.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:debrify/services/storage/track_preferences_storage.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:debrify/services/storage/tracker_episode_progress_storage.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:debrify/services/storage/video_progress_storage.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:http/http.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:path_provider/path_provider.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'video_player/services/android_renderer_startup_fallback.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'video_player/services/external_subtitle_payload.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'video_player/services/media_kit_subtitle_auto_sync.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'video_player/services/subtitle_track_utils.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'video_player/utils/aspect_mode_utils.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'video_player/utils/language_mapping.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'video_player/utils/subtitle_audio_policy.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'video_player/utils/subtitle_priority_selection.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'video_player/widgets/playlist_sheet.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'video_player/widgets/spotlight_dialog.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'video_player/widgets/subtitle_line_picker_overlay.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'video_player/widgets/sync_stepper_overlay.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_shown_name",
+      "symbol": "@directives",
+      "message": "The name kIsWeb is shown, but isn't used. Try removing the name from the list of shown members",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_shown_name",
+      "symbol": "@directives",
+      "message": "The name listEquals is shown, but isn't used. Try removing the name from the list of shown members",
+      "maximum": 1
+    }
+  ],
+  "procedure": "P1-P20 mappings preserved. Original root, strict feature config, final formatted P21 receiver/rename probe.",
+  "runs": {
+    "root": {
+      "count": 159,
+      "entries": [
+        {
+          "severity": "info",
+          "rule": "avoid_print",
+          "symbol": "_VideoPlayerScreenState._loadPlaylistIndexAttempt",
+          "message": "Don't invoke 'print' in production code. Try using a logging framework",
+          "maximum": 2
+        },
+        {
+          "severity": "info",
+          "rule": "avoid_print",
+          "symbol": "_VideoPlayerScreenState._playPikPakVideoWithRetry",
+          "message": "Don't invoke 'print' in production code. Try using a logging framework",
+          "maximum": 24
+        },
+        {
+          "severity": "info",
+          "rule": "avoid_print",
+          "symbol": "_VideoPlayerScreenState._saveSeriesPosterToPlaylist",
+          "message": "Don't invoke 'print' in production code. Try using a logging framework",
+          "maximum": 10
+        },
+        {
+          "severity": "info",
+          "rule": "avoid_print",
+          "symbol": "_VideoPlayerScreenState._waitForVideoMetadata",
+          "message": "Don't invoke 'print' in production code. Try using a logging framework",
+          "maximum": 9
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._adjacentEpisode",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._applyStremioSubtitleFromTracksSheet",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._currentSeriesImdbId",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._currentSkipSegmentRequest",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._enterPip",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 2
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._fetchAndMaybeAutoSelectAddonSubtitle",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 2
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._getEnhancedPlaybackState",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._identifyTitleAndFetchSubtitles",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._initializePlayer",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._menuSelectAddonSubtitle",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._prepareNextDirectEpisode",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._refreshEngineRecordingState",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._saveResumeLocked",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._startRecording",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._syncSkipSegmentsForCurrentContent",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 2
+        },
+        {
+          "severity": "info",
+          "rule": "deprecated_member_use",
+          "symbol": "_VideoPlayerScreenState.build",
+          "message": "'RawKeyDownEvent' is deprecated and shouldn't be used. Use KeyDownEvent instead. This feature was deprecated after v3.18.0-2.0.pre. Try replacing the use of the deprecated member with the replacement",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "deprecated_member_use",
+          "symbol": "_VideoPlayerScreenState.build",
+          "message": "'onKey' is deprecated and shouldn't be used. Use onKeyEvent instead. This feature was deprecated after v3.18.0-2.0.pre. Try replacing the use of the deprecated member with the replacement",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_display_mode_controller.dart:@directives",
+          "message": "Sort directive sections alphabetically. Try sorting the directives",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_local_completion.dart:@directives",
+          "message": "Sort directive sections alphabetically. Try sorting the directives",
+          "maximum": 2
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_mdblist_scrobbler.dart:@directives",
+          "message": "Sort directive sections alphabetically. Try sorting the directives",
+          "maximum": 3
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_resume_keys.dart:@directives",
+          "message": "Sort directive sections alphabetically. Try sorting the directives",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_resume_restore.dart:@directives",
+          "message": "Sort directive sections alphabetically. Try sorting the directives",
+          "maximum": 3
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_resume_save.dart:@directives",
+          "message": "Sort directive sections alphabetically. Try sorting the directives",
+          "maximum": 2
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_simkl_scrobbler.dart:@directives",
+          "message": "Sort directive sections alphabetically. Try sorting the directives",
+          "maximum": 2
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_skip_segment_controller.dart:@directives",
+          "message": "Sort directive sections alphabetically. Try sorting the directives",
+          "maximum": 2
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_sleep_timer_controller.dart:@directives",
+          "message": "Sort directive sections alphabetically. Try sorting the directives",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_subtitle_auto_sync.dart:@directives",
+          "message": "Sort directive sections alphabetically. Try sorting the directives",
+          "maximum": 2
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_track_preferences.dart:@directives",
+          "message": "Sort directive sections alphabetically. Try sorting the directives",
+          "maximum": 2
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_trakt_scrobbler.dart:@directives",
+          "message": "Sort directive sections alphabetically. Try sorting the directives",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "empty_catches",
+          "symbol": "_VideoPlayerScreenState._getCurrentEpisodeSubtitle",
+          "message": "Empty catch block. Try adding statements to the block, adding a comment to the block, or removing the 'catch' clause",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "empty_catches",
+          "symbol": "_VideoPlayerScreenState._getEnhancedMetadata",
+          "message": "Empty catch block. Try adding statements to the block, adding a comment to the block, or removing the 'catch' clause",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "empty_catches",
+          "symbol": "_VideoPlayerScreenState._getEnhancedPlaybackState",
+          "message": "Empty catch block. Try adding statements to the block, adding a comment to the block, or removing the 'catch' clause",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "empty_catches",
+          "symbol": "_VideoPlayerScreenState._markCurrentEpisodeAsFinished",
+          "message": "Empty catch block. Try adding statements to the block, adding a comment to the block, or removing the 'catch' clause",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "empty_catches",
+          "symbol": "_VideoPlayerScreenState._saveResumeLocked",
+          "message": "Empty catch block. Try adding statements to the block, adding a comment to the block, or removing the 'catch' clause",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "sort_child_properties_last",
+          "symbol": "_VideoPlayerScreenState._requestSeasonEpisodeForIdentity",
+          "message": "The 'child' argument should be last in widget constructor invocations. Try moving the argument to the end of the argument list",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "unnecessary_import",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_resume_restore.dart:@directives",
+          "message": "The import of 'package:debrify/models/tracking_source.dart' is unnecessary because all of the used elements are also provided by the import of 'package:debrify/services/tracking_source_policy.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "unnecessary_import",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_resume_save.dart:@directives",
+          "message": "The import of 'package:debrify/models/playback_resume_policy.dart' is unnecessary because all of the used elements are also provided by the import of 'package:debrify/services/local_playback_resume_resolver.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "use_build_context_synchronously",
+          "symbol": "_VideoPlayerScreenState._enterPip",
+          "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "use_build_context_synchronously",
+          "symbol": "_VideoPlayerScreenState._identifyTitleAndFetchSubtitles",
+          "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+          "maximum": 3
+        },
+        {
+          "severity": "info",
+          "rule": "use_build_context_synchronously",
+          "symbol": "_VideoPlayerScreenState._publishRecording",
+          "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "use_build_context_synchronously",
+          "symbol": "_VideoPlayerScreenState._startRecording",
+          "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+          "maximum": 2
+        },
+        {
+          "severity": "info",
+          "rule": "use_build_context_synchronously",
+          "symbol": "_VideoPlayerScreenState._stopRecording",
+          "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "use_build_context_synchronously",
+          "symbol": "_VideoPlayerScreenState._switchToSourcePlaylist",
+          "message": "Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "use_build_context_synchronously",
+          "symbol": "_VideoPlayerScreenState._toggleRecording",
+          "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+          "maximum": 7
+        },
+        {
+          "severity": "info",
+          "rule": "use_build_context_synchronously",
+          "symbol": "_VideoPlayerScreenState._toggleRecording",
+          "message": "Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check",
+          "maximum": 4
+        },
+        {
+          "severity": "info",
+          "rule": "use_build_context_synchronously",
+          "symbol": "_VideoPlayerScreenState.build",
+          "message": "Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "invalid_use_of_visible_for_testing_member",
+          "symbol": "_VideoPlayerScreenState._claimVideoOutput",
+          "message": "The member 'isHeld' can only be used within 'package:debrify/widgets/video_output_lease.dart' or a test",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_field",
+          "symbol": "_VideoPlayerScreenState._isSeekingWithSlider",
+          "message": "The value of the field '_isSeekingWithSlider' isn't used. Try removing the field, or using it",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_field",
+          "symbol": "_VideoPlayerScreenState._pikPakRetryCount",
+          "message": "The value of the field '_pikPakRetryCount' isn't used. Try removing the field, or using it",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_field",
+          "symbol": "_VideoPlayerScreenState._rainbowOpacity",
+          "message": "The value of the field '_rainbowOpacity' isn't used. Try removing the field, or using it",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_field",
+          "symbol": "_VideoPlayerScreenState._transitionPhase",
+          "message": "The value of the field '_transitionPhase' isn't used. Try removing the field, or using it",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_field",
+          "symbol": "_VideoPlayerScreenState._transitionPhase2Started",
+          "message": "The value of the field '_transitionPhase2Started' isn't used. Try removing the field, or using it",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../features/video_player/application/vp_filename_hash.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../features/video_player/application/vp_identity_text.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../features/video_player/application/vp_subtitle_identity.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../models/subtitle_source_priority.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../services/mdblist/mdblist_models.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../services/mdblist/mdblist_scrobble_session.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../services/mdblist/mdblist_service.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../services/simkl/simkl_service.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../services/stremio_service.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../services/stremio_subtitle_service.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../services/tracking_source_policy.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../services/trakt/trakt_service.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../utils/app_storage.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../utils/episode_progress_merge.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../utils/time_formatters.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../utils/tv_search_focus_handoff.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../widgets/recording_limit_dialogs.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../widgets/tv_text_field.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'package:debrify/services/storage/episode_completion_storage.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'package:debrify/services/storage/iptv_playlist_storage.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'package:debrify/services/storage/local_completion_storage.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'package:debrify/services/storage/movie_progress_storage.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'package:debrify/services/storage/series_progress_storage.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'package:debrify/services/storage/skip_segments_storage.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'package:debrify/services/storage/track_preferences_storage.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'package:debrify/services/storage/tracker_episode_progress_storage.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'package:http/http.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'package:path_provider/path_provider.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'video_player/services/external_subtitle_payload.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'video_player/services/media_kit_subtitle_auto_sync.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'video_player/services/subtitle_track_utils.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'video_player/utils/aspect_mode_utils.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'video_player/utils/subtitle_audio_policy.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'video_player/utils/subtitle_priority_selection.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'video_player/widgets/spotlight_dialog.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'video_player/widgets/subtitle_line_picker_overlay.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'video_player/widgets/sync_stepper_overlay.dart'. Try removing the import directive",
+          "maximum": 1
+        }
+      ],
+      "source_hashes": {
+        "lib/screens/video_player_screen.dart": "5db489a4eb6e3ceb6c6124de922afd551d9fc70682a8157bb670fa82a12320f0",
+        "lib/features/video_player/models/vp_season_episode_selection.dart": "45170b2f311f8f0fa84c9dde0670386ad94d32311d133ebb7227db542fdbd7f1",
+        "lib/features/video_player/models/vp_subtitle_apply_attempt.dart": "e891a1c5b181145b6b0df01f8cde87ce811eed2f3ee1adb7011fb80ada5284b0",
+        "lib/features/video_player/models/vp_iptv_zap_page.dart": "b491435a11f6e90556ab2b1ecd49abc5db8889f98304eba1a6fc117097e5e303",
+        "lib/features/video_player/models/vp_manual_source_validation_failure.dart": "25ea8459dae63de00a8394fa0994db213089e49842412cfd0724945fdd958489",
+        "lib/features/video_player/models/iptv_catchup_request_gate.dart": "3cac25f57910f94061b0326b943f0011bedd0d114a0a153fbf7a1ae918c89908",
+        "lib/features/video_player/application/vp_identity_text.dart": "23188878df7822ab07783567ee6bd163bc90d5c5793153b33479284940032c73",
+        "lib/features/video_player/application/vp_subtitle_identity.dart": "145954c79d03010736ba0765a73867f3abac20b5e1577ae34857168827dc2081",
+        "lib/features/video_player/application/vp_format.dart": "998add677612798dcccb65ef0bdc7df29e1d30db4d0fbcef25ad37b618fb124f",
+        "lib/features/video_player/application/vp_filename_hash.dart": "b14981f8c1131b845da18bcd1fae1b21d5c8dd59b1d8d5c16b1788ba7c289c85",
+        "lib/features/video_player/presentation/vp_random_choice_tile.dart": "c38466d20b09b65991d214d5e9f981f33528f517f0b77bb185a82a225e8090bb",
+        "lib/features/video_player/presentation/legacy_video_player/vp_player_menu.dart": "f4a973758c2136f69b72ddd5f5dfae4a3376cd82fc041e14f32090028f26c723",
+        "lib/features/video_player/presentation/legacy_video_player/vp_addon_subtitles.dart": "6ee5eb6659532441eeef7f98432fc1c42a55d3d6bfd9e0242f9e0306e0a409fd",
+        "lib/features/video_player/presentation/legacy_video_player/vp_skip_segment_controller.dart": "bc3bc333f3b0ddea971c8b25bb0e8f451e467107b925550a336a00090da6c636",
+        "lib/features/video_player/presentation/legacy_video_player/vp_resume_save.dart": "f8aa88bbe6e8ae33507fde33e0e146ff8c06b99ab877e62704c519f7cf5999d7",
+        "lib/features/video_player/presentation/legacy_video_player/vp_resume_restore.dart": "e2fa30c19a4f5443b552347c319213c3d1a666e896e5e6580285797eed9ecfe0",
+        "lib/features/video_player/presentation/legacy_video_player/vp_identify_title.dart": "7263485f41bd85caca5c748babafb4be0ed434544da3aded467e092aac587df5",
+        "lib/features/video_player/presentation/legacy_video_player/vp_pip_lifecycle.dart": "054c9ee76b69f8e49fb384e5978f6f4de5578e60012ee98f2a5c02fc35c92f31",
+        "lib/features/video_player/presentation/legacy_video_player/vp_sleep_timer_controller.dart": "a7c0cd77d9164efdb5e570d7995c3af775303928c7dfb56e350c9398b2530fee",
+        "lib/features/video_player/presentation/legacy_video_player/vp_identify_title_ui.dart": "2a5130869fbf027888692ab381f718fb51be064e1db26bf97efb761f22af1df4",
+        "lib/features/video_player/presentation/legacy_video_player/vp_trakt_scrobbler.dart": "392d90c3494f5bfc7b21fa0e039c35084ad12b662fe73e72a93730f29c3853d6",
+        "lib/features/video_player/presentation/legacy_video_player/vp_iptv_recording_resources.dart": "16523174947333b8c802270b3139b31a8a941426078d7d6d8114a24e77ab230d",
+        "lib/features/video_player/presentation/legacy_video_player/vp_mdblist_scrobbler.dart": "71c36e9870e491608a8f9c0aecb3ce0958e31092db1a4f6b486cac5728983ff0",
+        "lib/features/video_player/presentation/legacy_video_player/vp_subtitle_language_policy.dart": "c3368127ecf4f62ecf8ec73ba08128372faf844fa10709e61afadbc58d6ce081",
+        "lib/features/video_player/presentation/legacy_video_player/vp_simkl_scrobbler.dart": "ddf1dd8fd058f97303a30e14e6f8f88e24a4458e77901124416cfb498bcbfbad",
+        "lib/features/video_player/presentation/legacy_video_player/vp_display_mode_controller.dart": "cc369cd259d0cf5378abd95918578e2a2cbd40235099118f3b6c0c0d7a05218d",
+        "lib/features/video_player/presentation/legacy_video_player/vp_subtitle_auto_sync.dart": "f156559348b23b27891639442e99cd742bed739821c88edac429fd8ea5f638b5",
+        "lib/features/video_player/presentation/legacy_video_player/vp_player_menu_ui.dart": "c3b5f44d25872e48360b6683a7539ef14e7650716ce04c00999a3488a2af35b3",
+        "lib/features/video_player/presentation/legacy_video_player/vp_local_completion.dart": "16af7799926aa89c08cd82eb3f8719db24cb967a8fe9b261f6b365bd81a51998",
+        "lib/features/video_player/presentation/legacy_video_player/vp_resume_keys.dart": "70fa2e112047875958f84c7dbcde9a8f15b3f40f1a052d7621f035beb32c08ac",
+        "lib/features/video_player/presentation/legacy_video_player/vp_subtitle_apply.dart": "2d5a7196e11d0b7a721b6cfd7f52e07105d3f204699b0f61fdfb337e478b5516",
+        "lib/features/video_player/presentation/legacy_video_player/vp_iptv_recording.dart": "fdbca45ec9f682ff83adb1f9f2579450bc0f817142b1b63602431c6847149219",
+        "lib/features/video_player/presentation/legacy_video_player/vp_track_preferences.dart": "a04cd8d22295e4d8b5de937eeca2fe92ec0d6c0425d003bf3d87664018166ff4"
+      }
+    },
+    "strict": {
+      "count": 235,
+      "entries": [
+        {
+          "severity": "info",
+          "rule": "avoid_print",
+          "symbol": "_VideoPlayerScreenState._loadPlaylistIndexAttempt",
+          "message": "Don't invoke 'print' in production code. Try using a logging framework",
+          "maximum": 2
+        },
+        {
+          "severity": "info",
+          "rule": "avoid_print",
+          "symbol": "_VideoPlayerScreenState._playPikPakVideoWithRetry",
+          "message": "Don't invoke 'print' in production code. Try using a logging framework",
+          "maximum": 24
+        },
+        {
+          "severity": "info",
+          "rule": "avoid_print",
+          "symbol": "_VideoPlayerScreenState._saveSeriesPosterToPlaylist",
+          "message": "Don't invoke 'print' in production code. Try using a logging framework",
+          "maximum": 10
+        },
+        {
+          "severity": "info",
+          "rule": "avoid_print",
+          "symbol": "_VideoPlayerScreenState._waitForVideoMetadata",
+          "message": "Don't invoke 'print' in production code. Try using a logging framework",
+          "maximum": 9
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._adjacentEpisode",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._applyStremioSubtitleFromTracksSheet",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._currentSeriesImdbId",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._currentSkipSegmentRequest",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._enterPip",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 2
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._fetchAndMaybeAutoSelectAddonSubtitle",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 2
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._getEnhancedPlaybackState",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._identifyTitleAndFetchSubtitles",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._initializePlayer",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._menuSelectAddonSubtitle",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._prepareNextDirectEpisode",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._refreshEngineRecordingState",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._saveResumeLocked",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._startRecording",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._syncSkipSegmentsForCurrentContent",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 2
+        },
+        {
+          "severity": "info",
+          "rule": "deprecated_member_use",
+          "symbol": "_VideoPlayerScreenState.build",
+          "message": "'RawKeyDownEvent' is deprecated and shouldn't be used. Use KeyDownEvent instead. This feature was deprecated after v3.18.0-2.0.pre. Try replacing the use of the deprecated member with the replacement",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "deprecated_member_use",
+          "symbol": "_VideoPlayerScreenState.build",
+          "message": "'onKey' is deprecated and shouldn't be used. Use onKeyEvent instead. This feature was deprecated after v3.18.0-2.0.pre. Try replacing the use of the deprecated member with the replacement",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "@directives",
+          "message": "Place 'dart:' imports before other imports. Try sorting the directives",
+          "maximum": 3
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "@directives",
+          "message": "Place 'package:' imports before relative imports. Try sorting the directives",
+          "maximum": 9
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "@directives",
+          "message": "Sort directive sections alphabetically. Try sorting the directives",
+          "maximum": 61
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "@directives",
+          "message": "Specify exports in a separate section after all imports. Try sorting the directives",
+          "maximum": 3
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_display_mode_controller.dart:@directives",
+          "message": "Sort directive sections alphabetically. Try sorting the directives",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_local_completion.dart:@directives",
+          "message": "Sort directive sections alphabetically. Try sorting the directives",
+          "maximum": 2
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_mdblist_scrobbler.dart:@directives",
+          "message": "Sort directive sections alphabetically. Try sorting the directives",
+          "maximum": 3
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_resume_keys.dart:@directives",
+          "message": "Sort directive sections alphabetically. Try sorting the directives",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_resume_restore.dart:@directives",
+          "message": "Sort directive sections alphabetically. Try sorting the directives",
+          "maximum": 3
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_resume_save.dart:@directives",
+          "message": "Sort directive sections alphabetically. Try sorting the directives",
+          "maximum": 2
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_simkl_scrobbler.dart:@directives",
+          "message": "Sort directive sections alphabetically. Try sorting the directives",
+          "maximum": 2
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_skip_segment_controller.dart:@directives",
+          "message": "Sort directive sections alphabetically. Try sorting the directives",
+          "maximum": 2
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_sleep_timer_controller.dart:@directives",
+          "message": "Sort directive sections alphabetically. Try sorting the directives",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_subtitle_auto_sync.dart:@directives",
+          "message": "Sort directive sections alphabetically. Try sorting the directives",
+          "maximum": 2
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_track_preferences.dart:@directives",
+          "message": "Sort directive sections alphabetically. Try sorting the directives",
+          "maximum": 2
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_trakt_scrobbler.dart:@directives",
+          "message": "Sort directive sections alphabetically. Try sorting the directives",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "empty_catches",
+          "symbol": "_VideoPlayerScreenState._getCurrentEpisodeSubtitle",
+          "message": "Empty catch block. Try adding statements to the block, adding a comment to the block, or removing the 'catch' clause",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "empty_catches",
+          "symbol": "_VideoPlayerScreenState._getEnhancedMetadata",
+          "message": "Empty catch block. Try adding statements to the block, adding a comment to the block, or removing the 'catch' clause",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "empty_catches",
+          "symbol": "_VideoPlayerScreenState._getEnhancedPlaybackState",
+          "message": "Empty catch block. Try adding statements to the block, adding a comment to the block, or removing the 'catch' clause",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "empty_catches",
+          "symbol": "_VideoPlayerScreenState._markCurrentEpisodeAsFinished",
+          "message": "Empty catch block. Try adding statements to the block, adding a comment to the block, or removing the 'catch' clause",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "empty_catches",
+          "symbol": "_VideoPlayerScreenState._saveResumeLocked",
+          "message": "Empty catch block. Try adding statements to the block, adding a comment to the block, or removing the 'catch' clause",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "sort_child_properties_last",
+          "symbol": "_VideoPlayerScreenState._requestSeasonEpisodeForIdentity",
+          "message": "The 'child' argument should be last in widget constructor invocations. Try moving the argument to the end of the argument list",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "unnecessary_import",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_resume_restore.dart:@directives",
+          "message": "The import of 'package:debrify/models/tracking_source.dart' is unnecessary because all of the used elements are also provided by the import of 'package:debrify/services/tracking_source_policy.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "unnecessary_import",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_resume_save.dart:@directives",
+          "message": "The import of 'package:debrify/models/playback_resume_policy.dart' is unnecessary because all of the used elements are also provided by the import of 'package:debrify/services/local_playback_resume_resolver.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "use_build_context_synchronously",
+          "symbol": "_VideoPlayerScreenState._enterPip",
+          "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "use_build_context_synchronously",
+          "symbol": "_VideoPlayerScreenState._identifyTitleAndFetchSubtitles",
+          "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+          "maximum": 3
+        },
+        {
+          "severity": "info",
+          "rule": "use_build_context_synchronously",
+          "symbol": "_VideoPlayerScreenState._publishRecording",
+          "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "use_build_context_synchronously",
+          "symbol": "_VideoPlayerScreenState._startRecording",
+          "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+          "maximum": 2
+        },
+        {
+          "severity": "info",
+          "rule": "use_build_context_synchronously",
+          "symbol": "_VideoPlayerScreenState._stopRecording",
+          "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "use_build_context_synchronously",
+          "symbol": "_VideoPlayerScreenState._switchToSourcePlaylist",
+          "message": "Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "use_build_context_synchronously",
+          "symbol": "_VideoPlayerScreenState._toggleRecording",
+          "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+          "maximum": 7
+        },
+        {
+          "severity": "info",
+          "rule": "use_build_context_synchronously",
+          "symbol": "_VideoPlayerScreenState._toggleRecording",
+          "message": "Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check",
+          "maximum": 4
+        },
+        {
+          "severity": "info",
+          "rule": "use_build_context_synchronously",
+          "symbol": "_VideoPlayerScreenState.build",
+          "message": "Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "invalid_use_of_visible_for_testing_member",
+          "symbol": "_VideoPlayerScreenState._claimVideoOutput",
+          "message": "The member 'isHeld' can only be used within 'package:debrify/widgets/video_output_lease.dart' or a test",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_field",
+          "symbol": "_VideoPlayerScreenState._isSeekingWithSlider",
+          "message": "The value of the field '_isSeekingWithSlider' isn't used. Try removing the field, or using it",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_field",
+          "symbol": "_VideoPlayerScreenState._pikPakRetryCount",
+          "message": "The value of the field '_pikPakRetryCount' isn't used. Try removing the field, or using it",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_field",
+          "symbol": "_VideoPlayerScreenState._rainbowOpacity",
+          "message": "The value of the field '_rainbowOpacity' isn't used. Try removing the field, or using it",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_field",
+          "symbol": "_VideoPlayerScreenState._transitionPhase",
+          "message": "The value of the field '_transitionPhase' isn't used. Try removing the field, or using it",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_field",
+          "symbol": "_VideoPlayerScreenState._transitionPhase2Started",
+          "message": "The value of the field '_transitionPhase2Started' isn't used. Try removing the field, or using it",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../features/video_player/application/vp_filename_hash.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../features/video_player/application/vp_identity_text.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../features/video_player/application/vp_subtitle_identity.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../models/subtitle_source_priority.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../services/mdblist/mdblist_models.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../services/mdblist/mdblist_scrobble_session.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../services/mdblist/mdblist_service.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../services/simkl/simkl_service.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../services/stremio_service.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../services/stremio_subtitle_service.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../services/tracking_source_policy.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../services/trakt/trakt_service.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../utils/app_storage.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../utils/episode_progress_merge.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../utils/time_formatters.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../utils/tv_search_focus_handoff.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../widgets/recording_limit_dialogs.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../widgets/tv_text_field.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'package:debrify/services/storage/episode_completion_storage.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'package:debrify/services/storage/iptv_playlist_storage.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'package:debrify/services/storage/local_completion_storage.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'package:debrify/services/storage/movie_progress_storage.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'package:debrify/services/storage/series_progress_storage.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'package:debrify/services/storage/skip_segments_storage.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'package:debrify/services/storage/track_preferences_storage.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'package:debrify/services/storage/tracker_episode_progress_storage.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'package:http/http.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'package:path_provider/path_provider.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'video_player/services/external_subtitle_payload.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'video_player/services/media_kit_subtitle_auto_sync.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'video_player/services/subtitle_track_utils.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'video_player/utils/aspect_mode_utils.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'video_player/utils/subtitle_audio_policy.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'video_player/utils/subtitle_priority_selection.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'video_player/widgets/spotlight_dialog.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'video_player/widgets/subtitle_line_picker_overlay.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'video_player/widgets/sync_stepper_overlay.dart'. Try removing the import directive",
+          "maximum": 1
+        }
+      ],
+      "source_hashes": {
+        "lib/screens/video_player_screen.dart": "5db489a4eb6e3ceb6c6124de922afd551d9fc70682a8157bb670fa82a12320f0",
+        "lib/features/video_player/models/vp_season_episode_selection.dart": "45170b2f311f8f0fa84c9dde0670386ad94d32311d133ebb7227db542fdbd7f1",
+        "lib/features/video_player/models/vp_subtitle_apply_attempt.dart": "e891a1c5b181145b6b0df01f8cde87ce811eed2f3ee1adb7011fb80ada5284b0",
+        "lib/features/video_player/models/vp_iptv_zap_page.dart": "b491435a11f6e90556ab2b1ecd49abc5db8889f98304eba1a6fc117097e5e303",
+        "lib/features/video_player/models/vp_manual_source_validation_failure.dart": "25ea8459dae63de00a8394fa0994db213089e49842412cfd0724945fdd958489",
+        "lib/features/video_player/models/iptv_catchup_request_gate.dart": "3cac25f57910f94061b0326b943f0011bedd0d114a0a153fbf7a1ae918c89908",
+        "lib/features/video_player/application/vp_identity_text.dart": "23188878df7822ab07783567ee6bd163bc90d5c5793153b33479284940032c73",
+        "lib/features/video_player/application/vp_subtitle_identity.dart": "145954c79d03010736ba0765a73867f3abac20b5e1577ae34857168827dc2081",
+        "lib/features/video_player/application/vp_format.dart": "998add677612798dcccb65ef0bdc7df29e1d30db4d0fbcef25ad37b618fb124f",
+        "lib/features/video_player/application/vp_filename_hash.dart": "b14981f8c1131b845da18bcd1fae1b21d5c8dd59b1d8d5c16b1788ba7c289c85",
+        "lib/features/video_player/presentation/vp_random_choice_tile.dart": "c38466d20b09b65991d214d5e9f981f33528f517f0b77bb185a82a225e8090bb",
+        "lib/features/video_player/presentation/legacy_video_player/vp_player_menu.dart": "f4a973758c2136f69b72ddd5f5dfae4a3376cd82fc041e14f32090028f26c723",
+        "lib/features/video_player/presentation/legacy_video_player/vp_addon_subtitles.dart": "6ee5eb6659532441eeef7f98432fc1c42a55d3d6bfd9e0242f9e0306e0a409fd",
+        "lib/features/video_player/presentation/legacy_video_player/vp_skip_segment_controller.dart": "bc3bc333f3b0ddea971c8b25bb0e8f451e467107b925550a336a00090da6c636",
+        "lib/features/video_player/presentation/legacy_video_player/vp_resume_save.dart": "f8aa88bbe6e8ae33507fde33e0e146ff8c06b99ab877e62704c519f7cf5999d7",
+        "lib/features/video_player/presentation/legacy_video_player/vp_resume_restore.dart": "e2fa30c19a4f5443b552347c319213c3d1a666e896e5e6580285797eed9ecfe0",
+        "lib/features/video_player/presentation/legacy_video_player/vp_identify_title.dart": "7263485f41bd85caca5c748babafb4be0ed434544da3aded467e092aac587df5",
+        "lib/features/video_player/presentation/legacy_video_player/vp_pip_lifecycle.dart": "054c9ee76b69f8e49fb384e5978f6f4de5578e60012ee98f2a5c02fc35c92f31",
+        "lib/features/video_player/presentation/legacy_video_player/vp_sleep_timer_controller.dart": "a7c0cd77d9164efdb5e570d7995c3af775303928c7dfb56e350c9398b2530fee",
+        "lib/features/video_player/presentation/legacy_video_player/vp_identify_title_ui.dart": "2a5130869fbf027888692ab381f718fb51be064e1db26bf97efb761f22af1df4",
+        "lib/features/video_player/presentation/legacy_video_player/vp_trakt_scrobbler.dart": "392d90c3494f5bfc7b21fa0e039c35084ad12b662fe73e72a93730f29c3853d6",
+        "lib/features/video_player/presentation/legacy_video_player/vp_iptv_recording_resources.dart": "16523174947333b8c802270b3139b31a8a941426078d7d6d8114a24e77ab230d",
+        "lib/features/video_player/presentation/legacy_video_player/vp_mdblist_scrobbler.dart": "71c36e9870e491608a8f9c0aecb3ce0958e31092db1a4f6b486cac5728983ff0",
+        "lib/features/video_player/presentation/legacy_video_player/vp_subtitle_language_policy.dart": "c3368127ecf4f62ecf8ec73ba08128372faf844fa10709e61afadbc58d6ce081",
+        "lib/features/video_player/presentation/legacy_video_player/vp_simkl_scrobbler.dart": "ddf1dd8fd058f97303a30e14e6f8f88e24a4458e77901124416cfb498bcbfbad",
+        "lib/features/video_player/presentation/legacy_video_player/vp_display_mode_controller.dart": "cc369cd259d0cf5378abd95918578e2a2cbd40235099118f3b6c0c0d7a05218d",
+        "lib/features/video_player/presentation/legacy_video_player/vp_subtitle_auto_sync.dart": "f156559348b23b27891639442e99cd742bed739821c88edac429fd8ea5f638b5",
+        "lib/features/video_player/presentation/legacy_video_player/vp_player_menu_ui.dart": "c3b5f44d25872e48360b6683a7539ef14e7650716ce04c00999a3488a2af35b3",
+        "lib/features/video_player/presentation/legacy_video_player/vp_local_completion.dart": "16af7799926aa89c08cd82eb3f8719db24cb967a8fe9b261f6b365bd81a51998",
+        "lib/features/video_player/presentation/legacy_video_player/vp_resume_keys.dart": "70fa2e112047875958f84c7dbcde9a8f15b3f40f1a052d7621f035beb32c08ac",
+        "lib/features/video_player/presentation/legacy_video_player/vp_subtitle_apply.dart": "2d5a7196e11d0b7a721b6cfd7f52e07105d3f204699b0f61fdfb337e478b5516",
+        "lib/features/video_player/presentation/legacy_video_player/vp_iptv_recording.dart": "fdbca45ec9f682ff83adb1f9f2579450bc0f817142b1b63602431c6847149219",
+        "lib/features/video_player/presentation/legacy_video_player/vp_track_preferences.dart": "a04cd8d22295e4d8b5de937eeca2fe92ec0d6c0425d003bf3d87664018166ff4"
+      }
+    },
+    "prototype": {
+      "count": 170,
+      "entries": [
+        {
+          "severity": "info",
+          "rule": "avoid_print",
+          "symbol": "_VideoPlayerScreenState._loadPlaylistIndexAttempt",
+          "message": "Don't invoke 'print' in production code. Try using a logging framework",
+          "maximum": 2
+        },
+        {
+          "severity": "info",
+          "rule": "avoid_print",
+          "symbol": "_VideoPlayerScreenState._playPikPakVideoWithRetry",
+          "message": "Don't invoke 'print' in production code. Try using a logging framework",
+          "maximum": 24
+        },
+        {
+          "severity": "info",
+          "rule": "avoid_print",
+          "symbol": "_VideoPlayerScreenState._saveSeriesPosterToPlaylist",
+          "message": "Don't invoke 'print' in production code. Try using a logging framework",
+          "maximum": 10
+        },
+        {
+          "severity": "info",
+          "rule": "avoid_print",
+          "symbol": "_VideoPlayerScreenState._waitForVideoMetadata",
+          "message": "Don't invoke 'print' in production code. Try using a logging framework",
+          "maximum": 9
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._adjacentEpisode",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._applyIptvAudioPreference",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._applyStremioSubtitleFromTracksSheet",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._currentSeriesImdbId",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._currentSkipSegmentRequest",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._enterPip",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 2
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._fetchAndMaybeAutoSelectAddonSubtitle",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 2
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._getEnhancedPlaybackState",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._identifyTitleAndFetchSubtitles",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._initializePlayer",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._installIptvZapWindow",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._menuSelectAddonSubtitle",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._prepareNextDirectEpisode",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._refreshEngineRecordingState",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._saveResumeLocked",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._startRecording",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "curly_braces_in_flow_control_structures",
+          "symbol": "_VideoPlayerScreenState._syncSkipSegmentsForCurrentContent",
+          "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+          "maximum": 2
+        },
+        {
+          "severity": "info",
+          "rule": "deprecated_member_use",
+          "symbol": "_VideoPlayerScreenState.build",
+          "message": "'RawKeyDownEvent' is deprecated and shouldn't be used. Use KeyDownEvent instead. This feature was deprecated after v3.18.0-2.0.pre. Try replacing the use of the deprecated member with the replacement",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "deprecated_member_use",
+          "symbol": "_VideoPlayerScreenState.build",
+          "message": "'onKey' is deprecated and shouldn't be used. Use onKeyEvent instead. This feature was deprecated after v3.18.0-2.0.pre. Try replacing the use of the deprecated member with the replacement",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_display_mode_controller.dart:@directives",
+          "message": "Sort directive sections alphabetically. Try sorting the directives",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_local_completion.dart:@directives",
+          "message": "Sort directive sections alphabetically. Try sorting the directives",
+          "maximum": 2
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_mdblist_scrobbler.dart:@directives",
+          "message": "Sort directive sections alphabetically. Try sorting the directives",
+          "maximum": 3
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_resume_keys.dart:@directives",
+          "message": "Sort directive sections alphabetically. Try sorting the directives",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_resume_restore.dart:@directives",
+          "message": "Sort directive sections alphabetically. Try sorting the directives",
+          "maximum": 3
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_resume_save.dart:@directives",
+          "message": "Sort directive sections alphabetically. Try sorting the directives",
+          "maximum": 2
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_simkl_scrobbler.dart:@directives",
+          "message": "Sort directive sections alphabetically. Try sorting the directives",
+          "maximum": 2
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_skip_segment_controller.dart:@directives",
+          "message": "Sort directive sections alphabetically. Try sorting the directives",
+          "maximum": 2
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_sleep_timer_controller.dart:@directives",
+          "message": "Sort directive sections alphabetically. Try sorting the directives",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_subtitle_auto_sync.dart:@directives",
+          "message": "Sort directive sections alphabetically. Try sorting the directives",
+          "maximum": 2
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_track_preferences.dart:@directives",
+          "message": "Sort directive sections alphabetically. Try sorting the directives",
+          "maximum": 2
+        },
+        {
+          "severity": "info",
+          "rule": "directives_ordering",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_trakt_scrobbler.dart:@directives",
+          "message": "Sort directive sections alphabetically. Try sorting the directives",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "empty_catches",
+          "symbol": "_VideoPlayerScreenState._getCurrentEpisodeSubtitle",
+          "message": "Empty catch block. Try adding statements to the block, adding a comment to the block, or removing the 'catch' clause",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "empty_catches",
+          "symbol": "_VideoPlayerScreenState._getEnhancedMetadata",
+          "message": "Empty catch block. Try adding statements to the block, adding a comment to the block, or removing the 'catch' clause",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "empty_catches",
+          "symbol": "_VideoPlayerScreenState._getEnhancedPlaybackState",
+          "message": "Empty catch block. Try adding statements to the block, adding a comment to the block, or removing the 'catch' clause",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "empty_catches",
+          "symbol": "_VideoPlayerScreenState._markCurrentEpisodeAsFinished",
+          "message": "Empty catch block. Try adding statements to the block, adding a comment to the block, or removing the 'catch' clause",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "empty_catches",
+          "symbol": "_VideoPlayerScreenState._saveResumeLocked",
+          "message": "Empty catch block. Try adding statements to the block, adding a comment to the block, or removing the 'catch' clause",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "sort_child_properties_last",
+          "symbol": "_VideoPlayerScreenState._requestSeasonEpisodeForIdentity",
+          "message": "The 'child' argument should be last in widget constructor invocations. Try moving the argument to the end of the argument list",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "unnecessary_import",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_iptv_channel_switch.dart:@directives",
+          "message": "The import of 'package:flutter/foundation.dart' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "unnecessary_import",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_iptv_live_sources.dart:@directives",
+          "message": "The import of 'package:flutter/foundation.dart' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "unnecessary_import",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_resume_restore.dart:@directives",
+          "message": "The import of 'package:debrify/models/tracking_source.dart' is unnecessary because all of the used elements are also provided by the import of 'package:debrify/services/tracking_source_policy.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "unnecessary_import",
+          "symbol": "lib/features/video_player/presentation/legacy_video_player/vp_resume_save.dart:@directives",
+          "message": "The import of 'package:debrify/models/playback_resume_policy.dart' is unnecessary because all of the used elements are also provided by the import of 'package:debrify/services/local_playback_resume_resolver.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "use_build_context_synchronously",
+          "symbol": "_VideoPlayerScreenState._enterPip",
+          "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "use_build_context_synchronously",
+          "symbol": "_VideoPlayerScreenState._identifyTitleAndFetchSubtitles",
+          "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+          "maximum": 3
+        },
+        {
+          "severity": "info",
+          "rule": "use_build_context_synchronously",
+          "symbol": "_VideoPlayerScreenState._publishRecording",
+          "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "use_build_context_synchronously",
+          "symbol": "_VideoPlayerScreenState._startIptvProgrammeFromBeginning",
+          "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "use_build_context_synchronously",
+          "symbol": "_VideoPlayerScreenState._startRecording",
+          "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+          "maximum": 2
+        },
+        {
+          "severity": "info",
+          "rule": "use_build_context_synchronously",
+          "symbol": "_VideoPlayerScreenState._stopRecording",
+          "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "use_build_context_synchronously",
+          "symbol": "_VideoPlayerScreenState._switchToSourcePlaylist",
+          "message": "Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check",
+          "maximum": 1
+        },
+        {
+          "severity": "info",
+          "rule": "use_build_context_synchronously",
+          "symbol": "_VideoPlayerScreenState._toggleRecording",
+          "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+          "maximum": 7
+        },
+        {
+          "severity": "info",
+          "rule": "use_build_context_synchronously",
+          "symbol": "_VideoPlayerScreenState._toggleRecording",
+          "message": "Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check",
+          "maximum": 4
+        },
+        {
+          "severity": "info",
+          "rule": "use_build_context_synchronously",
+          "symbol": "_VideoPlayerScreenState.build",
+          "message": "Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "invalid_use_of_visible_for_testing_member",
+          "symbol": "_VideoPlayerScreenState._claimVideoOutput",
+          "message": "The member 'isHeld' can only be used within 'package:debrify/widgets/video_output_lease.dart' or a test",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_field",
+          "symbol": "_VideoPlayerScreenState._isSeekingWithSlider",
+          "message": "The value of the field '_isSeekingWithSlider' isn't used. Try removing the field, or using it",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_field",
+          "symbol": "_VideoPlayerScreenState._pikPakRetryCount",
+          "message": "The value of the field '_pikPakRetryCount' isn't used. Try removing the field, or using it",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_field",
+          "symbol": "_VideoPlayerScreenState._rainbowOpacity",
+          "message": "The value of the field '_rainbowOpacity' isn't used. Try removing the field, or using it",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_field",
+          "symbol": "_VideoPlayerScreenState._transitionPhase",
+          "message": "The value of the field '_transitionPhase' isn't used. Try removing the field, or using it",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_field",
+          "symbol": "_VideoPlayerScreenState._transitionPhase2Started",
+          "message": "The value of the field '_transitionPhase2Started' isn't used. Try removing the field, or using it",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../features/video_player/application/vp_filename_hash.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../features/video_player/application/vp_identity_text.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../features/video_player/application/vp_subtitle_identity.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../features/video_player/models/iptv_catchup_request_gate.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../models/subtitle_source_priority.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../services/mdblist/mdblist_models.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../services/mdblist/mdblist_scrobble_session.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../services/mdblist/mdblist_service.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../services/simkl/simkl_service.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../services/stremio_service.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../services/stremio_subtitle_service.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../services/tracking_source_policy.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../services/trakt/trakt_service.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../utils/app_storage.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../utils/episode_progress_merge.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../utils/iptv_player_paging.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../utils/time_formatters.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../utils/tv_search_focus_handoff.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../widgets/recording_limit_dialogs.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: '../widgets/tv_text_field.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'package:debrify/services/storage/episode_completion_storage.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'package:debrify/services/storage/iptv_audio_storage.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'package:debrify/services/storage/iptv_history_storage.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'package:debrify/services/storage/iptv_last_channel_storage.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'package:debrify/services/storage/iptv_playlist_storage.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'package:debrify/services/storage/local_completion_storage.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'package:debrify/services/storage/movie_progress_storage.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'package:debrify/services/storage/series_progress_storage.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'package:debrify/services/storage/skip_segments_storage.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'package:debrify/services/storage/track_preferences_storage.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'package:debrify/services/storage/tracker_episode_progress_storage.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'package:http/http.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'package:path_provider/path_provider.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'video_player/services/external_subtitle_payload.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'video_player/services/media_kit_subtitle_auto_sync.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'video_player/services/subtitle_track_utils.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'video_player/utils/aspect_mode_utils.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'video_player/utils/subtitle_audio_policy.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'video_player/utils/subtitle_priority_selection.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'video_player/widgets/spotlight_dialog.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'video_player/widgets/subtitle_line_picker_overlay.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_import",
+          "symbol": "@directives",
+          "message": "Unused import: 'video_player/widgets/sync_stepper_overlay.dart'. Try removing the import directive",
+          "maximum": 1
+        },
+        {
+          "severity": "warning",
+          "rule": "unused_shown_name",
+          "symbol": "@directives",
+          "message": "The name listEquals is shown, but isn't used. Try removing the name from the list of shown members",
+          "maximum": 1
+        }
+      ],
+      "source_hashes": {
+        "lib/screens/video_player_screen.dart": "9d1f95cbf248bed11028c11361dd9d4e2d24fce8ec09fdf6ada0f73fbaa4816f",
+        "lib/features/video_player/models/vp_season_episode_selection.dart": "45170b2f311f8f0fa84c9dde0670386ad94d32311d133ebb7227db542fdbd7f1",
+        "lib/features/video_player/models/vp_subtitle_apply_attempt.dart": "e891a1c5b181145b6b0df01f8cde87ce811eed2f3ee1adb7011fb80ada5284b0",
+        "lib/features/video_player/models/vp_iptv_zap_page.dart": "b491435a11f6e90556ab2b1ecd49abc5db8889f98304eba1a6fc117097e5e303",
+        "lib/features/video_player/models/vp_manual_source_validation_failure.dart": "25ea8459dae63de00a8394fa0994db213089e49842412cfd0724945fdd958489",
+        "lib/features/video_player/models/iptv_catchup_request_gate.dart": "3cac25f57910f94061b0326b943f0011bedd0d114a0a153fbf7a1ae918c89908",
+        "lib/features/video_player/application/vp_identity_text.dart": "23188878df7822ab07783567ee6bd163bc90d5c5793153b33479284940032c73",
+        "lib/features/video_player/application/vp_subtitle_identity.dart": "145954c79d03010736ba0765a73867f3abac20b5e1577ae34857168827dc2081",
+        "lib/features/video_player/application/vp_format.dart": "998add677612798dcccb65ef0bdc7df29e1d30db4d0fbcef25ad37b618fb124f",
+        "lib/features/video_player/application/vp_filename_hash.dart": "b14981f8c1131b845da18bcd1fae1b21d5c8dd59b1d8d5c16b1788ba7c289c85",
+        "lib/features/video_player/presentation/vp_random_choice_tile.dart": "c38466d20b09b65991d214d5e9f981f33528f517f0b77bb185a82a225e8090bb",
+        "lib/features/video_player/presentation/legacy_video_player/vp_player_menu.dart": "f4a973758c2136f69b72ddd5f5dfae4a3376cd82fc041e14f32090028f26c723",
+        "lib/features/video_player/presentation/legacy_video_player/vp_addon_subtitles.dart": "6ee5eb6659532441eeef7f98432fc1c42a55d3d6bfd9e0242f9e0306e0a409fd",
+        "lib/features/video_player/presentation/legacy_video_player/vp_iptv_guide_catchup.dart": "71d397464a188c0002ae031a9d35f3b7f488afdf3ae3fed6835dc1af44010944",
+        "lib/features/video_player/presentation/legacy_video_player/vp_skip_segment_controller.dart": "bc3bc333f3b0ddea971c8b25bb0e8f451e467107b925550a336a00090da6c636",
+        "lib/features/video_player/presentation/legacy_video_player/vp_iptv_zap_ring.dart": "d382f70ece79670f926fe1e06e76583330acbc3ab86c564beb0f904e3d443c37",
+        "lib/features/video_player/presentation/legacy_video_player/vp_resume_save.dart": "f8aa88bbe6e8ae33507fde33e0e146ff8c06b99ab877e62704c519f7cf5999d7",
+        "lib/features/video_player/presentation/legacy_video_player/vp_resume_restore.dart": "e2fa30c19a4f5443b552347c319213c3d1a666e896e5e6580285797eed9ecfe0",
+        "lib/features/video_player/presentation/legacy_video_player/vp_identify_title.dart": "7263485f41bd85caca5c748babafb4be0ed434544da3aded467e092aac587df5",
+        "lib/features/video_player/presentation/legacy_video_player/vp_iptv_watch_memory.dart": "26e964328a7cf2ac05b1942aa7d8271c15504e425d5dfd497e291f86be1ad2d8",
+        "lib/features/video_player/presentation/legacy_video_player/vp_pip_lifecycle.dart": "054c9ee76b69f8e49fb384e5978f6f4de5578e60012ee98f2a5c02fc35c92f31",
+        "lib/features/video_player/presentation/legacy_video_player/vp_iptv_channel_switch.dart": "448eb5aec9ebee2c3b48ab9aaff29343c78a9eddad6347fc05d846dab1a34bfc",
+        "lib/features/video_player/presentation/legacy_video_player/vp_sleep_timer_controller.dart": "a7c0cd77d9164efdb5e570d7995c3af775303928c7dfb56e350c9398b2530fee",
+        "lib/features/video_player/presentation/legacy_video_player/vp_identify_title_ui.dart": "2a5130869fbf027888692ab381f718fb51be064e1db26bf97efb761f22af1df4",
+        "lib/features/video_player/presentation/legacy_video_player/vp_trakt_scrobbler.dart": "392d90c3494f5bfc7b21fa0e039c35084ad12b662fe73e72a93730f29c3853d6",
+        "lib/features/video_player/presentation/legacy_video_player/vp_iptv_zap_ladder.dart": "8671011458f67b14214ea48be60687ea669061d42b49afaa66a264c0ec063a62",
+        "lib/features/video_player/presentation/legacy_video_player/vp_iptv_recording_resources.dart": "16523174947333b8c802270b3139b31a8a941426078d7d6d8114a24e77ab230d",
+        "lib/features/video_player/presentation/legacy_video_player/vp_mdblist_scrobbler.dart": "71c36e9870e491608a8f9c0aecb3ce0958e31092db1a4f6b486cac5728983ff0",
+        "lib/features/video_player/presentation/legacy_video_player/vp_subtitle_language_policy.dart": "c3368127ecf4f62ecf8ec73ba08128372faf844fa10709e61afadbc58d6ce081",
+        "lib/features/video_player/presentation/legacy_video_player/vp_simkl_scrobbler.dart": "ddf1dd8fd058f97303a30e14e6f8f88e24a4458e77901124416cfb498bcbfbad",
+        "lib/features/video_player/presentation/legacy_video_player/vp_display_mode_controller.dart": "cc369cd259d0cf5378abd95918578e2a2cbd40235099118f3b6c0c0d7a05218d",
+        "lib/features/video_player/presentation/legacy_video_player/vp_subtitle_auto_sync.dart": "f156559348b23b27891639442e99cd742bed739821c88edac429fd8ea5f638b5",
+        "lib/features/video_player/presentation/legacy_video_player/vp_iptv_zap_banner.dart": "60367c8851c8ebb1d35d40980898623538ead0053893b42ea3778fbd85c86ef0",
+        "lib/features/video_player/presentation/legacy_video_player/vp_player_menu_ui.dart": "c3b5f44d25872e48360b6683a7539ef14e7650716ce04c00999a3488a2af35b3",
+        "lib/features/video_player/presentation/legacy_video_player/vp_local_completion.dart": "16af7799926aa89c08cd82eb3f8719db24cb967a8fe9b261f6b365bd81a51998",
+        "lib/features/video_player/presentation/legacy_video_player/vp_resume_keys.dart": "70fa2e112047875958f84c7dbcde9a8f15b3f40f1a052d7621f035beb32c08ac",
+        "lib/features/video_player/presentation/legacy_video_player/vp_iptv_live_sources.dart": "db04395168850bd0d130a1dae8a6b945083189097cf7e791241a6daa5a0249f6",
+        "lib/features/video_player/presentation/legacy_video_player/vp_subtitle_apply.dart": "2d5a7196e11d0b7a721b6cfd7f52e07105d3f204699b0f61fdfb337e478b5516",
+        "lib/features/video_player/presentation/legacy_video_player/vp_iptv_recording.dart": "fdbca45ec9f682ff83adb1f9f2579450bc0f817142b1b63602431c6847149219",
+        "lib/features/video_player/presentation/legacy_video_player/vp_track_preferences.dart": "a04cd8d22295e4d8b5de937eeca2fe92ec0d6c0425d003bf3d87664018166ff4"
+      }
+    }
+  },
+  "p16_receiver_probe_additions": [
+    {
+      "severity": "info",
+      "rule": "use_build_context_synchronously",
+      "symbol": "_VideoPlayerScreenState._switchToSourcePlaylist",
+      "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+      "maximum": 1,
+      "reason": "P16 receiver rewrite: _host.context/_host.mounted is not recognised as the State mounted guard (P12 precedent)"
+    },
+    {
+      "severity": "info",
+      "rule": "use_build_context_synchronously",
+      "symbol": "_VideoPlayerScreenState._switchToStremioSource",
+      "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+      "maximum": 1,
+      "reason": "P16 receiver rewrite: _host.context/_host.mounted is not recognised as the State mounted guard (P12 precedent)"
+    },
+    {
+      "severity": "info",
+      "rule": "use_build_context_synchronously",
+      "symbol": "_VideoPlayerScreenState._reportStartupFailure",
+      "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+      "maximum": 2,
+      "reason": "P16 receiver rewrite: _host.context/_host.mounted is not recognised as the State mounted guard (P12 precedent)"
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:debrify/services/storage/quick_play_storage.dart'. Try removing the import directive",
+      "maximum": 1,
+      "reason": "Facade import left unused by the verbatim P16 move (P15 precedent); removal deferred to the end-state import cleanup"
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../features/video_player/models/vp_manual_source_validation_failure.dart'. Try removing the import directive",
+      "maximum": 1,
+      "reason": "Facade import left unused by the verbatim P16 move (P15 precedent); removal deferred to the end-state import cleanup"
+    }
+  ],
+  "p17_receiver_probe_additions": [
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_VideoPlayerScreenState._showPlaylistSheet",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 1,
+      "reason": "P17 receiver rewrite: `_activePlaylist` -> `_host.activePlaylist` lengthens the single-line `if (...) return;` past 80 columns, the formatter wraps it, and the single-line exemption of curly_braces_in_flow_control_structures no longer applies"
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'video_player/widgets/playlist_sheet.dart'. Try removing the import directive",
+      "maximum": 1,
+      "reason": "Facade import left unused by the verbatim P17 move (P15/P16 precedent); removal deferred to the end-state import cleanup"
+    }
+  ],
+  "p17_receiver_probe_additions_note": "Documentation only \u2014 the comparator reads `entries`, where these maxima are included. P16 additions remain under `p16_receiver_probe_additions`.",
+  "p18_receiver_probe_additions": [
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_VideoPlayerScreenState._findNextEpisodeIndex",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 2,
+      "reason": "P18 receiver rewrite: the longer `_host.` receiver makes the formatter wrap a single-line `if` body (Step T prototype)."
+    },
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_VideoPlayerScreenState._findPreviousEpisodeIndex",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 2,
+      "reason": "P18 receiver rewrite: the longer `_host.` receiver makes the formatter wrap a single-line `if` body (Step T prototype)."
+    },
+    {
+      "severity": "info",
+      "rule": "use_build_context_synchronously",
+      "symbol": "_VideoPlayerScreenState._handleSeriesNextEpisode",
+      "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+      "maximum": 1,
+      "reason": "P18 receiver rewrite: `mounted` becomes `_host.mounted`, which the analyzer reads as an unrelated 'mounted' guard (Step T prototype)."
+    },
+    {
+      "severity": "info",
+      "rule": "use_build_context_synchronously",
+      "symbol": "_VideoPlayerScreenState._playPikPakVideoWithRetry",
+      "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+      "maximum": 4,
+      "reason": "P18 receiver rewrite: `mounted` becomes `_host.mounted`, which the analyzer reads as an unrelated 'mounted' guard (Step T prototype)."
+    },
+    {
+      "severity": "info",
+      "rule": "use_build_context_synchronously",
+      "symbol": "_VideoPlayerScreenState._loadPlaylistIndexAttempt",
+      "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+      "maximum": 4,
+      "reason": "P18 receiver rewrite: `mounted` becomes `_host.mounted`, which the analyzer reads as an unrelated 'mounted' guard (Step T prototype)."
+    },
+    {
+      "severity": "info",
+      "rule": "use_build_context_synchronously",
+      "symbol": "_VideoPlayerScreenState._playShowShuffle",
+      "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+      "maximum": 2,
+      "reason": "P18 receiver rewrite: `mounted` becomes `_host.mounted`, which the analyzer reads as an unrelated 'mounted' guard (Step T prototype)."
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:debrify/services/storage/alldebrid_storage.dart'. Try removing the import directive",
+      "maximum": 1,
+      "reason": "P18 move leaves a frozen facade directive unused (allowlisted; end-state cleanup in phase 21)."
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:debrify/services/storage/playlist_artwork_storage.dart'. Try removing the import directive",
+      "maximum": 1,
+      "reason": "P18 move leaves a frozen facade directive unused (allowlisted; end-state cleanup in phase 21)."
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:debrify/services/storage/playlist_metadata_storage.dart'. Try removing the import directive",
+      "maximum": 1,
+      "reason": "P18 move leaves a frozen facade directive unused (allowlisted; end-state cleanup in phase 21)."
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:debrify/services/storage/premiumize_storage.dart'. Try removing the import directive",
+      "maximum": 1,
+      "reason": "P18 move leaves a frozen facade directive unused (allowlisted; end-state cleanup in phase 21)."
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:debrify/services/storage/real_debrid_storage.dart'. Try removing the import directive",
+      "maximum": 1,
+      "reason": "P18 move leaves a frozen facade directive unused (allowlisted; end-state cleanup in phase 21)."
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:debrify/services/storage/torbox_storage.dart'. Try removing the import directive",
+      "maximum": 1,
+      "reason": "P18 move leaves a frozen facade directive unused (allowlisted; end-state cleanup in phase 21)."
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../utils/show_shuffle.dart'. Try removing the import directive",
+      "maximum": 1,
+      "reason": "P18 move leaves a frozen facade directive unused (allowlisted; end-state cleanup in phase 21)."
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../services/debrid_service.dart'. Try removing the import directive",
+      "maximum": 1,
+      "reason": "P18 move leaves a frozen facade directive unused (allowlisted; end-state cleanup in phase 21)."
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../services/premiumize_service.dart'. Try removing the import directive",
+      "maximum": 1,
+      "reason": "P18 move leaves a frozen facade directive unused (allowlisted; end-state cleanup in phase 21)."
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../services/alldebrid_service.dart'. Try removing the import directive",
+      "maximum": 1,
+      "reason": "P18 move leaves a frozen facade directive unused (allowlisted; end-state cleanup in phase 21)."
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../utils/movie_parser.dart'. Try removing the import directive",
+      "maximum": 1,
+      "reason": "P18 move leaves a frozen facade directive unused (allowlisted; end-state cleanup in phase 21)."
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../services/movie_metadata_service.dart'. Try removing the import directive",
+      "maximum": 1,
+      "reason": "P18 move leaves a frozen facade directive unused (allowlisted; end-state cleanup in phase 21)."
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../services/torbox_service.dart'. Try removing the import directive",
+      "maximum": 1,
+      "reason": "P18 move leaves a frozen facade directive unused (allowlisted; end-state cleanup in phase 21)."
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../services/pikpak_api_service.dart'. Try removing the import directive",
+      "maximum": 1,
+      "reason": "P18 move leaves a frozen facade directive unused (allowlisted; end-state cleanup in phase 21)."
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../services/next_episode_service.dart'. Try removing the import directive",
+      "maximum": 1,
+      "reason": "P18 move leaves a frozen facade directive unused (allowlisted; end-state cleanup in phase 21)."
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../features/video_player/presentation/vp_random_choice_tile.dart'. Try removing the import directive",
+      "maximum": 1,
+      "reason": "P18 move leaves a frozen facade directive unused (allowlisted; end-state cleanup in phase 21)."
+    }
+  ],
+  "p18_receiver_probe_additions_note": "Documentation only \u2014 the comparator reads `entries`, where these maxima are included. Earlier additions remain under their phase keys. Counts match the Step T prototype (+31: 16 unused imports, 4 curly-brace wraps, 11 unrelated-mounted guards).",
+  "p19_receiver_probe_additions": [
+    {
+      "severity": "info",
+      "rule": "use_build_context_synchronously",
+      "symbol": "_VideoPlayerScreenState._fallbackExplicitRendererToAutomatic",
+      "message": "Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext",
+      "maximum": 1,
+      "reason": "P19 receiver rewrite: the snackbar reads `_host.context` behind `_host.mounted`, which the lint treats as an unrelated mounted guard (Step T prototype)."
+    },
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_VideoPlayerScreenState._scheduleTvosDisplayMatch",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 1,
+      "reason": "P19 receiver rewrite: the longer `_host.` receiver makes the formatter wrap a single-line `if` body (Step T prototype)."
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../services/audio_effect_session_service.dart'. Try removing the import directive",
+      "maximum": 1,
+      "reason": "P19 frozen facade directive left unused by the moves (phase 21 cleanup; also allowlisted)."
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../utils/player_audio_config.dart'. Try removing the import directive",
+      "maximum": 1,
+      "reason": "P19 frozen facade directive left unused by the moves (phase 21 cleanup; also allowlisted)."
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../widgets/video_output_lease.dart'. Try removing the import directive",
+      "maximum": 1,
+      "reason": "P19 frozen facade directive left unused by the moves (phase 21 cleanup; also allowlisted)."
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'video_player/utils/language_mapping.dart'. Try removing the import directive",
+      "maximum": 1,
+      "reason": "P19 frozen facade directive left unused by the moves (phase 21 cleanup; also allowlisted)."
+    }
+  ],
+  "p19_receiver_probe_additions_note": "Documentation only \u2014 the comparator reads `entries`, where these maxima are included. Earlier additions remain under their phase keys. Counts match the Step T prototype (+6: 4 unused imports, 1 curly-brace wrap, 1 unrelated-mounted guard).",
+  "p20_receiver_probe_additions": [
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_VideoPlayerScreenState._openMedia",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_VideoPlayerScreenState._applyNetworkTuningInner",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 1
+    },
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_VideoPlayerScreenState._onPlayerInstanceReady",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:debrify/services/storage/episode_resume_storage.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:debrify/services/storage/iptv_appearance_storage.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:debrify/services/storage/player_network_storage.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:debrify/services/storage/subtitle_settings_storage.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:debrify/services/storage/video_progress_storage.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../services/source_selection_diagnostics.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_shown_name",
+      "symbol": "@directives",
+      "message": "The name kIsWeb is shown, but isn't used. Try removing the name from the list of shown members",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../services/direct_source_authorization.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../models/profiles/profile_policy.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../services/profiles/profile_policy_guard.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../services/live_recording_service.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: '../services/profiles/profile_runtime.dart'. Try removing the import directive",
+      "maximum": 1
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'video_player/services/android_renderer_startup_fallback.dart'. Try removing the import directive",
+      "maximum": 1
+    }
+  ],
+  "p20_receiver_probe_additions_note": "Documentation only \u2014 the comparator reads `entries`, where these maxima are included. Earlier additions remain under their phase keys. Counts match the Step T prototype (+16: 13 unused facade directives incl. the kIsWeb shown name, 3 curly-brace wraps).",
+  "p21_receiver_probe_additions": [
+    {
+      "severity": "info",
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_VideoPlayerScreenState._tvScrubBegin",
+      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
+      "maximum": 1,
+      "reason": "P21 receiver rewrite: the post-frame `if (_host.mounted && _host.tvScrubTarget != null)` body no longer fits one line, the formatter wraps it, and the single-line exemption no longer applies (Step T prototype)."
+    },
+    {
+      "severity": "warning",
+      "rule": "unused_import",
+      "symbol": "@directives",
+      "message": "Unused import: 'package:debrify/services/storage/player_appearance_storage.dart'. Try removing the import directive",
+      "maximum": 1,
+      "reason": "P21 frozen facade directive left unused by the move of `_loadDockPrefs` (21b C1 cleanup; also allowlisted)."
+    }
+  ],
+  "p21_receiver_probe_additions_note": "Documentation only \u2014 the comparator reads `entries`, where these maxima are included. Earlier additions remain under their phase keys. Counts match the Step T prototype (+2: 1 unused facade directive, 1 curly-brace wrap)."
+}

@@ -43,7 +43,9 @@ void main() {
           .where(
             (entry) =>
                 entry.timer.isActive &&
-                entry.stack.contains('_scheduleAutoHide'),
+                // Un-prefixed: matches the facade frame and, after phase 21,
+                // the moved VpControlsRuntime.scheduleAutoHide frame.
+                entry.stack.contains('scheduleAutoHide'),
           )
           .toList();
       expect(hideTimers, isNotEmpty);
