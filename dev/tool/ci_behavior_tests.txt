@@ -928,3 +928,4 @@ test/features/video_player/video_player_p21_pan_lifecycle_test.dart
 test/features/video_player/video_player_p21_remote_symmetry_test.dart
 test/features/video_player/video_player_p21_timer_owners_test.dart
 test/features/video_player/video_player_p21_tracker_paths_test.dart
+test/features/video_player/video_player_p21_press_routing_test.dart
