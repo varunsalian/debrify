@@ -41,7 +41,7 @@ class VpIptvWatchMemory {
   String? lastLiveChannelArmedUrl;
 
   /// Commit-on-settle: a channel counts once it has been *playing* for
-  /// [_lastLiveChannelSettle]. Zapping through twenty channels arms and
+  /// [lastLiveChannelSettle]. Zapping through twenty channels arms and
   /// supersedes one timer rather than writing twenty times, and the commit
   /// lands while the app is alive — an abrupt force-stop runs no lifecycle
   /// callback, so a flush-on-dispose alone would lose it.
@@ -147,7 +147,7 @@ class VpIptvWatchMemory {
       if (tracks.audio.length < 2) return; // nothing to switch to
 
       // Resolve the target language now (not before the wait): a manual pick
-      // during the wait updated _preferredIptvAudioLanguage, and it should win.
+      // during the wait updated preferredIptvAudioLanguage, and it should win.
       String? lang = preferredIptvAudioLanguage;
       if (lang == null) {
         final key = iptvSeriesAudioKey();

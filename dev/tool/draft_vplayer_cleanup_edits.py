@@ -301,13 +301,19 @@ def derive(values, expected, origin):
         a, b = i1 + shift, i2 + shift
         inserted = expected[j1:j2]
         chosen = None
-        for size in range(1, 60):
+        for size in range(0, 60):
             for k in range(0, size + 1):
                 m = size - k
                 lo, hi = a - k, b + m
                 if lo < 0 or hi > len(work) or set(range(lo, hi)) & fresh:
                     continue
                 before = work[lo:hi]
+                after = work[lo:a] + inserted + work[b:hi]
+                # The projection renders tokens on one line: a line comment may
+                # only be followed by further comments.
+                if any(t.startswith('//') and not all(u.startswith('//') for u in seq[i + 1:])
+                       for seq in (before, after) for i, t in enumerate(seq)):
+                    continue
                 if not before or sum(work[q:q + len(before)] == before for q in range(len(work))) != 1:
                     continue
                 if origin is not None:

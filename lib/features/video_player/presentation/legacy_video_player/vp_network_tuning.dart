@@ -10,7 +10,7 @@ class VpNetworkTuning {
   VpNetworkTuning(this._host);
   final VpNetworkTuningHost _host;
 
-  /// Stock values of exactly the player-global properties [_networkTuning]
+  /// Stock values of exactly the player-global properties [VpMediaOpen.networkTuning]
   /// has overridden, captured before the first override. A later live open
   /// on the same player (mixed playlist) restores these, so the tuned live
   /// IPTV pipeline can never inherit VOD tuning. Null until tuning has
@@ -18,7 +18,7 @@ class VpNetworkTuning {
   /// so never sets a single property.
   Map<String, String>? networkTuningDefaults;
 
-  /// Serializes tuning applies: a rapid zap starts a newer [_openMedia]
+  /// Serializes tuning applies: a rapid zap starts a newer [VpMediaOpen.openMedia]
   /// while an older one is suspended mid-capture, and interleaved property
   /// writes could land VOD tuning on the newer open's live stream. Each
   /// apply runs WHOLE, in order, and bails via its generation check when a

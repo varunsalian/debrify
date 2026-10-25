@@ -44,7 +44,7 @@ class VpSimklScrobbler {
 
   // ── Simkl scrobble machine — fully parallel mirror of the Trakt one above.
   // Zero shared state: its own enable flag, dedup guard and heartbeat, driven
-  // by the same (tracker-agnostic) _traktProgress()/_traktSeasonEpisode()
+  // by the same (tracker-agnostic) VpTraktScrobbler.traktProgress()/_traktSeasonEpisode()
   // helpers. See the Simkl integration plan.
 
   Future<void> initSimklScrobble() async {
@@ -64,8 +64,8 @@ class VpSimklScrobbler {
     // point untouched and let the pause-based heartbeat keep it current.
     // BUT still stamp the marker 'start' (no POST) — the local action marker
     // must read "playing" so a later user-pause / exit-stop isn't dedup-
-    // suppressed at _simklScrobble's guard. Mirrors the Trakt block and the TV
-    // launcher's self-healing marker. (Field assignment, NOT _simklScrobble
+    // suppressed at simklScrobble's guard. Mirrors the Trakt block and the TV
+    // launcher's self-healing marker. (Field assignment, NOT simklScrobble
     // ('start'), which now routes to a pause POST.)
     if (!_host.validationGateActive &&
         simklScrobbleEnabled &&
@@ -163,7 +163,7 @@ class VpSimklScrobbler {
       // position. Simkl's /scrobble/start saves nothing (id:0); only pause/stop
       // persist to /sync/playback, so this must be pause to survive a hard kill.
       // Leave the marker 'start' (live), NOT 'pause': stamping 'pause' here would
-      // make the user's real pause dedup-suppress at _simklScrobble and strand
+      // make the user's real pause dedup-suppress at simklScrobble and strand
       // the true pause position at this (older) heartbeat %.
       simklLastScrobbleAction = 'start';
       SimklService.instance.scrobblePause(
@@ -239,7 +239,7 @@ class VpSimklScrobbler {
     _host.bindEpisodeTrackerProgressIdentity(imdbId);
 
     // Await before resolving the episode identity for the same race-safety as
-    // [_currentEpisodeTraktPercent].
+    // [VpTraktScrobbler.currentEpisodeTraktPercent].
     if (simklEpisodeProgress == null) {
       final loaded =
           await TrackerEpisodeProgressStorage.getEpisodeSimklProgress(

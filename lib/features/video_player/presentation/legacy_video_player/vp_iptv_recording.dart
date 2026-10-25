@@ -312,7 +312,7 @@ class VpIptvRecording {
         _host.recordingTempPath = path;
       });
       // Crash insurance: registered natively so the file gets published on
-      // next launch even if this process never reaches _stopRecording.
+      // next launch even if this process never reaches stopRecording.
       if (Platform.isAndroid) {
         unawaited(
           AndroidNativeDownloader.registerPendingRecording(

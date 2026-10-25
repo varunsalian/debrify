@@ -28,7 +28,7 @@ class VpAudioOutput {
 
   /// Audio session announced to system effect apps (Android only). Non-null
   /// only while an OPEN broadcast is outstanding — see
-  /// [_attachAudioEffectSession] / [_releaseAudioEffectSession].
+  /// [attachAudioEffectSession] / [releaseAudioEffectSession].
   int? audioEffectSessionId;
 
   /// Load an external audio track to play alongside a video-only stream
@@ -68,20 +68,20 @@ class VpAudioOutput {
   /// for byte as it was.
   Future<void> attachAudioEffectSession() async {
     if (!Platform.isAndroid) return;
-    // Everything below is inside the catch: _initializePlayer() runs
+    // Everything below is inside the catch: VpPlayerStartup.initializePlayer() runs
     // unawaited, so anything that escapes here would abort the rest of init
     // and leave a black screen — including for users who have this turned off,
     // since the settings read itself happens either way.
     try {
       final platform = _host.player.platform;
       if (platform is! mk.NativePlayer) return;
-      // The CACHED field, deliberately: [_configurePlayerAudio] chose the
+      // The CACHED field, deliberately: [configurePlayerAudio] chose the
       // audio output from it, and a fresh preference read here could
       // diverge mid-session — announcing a session on an output that was
       // never switched, or vice versa. "Restart playback to apply" is the
       // settings contract for both halves.
       if (!_host.systemAudioEffectsEnabled) return;
-      // `ao=audiotrack,...` itself is owned by [_configurePlayerAudio] now
+      // `ao=audiotrack,...` itself is owned by [configurePlayerAudio] now
       // (the passthrough setting needs the same output, and two writers of
       // `ao` is how the two settings would fight) — this method keeps only
       // the session-id half.
@@ -188,7 +188,7 @@ class VpAudioOutput {
       }
     }
     // Preferred audio language, handed to mpv itself as `alang`. The Dart
-    // matcher (_applyDefaultAudioLanguage) only runs after the track list
+    // matcher (VpSubtitleLanguagePolicy.applyDefaultAudioLanguage) only runs after the track list
     // reaches Dart and only matches on metadata; mpv applies the preference
     // at stream selection, and its matcher also weighs the default/forced
     // dispositions. Users with no preference set send nothing.

@@ -272,7 +272,7 @@ class VpPipLifecycle {
     unawaited(_host.player.pause());
   }
 
-  /// Undo [_pauseForBackground] when the app returns, restoring the
+  /// Undo [pauseForBackground] when the app returns, restoring the
   /// pre-existing contract that coming back to this screen shows it playing.
   /// A pause the user made themselves (flag unset) stays a pause.
   void resumeFromBackground() {

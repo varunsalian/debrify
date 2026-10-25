@@ -208,7 +208,7 @@ class VpIptvZapRing {
     try {
       result = await provider({
         'action': 'zapPage',
-        // The ring's own source, not the guide's — see [_iptvZapSourceId].
+        // The ring's own source, not the guide's — see [iptvZapSourceId].
         'sourceId':
             iptvZapSourceId ??
             _host.iptvGuideContextOverride?.sourceId ??

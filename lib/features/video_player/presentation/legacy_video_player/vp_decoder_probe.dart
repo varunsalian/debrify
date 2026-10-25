@@ -51,7 +51,7 @@ class VpDecoderProbe {
     if (width <= 0 || height <= 0) {
       // Player.open() normally resets VideoParams before loading the next item.
       // Treat it as an extra invalidation signal, but do not require it: the
-      // app-owned generation started in _openMedia is the session boundary.
+      // app-owned generation started in VpMediaOpen.openMedia is the session boundary.
       _host.decoderProbeToken++;
       _host.decoderProbeTimer?.cancel();
       _host.decoderProbeTimer = null;
@@ -92,8 +92,8 @@ class VpDecoderProbe {
     // ANDROID ONLY, deliberately.
     //
     // These observers exist to feed the Android explicit-renderer fallback
-    // (`_scheduleRendererStartupValidation`), which is itself
-    // gated on `Platform.isAndroid` — so everywhere else they were pure cost.
+    // (`VpRendererFallback.scheduleRendererStartupValidation`), which is itself
+    // gated on the Android renderer-validation check (S2f) — so everywhere else they were pure cost.
     //
     // They are also `mpv_observe_property` calls issued unawaited, at the same
     // moment the video controller is building the native render context on its

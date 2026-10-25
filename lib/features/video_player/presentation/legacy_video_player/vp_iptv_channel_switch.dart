@@ -201,10 +201,10 @@ class VpIptvChannelSwitch {
 
     final channel = channels[index];
     _host.clearBufferingIndicator();
-    // The zap path never runs _maybeRestoreResume, so the previous channel's
+    // The zap path never runs VpResumeRestore.maybeRestoreResume, so the previous channel's
     // resume guard (a VOD movie mid-resume) would otherwise stay armed and
     // suppress the incoming channel's saves. Same switch-boundary rule as
-    // _loadPlaylistIndex.
+    // VpPlaylistLoad.loadPlaylistIndex.
     _host.resumeWriteGuard.clear();
     _host.setState(() {
       _host.iptvStartOverActive = false;
@@ -414,7 +414,7 @@ class VpIptvChannelSwitch {
       // sheet ignores selecting the "current" source).
       _host.setState(() => _host.currentSourceIndex = previousIndex);
     }
-    // Same direct transition-overlay cleanup as _switchToIptvChannel — the
+    // Same direct transition-overlay cleanup as switchToIptvChannel — the
     // 'playing' event is unreliable for HLS/live streams.
     _host.transitionStopTimer?.cancel();
     _host.transitionPhaseTimer?.cancel();

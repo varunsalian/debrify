@@ -357,7 +357,7 @@ class VpPlayerStartup {
     }
 
     // IPTV launch: the first tune starts here, before either open branch
-    // below (IPTV is never PikPak). Zaps re-arm this in _switchToIptvChannel.
+    // below (IPTV is never PikPak). Zaps re-arm this in VpIptvChannelSwitch.switchToIptvChannel.
     var launchIsLiveIptv = false;
     final launchIptvChannels = _host.effectiveIptvChannels;
     if (launchIptvChannels != null && initialUrl.isNotEmpty) {
@@ -397,7 +397,7 @@ class VpPlayerStartup {
 
       if (initialUrl.isNotEmpty &&
           ((isPikPak && _host.activePlaylist != null) || isPikPakUrl)) {
-        // The continuation can sleep up to 10s in _waitForVideoReady; the
+        // The continuation can sleep up to 10s in VpMediaWaits.waitForVideoReady; the
         // screen may be left (player disposed) or the player replaced by a
         // renderer fallback in that window, so it must re-check before every
         // touch of _player.

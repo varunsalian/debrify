@@ -168,7 +168,7 @@ class VpLocalCompletion {
 
   /// Apply the local, user-configured completion rule. This is synchronous on
   /// purpose because it runs for every position update; actual writes stay
-  /// unawaited and are guarded one-shot above/in [_markCurrentEpisodeAsFinished].
+  /// unawaited and are guarded one-shot above/in [markCurrentEpisodeAsFinished].
   void checkAndApplyLocalCompletion() {
     if (_host.validationGateActive ||
         !usesLocalCompletionTracking ||

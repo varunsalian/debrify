@@ -94,7 +94,7 @@ class VpStartupCandidates {
               fallbackInProgress: _host.rendererFallbackInProgress,
             )) {
           // Renderer-bound failure, owned by the renderer fallback — same
-          // contract as the probe path (see _tryOpenStartupVod).
+          // contract as the probe path (see tryOpenStartupVod).
           finish(true, 'renderer_fallback_deferred');
           return;
         }

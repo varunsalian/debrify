@@ -189,7 +189,7 @@ class VpResumeSave {
 
   bool resumeSaveBlocked(bool debounced) {
     if (_host.validationGateActive || !_host.isReady) return true;
-    // An IPTV zap flips _currentIptvIndex — and therefore _resumeKey — before
+    // An IPTV zap flips _currentIptvIndex — and therefore VpResumeKeys.resumeKey — before
     // the incoming stream opens, while _position/_duration still describe the
     // OUTGOING one (_isReady is never cleared for the gap). A tick landing in
     // that window would file the old movie's position under the new channel's

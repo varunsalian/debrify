@@ -137,7 +137,7 @@ class VpMediaOpen {
     // stale guard suppressing the new media's saves or a live verifier
     // re-seeking the old target against it. Ordering is safe by construction:
     // every outgoing checkpoint save runs BEFORE its new open, and every path
-    // that re-protects (_seekForResume) re-arms AFTER it.
+    // that re-protects (VpResumeRestore.seekForResume) re-arms AFTER it.
     _host.resumeVerifyEpoch++;
     _host.resumeWriteGuard.clear();
     beginMediaGeneration(preserveStartupEpoch: preserveStartupEpoch);

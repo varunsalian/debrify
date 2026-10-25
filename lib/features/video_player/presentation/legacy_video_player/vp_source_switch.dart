@@ -219,7 +219,7 @@ class VpSourceSwitch {
     // For direct/torrent switches, `_player.open` discards the old media's
     // subtitle tracks, so an active external/addon subtitle would silently
     // vanish and the cached identifiers would dangle. Reset now (mirrors
-    // `_loadPlaylistIndex`) so the new media starts clean and addon-subtitle
+    // `VpPlaylistLoad.loadPlaylistIndex`) so the new media starts clean and addon-subtitle
     // logic re-runs. Deliberately NOT done for the external-audio (YouTube)
     // path — that flow is left exactly as before to avoid any regression.
     if (!hasExternalAudio) {
@@ -252,7 +252,7 @@ class VpSourceSwitch {
       if (hasExternalAudio) {
         await _host.setExternalAudioTrack(_host.audioUrl!);
       }
-      // Seek to the position from the previous source. _seekForResume
+      // Seek to the position from the previous source. VpResumeRestore.seekForResume
       // re-ARMS the guard (a pure held-target query never restarted the
       // settle window), so a switched-to stream that restarts at 0 cannot
       // have its first autosave file ~0 over the carried bookmark — the
@@ -268,7 +268,7 @@ class VpSourceSwitch {
         // case above, where the merged audio track is set explicitly and track
         // preferences would fight it.
         //
-        // Fire-and-forget: `_restoreTrackPreferences` awaits `_waitForSubtitleTracks`,
+        // Fire-and-forget: `VpTrackPreferences.restoreTrackPreferences` awaits `VpSubtitleApply.waitForSubtitleTracks`,
         // which polls up to ~5s on media with no embedded subtitle tracks
         // (common for direct MP4/torrent streams). Awaiting it here would hold
         // the black transition overlay for that whole wait — a regression vs the

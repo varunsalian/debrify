@@ -91,7 +91,7 @@ class VpSkipSegmentController {
     // Two stale-media windows, both of which would judge the incoming item
     // against the outgoing one's clock:
     //
-    // * _skipSegmentsMediaReady covers a playlist switch. _loadPlaylistIndex
+    // * skipSegmentsMediaReady covers a playlist switch. VpPlaylistLoad.loadPlaylistIndex
     //   points _currentIndex at the new episode and only then saves resume and
     //   resolves the stream URL — a network round trip for debrid/PikPak
     //   links. Through all of that _position/_duration still describe the
@@ -100,7 +100,7 @@ class VpSkipSegmentController {
     //   pressed. It also asks the provider for the new episode at the old
     //   episode's duration, which can select or validate the wrong release.
     // * _isTransitioning covers an IPTV zap / source switch, where the key
-    //   flips before the incoming stream opens (the same window _saveResume
+    //   flips before the incoming stream opens (the same window VpResumeSave.saveResume
     //   guards against).
     if (!skipSegmentSettingsLoaded ||
         !skipSegmentsEnabled ||

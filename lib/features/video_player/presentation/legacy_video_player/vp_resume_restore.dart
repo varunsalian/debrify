@@ -61,7 +61,7 @@ class VpResumeRestore {
   /// [verifyLanding]: this is the initial open, where the startup gate commits
   /// a candidate after ~40ms of decoded media and the seek can be answered with
   /// a stream restart. Confirm the seek took and re-issue once. See
-  /// [_seekForResume].
+  /// [seekForResume].
   Future<void> maybeRestoreResume({
     bool preferLocalResume = false,
     bool verifyLanding = false,

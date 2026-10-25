@@ -191,7 +191,7 @@ class VpEpisodeNext {
             debugPrint(
               'Player: Detected PikPak video from Debrify TV, using retry logic',
             );
-            // _playPikPakVideoWithRetry will increment _pikPakRetryId to cancel previous retries
+            // VpPikPakRetry.playPikPakVideoWithRetry will increment _pikPakRetryId to cancel previous retries
             await _host.playPikPakVideoWithRetry(
               url,
               overrideProvider: provider,

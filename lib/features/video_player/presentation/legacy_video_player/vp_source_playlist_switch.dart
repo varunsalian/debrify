@@ -140,7 +140,7 @@ class VpSourcePlaylistSwitch {
         : current;
     // Checkpoint the OUTGOING episode now, while _activePlaylist/_currentIndex
     // still point at it — after the swap the index would resolve against the
-    // new playlist. _loadPlaylistIndex below is told to skip its own save.
+    // new playlist. VpPlaylistLoad.loadPlaylistIndex below is told to skip its own save.
     await _host.saveResume();
     if (!_host.mounted || request?.isCurrent == false) return false;
     _host.setState(() {
@@ -192,7 +192,7 @@ class VpSourcePlaylistSwitch {
     }
 
     // Resume the SAME episode from the new source (a season/complete pack would
-    // otherwise restart at S1E1); _loadPlaylistIndex restores its saved
+    // otherwise restart at S1E1); VpPlaylistLoad.loadPlaylistIndex restores its saved
     // position.
     var targetIndex = 0;
     // Whether the new source landed on the SAME content we were watching — only
@@ -239,7 +239,7 @@ class VpSourcePlaylistSwitch {
     // A source switch must resume the outgoing episode's position (saved above).
     // Clear any lingering manual-selection state first: if the user had manually
     // jumped to an episode within the last 30s, that stale flag makes
-    // `_maybeRestoreResume` bail out and the new source opens at 0:00 instead of
+    // `VpResumeRestore.maybeRestoreResume` bail out and the new source opens at 0:00 instead of
     // resuming. The switch is not a "manual episode pick", so drop the flag.
     _host.isManualEpisodeSelection = false;
     _host.allowResumeForManualSelection = false;
@@ -379,7 +379,7 @@ class VpSourcePlaylistSwitch {
       );
     }
 
-    // End transition (same pattern as _switchToStremioSource)
+    // End transition (same pattern as VpSourceSwitch.switchToStremioSource)
     _host.transitionStopTimer?.cancel();
     _host.transitionPhaseTimer?.cancel();
     _host.transitionPhase = 2;

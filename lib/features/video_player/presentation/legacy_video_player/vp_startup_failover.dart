@@ -277,7 +277,7 @@ class VpStartupFailover {
         continue;
       }
       // Debrid-resolved torrents bypass the decode probe (see
-      // _openStartupDebridDirect); addon direct URLs keep it, and so do
+      // VpStartupCandidates.openStartupDebridDirect); addon direct URLs keep it, and so do
       // PikPak sessions — cold-storage opens are the slowest in the app and
       // have their own readiness needs.
       final isDebridResolved =

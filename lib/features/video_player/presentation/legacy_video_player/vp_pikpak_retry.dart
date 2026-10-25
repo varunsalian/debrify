@@ -158,7 +158,7 @@ class VpPikPakRetry {
         if (loadSuccess) {
           // Success! Video loaded (either immediately or during monitoring/delay)
           print('PikPak: Video metadata loaded successfully - file is ready!');
-          // Note: Retry state already cleared by _waitForVideoMetadata
+          // Note: Retry state already cleared by VpMediaWaits.waitForVideoMetadata
           print('PikPak: Retry mechanism fully deactivated, playback ready');
           return true;
         }

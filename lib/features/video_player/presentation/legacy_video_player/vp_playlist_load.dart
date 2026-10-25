@@ -112,7 +112,7 @@ class VpPlaylistLoad {
   /// episode). Without this the UI stays stuck on the black transition
   /// `Container` and the rainbow overlay never stops. The source-switch caller
   /// clears transition state itself, so this only rescues the other callers
-  /// (`_goToNextEpisode`, shuffle). Safe to call redundantly.
+  /// (`VpEpisodeNext.goToNextEpisode`, shuffle). Safe to call redundantly.
   void clearTransitionOnFailure() {
     _host.transitionStopTimer?.cancel();
     _host.transitionPhaseTimer?.cancel();
@@ -138,7 +138,7 @@ class VpPlaylistLoad {
     EpisodePlaybackRequest? request,
     bool skipInitialSave = false,
     // Source switch on the same content: resume the checkpointed local position
-    // exactly (see _maybeRestoreResume).
+    // exactly (see VpResumeRestore.maybeRestoreResume).
     bool preferLocalResume = false,
     bool suppressResume = false,
     Torrent? manualValidationSource,
@@ -196,7 +196,7 @@ class VpPlaylistLoad {
     EpisodePlaybackRequest? request,
     bool skipInitialSave = false,
     // Source switch on the same content: resume the checkpointed local position
-    // exactly (see _maybeRestoreResume).
+    // exactly (see VpResumeRestore.maybeRestoreResume).
     bool preferLocalResume = false,
     bool suppressResume = false,
     Torrent? manualValidationSource,
@@ -208,7 +208,7 @@ class VpPlaylistLoad {
     // one and must never land on this one; same for the landing verifier
     // (epoch bump — a verifier retry must never seek the incoming item).
     // NOTE: the resume write GUARD is deliberately NOT cleared here — the
-    // outgoing item's checkpoint _saveResume() below must still run against
+    // outgoing item's checkpoint VpResumeSave.saveResume() below must still run against
     // the armed guard, or an unlanded resume's ~0 position would be filed over
     // that item's bookmark by the very switch that abandons it. The clear sits
     // immediately after that save.
@@ -342,7 +342,7 @@ class VpPlaylistLoad {
     // ALWAYS use retry logic for PikPak videos, regardless of autoplay
     if (isPikPak) {
       // For PikPak, we need retry logic even if not autoplaying
-      // _playPikPakVideoWithRetry will increment _pikPakRetryId to cancel previous retries
+      // VpPikPakRetry.playPikPakVideoWithRetry will increment _pikPakRetryId to cancel previous retries
       final pikPakLoaded = await _host.playPikPakVideoWithRetry(
         videoUrl,
         request: request,

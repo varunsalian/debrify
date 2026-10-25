@@ -465,7 +465,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   );
 
   late mk.Player _player;
-  // _player is assigned partway through the async _initializePlayer(); if the
+  // _player is assigned partway through the async VpPlayerStartup.initializePlayer(); if the
   // user backs out before that (or init throws first), dispose() must not
   // touch the unassigned late field (LateInitializationError during pop).
   bool _playerCreated = false;
@@ -479,7 +479,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   TvosDecodeRemedy? _tvosDecodeRemedy;
 
   /// tvOS manual escape hatch — forces `hwdec=no` at controller creation.
-  /// Preloaded in [_loadPlayerDefaults]; [_createPlayerInstance] is
+  /// Preloaded in [VpPlayerDefaults.loadPlayerDefaults]; [VpPlayerInstance.createPlayerInstance] is
   /// synchronous and cannot read prefs itself.
   bool _tvosForceSoftwareDecode = false;
   ContentDisplayMatchMode _contentDisplayMatchMode =
@@ -488,7 +488,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Timer? _tvosDisplayMatchTimer;
 
   /// Audio-output settings (AUDIO_FIDELITY_PLAN.md), preloaded in
-  /// [_loadPlayerDefaults] and applied by [_configurePlayerAudio].
+  /// [VpPlayerDefaults.loadPlayerDefaults] and applied by [VpAudioOutput.configurePlayerAudio].
   bool _audioPassthroughEnabled = false;
   bool _systemAudioEffectsEnabled = false;
   bool _appleMultichannelEnabled = false;
@@ -908,13 +908,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// no tee (mpv can't mux on media_kit's libs) and no Android engine — the raw
   /// HTTP copy is the only recorder there — but like the engine it belongs to
   /// the SERVICE, so closing the player leaves it running and nothing here may
-  /// stop it implicitly. [_desktopCaptureForCurrent] asks the service instead,
+  /// stop it implicitly. [VpIptvRecordingResources.desktopCaptureForCurrent] asks the service instead,
   /// which is also what makes a SCHEDULER-started capture stoppable from this
   /// same button.
   VoidCallback? _desktopRecordingRevisionListener;
 
   /// Bumped whenever a stop, a channel change or a teardown supersedes an
-  /// in-flight [_startRecording]. That start does async work (storage lookup,
+  /// in-flight [VpIptvRecording.startRecording]. That start does async work (storage lookup,
   /// mkdir) during which `_isRecording` is still false, so the stop-if-
   /// recording checks elsewhere cannot see it; without this token the awaits
   /// could resume and arm libmpv on the NEW channel under the OLD channel's
@@ -1144,8 +1144,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _isTransitioning = false; // Show black screen during transitions
 
   /// One-shot guard set the moment we pop to hand the next episode back to the
-  /// host for Quick Play. End-of-video auto-advance (_onPlaybackEnded) and a
-  /// manual Next press both funnel into _handleSeriesNextEpisode, which awaits a
+  /// host for Quick Play. End-of-video auto-advance (VpPlaybackEnded.onPlaybackEnded) and a
+  /// manual Next press both funnel into VpEpisodeNext.handleSeriesNextEpisode, which awaits a
   /// network lookup and then pops — without this, the two can race and pop
   /// twice, ejecting the user off the host screen instead of playing the next.
   bool _seriesNextDispatched = false;
@@ -1218,7 +1218,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   // Retro TV static loading messages
   String _tvStaticMessage = '📺 TUNING...';
-  String _tvStaticSubtext = '';
+  String _tvStaticSubtext = ''; // Second line for video title
 
   // Dynamic title for Debrify TV (no-playlist) flow
   String _dynamicTitle = '';
@@ -1270,7 +1270,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         .toList();
     _seriesImdbKnownAtLaunch = widget.contentImdbId?.trim().isNotEmpty == true;
     // The dock and the zap banner share the bottom strip, and the dock is
-    // raised from several places that never go through _toggleControls
+    // raised from several places that never go through VpControlsRuntime.toggleControls
     // (volume keys, pointer wake). Watching the notifier catches all of them.
     _controlsVisible.addListener(_controlsRuntime.onControlsVisibilityChanged);
 
@@ -1384,7 +1384,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     );
     // Held for the LOADING phase only — a slow debrid resolve must not let
     // the screen sleep before the first frame. From the first playing event
-    // onward the lock follows play/pause (see _syncWakelock).
+    // onward the lock follows play/pause (see VpPipLifecycle.syncWakelock).
     unawaited(PlayerDisplayControls.instance.setWakelock(true));
     if (Platform.isWindows || Platform.isLinux) {
       windowManager.setFullScreen(true);
@@ -1425,7 +1425,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // mpv live and can transiently read short on a fresh remote stream —
     // against which the held target could compute as >80% or >100% progress,
     // turning a tracker start/pause into a stop (a watched mark for content
-    // playing at 0:00). Same rule as _saveResume's short-duration skip: fall
+    // playing at 0:00). Same rule as VpResumeSave.saveResume's short-duration skip: fall
     // back to the raw position for the few seconds the reading is off. A raw
     // ~0 start-scrobble in that window is the pre-guard behavior, not a new
     // harm.
@@ -1514,7 +1514,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
-  /// Load default player settings (aspect)
   /// The vertical band at the bottom of the screen the dock occupies.
   ///
   /// `classic` keeps the literal each consumer has always used; only the
@@ -1595,7 +1594,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   final List<int> _iptvZapPendingInputs = [];
 
   /// Monotonic ticket for IPTV channel switches. The Stremio candidate ladder
-  /// can hold [_switchToIptvChannel] open for many seconds; a newer switch
+  /// can hold [VpIptvChannelSwitch.switchToIptvChannel] open for many seconds; a newer switch
   /// must strand the older one (no opens, no winner marks) or an abandoned
   /// ladder would hijack playback back to its channel.
   int _iptvSwitchTicket = 0;
@@ -1605,8 +1604,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// the live path instead of the movie source-switch pipeline.
   String? _iptvChannelKey;
 
-  /// Suppresses [_onIptvStreamError] for errors that aren't the tuned
-  /// channel's to own. Set for the whole of [_switchToIptvChannel] and
+  /// Suppresses [VpIptvLiveSources.onIptvStreamError] for errors that aren't the tuned
+  /// channel's to own. Set for the whole of [VpIptvChannelSwitch.switchToIptvChannel] and
   /// cleared the moment the new media is actually opened, because until then
   /// mpv is still draining the OUTGOING channel — while [_currentIptvIndex]
   /// already points at the new one, so a report would blame the wrong
@@ -1717,7 +1716,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // bump also cancels a start still awaiting its storage setup (it would
     // otherwise arm a disposed player and leave the file untracked).
     //
-    // Done inline rather than through `_stopRecording`: dispose() cannot await,
+    // Done inline rather than through `VpIptvRecording.stopRecording`: dispose() cannot await,
     // so that call would race `_player.dispose()` a few lines below AND reach
     // its own setState() mid-teardown. The order that matters is preserved by
     // hand — state cleared now, publish handed off immediately (it reads the
@@ -1935,7 +1934,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         },
         // `_` on purpose: `context` inside must keep resolving to the State's
         // context, exactly as before this wrapper existed — sheet callbacks
-        // like _showTracksSheet await before using it, and the Builder's own
+        // like VpPlayerMenuUi.showTracksSheet await before using it, and the Builder's own
         // element dies whenever the controls subtree is dropped (PiP,
         // not-ready), which the State's context survives.
         child: Builder(
@@ -1966,7 +1965,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               // rather than parking the remote on it.
               progressFocusable: !_tvNoTimeline,
               // OK is claimed by the dock's own buttons, so those presses never
-              // reach _handleTvKey and never restarted the countdown.
+              // reach VpTvRemote.handleTvKey and never restarted the countdown.
               onInteract: _controlsRuntime.scheduleAutoHide,
               scrubPreview: _tvScrubTarget,
               onPlayPause: _controlsRuntime.togglePlay,
