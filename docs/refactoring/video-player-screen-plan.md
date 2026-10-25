@@ -6379,6 +6379,29 @@ a release device. No device runs happen now. P21 items:
     is the only suite that kills the scrub commit's Simkl and MDBList seek
     reports (points 170, 171). It must stay in the Step 1 reduced-gate
     inventory (`vplayer_p21_test_inventory.txt`) and in CI.
+- **P21 Step 0c (characterized; no fixes):**
+  - A TV tap raise keeps a remembered auto-hide block, so the bar stays up
+    for one extra interval (6 s). The remote's raise forgets the block.
+    Pinned by "TV a tap raise keeps a block remembered from before, so the
+    bar stays one extra interval".
+  - A pan end's 250 ms HUD clear belongs to no pan. It blanks the next live
+    pan's HUD in mid-gesture until that pan's next update. Pinned by "a pan
+    end HUD clear is not cancelled by the next pan".
+  - The hold count does not depend on direction: RIGHT, LEFT, LEFT inside
+    the window enters a backward scrub. Pinned.
+  - `goBack` before the first ready, during a transition, and on the hidden
+    bar after ready goes unhandled to the platform. The desktop mapping pops
+    only on `escape`. On Android the platform turns it into the system back.
+    Pinned by the `key_aliases` cases.
+  - Not killable by behaviour:
+    - S10 (prefs without `setState`) is masked by the per-tick rebuild.
+    - S51 (unclamped tracker target) is equivalent, because all three
+      trackers clamp progress.
+    - S86 (pan start `mounted` check before the await) is observable only as
+      a use-after-dispose error, so it is crash-only.
+    - M52 is equivalent.
+
+    Review these as structural checks of the moved code at Step 1.
 - **P21 Step 0b (characterized; no fixes):**
   - A player closed by BACK before its first ready still arms the 6 s
     resume autosave about ten seconds after the dispose, and nothing
@@ -12056,6 +12079,82 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
 - Not re-done: the Step 0 98.6 % provenance question (reviewer P2-6) is
   outside this step. The Step 0 sweep is not re-run on the committed bytes.
 - Next: Step 1 (generator output into `lib/`, ratchet, reduced gate).
+
+### 2026-10-25 — Phase 21a Step 0c (executor: Claude)
+
+- **Input.**
+  - A fresh re-sample after Step 0b scored **69.1 % (56/81)**
+    (`p21/step0b-resample/resample-review.md`), below 75 %. Its P2-1 was the
+    unpinned host reads.
+  - Step 0b had fitted the first sample's survivors, so Step 0c closes whole
+    fault classes instead.
+- **Tests** (commit `5eac52bde`; tests only, no `lib/` change).
+  - 8 new suites (`mirror_reads`, `remote_symmetry`, `tracker_paths`,
+    `await_capture`, `timer_owners`, `overlay_guards`, `key_aliases`,
+    `pan_lifecycle`) plus `dock_bands`: 71 new cases, P21 total
+    147 → 218.
+  - Registered in `vplayer_p21_test_inventory.txt` (508 → 516) and
+    `ci_behavior_tests.txt`.
+  - New driver helper `playerReports`: it moves only the player's reported
+    state, so the screen's copies keep their values.
+- **What each class now pins:**
+  1. *Screen state vs player state.* Every moved read of the playhead,
+     the playing flag and the length follows the screen's copy. That covers
+     the toggle and its save, the TV pause blocker, the scrub begin (preview,
+     pause, resume) and the stride clamp, hold entry, double tap, and pan
+     base, range and clamp. A skip whose seek is still in flight is the real
+     path where they diverge.
+  2. *Direction symmetry.* LEFT holds accelerate 10/30/60 s and reversals
+     keep the stride size. The zero clamp holds through the confirm. The hold
+     window is 300 ms for LEFT as for RIGHT.
+  3. *Tracker reports.* A paused or playing double tap, pan or scrub that
+     crosses 80 % gives an MDBList stop at the target, and while paused Simkl
+     hears nothing. Near the end the report is the clamped 100 %. The double
+     tap reports only after its held seek; pan and scrub report without
+     waiting.
+  4. *Capture across awaits.* A pan start captures the playhead and volume
+     before its brightness read. A double tap reports the target it computed
+     at the tap even if the playhead moves, and decides its band and side
+     before the seek. A close during the read writes nothing (pinned
+     through `errors`).
+  5. *Timers.* A press before ready arms no countdown. An abandoned scrub
+     arms none and leaves the scrub's countdown pending. A buffering clear
+     cancels the debounce on a playlist switch. A pan end's HUD clear
+     outlives the next pan.
+  6. *Overlays and guides.* The pointer wake is blocked under every overlay
+     kind. Close-top precedence: Debrify guide over IPTV sheet, IPTV sheet
+     over source sheet. UP on IPTV sessions picks Stremio, Debrify, IPTV, or
+     raises the bar on an empty list.
+  7. *Keys.* `goBack` cancels a scrub and lowers the bar, and before ready
+     or during a transition it is left to the system. A live channel zaps
+     before the first ready. Presses made without a timeline do not count
+     toward a hold.
+  8. *Bands.* The top band stays at 72 px under styled and classic docks;
+     classic is 72 px at both edges.
+  9. *Pan lifecycle.* A pan that never ends, ignored or live, does not leak
+     into the next one, even after the controls lower. A volume pan inside a
+     seek pan's HUD tail reports nothing. A pan that never moves does
+     nothing. A tap raise keeps a remembered block.
+- **Proof** (`p21/step0c/`: `make_mutants.py`, `mutants.json`, `mut.py` (the
+  re-sample runner, paths only), `results.jsonl`, `heldout-*`,
+  `summary.md`, `test-bytes.txt`).
+  - Unmutated `5eac52bde`: 218/218 twice.
+  - Step T moved tree (`vp21-moved`): 218/218.
+  - Format and analyze clean.
+- **Self-sample** (written and run before the held-out set): 52 fresh
+  multi-site mutants across the nine classes.
+  - Round 1 killed 50. M44 was closed with a class-9 case.
+  - Of record on the committed bytes: **51/52 raw, 51/51 (100 %)** with M52
+    equivalent.
+- **Held-out S-survivors** (the re-sample's 29, run once after the commit;
+  no test was changed afterwards): **22/29 raw, 22/25 (88.0 %)**, excluding
+  S12 and S25 as masked and S63 and S88 as equivalent, per the re-sample.
+  - S10 is masked.
+  - S51 is equivalent: all trackers clamp progress.
+  - S86 is crash-only: only a disposed-notifier error, pinned through
+    `errors`.
+- Follow-ups: see "P21 Step 0c" in Follow-ups.
+- Next: an independent re-sample (≥ 75 %), then Step 1.
 
 ## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
 
