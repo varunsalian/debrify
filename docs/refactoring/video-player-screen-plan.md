@@ -5894,10 +5894,28 @@ So the adapters stay. They are the composition root's wiring cost.
   scope"). A small fix inside retained facade code (`build`, a lifecycle
   step, an adapter) that must add lines or a State member may raise the
   cap. The rules:
-  - it is one reviewed commit that changes, together: the facade, the cap
-    in `check_search_architecture.py`, the baseline line (raised by hand,
-    since `--update` never raises), and, if a member is added, the frozen
-    list in `vplayer_end_state.py`;
+  - it is one reviewed commit that changes, together (the artifact list is
+    complete after the P21b review, P2-2):
+    - the facade;
+    - the cap in `check_search_architecture.py`;
+    - the baseline line (raised by hand, since `--update` never raises);
+    - if a member is added or removed, the frozen list in
+      `vplayer_end_state.py`;
+    - the P21 manifest `dev/tool/dart_moves/vplayer_p21.json`, or
+      `check_dart_moves.py` (the current move check) fails: a `patched`
+      row with `reason`, `test` and exact `patches` for each changed facade
+      declaration, a moved-row patch (with `reason` and `test`) for a P21
+      destination, or an `earlier_patches` entry for an earlier destination;
+    - if a `_Vp*HostAdapter` member or its Host changes, whatever entry
+      `vplayer_host_usage.py` then needs (`RENAMED`, `UNUSED_EXCEPTIONS`,
+      `REGISTERED_DUPLICATES`, each exact), so the Host-usage audit stays
+      green;
+    - **not** the cleanup proof: `vplayer_cleanup_proof.py` is pinned to
+      `b72ff16f8..218a5806a` and reads both sides through git, never the
+      live tree (review P1-1), so no raise or exit updates or retires it.
+      An exit that moves declarations brings its own move manifest; its
+      design states how the P21 current move check is then pinned with
+      `--at` (as P1–P20 were) or extended;
   - it appends a row to an "End-state exception changes" table in this
     plan: date, commit, reason, scope, old → new exact count, and members
     added;
@@ -6007,7 +6025,11 @@ reviewed raise procedure.
      included. Negatives: an undeclared brace; an extra removed import; an
      export removal; a code token hidden in a comment replacement; a
      declared site that no longer matches; the excluded startup site
-     braced; an edit in a file outside the set.
+     braced; an edit in a file outside the set. **Amended (P21b review
+     P1-1):** the "current" side is the post-C3 commit `218a5806a`, read
+     through git, and the outside-the-set rule covers
+     `b72ff16f8..218a5806a` only; the live tree is covered by the P21
+     current move check and the end-state guards.
   2. **The current check accepts exactly those edits**, by file class:
 
      | File class | Checker that sees the edit | Mechanism |
@@ -6303,6 +6325,15 @@ a release device. No device runs happen now. P21 items:
   must fail the cleanup proof.
 - Then merge into `refactor/codebase` and push to `private`. **Merging into
   `main` and the device pass are the user's decision after the series.**
+- **Deviation (commit-7 ownership, recorded after the P21b review, P2-3).**
+  This design puts the final checks on the clean tree in commit 7, the
+  final record, and the review after them. In practice the review ran at
+  commit 6 (`aebee3166`), before commit 7. **Commit 7 is run by the
+  coordinator after the review**, as a separate step: the full suite
+  compared by identity with M5, the `test_baseline.py` replay, the
+  `flutter build apk/macos/ios --release` builds and the gate record (the
+  commit whose message carries the CI full-suite word). The review of that
+  final record is still due. Merge only after commit 7 records these checks.
 
 ### Open questions for the design reviewer
 
@@ -6472,6 +6503,39 @@ a release device. No device runs happen now. P21 items:
     them compare at each phase's applied revision.
   - The device checklist cites plan line numbers at the commit-6 tree; later
     plan edits shift them (each citation also names its section).
+
+- **P21b review (recorded; no fixes).** Report `p21b/review.md`; P1-1 and
+  P2-1 to P2-3 are fixed in the review-fix entry. The P3 notes:
+  - P3-1: removed imports are proven unused only by the analyzer (expected
+    by design). A used import removed and declared in both layers passes the
+    cleanup proof and the move check; `flutter analyze` then reports 61
+    errors and `check_analyzer_allowlist.py` fails, and the exact cap fails
+    on the line count.
+  - P3-2: layer 1 accepts directive comments in a declared
+    `replace_comment` (`// ignore: ...`, `// ignore_for_file:`,
+    `// @dart=`, `// dart format off`). None of the 77 C3 edits has one.
+    Candidate: reject them in `apply()`.
+  - P3-3: the end-state guard freezes top-level declarations, State members
+    and adapter classes, not the members of `VideoPlayerScreen`, the two
+    hook classes or the adapters (a planted static on
+    `VideoPlayerScreenTestHooks` passes it; the P21 move check fails it).
+    Wherever the guard is described as freezing "the facade's declaration
+    set", the scope should say so.
+  - P3-4: *T*'s 300-line wiring allowance is assumed, not measured. **Fixed
+    in the exception text:** *T* is re-recorded from the measured wiring
+    either way.
+  - P3-5: the device checklist's plan line citations will drift with
+    commit 7's insertions; cite the plan revision SHA after commit 7, or
+    re-pin them in commit 7.
+  - P3-6: the p21b analyzer inventory drops 80 entries, not 79; the extra
+    one is a stale ceiling entry for
+    `video_player/services/media_kit_subtitle_auto_sync.dart`. The drop only
+    makes the check stricter; the counts in the C1 message are off by one.
+  - P3-7: C2, C3 and commit 4 alone are red for the CI moves self-test step
+    (already recorded above); acceptable when the commits are pushed
+    together.
+  - P3-8: `audit/composition-final.txt` cites `be07a1497`, the SHA before
+    the reword; `REWORD-NOTE.txt` explains that the trees are identical.
 
 - **P20 Step 1 / post-gate review:**
   - **Startup orchestration decomposition** (exit of the 623-line
@@ -12589,10 +12653,71 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
   [video player device checklist](video-player-device-checklist.md).
   Evidence `p21b/audit/` (`trace.py`/`trace.txt`/`trace.json`,
   `composition-final.txt`, `final_tree_mutation.log`, `host-usage.json`).
-- Next: commit 7, the final record. The user runs the full suite and the
-  release builds (`flutter build apk/macos/ios --release`) as its final
-  checks; then the review, the merge into `refactor/codebase` and the push.
-  The device pass and the merge into `main` are the user's decisions.
+- Next: commit 7, the final record. **The coordinator runs commit 7 after
+  the review:** the full suite compared by identity with M5, the
+  `test_baseline.py` replay, the `flutter build apk/macos/ios --release`
+  builds and the gate record. Then the merge into `refactor/codebase` and
+  the push. The device pass and the merge into `main` are the user's
+  decisions. (Deviation from the design's commit-7 ownership; see "21b
+  steps and final checks".)
+
+### 2026-10-26 — Phase 21b review fixes (executor: Claude)
+
+- Review `p21b/review.md` (one P1, three P2s, eight P3s). Tooling commit
+  `286a07fdd`; evidence `p21b/review-fix/`.
+- **P1-1 (fixed):** `vplayer_cleanup_proof.py` compared `b72ff16f8` with the
+  live tree, so the every-push `vplayer-structure` job would fail on the
+  first unrelated `lib/` change. The current side is now the post-C3 commit
+  `218a5806a`, read through git (`HEAD` constant), and so is the P21
+  manifest used by the cross-check. The outside-the-set rule covers
+  `git diff b72ff16f8 218a5806a -- lib` only. `--head REV` runs the proof
+  against another head. The live tree stays covered by the P21 current move
+  check and the end-state guards. The self-test negatives all still reject
+  against the pinned revisions (`cleanup-proof-self-test.log`; 185 declared
+  edits, 155 cross-checked records, 0 differences).
+  - Scratch commits on `218a5806a`, proof run with `--head`
+    (`head-plants.txt`, `head-negatives.log`). Each one FAILs: an undeclared
+    `== null` → `!= null` (undeclared token change); an extra removed
+    import (undeclared token change, facade); a code line inside a C3
+    comment block (undeclared token change, `vp_simkl_scrobbler.dart`;
+    a first attempt planted a statement at class level and was a parse
+    error, so it was re-planted as a member); a `lib/main.dart` edit (lib
+    change outside the cleanup file set); a new feature file (cleanup file
+    set changed); `'90'` → `'91'` in `network_tuning.dart` (undeclared token
+    change).
+  - Live-tree plants in a scratch worktree (`live-negatives.log`). The proof
+    PASSes with a `lib/main.dart` edit and with a new feature file. Live
+    coverage holds: a facade token change (250 → 251 ms in `build`) FAILs the
+    P21 move check (`non-verbatim declaration: _VideoPlayerScreenState.build`);
+    a new State member with the line count unchanged FAILs
+    `vplayer_end_state.py` (`declaration added: "_planted"`) and the move
+    check (`unexpected new declaration`); `check_search_architecture.py`
+    passes it, as review P3-3 notes.
+- **P2-1 (fixed):** `vplayer_host_usage.py` compares the last name of any
+  accessor chain (`_s.widget.f`, `_s._collab.f`, `_s.a.b.f`), as the method
+  rule does. 165 chain forwarders (152 getters, 13 setters), all same-name;
+  `RENAMED` stays empty. New negatives: `contentSeason =>
+  _s.widget.contentEpisode` (`renamed forwarder:
+  _VpPlayerStartupHostAdapter.contentSeason -> _s.widget.contentEpisode`, in
+  the self-test and on the live tree) and a collaborator getter and setter.
+  Completion audit item 3 now says 1,769 (1,333 accessors, 436 methods).
+- **P2-2 (fixed):** the raise procedure (Phase 21 §4 and the exception text)
+  lists the P21 manifest row, the Host-usage entries and the pinned cleanup
+  proof.
+- **P2-3 (recorded):** commit 7 is run by the coordinator after the review;
+  recorded as a deviation in "21b steps and final checks".
+- **P3s:** recorded in Follow-ups ("P21b review"); P3-4 is fixed in the
+  exception text (*T* is re-recorded from the measured wiring either way).
+- **Checks** (`review-fix/run.sh`, which is `final/run.sh` without its last
+  step; `checks.log`): 38 steps, all exit 0. They cover format, sizes,
+  storage keys, architecture, the P21 current move check, the cleanup proof
+  self-test, P1–P21 history, the seam proofs, storage references, the
+  end-state guard, Host usage, the source reader and the analyzer (519
+  issues as at C3; allowlist nothing new; `check_vplayer_analyzer` 0
+  additions). **Skipped:** the 45-minute `check_dart_moves.py --self-test`,
+  because neither `check_dart_moves.py` nor its tests changed (its last run
+  is `final/checks.log`, PASS). The full suite and builds were not run
+  (commit 7).
 
 ## Video player end state and completion audit (Phase 21b)
 
@@ -12636,8 +12761,12 @@ responsibility lives in a collaborator.
 - `vp_player_startup.dart` stays the exact 623-line bridge exception
   (`VIDEO_PLAYER_SIZE_EXCEPTIONS`).
 - Growth only through the reviewed raise procedure (Phase 21 §4): one
-  reviewed commit changes the facade, the cap, the baseline line and the
-  frozen list together and appends a row below; the reviewer confirms that a
+  reviewed commit changes, together, the facade, the cap, the baseline line,
+  the frozen list (if a member changes), the P21 manifest (a `patched` row
+  or patch with reason, test and exact patches, or the move check fails)
+  and, for an adapter or Host change, any entry the Host-usage audit needs,
+  and appends a row below. The cleanup proof is pinned to
+  `b72ff16f8..218a5806a` and needs no change. The reviewer confirms that a
   collaborator could not take the change; the ratchet stays exact. The same
   procedure governs the startup exception and exit-driven changes.
 - **Exits, in order:** (1) startup orchestration decomposition (milestone:
@@ -12648,10 +12777,12 @@ responsibility lives in a collaborator.
 - **Interim target *T* = 8,562 − 1,549 + 300 = 7,313.** 8,562 is the
   measured total, 1,549 the measured `build`-and-helpers span, and 300 the
   wiring allowance (the replacement `build` composing the layout widgets plus
-  any new adapters) on which the design's estimate rests. The `build`
-  decomposition design must measure its wiring before it starts; if it needs
-  more than 300 lines, it records the new exact *T* there and in this
-  section, through the raise procedure.
+  any new adapters) on which the design's estimate rests. 300 is an
+  assumed allowance, not a measurement. The `build` decomposition design
+  must measure its wiring before it starts and re-records the exact *T* =
+  8,562 − 1,549 + the measured wiring, there and in this section, **either
+  way**: lower when the wiring is under 300, higher when it is over. A *T*
+  above 7,313 is recorded through the raise procedure (P21b review P3-4).
 - **Reassessment trigger:** any commit that changes the facade's line count
   or its frozen declaration list, and the completion of each exit.
 
@@ -12708,9 +12839,16 @@ row.)
    (P21 move check: `surviving-after-move` and exhaustive ownership, 0
    differences; item 1). The Host-usage audit: all 1,605 members of the 65
    Hosts are used by their collaborators, no adapter member lacks a Host
-   member, all 1,604 single-read/single-call forwarders forward the member of
+   member, all 1,769 single-read/single-call forwarders forward the member of
    their own name (`setState` → `_vpSetState` is the one rule), and the
-   duplicate `isAnyOverlayOpen` forwarder is listed.
+   duplicate `isAnyOverlayOpen` forwarder is listed. The 1,769 are 1,333
+   accessors and 436 methods. The 1,333 accessors are 1,168 direct reads or
+   writes (`_s.x`) and 165 member chains (152 getters and 13 setters such as
+   `_s.widget.f` or `_s._collab.f`); for a chain, the last name is the one
+   compared. Until the P21b review (P2-1) the audit compared only the 1,168
+   direct accessors, so the earlier "all 1,604" overstated its reach. The
+   exception list `RENAMED` is empty: no chain forwarder of another name
+   exists.
 4. **Sizes.** Every handwritten file under `lib/features/video_player/` is ≤
    500 lines except `vp_player_startup.dart` (exactly 623, the registered
    exception); the largest others are `vp_identify_title_ui.dart` 470,
@@ -12770,8 +12908,10 @@ characterized-but-unfixed items in Follow-ups.
 **Completion wording:** Video player slice complete with registered open
 exceptions (facade, startup, D1, the duplicates above) and recorded open
 Follow-ups; the first CI run, the tvOS/Windows/Linux builds and the device
-pass are pending. The full suite and the apk/macOS/iOS release builds are
-the final checks of commit 7.
+pass are pending. The full suite, the `test_baseline.py` replay and the
+apk/macOS/iOS release builds are the final checks of commit 7, which the
+coordinator runs after the review (deviation recorded in "21b steps and
+final checks").
 
 **Device checklist:** [video player device checklist](video-player-device-checklist.md),
 one session per platform, with every phase's "Device checklist (end of
