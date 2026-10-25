@@ -6402,6 +6402,23 @@ a release device. No device runs happen now. P21 items:
     - M52 is equivalent.
 
     Review these as structural checks of the moved code at Step 1.
+- **P21 re-sample (post Step 0c) P3s (recorded; no fixes):**
+  - T05: the overlay half of the visibility listener's root hand-back guard
+    is masked by each overlay's mount-time focus claim. Behaviour survives
+    through the overlay, but the guard has no pin of its own; a later change
+    to overlay autofocus would expose it.
+  - T44: UP opening a guide must not raise the bar first (the raise drops
+    floating IPTV/Debrify banners, refreshes recording, resets the block and
+    arms a countdown before the guide lowers the bar). Unpinned.
+  - T49: a double-tap seek that throws has no coverage (it must not report to
+    the trackers or ripple).
+  - T75: the hold-window stamp belongs to hidden-bar arrows only; a quick tap
+    right after a scrub must not count toward the next hold. Unpinned.
+  - T38 (the bar-up re-arm order around BACK) and T55 (the vertical pan side
+    from the start point, within about 12 px of the centre line): narrow
+    timing and geometry windows; no action needed.
+  - T50: disposed-screen behaviour after a double-tap seek is pinned only
+    through the hazard-11 `errors` assertion (crash-only by rule).
 - **P21 Step 0b (characterized; no fixes):**
   - A player closed by BACK before its first ready still arms the 6 s
     resume autosave about ten seconds after the dispose, and nothing
@@ -12155,6 +12172,46 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
     `errors`.
 - Follow-ups: see "P21 Step 0c" in Follow-ups.
 - Next: an independent re-sample (≥ 75 %), then Step 1.
+
+### 2026-10-25 — Phase 21a re-sample (post Step 0c) (review agent, executor: Claude)
+
+- **Re-sample** (`p21/step0c-resample/resample-review.md`, reviewer 4, base
+  `2a444d4c1`): 60 fresh mutants (36 semantic multi-site), none repeating an
+  earlier fault. **48/56 = 85.7 % P21-only of record** (80.0 % raw; T07, T63,
+  T65 equivalent, T05 masked), above 75 %. **No P1s.** Unmutated control
+  218/218 P21 and 126/126 legacy; the legacy selection killed none of the 11
+  survivors.
+- **P2s, closed with tests** (commit `9421ca4fe`; tests only, no `lib/`
+  change). New suite `video_player_p21_press_routing` (4 cases, P21 total
+  218 → 222), registered in `vplayer_p21_test_inventory.txt` (516 → 517) and
+  `ci_behavior_tests.txt`:
+  - **P2-1 (T27)**: a TV scrub begun while playing issues exactly pause,
+    seek, play to the player (cancelled: pause, play) and writes no resume
+    save. The toggle's pause branch writes the user-paused / should-play
+    intent and the save together; no television reader of the intent is
+    reachable during a scrub (the renderer fallback is disarmed on Android TV,
+    the live-recovery reader needs a live channel, which has no timeline, and
+    the lifecycle reader needs Start Over), so the save is the observable
+    boundary for "intent unchanged".
+  - **P2-2 (T24)**: a TV play press on a paused bar keeps the remembered
+    block, so the bar hides about 6 s after the press, not 3 s; a play press
+    with the bar hidden neither raises it nor moves focus off the root.
+- **Proof** (`p21/step0c-resample-fix/`: `mut.py` = the reviewer's runner
+  with only the worktree and output paths changed, `mutants.json` copied
+  unchanged, `results.jsonl`, `per_case.py`, `per-case.txt`, `control.jsonl`,
+  `summary.md`, `test-bytes.txt`). Scratch `vp21-rs3` at `2a444d4c1` plus the
+  new file; one mutant at a time, restored in `finally` with
+  `git checkout --`; all 23 P21 files, fail-fast.
+  - T24 **killed** by "P21 TV a play press on a paused bar keeps its
+    remembered block, so the bar stays one extra interval".
+  - T27 **killed** by "P21 TV a scrub while playing pauses, seeks and plays
+    the player without a resume save".
+  - Per case: each mutant fails both of its own cases and neither of the
+    other two.
+  - Unmutated: **222/222**. Format and analyze clean.
+- **P3s** recorded as Follow-ups ("P21 re-sample (post Step 0c)"): T05, T44,
+  T49, T75, T38, T55, T50.
+- Next: Step 1.
 
 ## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
 
