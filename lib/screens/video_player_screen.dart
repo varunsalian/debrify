@@ -236,6 +236,11 @@ import '../features/video_player/presentation/legacy_video_player/vp_player_subs
 import '../features/video_player/presentation/legacy_video_player/vp_network_tuning.dart';
 import '../features/video_player/presentation/legacy_video_player/vp_media_open.dart';
 import '../features/video_player/presentation/legacy_video_player/vp_player_startup.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_transition_overlay.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_dock_layout.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_controls_runtime.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_tv_remote.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_player_gestures.dart';
 
 /// A full-featured video player screen with playlist support and navigation controls.
 ///
@@ -522,6 +527,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _networkTuner = VpNetworkTuning(_VpNetworkTuningHostAdapter(this));
     _mediaOpen = VpMediaOpen(_VpMediaOpenHostAdapter(this));
     _playerStartup = VpPlayerStartup(_VpPlayerStartupHostAdapter(this));
+    _transitionOverlay = VpTransitionOverlay(
+      _VpTransitionOverlayHostAdapter(this),
+    );
+    _dockLayout = VpDockLayout(_VpDockLayoutHostAdapter(this));
+    _controlsRuntime = VpControlsRuntime(_VpControlsRuntimeHostAdapter(this));
+    _tvRemote = VpTvRemote(_VpTvRemoteHostAdapter(this));
+    _gestures = VpPlayerGestures(_VpPlayerGesturesHostAdapter(this));
   }
   void _vpSetState(VoidCallback fn) => setState(fn);
 
@@ -694,20 +706,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// [_tvScrubTarget] non-null means a scrub is in flight.
   Duration? _tvScrubTarget;
 
-  /// When the last LEFT/RIGHT arrived, so a held key (fast repeats) can be
-  /// told from deliberate taps without needing key-up, which the tvOS fork
-  /// does not reliably deliver.
-  DateTime? _tvLastArrowAt;
-  bool _tvScrubWasPlaying = false;
-  int _tvScrubRepeats = 0;
-
   /// Bumped on every transition and on dispose. A confirm carrying a stale
   /// generation is dropped, so a scrub started before a source switch can
   /// never seek the item that replaced it.
   int _tvScrubGeneration = 0;
-
-  /// The generation in force when the current scrub began.
-  int _tvScrubStartedAtGeneration = 0;
 
   // Text subtitles stay in MediaKit's Flutter renderer. Bitmap subtitles are
   // the narrow exception: their decoded image cues cannot enter a text widget,
@@ -740,7 +742,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   DateTime _iptvZapClock = DateTime.now();
 
   DoubleTapRipple? _ripple;
-  bool _panIgnore = false;
   int _currentIndex = 0;
   Offset? _lastTapLocal;
   bool _isManualEpisodeSelection =
@@ -897,46 +898,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// post-frame report from the previous layout cannot overwrite a newer one.
   int _dockGeometryGeneration = 0;
 
-  /// Everything that can change the dock's height without the dock itself
-  /// changing: the viewport, the safe-area insets, the text scaler, the
-  /// chosen style and size, and the two flags that add or remove whole rows.
-  String _dockGeometrySignature(MediaQueryData media) => [
-    media.size.width.round(),
-    media.size.height.round(),
-    media.padding.top.round(),
-    media.padding.bottom.round(),
-    media.textScaler.scale(100).round(),
-    _dockStyle.name,
-    _dockSize.name,
-    widget.hideOptions,
-    widget.hideSeekbar,
-  ].join('|');
-
-  String _lastDockGeometrySignature = '';
-
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _pip.iosPipSession = PlayerPipSession.of(context);
-    _refreshDockGeometry();
-  }
-
-  /// Drops the cached dock geometry whenever anything that can change the
-  /// dock's height changes.
-  void _refreshDockGeometry() {
-    // Rotation, window resize, split-screen, a safe-area change or a font-size
-    // change all land here. Any of them can make the cached extent wrong, and
-    // a stale extent means a tap near the bottom is judged against the wrong
-    // band — so drop back to the legacy constants until a fresh measurement
-    // arrives, rather than trusting the old number for a frame.
-    final signature = _dockGeometrySignature(MediaQuery.of(context));
-    if (signature == _lastDockGeometrySignature) return;
-    _lastDockGeometrySignature = signature;
-    _dockGeometryGeneration++;
-    _dockExtent.value = 0;
-    _infoPanelGeneration++;
-    _infoPanelHeight = DockLayoutInput.kInfoPanelBound;
-    _lastInfoPanelSignature = '';
+    _dockLayout.refreshDockGeometry();
   }
 
   /// Reserved panel height for this build. Resets to the bound (or 0 when no
@@ -1197,6 +1163,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   late final VpNetworkTuning _networkTuner;
   late final VpMediaOpen _mediaOpen;
   late final VpPlayerStartup _playerStartup;
+  late final VpTransitionOverlay _transitionOverlay;
+  late final VpDockLayout _dockLayout;
+  late final VpControlsRuntime _controlsRuntime;
+  late final VpTvRemote _tvRemote;
+  late final VpPlayerGestures _gestures;
 
   // The quiet bottom-right auto-sync surface: a 5s announce line, then
   // nothing until a real event — statuses during passes, word-only results.
@@ -1281,13 +1252,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   final ValueNotifier<bool> _showBufferingIndicator = ValueNotifier(false);
   Timer? _bufferingDebounceTimer;
 
-  // Gesture state
-  GestureMode _mode = GestureMode.none;
-  Offset _gestureStartPosition = Offset.zero;
-  Duration _gestureStartVideoPosition = Duration.zero;
-  double _gestureStartVolume = 0.0;
-  double _gestureStartBrightness = 0.0;
-
   // HUD state
   final ValueNotifier<SeekHudState?> _seekHud = ValueNotifier<SeekHudState?>(
     null,
@@ -1330,17 +1294,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   // Retro TV static loading messages
   String _tvStaticMessage = '📺 TUNING...';
-  String _tvStaticSubtext = ''; // Second line for video title
-  final List<String> _tvStaticMessages = [
-    '📺 BUFFERING... JUST KIDDING',
-    '📺 RETICULATING SPLINES...',
-    '📺 SUMMONING VIDEO GODS...',
-    '📺 ENGAGING HYPERDRIVE...',
-    '📺 CALIBRATING FLUX CAPACITOR',
-    '📺 CONSULTING THE ALGORITHMS',
-    '📺 WARMING UP THE PIXELS',
-    '📺 BRIBING THE SERVERS...',
-  ];
+  String _tvStaticSubtext = '';
 
   // Dynamic title for Debrify TV (no-playlist) flow
   String _dynamicTitle = '';
@@ -1394,7 +1348,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // The dock and the zap banner share the bottom strip, and the dock is
     // raised from several places that never go through _toggleControls
     // (volume keys, pointer wake). Watching the notifier catches all of them.
-    _controlsVisible.addListener(_onControlsVisibilityChanged);
+    _controlsVisible.addListener(_controlsRuntime.onControlsVisibilityChanged);
 
     // onPause fires on the transition to AppLifecycleState.paused — Android's
     // onStop, i.e. Home or an app switch. Picture-in-Picture keeps the
@@ -1619,7 +1573,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     super.didUpdateWidget(oldWidget);
     // `hideOptions` / `hideSeekbar` arrive through the widget, not through an
     // inherited dependency, so didChangeDependencies never fires for them.
-    _refreshDockGeometry();
+    _dockLayout.refreshDockGeometry();
     if (widget.channelName != oldWidget.channelName) {
       final String? trimmed = widget.channelName?.trim();
       if ((trimmed == null || trimmed.isEmpty) && _currentChannelName != null) {
@@ -1634,30 +1588,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         });
       }
     }
-  }
-
-  void _startTransitionOverlay() {
-    if (!mounted) return;
-    _rainbowActive = true;
-    _transitionRunning = true;
-    _transitionStopTimer?.cancel();
-    _transitionPhaseTimer?.cancel();
-    _transitionPhase = 1;
-    // Pick a random retro TV message and reset subtext
-    _tvStaticMessage =
-        _tvStaticMessages[math.Random().nextInt(_tvStaticMessages.length)];
-    _tvStaticSubtext = ''; // Clear subtext until video is ready
-    debugPrint('Player: Transition overlay started.');
-    // Match Android TV: update every 50ms for smooth static effect
-    _rainbowController.repeat(
-      period: VideoPlayerTimingConstants.rainbowRepeatPeriod,
-    );
-    if (mounted) setState(() {});
-  }
-
-  void _clearBufferingIndicator() {
-    _bufferingDebounceTimer?.cancel();
-    _showBufferingIndicator.value = false;
   }
 
   /// Load default player settings (aspect)
@@ -1696,36 +1626,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (!dockVisible) return 28;
     final inset = MediaQuery.paddingOf(context).bottom;
     return math.max(28.0, dockExtent + 8 - inset);
-  }
-
-  Future<void> _loadDockPrefs() async {
-    final style = await PlayerAppearanceStorage.getPlayerDockStyle();
-    final palette = await PlayerAppearanceStorage.getPlayerDockPalette();
-    final size = await PlayerAppearanceStorage.getPlayerDockSize();
-    if (!mounted) return;
-    setState(() {
-      _dockStyle = PlayerDockStyle.fromPref(style);
-      _dockPalette = PlayerDockPalette.fromPref(palette);
-      _dockSize = PlayerDockSize.fromPref(size);
-      // Style/size are part of the geometry signature but arrive here, not
-      // through an inherited dependency.
-      _lastDockGeometrySignature = '';
-      // Deliberately NOT seeded to the viewport height. Over-protecting the
-      // whole screen kills every gesture until the first measurement, and it
-      // also strands the fallback case: when DockMetrics.compute returns null
-      // the classic subtree renders and no reporter is ever mounted, so the
-      // seed would never be corrected. 0 means `_dockBand` yields the legacy
-      // constant, which is exactly right for both.
-    });
-  }
-
-  /// Overlays inside the player share its route scope, which already has a
-  /// focused child (the player root) — so their `autofocus` is silently
-  /// discarded and the first OK does nothing. Releasing the current focus as
-  /// the overlay appears lets its autofocus node claim it.
-  void _tvReleaseFocusForOverlay() {
-    if (!PlatformUtil.isTelevision) return;
-    FocusManager.instance.primaryFocus?.unfocus();
   }
 
   // ── Live channel zapping ─────────────────────────────────────────────────
@@ -1972,7 +1872,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _tvPlayPauseFocus.dispose();
     _tvProgressFocus.dispose();
     _tvRootFocus.dispose();
-    _controlsVisible.removeListener(_onControlsVisibilityChanged);
+    _controlsVisible.removeListener(
+      _controlsRuntime.onControlsVisibilityChanged,
+    );
     _controlsVisible.dispose();
     _seekHud.dispose();
     _verticalHud.dispose();
@@ -2061,170 +1963,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   Timer? _autosaveTimer;
 
-  /// True while the auto-hide poll is being held off by a scrub, a pause, a
-  /// route or an overlay — so the tick that finds the blocker gone can grant a
-  /// full interval instead of hiding on the spot.
-  bool _tvAutoHideBlocked = false;
-
-  void _scheduleAutoHide() {
-    _hideTimer?.cancel();
-    _hideTimer = Timer(VideoPlayerTimingConstants.controlsAutoHideDuration, () {
-      if (!mounted) return;
-      // Televisions dismiss the dock on INACTIVITY, the way an OTT transport
-      // bar does, and only while something is actually playing. A paused TV
-      // bar staying up is correct — BACK is how you dismiss that one.
-      if (PlatformUtil.isTelevision) {
-        // Nothing on screen to dismiss — let the timer lapse rather than
-        // re-arming one that would poll forever behind a hidden bar.
-        if (!_controlsVisible.value) return;
-        // BLOCKED, not finished. A tracks/episodes sheet is a ROUTE: it takes
-        // focus, and the bar would be excluded underneath it, leaving nothing
-        // sane to focus when the sheet closes. A scrub owns the bar outright,
-        // and a paused player is meant to keep it.
-        //
-        // Re-arm instead of returning: this is a one-shot Timer, so a bare
-        // return SPENT it — a scrub or a sheet lasting longer than the
-        // interval meant the dock never auto-hid again for the rest of the
-        // session. Re-arming makes the block a pause, not a cancellation.
-        final route = ModalRoute.of(context);
-        if (_tvScrubTarget != null ||
-            !_isPlaying ||
-            (route != null && !route.isCurrent) ||
-            _anyPlayerOverlayOpen) {
-          _tvAutoHideBlocked = true;
-          _scheduleAutoHide();
-          return;
-        }
-        if (_tvAutoHideBlocked) {
-          // The blocker cleared somewhere inside the last poll. Start the
-          // interval again from NOW: closing a sheet must not be met by a
-          // countdown that already ran out behind it.
-          _tvAutoHideBlocked = false;
-          _scheduleAutoHide();
-          return;
-        }
-        // Deliberately NOT gated on "focus is inside the bar". Raising the bar
-        // always focuses Play/Pause, so that test is true for the entire life
-        // of the bar and the timer could never fire — the dock sat over
-        // playing video until the user pressed BACK. Every key that reaches
-        // the player and every bar action reschedules this timer, so what
-        // actually elapses here is INACTIVITY, which is what an OTT dock
-        // dismisses on. Route through _tvHideBar so focus leaves the bar
-        // before it is excluded; setting the flag alone would strand the
-        // remote on a node that no longer exists.
-        _tvHideBar();
-        return;
-      }
-      _controlsVisible.value = false;
-    });
-  }
-
-  // ---- Television transport bar -------------------------------------------
-
-  /// Raise the bar and put focus on Play/Pause (not the first button — the
-  /// control you want 90% of the time should be under the thumb already).
-  void _tvShowBar() {
-    _controlsVisible.value = true;
-    // A fresh raise starts from a clean slate: a stale "was blocked" left over
-    // from the previous time the bar was up would silently buy this one an
-    // extra interval before it could hide.
-    _tvAutoHideBlocked = false;
-    _scheduleAutoHide();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_controlsVisible.value) return;
-      // An open overlay owns the remote — the bar must not pull focus out
-      // from under it.
-      if (_anyPlayerOverlayOpen) return;
-      if (!_tvBarScope.hasFocus) _tvPlayPauseFocus.requestFocus();
-    });
-  }
-
-  /// Lower the bar and take focus back to the player root. Without the second
-  /// half the focused control is excluded from the tree and the remote dies.
-  void _tvHideBar() {
-    _controlsVisible.value = false;
-    // With an overlay up, focus belongs to the overlay (its claim may still
-    // be a frame away) — grabbing the root here would strand its DPAD.
-    if (!_anyPlayerOverlayOpen) _tvRootFocus.requestFocus();
-  }
-
-  /// Cinema scrub: hold LEFT/RIGHT to pause and preview a destination, OK to
-  /// confirm, BACK/DOWN to cancel. One seek on confirm, so the trackers and
-  /// resume see a single jump instead of a burst.
-  void _tvScrubBegin(int direction) {
-    if (_tvNoTimeline) return;
-    _tvScrubStartedAtGeneration = _tvScrubGeneration;
-    _tvScrubWasPlaying = _isPlaying;
-    if (_isPlaying) _player.pause();
-    _tvScrubTarget = _position;
-    _tvShowBar();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _tvScrubTarget != null) _tvProgressFocus.requestFocus();
-    });
-    _tvScrubStep(direction);
-  }
-
-  void _tvScrubStep(int direction) {
-    final base = _tvScrubTarget;
-    if (base == null) return;
-    // Accelerate with the hold: fine control at first, then long strides so a
-    // two-hour remux is crossable without holding the key for a minute.
-    final step = _tvScrubRepeats < 8
-        ? 10
-        : _tvScrubRepeats < 16
-        ? 30
-        : 60;
-    _tvScrubRepeats++;
-    final next = base + Duration(seconds: step * direction);
-    setState(() {
-      _tvScrubTarget = next < Duration.zero
-          ? Duration.zero
-          : (next > _duration ? _duration : next);
-    });
-    _scheduleAutoHide();
-  }
-
-  void _tvScrubCommit() {
-    final target = _tvScrubTarget;
-    // Captured when the scrub STARTED. Reading it here would always match and
-    // the guard would never fire — a scrub begun before a source switch would
-    // happily seek whatever replaced it.
-    final generation = _tvScrubStartedAtGeneration;
-    if (target == null) return;
-    setState(() => _tvScrubTarget = null);
-    _tvScrubRepeats = 0;
-    // A source switch or dispose bumps the generation; a confirm that lands
-    // afterwards must not seek whatever replaced the item being scrubbed.
-    if (generation != _tvScrubGeneration || !mounted) return;
-    _player.seek(target);
-    _trakt.traktScrobbleSeek(target);
-    _simkl.simklScrobbleSeek(target);
-    _mdblist.mdblistScrobbleSeek(target);
-    if (_tvScrubWasPlaying) _player.play();
-    if (!_anyPlayerOverlayOpen) _tvPlayPauseFocus.requestFocus();
-    // Fresh interval: the countdown that was running belonged to the scrub,
-    // and inheriting its remainder could drop the bar the instant OK lands.
-    _scheduleAutoHide();
-  }
-
-  /// Drop a scrub without seeking and without touching playback — the item it
-  /// belonged to is going away. Restoring "was playing" here would fight the
-  /// transition, which drives play/pause itself.
-  void _tvAbandonScrub() {
-    if (_tvScrubTarget == null) return;
-    _tvScrubTarget = null;
-    _tvScrubRepeats = 0;
-  }
-
-  void _tvScrubCancel() {
-    if (_tvScrubTarget == null) return;
-    setState(() => _tvScrubTarget = null);
-    _tvScrubRepeats = 0;
-    if (_tvScrubWasPlaying) _player.play();
-    if (!_anyPlayerOverlayOpen) _tvPlayPauseFocus.requestFocus();
-    _scheduleAutoHide();
-  }
-
   /// The television bar. Reuses every flag the touch call site already
   /// computes, so the two stay in step: live comes from the same
   /// zap-banner signal, sources/guide/record from the same capability checks.
@@ -2254,14 +1992,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       onPopInvokedWithResult: (didPop, _) {
         if (didPop || !mounted) return;
         if (_tvScrubTarget != null) {
-          _tvScrubCancel();
+          _tvRemote.tvScrubCancel();
           return;
         }
         if (_anyPlayerOverlayOpen) {
-          _closeTopPlayerOverlay();
+          _controlsRuntime.closeTopPlayerOverlay();
           return;
         }
-        if (_controlsVisible.value) _tvHideBar();
+        if (_controlsVisible.value) _controlsRuntime.tvHideBar();
       },
       child: TvControlsScope(
         seek: (target) {
@@ -2269,7 +2007,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           _trakt.traktScrobbleSeek(target);
           _simkl.simklScrobbleSeek(target);
           _mdblist.mdblistScrobbleSeek(target);
-          _scheduleAutoHide();
+          _controlsRuntime.scheduleAutoHide();
         },
         // `_` on purpose: `context` inside must keep resolving to the State's
         // context, exactly as before this wrapper existed — sheet callbacks
@@ -2305,9 +2043,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               progressFocusable: !_tvNoTimeline,
               // OK is claimed by the dock's own buttons, so those presses never
               // reach _handleTvKey and never restarted the countdown.
-              onInteract: _scheduleAutoHide,
+              onInteract: _controlsRuntime.scheduleAutoHide,
               scrubPreview: _tvScrubTarget,
-              onPlayPause: _togglePlay,
+              onPlayPause: _controlsRuntime.togglePlay,
               onShowTracks: () => _menuUi.showTracksSheet(context),
               onSpeed: _display.onSpeedButton,
               onAspect: _display.onAspectButton,
@@ -2397,371 +2135,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _showSourceSheet ||
       _showStremioTvGuide ||
       _showPlayerMenu;
-
-  /// Closes the topmost overlay and returns focus to the player root, which the
-  /// individual hide methods do not do on their own.
-  void _closeTopPlayerOverlay() {
-    if (_showPlayerMenu) {
-      // Delegate: BACK inside the menu walks values -> rail before closing
-      // (tvOS Menu arrives here via PopScope, never as a key).
-      if (_playerMenuKey.currentState?.handleHostBack() != true) {
-        _menu.hidePlayerMenu();
-      }
-      // Still open means the press was spent on a pane change.
-      if (_showPlayerMenu) return;
-    } else if (_showSyncOverlay) {
-      _subtitleSync.hideSyncOverlay();
-    } else if (_showChannelGuide) {
-      _debrifyChannels.hideChannelGuideOverlay();
-    } else if (_showIptvChannelSheet) {
-      // Delegate: the guide's own back walks schedule -> channels first, and
-      // its close restores a search-interrupted category.
-      if (_iptvSheetKey.currentState?.handleHostBack() != true) {
-        _iptvGuide.hideIptvChannelSheet();
-      }
-      // It may still be open (pane change rather than close). Taking focus to
-      // the player root would leave its DPAD dead.
-      if (_showIptvChannelSheet) return;
-    } else if (_showSourceSheet) {
-      _sourceSwitch.hideSourceSheet();
-    } else if (_showStremioTvGuide) {
-      _stremioTv.hideStremioTvGuide();
-    } else {
-      return;
-    }
-    if (PlatformUtil.isTelevision) _tvRootFocus.requestFocus();
-  }
-
-  /// Opens whichever guide this session actually has, in the order the dock
-  /// offers them. Returns false when there is none, so the caller can fall back
-  /// to raising the transport bar.
-  bool _openTvGuide() {
-    if (_channelEntries.isNotEmpty && widget.requestChannelById != null) {
-      _debrifyChannels.showChannelGuideOverlay();
-      return true;
-    }
-    if (_hasStremioTvGuide) {
-      _stremioTv.showStremioTvGuideOverlay();
-      return true;
-    }
-    if (_effectiveIptvChannels?.isNotEmpty == true) {
-      _iptvGuide.showIptvChannelSheetOverlay();
-      return true;
-    }
-    return false;
-  }
-
-  /// Returns null to let the desktop mapping below handle the key.
-  KeyEventResult? _handleTvKey(LogicalKeyboardKey key) {
-    // Not const: LogicalKeyboardKey overrides ==, which a const set forbids.
-    // The Siri Remote's click pad arrives as `enter` (measured on device);
-    // `select`/`gameButtonA` cover Android TV remotes and game controllers.
-    final activate = <LogicalKeyboardKey>{
-      LogicalKeyboardKey.enter,
-      LogicalKeyboardKey.numpadEnter,
-      LogicalKeyboardKey.select,
-      LogicalKeyboardKey.gameButtonA,
-    };
-    final isLeft = key == LogicalKeyboardKey.arrowLeft;
-    final isRight = key == LogicalKeyboardKey.arrowRight;
-    final isBack =
-        key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack;
-
-    // A scrub in flight owns the remote completely.
-    if (_tvScrubTarget != null) {
-      if (isLeft || isRight) {
-        _tvScrubStep(isRight ? 1 : -1);
-      } else if (activate.contains(key)) {
-        _tvScrubCommit();
-      } else if (isBack || key == LogicalKeyboardKey.arrowDown) {
-        _tvScrubCancel();
-      }
-      return KeyEventResult.handled;
-    }
-
-    // Nothing is actionable until the first frame, and acting during a
-    // transition would drive the OUTGOING item.
-    // Nothing is actionable before the first frame, and during a switch most
-    // actions would drive the OUTGOING item. Two exceptions, both deliberate:
-    // BACK must always get you out (a tune can hang on the network), and
-    // LEFT/RIGHT must still zap, because a newer switch is allowed to
-    // supersede a slow one (_iptvSwitchTicket).
-    if (!_isReady || _isTransitioning) {
-      if (isBack) return null;
-      // Zap directly rather than falling through: the mapping below only zaps
-      // when the bar is hidden, so with it up the press would reach the seek
-      // branch and seek the OUTGOING item.
-      if ((isLeft || isRight) && _zapRing.canZapIptvChannel) {
-        _zapLadder.zapIptvChannel(isRight ? 1 : -1);
-        return KeyEventResult.handled;
-      }
-      return KeyEventResult.handled;
-    }
-
-    if (!_controlsVisible.value) {
-      if (activate.contains(key)) {
-        // While a skip is offered it owns OK: the button is on screen naming
-        // the action, and it lives outside the bar's focus scope so the remote
-        // has no other way to reach it.
-        if (_skip.activeSkipSegment != null) {
-          _skip.skipActiveSegment();
-          return KeyEventResult.handled;
-        }
-        // Native TV player: OK both toggles playback and raises the bar.
-        _togglePlay();
-        _tvShowBar();
-        return KeyEventResult.handled;
-      }
-      if (key == LogicalKeyboardKey.arrowDown) {
-        _tvShowBar();
-        return KeyEventResult.handled;
-      }
-      // UP opens the guide, matching the native TV player. The desktop mapping
-      // below only knows the Debrify-TV and Stremio guides, so on an IPTV
-      // session it fell through to volume and UP appeared dead.
-      if (key == LogicalKeyboardKey.arrowUp) {
-        if (_openTvGuide()) return KeyEventResult.handled;
-        _tvShowBar();
-        return KeyEventResult.handled;
-      }
-      if ((isLeft || isRight) && _tvNoTimeline) {
-        // No timeline to move along. Hand the key down ONLY when the mapping
-        // below has something real to do with it — zapping to the next
-        // channel. Falling through unconditionally reached the generic 10s
-        // seek, which on a live stream is a blind jump on a rolling window and
-        // on a `hideSeekbar` session is exactly the seek that session turned
-        // off. And never enter a scrub whose progress row is hidden.
-        return _zapRing.canZapIptvChannel ? null : KeyEventResult.handled;
-      }
-      if ((isLeft || isRight) && !_zapRing.canZapIptvChannel) {
-        // Repeats arriving in quick succession mean the key is held; the third
-        // one enters scrub. Slower taps stay 10s nudges, so a single press
-        // still does the obvious thing.
-        final now = DateTime.now();
-        final last = _tvLastArrowAt;
-        _tvScrubRepeats =
-            (last != null && now.difference(last).inMilliseconds < 400)
-            ? _tvScrubRepeats + 1
-            : 0;
-        _tvLastArrowAt = now;
-        if (_tvScrubRepeats >= 2 && _duration > Duration.zero) {
-          _tvScrubRepeats = 0;
-          _tvScrubBegin(isRight ? 1 : -1);
-          return KeyEventResult.handled;
-        }
-      }
-      // UP keeps its existing precedence (channel guide, Stremio guide) and
-      // LEFT/RIGHT fall through to zap-or-seek, both already below.
-      return null;
-    }
-
-    // Bar up: it owns the DPAD and OK.
-    if (isBack) {
-      _tvHideBar();
-      return KeyEventResult.handled;
-    }
-    if ((isLeft || isRight) && _tvProgressFocus.hasFocus) {
-      if (!_tvNoTimeline) {
-        _tvScrubBegin(isRight ? 1 : -1);
-        return KeyEventResult.handled;
-      }
-      return KeyEventResult.handled; // nothing to scrub; don't fall through
-    }
-    _scheduleAutoHide();
-    // Traversal and activation belong to the bar's own focus tree.
-    return KeyEventResult.ignored;
-  }
-
-  void _toggleControls() {
-    _controlsVisible.value = !_controlsVisible.value;
-    if (_controlsVisible.value) {
-      _scheduleAutoHide();
-      // Identity rides IN the bar (IPTV zap panel / Debrify TV banner both
-      // embed as the dock's info panel), so nothing floats when it rises.
-    }
-  }
-
-  void _onControlsVisibilityChanged() {
-    _debrifyBanner.syncPlaybackClockVisibility();
-    // The dock carries its own copy of the panel, so the floating one goes the
-    // instant the dock opens. Fading it would cross-dissolve two copies of the
-    // same panel at two different heights.
-    if (_controlsVisible.value) {
-      _iptvBanner.hideIptvZapBanner(immediate: true);
-      _debrifyBanner.hideDebrifyBanner(immediate: true);
-      // The Record button is about to be looked at — make sure it reflects
-      // engine captures stopped from the notification (which this screen
-      // otherwise never hears about).
-      if (_engineFlagOn) unawaited(_recording.refreshEngineRecordingState());
-    }
-    // Return focus to the player root whenever the bar goes down, so the
-    // remote is never left pointing at a control that has just been excluded
-    // from the tree.
-    if (PlatformUtil.isTelevision) {
-      // Not while an overlay is up: the source / guide / channel sheets
-      // autofocus their own KeyboardListener and drive a virtual focus index,
-      // so taking focus back here would leave them unable to see any keys.
-      if (!_controlsVisible.value &&
-          _tvBarScope.hasFocus &&
-          !_anyPlayerOverlayOpen) {
-        _tvRootFocus.requestFocus();
-      }
-    }
-    _iptvBanner.syncIptvBannerTicker();
-  }
-
-  Future<void> _handleDoubleTap(TapDownDetails details) async {
-    final box = context.findRenderObject() as RenderBox?;
-    if (box == null) return;
-    final size = box.size;
-    final localPos = details.localPosition;
-    // Avoid edge conflicts with system back gesture by requiring a margin
-    const edgeGuard = 24.0;
-    if (localPos.dx < edgeGuard || localPos.dx > size.width - edgeGuard) return;
-    // If controls visible, ignore double-taps near top/bottom bars to not clash with buttons/slider
-    if (_controlsVisible.value) {
-      const topBar = 72.0;
-      final bottomBar = _dockBand(72.0);
-      if (localPos.dy < topBar || localPos.dy > size.height - bottomBar) return;
-    }
-
-    // Default seek behavior for left/right taps
-    final isLeft = localPos.dx < size.width / 2;
-    final delta = VideoPlayerTimingConstants.seekDelta;
-    final target = _position + (isLeft ? -delta : delta);
-    final minPos = Duration.zero;
-    final maxPos = _duration;
-    final clamped = target < minPos
-        ? minPos
-        : (target > maxPos ? maxPos : target);
-    await _player.seek(clamped);
-    _trakt.traktScrobbleSeek(clamped);
-    _simkl.simklScrobbleSeek(clamped);
-    _mdblist.mdblistScrobbleSeek(clamped);
-    _ripple = DoubleTapRipple(
-      center: localPos,
-      icon: isLeft ? Icons.replay_10_rounded : Icons.forward_10_rounded,
-    );
-    setState(() {});
-    Future.delayed(const Duration(milliseconds: 450), () {
-      if (mounted) setState(() => _ripple = null);
-    });
-  }
-
-  void _onPanStart(DragStartDetails details) async {
-    // If controls are visible, ignore pans that begin within top/bottom bars so buttons and slider work unaffected
-    _panIgnore = false;
-    if (_controlsVisible.value) {
-      final box = context.findRenderObject() as RenderBox?;
-      if (box != null) {
-        final size = box.size;
-        const topBar = 72.0;
-        final bottomBar = _dockBand(72.0);
-        final dy = details.localPosition.dy;
-        if (dy < topBar || dy > size.height - bottomBar) {
-          _panIgnore = true;
-          return;
-        }
-      }
-    }
-    _gestureStartPosition = details.localPosition;
-    _gestureStartVideoPosition = _position;
-    _gestureStartVolume = (_player.state.volume / 100.0).clamp(0.0, 1.0);
-    _gestureStartBrightness = await PlayerDisplayControls.instance.brightness();
-    if (!mounted) return;
-    _mode = GestureMode.none;
-    _verticalHud.value = null;
-    _seekHud.value = null;
-  }
-
-  void _onPanUpdate(DragUpdateDetails details) {
-    if (_panIgnore) return;
-    final dx = details.localPosition.dx - _gestureStartPosition.dx;
-    final dy = details.localPosition.dy - _gestureStartPosition.dy;
-    final absDx = dx.abs();
-    final absDy = dy.abs();
-    final size = (context.findRenderObject() as RenderBox).size;
-
-    // Decide mode on first significant movement
-    if (_mode == GestureMode.none) {
-      if (absDx > 12 && absDx > absDy) {
-        _mode = GestureMode.seek;
-      } else if (absDy > 12) {
-        final isLeftHalf = _gestureStartPosition.dx < size.width / 2;
-        if (isLeftHalf && !PlayerDisplayControls.supportsBrightness) return;
-        _mode = isLeftHalf ? GestureMode.brightness : GestureMode.volume;
-      }
-    }
-
-    if (_mode == GestureMode.seek) {
-      final duration = _duration;
-      if (duration == Duration.zero) return;
-      // Map horizontal delta to seconds, proportional to width
-      final totalSeconds = duration.inSeconds.toDouble();
-      final seekSeconds = (dx / size.width) * math.min(120.0, totalSeconds);
-      var newPos =
-          _gestureStartVideoPosition + Duration(seconds: seekSeconds.round());
-      if (newPos < Duration.zero) newPos = Duration.zero;
-      if (newPos > duration) newPos = duration;
-      _seekHud.value = SeekHudState(
-        target: newPos,
-        base: _position,
-        isForward: newPos >= _position,
-      );
-    } else if (_mode == GestureMode.volume) {
-      var newVol = (_gestureStartVolume - dy / size.height).clamp(0.0, 1.0);
-      _player.setVolume((newVol * 100).clamp(0.0, 100.0));
-      _verticalHud.value = VerticalHudState(
-        kind: VerticalKind.volume,
-        value: newVol,
-      );
-    } else if (_mode == GestureMode.brightness) {
-      var newBright = (_gestureStartBrightness - dy / size.height).clamp(
-        0.0,
-        1.0,
-      );
-      unawaited(PlayerDisplayControls.instance.setBrightness(newBright));
-      _verticalHud.value = VerticalHudState(
-        kind: VerticalKind.brightness,
-        value: newBright,
-      );
-    }
-  }
-
-  void _onPanEnd(DragEndDetails details) {
-    if (_panIgnore) return;
-    if (_mode == GestureMode.seek && _seekHud.value != null) {
-      final target = _seekHud.value!.target;
-      _player.seek(target);
-      _trakt.traktScrobbleSeek(target);
-      _simkl.simklScrobbleSeek(target);
-      _mdblist.mdblistScrobbleSeek(target);
-    }
-    _mode = GestureMode.none;
-    Future.delayed(const Duration(milliseconds: 250), () {
-      if (mounted) {
-        _seekHud.value = null;
-        _verticalHud.value = null;
-      }
-    });
-  }
-
-  void _togglePlay() {
-    if (!_isReady) return;
-    if (_isPlaying) {
-      _activeMediaUserPaused = true;
-      _activeMediaShouldPlay = false;
-      _player.pause();
-      unawaited(_resumeSave.saveResume(positionOverride: _position));
-    } else {
-      // An explicit press is the one thing that clears a sleep stop.
-      _sleepStopLatched = false;
-      _activeMediaUserPaused = false;
-      _activeMediaShouldPlay = true;
-      _player.play();
-    }
-    _scheduleAutoHide();
-  }
 
   // Build subtitle view configuration from settings
   // NOTE: the television bar deliberately does NOT move subtitles.
@@ -3009,7 +2382,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             // DPAD belongs to the bar. Mirrors the native Android TV player so
             // both players behave the same. Touch and desktop never enter here.
             if (PlatformUtil.isTelevision) {
-              final tvResult = _handleTvKey(key);
+              final tvResult = _tvRemote.handleTvKey(key);
               if (tvResult != null) return tvResult;
             }
 
@@ -3057,7 +2430,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
             // Space -> Pause resume
             if (key == LogicalKeyboardKey.space) {
-              _togglePlay();
+              _controlsRuntime.togglePlay();
               return KeyEventResult.handled;
             }
 
@@ -3077,7 +2450,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
               // Otherwise, control volume
               _controlsVisible.value = true;
-              _scheduleAutoHide();
+              _controlsRuntime.scheduleAutoHide();
 
               // Increase volume
               final currentVolume = (_player.state.volume / 100.0).clamp(
@@ -3104,7 +2477,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             if (key == LogicalKeyboardKey.arrowDown) {
               // Show controls first
               _controlsVisible.value = true;
-              _scheduleAutoHide();
+              _controlsRuntime.scheduleAutoHide();
 
               // Decrease volume
               final currentVolume = (_player.state.volume / 100.0).clamp(
@@ -3131,9 +2504,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             // Center/Enter toggles play or shows controls
             if (isActivateKey(key)) {
               if (_controlsVisible.value) {
-                _togglePlay();
+                _controlsRuntime.togglePlay();
               } else {
-                _toggleControls();
+                _controlsRuntime.toggleControls();
               }
               return KeyEventResult.handled;
             }
@@ -3187,7 +2560,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             if (key == LogicalKeyboardKey.mediaPlayPause ||
                 key == LogicalKeyboardKey.mediaPlay ||
                 key == LogicalKeyboardKey.mediaPause) {
-              _togglePlay();
+              _controlsRuntime.togglePlay();
               return KeyEventResult.handled;
             }
 
@@ -3538,15 +2911,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                         controlsVisible: _controlsVisible.value,
                         bottomBar: _dockBand(72.0),
                       )) {
-                        _toggleControls();
+                        _controlsRuntime.toggleControls();
                       }
                     },
-                    onDoubleTapDown: _handleDoubleTap,
+                    onDoubleTapDown: _gestures.handleDoubleTap,
                     onLongPressStart: _display.onLongPressStart,
                     onLongPressEnd: _display.onLongPressEnd,
-                    onPanStart: _onPanStart,
-                    onPanUpdate: _onPanUpdate,
-                    onPanEnd: _onPanEnd,
+                    onPanStart: _gestures.onPanStart,
+                    onPanUpdate: _gestures.onPanUpdate,
+                    onPanEnd: _gestures.onPanEnd,
                   ),
                 // Above the gesture layer: startup hides normal controls, but
                 // leaving the player must remain available while links resolve.
@@ -3675,7 +3048,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                   clock: _playbackUiClock,
                                   isPlaying: _isPlaying,
                                   isReady: isReady,
-                                  onPlayPause: _togglePlay,
+                                  onPlayPause: _controlsRuntime.togglePlay,
                                   onBack: () => Navigator.of(context).pop(),
                                   onAspect: _display.onAspectButton,
                                   onSpeed: _display.onSpeedButton,
@@ -3714,7 +3087,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                   },
                                   onSeekBarChangeEnd: () {
                                     _isSeekingWithSlider = false;
-                                    _scheduleAutoHide();
+                                    _controlsRuntime.scheduleAutoHide();
                                     if (_lastSliderSeekPos != null) {
                                       final settledPosition =
                                           _lastSliderSeekPos!;
@@ -4098,7 +3471,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 cursor: hideCursor
                     ? SystemMouseCursors.none
                     : MouseCursor.defer,
-                onHover: (_) => _wakeControlsOnPointer(),
+                onHover: (_) => _controlsRuntime.wakeControlsOnPointer(),
                 child: child,
               );
             },
@@ -4117,18 +3490,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _showSourceSheet ||
       _showStremioTvGuide ||
       _showPlayerMenu;
-
-  /// Called on mouse movement: reveal controls (and the cursor) if hidden and
-  /// (re)start the auto-hide countdown so continuous movement keeps them alive.
-  void _wakeControlsOnPointer() {
-    // Don't disturb the base controls while an overlay owns the screen; the
-    // cursor is already kept visible by _isAnyOverlayOpen in the builder.
-    if (_isAnyOverlayOpen) return;
-    if (!_controlsVisible.value) {
-      _controlsVisible.value = true;
-    }
-    _scheduleAutoHide();
-  }
 
   /// Reset subtitle-related state when switching content.
   void _resetSubtitleState() {
@@ -4172,6 +3533,283 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
     return null;
   }
+}
+
+class _VpPlayerGesturesHostAdapter implements VpPlayerGesturesHost {
+  _VpPlayerGesturesHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  ValueNotifier<bool> get controlsVisible => _s._controlsVisible;
+  @override
+  Duration get duration => _s._duration;
+  @override
+  mk.Player get player => _s._player;
+  @override
+  Duration get position => _s._position;
+  @override
+  set ripple(DoubleTapRipple? v) => _s._ripple = v;
+  @override
+  ValueNotifier<SeekHudState?> get seekHud => _s._seekHud;
+  @override
+  ValueNotifier<VerticalHudState?> get verticalHud => _s._verticalHud;
+  @override
+  double dockBand(double legacy) => _s._dockBand(legacy);
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  BuildContext get context => _s.context;
+  @override
+  void setState(VoidCallback fn) => _s._vpSetState(fn);
+  @override
+  void mdblistScrobbleSeek(Duration target) =>
+      _s._mdblist.mdblistScrobbleSeek(target);
+  @override
+  void simklScrobbleSeek(Duration seekTarget) =>
+      _s._simkl.simklScrobbleSeek(seekTarget);
+  @override
+  void traktScrobbleSeek(Duration seekTarget) =>
+      _s._trakt.traktScrobbleSeek(seekTarget);
+}
+
+class _VpTvRemoteHostAdapter implements VpTvRemoteHost {
+  _VpTvRemoteHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  bool get anyPlayerOverlayOpen => _s._anyPlayerOverlayOpen;
+  @override
+  List<ChannelEntry> get channelEntries => _s._channelEntries;
+  @override
+  ValueNotifier<bool> get controlsVisible => _s._controlsVisible;
+  @override
+  Duration get duration => _s._duration;
+  @override
+  List<IptvChannel>? get effectiveIptvChannels => _s._effectiveIptvChannels;
+  @override
+  bool get hasStremioTvGuide => _s._hasStremioTvGuide;
+  @override
+  bool get isPlaying => _s._isPlaying;
+  @override
+  bool get isReady => _s._isReady;
+  @override
+  bool get isTransitioning => _s._isTransitioning;
+  @override
+  mk.Player get player => _s._player;
+  @override
+  Duration get position => _s._position;
+  @override
+  bool get tvNoTimeline => _s._tvNoTimeline;
+  @override
+  FocusNode get tvPlayPauseFocus => _s._tvPlayPauseFocus;
+  @override
+  FocusNode get tvProgressFocus => _s._tvProgressFocus;
+  @override
+  int get tvScrubGeneration => _s._tvScrubGeneration;
+  @override
+  Duration? get tvScrubTarget => _s._tvScrubTarget;
+  @override
+  set tvScrubTarget(Duration? v) => _s._tvScrubTarget = v;
+  @override
+  void scheduleAutoHide() => _s._controlsRuntime.scheduleAutoHide();
+  @override
+  void tvShowBar() => _s._controlsRuntime.tvShowBar();
+  @override
+  void tvHideBar() => _s._controlsRuntime.tvHideBar();
+  @override
+  void togglePlay() => _s._controlsRuntime.togglePlay();
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  void setState(VoidCallback fn) => _s._vpSetState(fn);
+  @override
+  Future<Map<String, dynamic>?> Function(String channelId)?
+  get requestChannelById => _s.widget.requestChannelById;
+  @override
+  void showChannelGuideOverlay() =>
+      _s._debrifyChannels.showChannelGuideOverlay();
+  @override
+  void showIptvChannelSheetOverlay() =>
+      _s._iptvGuide.showIptvChannelSheetOverlay();
+  @override
+  void mdblistScrobbleSeek(Duration target) =>
+      _s._mdblist.mdblistScrobbleSeek(target);
+  @override
+  void simklScrobbleSeek(Duration seekTarget) =>
+      _s._simkl.simklScrobbleSeek(seekTarget);
+  @override
+  SkipSegment? get activeSkipSegment => _s._skip.activeSkipSegment;
+  @override
+  void skipActiveSegment() => _s._skip.skipActiveSegment();
+  @override
+  void showStremioTvGuideOverlay() => _s._stremioTv.showStremioTvGuideOverlay();
+  @override
+  void traktScrobbleSeek(Duration seekTarget) =>
+      _s._trakt.traktScrobbleSeek(seekTarget);
+  @override
+  void zapIptvChannel(int delta) => _s._zapLadder.zapIptvChannel(delta);
+  @override
+  bool get canZapIptvChannel => _s._zapRing.canZapIptvChannel;
+}
+
+class _VpControlsRuntimeHostAdapter implements VpControlsRuntimeHost {
+  _VpControlsRuntimeHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  set activeMediaShouldPlay(bool v) => _s._activeMediaShouldPlay = v;
+  @override
+  set activeMediaUserPaused(bool v) => _s._activeMediaUserPaused = v;
+  @override
+  bool get anyPlayerOverlayOpen => _s._anyPlayerOverlayOpen;
+  @override
+  ValueNotifier<bool> get controlsVisible => _s._controlsVisible;
+  @override
+  bool get engineFlagOn => _s._engineFlagOn;
+  @override
+  Timer? get hideTimer => _s._hideTimer;
+  @override
+  set hideTimer(Timer? v) => _s._hideTimer = v;
+  @override
+  GlobalKey<IptvChannelSheetState> get iptvSheetKey => _s._iptvSheetKey;
+  @override
+  bool get isAnyOverlayOpen => _s._isAnyOverlayOpen;
+  @override
+  bool get isPlaying => _s._isPlaying;
+  @override
+  bool get isReady => _s._isReady;
+  @override
+  mk.Player get player => _s._player;
+  @override
+  GlobalKey<PlayerMenuPanelState> get playerMenuKey => _s._playerMenuKey;
+  @override
+  Duration get position => _s._position;
+  @override
+  bool get showChannelGuide => _s._showChannelGuide;
+  @override
+  bool get showIptvChannelSheet => _s._showIptvChannelSheet;
+  @override
+  bool get showPlayerMenu => _s._showPlayerMenu;
+  @override
+  bool get showSourceSheet => _s._showSourceSheet;
+  @override
+  bool get showStremioTvGuide => _s._showStremioTvGuide;
+  @override
+  bool get showSyncOverlay => _s._showSyncOverlay;
+  @override
+  set sleepStopLatched(bool v) => _s._sleepStopLatched = v;
+  @override
+  FocusScopeNode get tvBarScope => _s._tvBarScope;
+  @override
+  FocusNode get tvPlayPauseFocus => _s._tvPlayPauseFocus;
+  @override
+  FocusNode get tvRootFocus => _s._tvRootFocus;
+  @override
+  Duration? get tvScrubTarget => _s._tvScrubTarget;
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  BuildContext get context => _s.context;
+  @override
+  void hideDebrifyBanner({bool immediate = false}) =>
+      _s._debrifyBanner.hideDebrifyBanner(immediate: immediate);
+  @override
+  void syncPlaybackClockVisibility() =>
+      _s._debrifyBanner.syncPlaybackClockVisibility();
+  @override
+  void hideChannelGuideOverlay() =>
+      _s._debrifyChannels.hideChannelGuideOverlay();
+  @override
+  void hideIptvZapBanner({bool immediate = false}) =>
+      _s._iptvBanner.hideIptvZapBanner(immediate: immediate);
+  @override
+  void syncIptvBannerTicker() => _s._iptvBanner.syncIptvBannerTicker();
+  @override
+  void hideIptvChannelSheet() => _s._iptvGuide.hideIptvChannelSheet();
+  @override
+  void hidePlayerMenu() => _s._menu.hidePlayerMenu();
+  @override
+  Future<void> refreshEngineRecordingState() =>
+      _s._recording.refreshEngineRecordingState();
+  @override
+  Future<void> saveResume({
+    bool debounced = false,
+    Duration? positionOverride,
+  }) => _s._resumeSave.saveResume(
+    debounced: debounced,
+    positionOverride: positionOverride,
+  );
+  @override
+  void hideSourceSheet() => _s._sourceSwitch.hideSourceSheet();
+  @override
+  void hideStremioTvGuide() => _s._stremioTv.hideStremioTvGuide();
+  @override
+  void hideSyncOverlay() => _s._subtitleSync.hideSyncOverlay();
+}
+
+class _VpDockLayoutHostAdapter implements VpDockLayoutHost {
+  _VpDockLayoutHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  ValueNotifier<double> get dockExtent => _s._dockExtent;
+  @override
+  int get dockGeometryGeneration => _s._dockGeometryGeneration;
+  @override
+  set dockGeometryGeneration(int v) => _s._dockGeometryGeneration = v;
+  @override
+  set dockPalette(PlayerDockPalette v) => _s._dockPalette = v;
+  @override
+  PlayerDockSize get dockSize => _s._dockSize;
+  @override
+  set dockSize(PlayerDockSize v) => _s._dockSize = v;
+  @override
+  PlayerDockStyle get dockStyle => _s._dockStyle;
+  @override
+  set dockStyle(PlayerDockStyle v) => _s._dockStyle = v;
+  @override
+  int get infoPanelGeneration => _s._infoPanelGeneration;
+  @override
+  set infoPanelGeneration(int v) => _s._infoPanelGeneration = v;
+  @override
+  set infoPanelHeight(double v) => _s._infoPanelHeight = v;
+  @override
+  set lastInfoPanelSignature(String v) => _s._lastInfoPanelSignature = v;
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  BuildContext get context => _s.context;
+  @override
+  void setState(VoidCallback fn) => _s._vpSetState(fn);
+  @override
+  bool get hideOptions => _s.widget.hideOptions;
+  @override
+  bool get hideSeekbar => _s.widget.hideSeekbar;
+}
+
+class _VpTransitionOverlayHostAdapter implements VpTransitionOverlayHost {
+  _VpTransitionOverlayHostAdapter(this._s);
+  final _VideoPlayerScreenState _s;
+  @override
+  Timer? get bufferingDebounceTimer => _s._bufferingDebounceTimer;
+  @override
+  set rainbowActive(bool v) => _s._rainbowActive = v;
+  @override
+  AnimationController get rainbowController => _s._rainbowController;
+  @override
+  ValueNotifier<bool> get showBufferingIndicator => _s._showBufferingIndicator;
+  @override
+  set transitionPhase(int v) => _s._transitionPhase = v;
+  @override
+  Timer? get transitionPhaseTimer => _s._transitionPhaseTimer;
+  @override
+  set transitionRunning(bool v) => _s._transitionRunning = v;
+  @override
+  Timer? get transitionStopTimer => _s._transitionStopTimer;
+  @override
+  set tvStaticMessage(String v) => _s._tvStaticMessage = v;
+  @override
+  set tvStaticSubtext(String v) => _s._tvStaticSubtext = v;
+  @override
+  bool get mounted => _s.mounted;
+  @override
+  void setState(VoidCallback fn) => _s._vpSetState(fn);
 }
 
 class _VpPlayerStartupHostAdapter implements VpPlayerStartupHost {
@@ -4241,7 +3879,7 @@ class _VpPlayerStartupHostAdapter implements VpPlayerStartupHost {
   @override
   ChannelStartupWatch? get stremioTvStartupWatch => _s._stremioTvStartupWatch;
   @override
-  Future<void> loadDockPrefs() => _s._loadDockPrefs();
+  Future<void> loadDockPrefs() => _s._dockLayout.loadDockPrefs();
   @override
   Duration? randomStartOffset(Duration duration) =>
       _s._randomStartOffset(duration);
@@ -4249,7 +3887,7 @@ class _VpPlayerStartupHostAdapter implements VpPlayerStartupHost {
   Duration? percentStartOffset(Duration duration) =>
       _s._percentStartOffset(duration);
   @override
-  void scheduleAutoHide() => _s._scheduleAutoHide();
+  void scheduleAutoHide() => _s._controlsRuntime.scheduleAutoHide();
   @override
   Future<void> loadPlayerDefaults() => _s._playerDefaults.loadPlayerDefaults();
   @override
@@ -5371,7 +5009,7 @@ class _VpPlaylistLoadHostAdapter implements VpPlaylistLoadHost {
   @override
   set tvScrubGeneration(int v) => _s._tvScrubGeneration = v;
   @override
-  void tvAbandonScrub() => _s._tvAbandonScrub();
+  void tvAbandonScrub() => _s._tvRemote.tvAbandonScrub();
   @override
   void resetSubtitleState() => _s._resetSubtitleState();
   @override
@@ -5554,7 +5192,7 @@ class _VpShuffleHostAdapter implements VpShuffleHost {
   @override
   SeriesPlaylist? get syntheticGuidePlaylist => _s._syntheticGuidePlaylist;
   @override
-  void scheduleAutoHide() => _s._scheduleAutoHide();
+  void scheduleAutoHide() => _s._controlsRuntime.scheduleAutoHide();
   @override
   ({int? season, int? episode}) traktSeasonEpisode() =>
       _s._traktSeasonEpisode();
@@ -5649,9 +5287,10 @@ class _VpEpisodeAdjacentHostAdapter implements VpEpisodeAdjacentHost {
   @override
   set tvScrubGeneration(int v) => _s._tvScrubGeneration = v;
   @override
-  void clearBufferingIndicator() => _s._clearBufferingIndicator();
+  void clearBufferingIndicator() =>
+      _s._transitionOverlay.clearBufferingIndicator();
   @override
-  void tvAbandonScrub() => _s._tvAbandonScrub();
+  void tvAbandonScrub() => _s._tvRemote.tvAbandonScrub();
   @override
   ({int? season, int? episode}) traktSeasonEpisode() =>
       _s._traktSeasonEpisode();
@@ -5757,11 +5396,13 @@ class _VpEpisodeNextHostAdapter implements VpEpisodeNextHost {
   @override
   set tvStaticSubtext(String v) => _s._tvStaticSubtext = v;
   @override
-  void clearBufferingIndicator() => _s._clearBufferingIndicator();
+  void clearBufferingIndicator() =>
+      _s._transitionOverlay.clearBufferingIndicator();
   @override
-  void startTransitionOverlay() => _s._startTransitionOverlay();
+  void startTransitionOverlay() =>
+      _s._transitionOverlay.startTransitionOverlay();
   @override
-  void tvAbandonScrub() => _s._tvAbandonScrub();
+  void tvAbandonScrub() => _s._tvRemote.tvAbandonScrub();
   @override
   void resetSubtitleState() => _s._resetSubtitleState();
   @override
@@ -6230,11 +5871,13 @@ class _VpStremioTvChannelsHostAdapter implements VpStremioTvChannelsHost {
   @override
   set tvScrubGeneration(int v) => _s._tvScrubGeneration = v;
   @override
-  void tvAbandonScrub() => _s._tvAbandonScrub();
+  void tvAbandonScrub() => _s._tvRemote.tvAbandonScrub();
   @override
-  void clearBufferingIndicator() => _s._clearBufferingIndicator();
+  void clearBufferingIndicator() =>
+      _s._transitionOverlay.clearBufferingIndicator();
   @override
-  void startTransitionOverlay() => _s._startTransitionOverlay();
+  void startTransitionOverlay() =>
+      _s._transitionOverlay.startTransitionOverlay();
   @override
   void resetSubtitleState() => _s._resetSubtitleState();
   @override
@@ -6359,11 +6002,13 @@ class _VpDebrifyTvChannelsHostAdapter implements VpDebrifyTvChannelsHost {
   @override
   set tvStaticSubtext(String v) => _s._tvStaticSubtext = v;
   @override
-  void tvAbandonScrub() => _s._tvAbandonScrub();
+  void tvAbandonScrub() => _s._tvRemote.tvAbandonScrub();
   @override
-  void clearBufferingIndicator() => _s._clearBufferingIndicator();
+  void clearBufferingIndicator() =>
+      _s._transitionOverlay.clearBufferingIndicator();
   @override
-  void startTransitionOverlay() => _s._startTransitionOverlay();
+  void startTransitionOverlay() =>
+      _s._transitionOverlay.startTransitionOverlay();
   @override
   void resetSubtitleState() => _s._resetSubtitleState();
   @override
@@ -6539,11 +6184,13 @@ class _VpSourcePlaylistSwitchHostAdapter implements VpSourcePlaylistSwitchHost {
   void resumeTrackingAfterValidationGate() =>
       _s._startupGate.resumeTrackingAfterValidationGate();
   @override
-  void tvAbandonScrub() => _s._tvAbandonScrub();
+  void tvAbandonScrub() => _s._tvRemote.tvAbandonScrub();
   @override
-  void startTransitionOverlay() => _s._startTransitionOverlay();
+  void startTransitionOverlay() =>
+      _s._transitionOverlay.startTransitionOverlay();
   @override
-  void clearBufferingIndicator() => _s._clearBufferingIndicator();
+  void clearBufferingIndicator() =>
+      _s._transitionOverlay.clearBufferingIndicator();
   @override
   Future<void> waitForVideoReady() => _s._mediaWaits.waitForVideoReady();
   @override
@@ -6730,11 +6377,13 @@ class _VpSourceSwitchHostAdapter implements VpSourceSwitchHost {
   void resumeTrackingAfterValidationGate() =>
       _s._startupGate.resumeTrackingAfterValidationGate();
   @override
-  void tvAbandonScrub() => _s._tvAbandonScrub();
+  void tvAbandonScrub() => _s._tvRemote.tvAbandonScrub();
   @override
-  void startTransitionOverlay() => _s._startTransitionOverlay();
+  void startTransitionOverlay() =>
+      _s._transitionOverlay.startTransitionOverlay();
   @override
-  void clearBufferingIndicator() => _s._clearBufferingIndicator();
+  void clearBufferingIndicator() =>
+      _s._transitionOverlay.clearBufferingIndicator();
   @override
   void resetSubtitleState() => _s._resetSubtitleState();
   @override
@@ -7150,7 +6799,8 @@ class _VpIptvChannelSwitchHostAdapter implements VpIptvChannelSwitchHost {
   void cancelPendingIptvCatchup({bool hideFeedback = true}) =>
       _s._iptvGuide.cancelPendingIptvCatchup(hideFeedback: hideFeedback);
   @override
-  void clearBufferingIndicator() => _s._clearBufferingIndicator();
+  void clearBufferingIndicator() =>
+      _s._transitionOverlay.clearBufferingIndicator();
   @override
   set currentChannelName(String? v) => _s._currentChannelName = v;
   @override
@@ -7265,7 +6915,8 @@ class _VpIptvChannelSwitchHostAdapter implements VpIptvChannelSwitchHost {
   @override
   bool get sleepStopLatched => _s._sleepStopLatched;
   @override
-  void startTransitionOverlay() => _s._startTransitionOverlay();
+  void startTransitionOverlay() =>
+      _s._transitionOverlay.startTransitionOverlay();
   @override
   Future<void> stopRecording({bool userInitiated = true}) =>
       _s._recording.stopRecording(userInitiated: userInitiated);
@@ -7292,7 +6943,7 @@ class _VpIptvChannelSwitchHostAdapter implements VpIptvChannelSwitchHost {
     httpHeaders: httpHeaders,
   );
   @override
-  void tvAbandonScrub() => _s._tvAbandonScrub();
+  void tvAbandonScrub() => _s._tvRemote.tvAbandonScrub();
   @override
   int get tvScrubGeneration => _s._tvScrubGeneration;
   @override
@@ -7388,7 +7039,7 @@ class _VpIptvGuideCatchupHostAdapter implements VpIptvGuideCatchupHost {
   @override
   void resetIptvZapPaging() => _s._zapRing.resetIptvZapPaging();
   @override
-  void scheduleAutoHide() => _s._scheduleAutoHide();
+  void scheduleAutoHide() => _s._controlsRuntime.scheduleAutoHide();
   @override
   set showIptvChannelSheet(bool v) => _s._showIptvChannelSheet = v;
   @override
@@ -7887,7 +7538,8 @@ class _VpPlayerMenuHostAdapter implements VpPlayerMenuHost {
   @override
   set subtitleAudioRevision(int v) => _s._subtitleAudioRevision = v;
   @override
-  void tvReleaseFocusForOverlay() => _s._tvReleaseFocusForOverlay();
+  void tvReleaseFocusForOverlay() =>
+      _s._controlsRuntime.tvReleaseFocusForOverlay();
   @override
   FocusNode get tvRootFocus => _s._tvRootFocus;
   @override
@@ -8520,7 +8172,8 @@ class _VpSubtitleAutoSyncHostAdapter implements VpSubtitleAutoSyncHost {
   @override
   set showSyncOverlay(bool v) => _s._showSyncOverlay = v;
   @override
-  void tvReleaseFocusForOverlay() => _s._tvReleaseFocusForOverlay();
+  void tvReleaseFocusForOverlay() =>
+      _s._controlsRuntime.tvReleaseFocusForOverlay();
 }
 
 class _VpPipLifecycleHostAdapter implements VpPipLifecycleHost {
@@ -8560,7 +8213,7 @@ class _VpPipLifecycleHostAdapter implements VpPipLifecycleHost {
   Future<void> setNativeSubtitleVisibilityForTrack(mk.SubtitleTrack track) =>
       _s._subtitleApply.setNativeSubtitleVisibilityForTrack(track);
   @override
-  void togglePlay() => _s._togglePlay();
+  void togglePlay() => _s._controlsRuntime.togglePlay();
   @override
   Future<void> goToNextEpisode() => _s._episodeNext.goToNextEpisode();
   @override
@@ -8790,7 +8443,7 @@ class _VpDisplayModeHostAdapter implements VpDisplayModeHost {
   @override
   mk.Player get player => _s._player;
   @override
-  void scheduleAutoHide() => _s._scheduleAutoHide();
+  void scheduleAutoHide() => _s._controlsRuntime.scheduleAutoHide();
   @override
   Future<void> saveResume() => _s._resumeSave.saveResume();
   @override
@@ -8879,7 +8532,7 @@ class _VpSleepTimerHostAdapter implements VpSleepTimerHost {
   @override
   IptvChannel? get currentIptvChannel => _s._currentIptvChannel;
   @override
-  void scheduleAutoHide() => _s._scheduleAutoHide();
+  void scheduleAutoHide() => _s._controlsRuntime.scheduleAutoHide();
   @override
   set sleepStopLatched(bool v) => _s._sleepStopLatched = v;
   @override
