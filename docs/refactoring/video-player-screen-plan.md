@@ -12213,6 +12213,44 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
   T49, T75, T38, T55, T50.
 - Next: Step 1.
 
+### 2026-10-25 — Phase 21a Step 1 (executor: Claude)
+
+- **Tooling (`76e706b48`).** Generator `draft_vplayer_controls_moves.py`
+  flipped to FINAL (manifest `vplayer_p21.json` status `applied`, label
+  FINAL, nothing pending: M5 `8587c7906` was docs-only, so the base stays
+  `5214f7a7e`). CI runs P21 current and `--self-test` and adds P20 history
+  `--at 5214f7a7e` (new parser package `ci_moves_p20_history`); the analyzer
+  step reads `vplayer_p21.json` with the new inventory
+  `vplayer_p21_analyzer.json` (P20 entries plus the two Step T additions,
+  `p21_receiver_probe_additions`). The allowlist gains the facade's
+  `player_appearance_storage` `unused_import` (21b C1). The three theme lists
+  gain the five files. Facade ratchet 8,986 → **8,639**
+  (`file_size_baseline.txt`). No size exception, so
+  `check_search_architecture.py` and `vplayer_architecture_test.py` need no
+  list change (both pass on the moved tree). No seam relocation: neither seam
+  proof nor its guard test needed an edit. The Step 0 retargets
+  (`221fc43ce`) were already applied.
+- **Production move (`a151e0356`).** The FINAL generator ran with the Step T
+  parser package (`p21/step1/probe/`, `gen.log`): **zero differences**,
+  sizes equal to the Step T prototypes (VpTransitionOverlay 60, VpDockLayout
+  84, VpControlsRuntime 255, VpTvRemote 277, VpPlayerGestures 176; 55
+  retained references; Hosts 12/12, 13/17, 38/39, 33/34, 14/14). The output
+  is byte-identical to the Step T probe and was copied unchanged into `lib/`.
+  Facade **8,986 → 8,639**.
+- **Checks** (`p21/step1/checks.sh`, `checks.log`; all 13 steps exit 0):
+  dart format (P21 lib, `test/features/video_player`, the theme guard and the
+  playback checkpoint test), file sizes, storage keys, search and vplayer
+  architecture; move checks P21 current, P21 `--self-test` and P20 history at
+  `5214f7a7e`, each "exhaustive Dart ownership; 0 differences"; the seam
+  `--self-test` (`p20_relocated_instance` true, ownership phase 21, 675
+  original spans) and the platform seam `--self-test` (active phase 21,
+  every `s2*`/relocated count unchanged).
+- **Analyzer** (`p21/step1/analyze.txt`, the P20 `analyze-cmd.txt` path list):
+  **627 issues, 0 errors**, as in the Step T probe (625 at the P20 merge + the
+  two receiver-probe identities). Allowlist: 123 recorded, nothing new.
+  Comparator: 232 scoped diagnostics, **0 additions** (self-test passes).
+- Next: the reduced gate.
+
 ## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
 
 Reviewed at `c5c8e3500` (facade byte-identical to `be4cd78aa`; split,
