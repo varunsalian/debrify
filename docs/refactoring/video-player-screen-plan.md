@@ -6209,7 +6209,7 @@ plan, evidence `p21b/audit/`):
 
    **Recorded open Follow-ups** (listed in the final record as open, not
    settled): P20 hazard 4 (a failed start never arms the autosave; pinned,
-   not fixed, the user's decision, R2-P3-5); hazard 11 (`handleDoubleTap`'s
+   not fixed, awaiting the user's confirmation, R2-P3-5); hazard 11 (`handleDoubleTap`'s
    unguarded `setState`); the post-series dead-state removal; the
    *transition lifecycle owner*; the `build` decomposition; D1; the startup
    decomposition.
@@ -6346,7 +6346,9 @@ a release device. No device runs happen now. P21 items:
   compared by identity with M5, the `test_baseline.py` replay, the
   `flutter build apk/macos/ios --release` builds and the gate record (the
   commit whose message carries the CI full-suite word). The review of that
-  final record is still due. Merge only after commit 7 records these checks.
+  final record follows it. Merge only after commit 7 records these checks.
+  (As run, the post-gate review followed the merge; see the 2026-10-26
+  post-gate review entry.)
 - **Pinned revision (P21b re-review P3-E).** `vplayer_cleanup_proof.py`
   hard-codes the post-C3 commit `218a5806a` (its `HEAD` constant) and the
   every-push `vplayer-structure` job reads it through git. C1–C3 and
@@ -12801,19 +12803,58 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
 - **Revision.** The suite and builds ran on `306e9836e`. `57fd13cc9` changes
   only `dev/tool/vplayer_host_usage.py`, a docstring in
   `vplayer_cleanup_proof.py` and this plan: the diff from `306e9836e` is
-  empty for `lib/`, `test/`, `pubspec.lock` and `analysis_options.yaml`,
-  so the suite and build evidence apply to this record. The other final
+  empty for `lib/`, `test/`, `pubspec.yaml`, `pubspec.lock`,
+  `analysis_options.yaml`, `assets/` and the native/build directories, so
+  the suite and build evidence apply to this record. SDK: Flutter 3.44.8,
+  Dart 3.12.2, the same as M5. The other final
   checks are in `p21b/final/checks.log`, `p21b/review-fix/checks.log` and
   `p21b/rereview-fix/`; the analyzer shows 519 issues and 0 additions.
 - **Pending, not claimed:**
   - the first `vplayer-structure` CI run, blocked by Actions billing, and
     making it a required check on `main`;
   - the device checklist (`video-player-device-checklist.md`);
-  - the user's confirmation that a failed start never arming autosave or
-    preload (Q12) is intended. Until confirmed, it stays a Follow-up.
+  - Q12: a failed ranked or direct start never arms the 6 s autosave timer
+    or the episode preload. Current behaviour is pinned, not fixed, and
+    **not confirmed** as intended. It stays an open Follow-up until the
+    user confirms it or asks for a separate behaviour-change fix.
 - Next: merge `--no-ff` into `refactor/codebase`, run the merge checks and
   push to `private`. The device pass and the merge to `main` are the user's
   decisions.
+
+### 2026-10-26 — Phase 21b post-gate review and merge (review agent; executor: Claude) — "No P1s"
+
+- Post-gate review `p21b/post-gate-review.md` of the gate record
+  `74ffb06d6` and the merge `88475abad`: **No P1s**, one P2, six P3s.
+  - It independently re-ran the comparison against M5 (PASS) and re-derived
+    the failure set (41 identical, with the same failure kinds), the 222
+    added tests (all in P21 suites) and the baseline replay (41 = 41).
+  - It confirmed that the builds ran on `306e9836e`, and that the diff to
+    `74ffb06d6` touches no execution inputs.
+- **Merge** `88475abad` (`--no-ff`, parents `b72ff16f8` and `74ffb06d6`).
+  Its tree equals the branch head. The merge checks passed 38 of 38
+  (`p21b/merge/checks.log`), and only then was it pushed to `private`.
+  Nothing went to `origin` or `main`.
+- **P2-1 (order deviation, recorded):** the merge and push came before
+  this post-gate review; the series order is gate, review, merge. The
+  impact is nil, since the review found no P1s and the branch is the
+  private integration branch. It is fixed forward here without rewriting
+  history.
+- **P3s:**
+  - Q12 wording now reads "awaiting the user's confirmation", and the
+    final record states its full scope (autosave timer and episode
+    preload).
+  - The device checklist's PRE-3 now says the coordinator ran commit 7.
+  - The record lists every unchanged execution path and names the SDK.
+  - The P21 moves self-test was reused from `aebee3166`, where it passed;
+    none of its inputs (`check_dart_moves.py`, its tests and the P21
+    manifest) changed after that.
+  - Provenance: the `compare` re-run line in `final/run.txt` was added by
+    hand after the first call failed on a path. The failing output was
+    overwritten, and its error is recorded in the final record. The build
+    revision is shown by the run start head and the reflog.
+- Series complete. Pending: Q12 confirmation, the first
+  `vplayer-structure` CI run (Actions billing), the device checklist,
+  tvOS/Windows/Linux builds and the merge to `main` (the user's decisions).
 
 ## Video player end state and completion audit (Phase 21b)
 
@@ -13007,8 +13048,8 @@ row.)
    `--at b72ff16f8`, remain history evidence and pass.
 
 **Recorded open Follow-ups** (open, not settled): P20 hazard 4 (a failed
-start never arms the autosave; pinned, not fixed, the user's decision,
-Q12); hazard 11 (`handleDoubleTap`'s unguarded `setState`); the post-series
+start never arms the autosave; pinned, not fixed, awaiting the user's
+confirmation, Q12); hazard 11 (`handleDoubleTap`'s unguarded `setState`); the post-series
 dead-state removal; the *transition lifecycle owner*; the `build`
 decomposition; D1; the startup orchestration decomposition; and the other
 characterized-but-unfixed items in Follow-ups.

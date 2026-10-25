@@ -37,7 +37,7 @@ These are recorded for the end of the series and are not device checks.
   L6096–6101)
 - [ ] **PRE-3. tvOS, Windows and Linux compilation.** These build only in their
   CI/VM pipelines and are recorded as pending. The series' final checks
-  (commit 7, run by the user) build only on the Mac: `flutter build apk
+  (commit 7, run by the coordinator) build only on the Mac: `flutter build apk
   --release`, `flutter build macos --release` and `flutter build ios --release
   --no-codesign`, with nothing installed or run.
   The tvOS, Windows and Linux sessions below need an artifact from those
