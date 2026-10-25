@@ -156,8 +156,9 @@ class VpIptvWatchMemory {
         }
       }
       lang ??= await SubtitleSettingsStorage.getDefaultAudioLanguage();
-      if (lang == null || !_host.mounted || ticket != _host.iptvSwitchTicket)
+      if (lang == null || !_host.mounted || ticket != _host.iptvSwitchTicket) {
         return;
+      }
 
       mk.AudioTrack? match;
       for (final t in tracks.audio) {

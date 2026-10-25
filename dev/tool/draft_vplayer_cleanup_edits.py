@@ -244,7 +244,11 @@ def sync_manifest(package, root=ROOT):
                 span_unit_tokens = [i for i, t in enumerate(unit.tokens)
                                     if spans[key]['start'] <= t['offset'] < spans[key]['end']]
                 span_values = [values[i] for i in span_unit_tokens]
-                target_values = proof.apply(subunit(unit, span_unit_tokens), group)
+                # Only this span's edits: the prefix and suffix stay unchanged.
+                whole = proof.apply(unit, group)
+                lo, hi = span_unit_tokens[0], span_unit_tokens[-1] + 1
+                assert whole[:lo] == values[:lo] and whole[len(whole) - (len(values) - hi):] == values[hi:]
+                target_values = whole[lo:len(whole) - (len(values) - hi)]
                 origin = None
                 if row['fate'] == 'moved' or path == source:
                     node = original_spans[row['original']]
@@ -270,17 +274,6 @@ def sync_manifest(package, root=ROOT):
         manifest['earlier_patches'] = earlier
     manifest_path.write_text(json.dumps(manifest, indent=2) + '\n')
     return manifest
-
-
-class subunit:
-    """A proof.Unit restricted to one span (same tokens/positions)."""
-
-    def __init__(self, unit, indices):
-        self.__dict__.update(unit.__dict__)
-        self._indices = indices
-        self.tokens = [unit.tokens[i] for i in indices]
-        start, end = unit.tokens[indices[0]]['offset'], unit.tokens[indices[-1]]['offset'] + 1
-        self.spans = [(k, max(s, start), min(e, end)) for k, s, e in unit.spans if s < end and e > start]
 
 
 def edit_offset(unit, edit):

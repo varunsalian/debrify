@@ -5978,7 +5978,35 @@
     },
     {
       "original": "_VideoPlayerScreenState._currentSeriesImdbId",
-      "fate": "retained"
+      "fate": "patched",
+      "reason": "Phase 21b C2: braces added at a curly_braces_in_flow_control_structures site.",
+      "test": "dev/tool/vplayer_cleanup_proof.py",
+      "patches": [
+        {
+          "before": [
+            "return",
+            "_effectiveContentImdbId"
+          ],
+          "after": [
+            "{",
+            "return",
+            "_effectiveContentImdbId"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "final",
+            "value"
+          ],
+          "after": [
+            "}",
+            "final",
+            "value"
+          ],
+          "count": 1
+        }
+      ]
     },
     {
       "original": "_VideoPlayerScreenState._skip",
@@ -7465,6 +7493,34 @@
             "_host",
             ".",
             "mounted"
+          ],
+          "count": 1
+        }
+      ],
+      "reason": "Phase 21b C2: braces added at a curly_braces_in_flow_control_structures site.",
+      "test": "dev/tool/vplayer_cleanup_proof.py",
+      "patches": [
+        {
+          "before": [
+            "null",
+            ")"
+          ],
+          "after": [
+            "null",
+            ")",
+            "{"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "}",
+            ")"
+          ],
+          "after": [
+            "}",
+            "}",
+            ")"
           ],
           "count": 1
         }
@@ -11539,5 +11595,1087 @@
         "role_change": "Complete live collaborator chain via facade routing"
       }
     ]
+  },
+  "earlier_patches": {
+    "lib/features/video_player/presentation/legacy_video_player/vp_addon_subtitles.dart": {
+      "reason": "Phase 21b C2 declared cleanup (braces and/or comments); see vplayer_p21b_cleanup.json.",
+      "review": "vplayer_cleanup_proof.py layer 1 + cross-check; Phase 21b review",
+      "patches": [
+        {
+          "before": [
+            "return",
+            ";",
+            "// Capture token at start to detect if content changes during async operations"
+          ],
+          "after": [
+            "{",
+            "return",
+            ";",
+            "// Capture token at start to detect if content changes during async operations"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "// Capture token at start to detect if content changes during async operations"
+          ],
+          "after": [
+            "}",
+            "// Capture token at start to detect if content changes during async operations"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "return",
+            ";",
+            "unawaited"
+          ],
+          "after": [
+            "{",
+            "return",
+            ";",
+            "unawaited"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "unawaited"
+          ],
+          "after": [
+            "}",
+            "unawaited"
+          ],
+          "count": 1
+        }
+      ]
+    },
+    "lib/features/video_player/presentation/legacy_video_player/vp_episode_adjacent.dart": {
+      "reason": "Phase 21b C2 declared cleanup (braces and/or comments); see vplayer_p21b_cleanup.json.",
+      "review": "vplayer_cleanup_proof.py layer 1 + cross-check; Phase 21b review",
+      "patches": [
+        {
+          "before": [
+            "return",
+            "-",
+            "1",
+            ";",
+            "if",
+            "(",
+            "_host",
+            ".",
+            "currentIndex",
+            "+"
+          ],
+          "after": [
+            "{",
+            "return",
+            "-",
+            "1",
+            ";",
+            "if",
+            "(",
+            "_host",
+            ".",
+            "currentIndex",
+            "+"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "if",
+            "(",
+            "_host",
+            ".",
+            "currentIndex",
+            "+"
+          ],
+          "after": [
+            "}",
+            "if",
+            "(",
+            "_host",
+            ".",
+            "currentIndex",
+            "+"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "+",
+            "1",
+            ";",
+            "}",
+            "return",
+            "-",
+            "1",
+            ";",
+            "}",
+            "// Collection mode (view mode not specified): navigate within Main group only",
+            "if",
+            "(",
+            "_host",
+            ".",
+            "activePlaylist",
+            "==",
+            "null",
+            "||",
+            "_host",
+            ".",
+            "activePlaylist",
+            "!",
+            ".",
+            "isEmpty",
+            ")"
+          ],
+          "after": [
+            "+",
+            "1",
+            ";",
+            "}",
+            "return",
+            "-",
+            "1",
+            ";",
+            "}",
+            "// Collection mode (view mode not specified): navigate within Main group only",
+            "if",
+            "(",
+            "_host",
+            ".",
+            "activePlaylist",
+            "==",
+            "null",
+            "||",
+            "_host",
+            ".",
+            "activePlaylist",
+            "!",
+            ".",
+            "isEmpty",
+            ")",
+            "{"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "final",
+            "indices",
+            "=",
+            "getMainGroupIndices",
+            "(",
+            "_host",
+            ".",
+            "activePlaylist",
+            "!",
+            ")",
+            ";",
+            "if",
+            "(",
+            "indices",
+            ".",
+            "isEmpty",
+            ")",
+            "return",
+            "-",
+            "1",
+            ";",
+            "final",
+            "currentPos",
+            "=",
+            "indices",
+            ".",
+            "indexOf",
+            "(",
+            "_host",
+            ".",
+            "currentIndex",
+            ")",
+            ";",
+            "if",
+            "(",
+            "currentPos",
+            "==",
+            "-",
+            "1",
+            ")",
+            "{",
+            "return",
+            "indices",
+            ".",
+            "first",
+            ";",
+            "}",
+            "if",
+            "(",
+            "currentPos",
+            "+"
+          ],
+          "after": [
+            "}",
+            "final",
+            "indices",
+            "=",
+            "getMainGroupIndices",
+            "(",
+            "_host",
+            ".",
+            "activePlaylist",
+            "!",
+            ")",
+            ";",
+            "if",
+            "(",
+            "indices",
+            ".",
+            "isEmpty",
+            ")",
+            "return",
+            "-",
+            "1",
+            ";",
+            "final",
+            "currentPos",
+            "=",
+            "indices",
+            ".",
+            "indexOf",
+            "(",
+            "_host",
+            ".",
+            "currentIndex",
+            ")",
+            ";",
+            "if",
+            "(",
+            "currentPos",
+            "==",
+            "-",
+            "1",
+            ")",
+            "{",
+            "return",
+            "indices",
+            ".",
+            "first",
+            ";",
+            "}",
+            "if",
+            "(",
+            "currentPos",
+            "+"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "return",
+            "-",
+            "1",
+            ";",
+            "if"
+          ],
+          "after": [
+            "{",
+            "return",
+            "-",
+            "1",
+            ";",
+            "if"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "1",
+            ";",
+            "if",
+            "(",
+            "_host"
+          ],
+          "after": [
+            "1",
+            ";",
+            "}",
+            "if",
+            "(",
+            "_host"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "!",
+            ".",
+            "isEmpty",
+            ")",
+            "return"
+          ],
+          "after": [
+            "!",
+            ".",
+            "isEmpty",
+            ")",
+            "{",
+            "return"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            ";",
+            "final",
+            "indices"
+          ],
+          "after": [
+            ";",
+            "}",
+            "final",
+            "indices"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "return",
+            "null",
+            ";",
+            "final"
+          ],
+          "after": [
+            "{",
+            "return",
+            "null",
+            ";",
+            "final"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "final",
+            "full"
+          ],
+          "after": [
+            "}",
+            "final",
+            "full"
+          ],
+          "count": 1
+        }
+      ]
+    },
+    "lib/features/video_player/presentation/legacy_video_player/vp_episode_fetch.dart": {
+      "reason": "Phase 21b C2 declared cleanup (braces and/or comments); see vplayer_p21b_cleanup.json.",
+      "review": "vplayer_cleanup_proof.py layer 1 + cross-check; Phase 21b review",
+      "patches": [
+        {
+          "before": [
+            "length",
+            ")"
+          ],
+          "after": [
+            "length",
+            ")",
+            "{"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "final",
+            "current"
+          ],
+          "after": [
+            "}",
+            "final",
+            "current"
+          ],
+          "count": 1
+        }
+      ]
+    },
+    "lib/features/video_player/presentation/legacy_video_player/vp_episode_guide.dart": {
+      "reason": "Phase 21b C2 declared cleanup (braces and/or comments); see vplayer_p21b_cleanup.json.",
+      "review": "vplayer_cleanup_proof.py layer 1 + cross-check; Phase 21b review",
+      "patches": [
+        {
+          "before": [
+            "isEmpty",
+            ")"
+          ],
+          "after": [
+            "isEmpty",
+            ")",
+            "{"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "_host",
+            ".",
+            "setManualSelectionMode"
+          ],
+          "after": [
+            "}",
+            "_host",
+            ".",
+            "setManualSelectionMode"
+          ],
+          "count": 1
+        }
+      ]
+    },
+    "lib/features/video_player/presentation/legacy_video_player/vp_identify_title.dart": {
+      "reason": "Phase 21b C2 declared cleanup (braces and/or comments); see vplayer_p21b_cleanup.json.",
+      "review": "vplayer_cleanup_proof.py layer 1 + cross-check; Phase 21b review",
+      "patches": [
+        {
+          "before": [
+            "addonSubtitleFetchToken",
+            ")",
+            "return"
+          ],
+          "after": [
+            "addonSubtitleFetchToken",
+            ")",
+            "{",
+            "return"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "final",
+            "cacheKey"
+          ],
+          "after": [
+            "}",
+            "final",
+            "cacheKey"
+          ],
+          "count": 1
+        }
+      ]
+    },
+    "lib/features/video_player/presentation/legacy_video_player/vp_iptv_recording.dart": {
+      "reason": "Phase 21b C2 declared cleanup (braces and/or comments); see vplayer_p21b_cleanup.json.",
+      "review": "vplayer_cleanup_proof.py layer 1 + cross-check; Phase 21b review",
+      "patches": [
+        {
+          "before": [
+            ")",
+            "_host"
+          ],
+          "after": [
+            ")",
+            "{",
+            "_host"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "null",
+            ")",
+            ";",
+            "return"
+          ],
+          "after": [
+            "null",
+            ")",
+            ";",
+            "}",
+            "return"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "return",
+            ";",
+            "_host"
+          ],
+          "after": [
+            "{",
+            "return",
+            ";",
+            "_host"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "_host",
+            ".",
+            "tapMpvLogsForRecording"
+          ],
+          "after": [
+            "}",
+            "_host",
+            ".",
+            "tapMpvLogsForRecording"
+          ],
+          "count": 1
+        }
+      ]
+    },
+    "lib/features/video_player/presentation/legacy_video_player/vp_iptv_watch_memory.dart": {
+      "reason": "Phase 21b C2 declared cleanup (braces and/or comments); see vplayer_p21b_cleanup.json.",
+      "review": "vplayer_cleanup_proof.py layer 1 + cross-check; Phase 21b review",
+      "patches": [
+        {
+          "before": [
+            "return",
+            ";",
+            "mk"
+          ],
+          "after": [
+            "{",
+            "return",
+            ";",
+            "mk"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "mk",
+            ".",
+            "AudioTrack"
+          ],
+          "after": [
+            "}",
+            "mk",
+            ".",
+            "AudioTrack"
+          ],
+          "count": 1
+        }
+      ]
+    },
+    "lib/features/video_player/presentation/legacy_video_player/vp_iptv_zap_ring.dart": {
+      "reason": "Phase 21b C2 declared cleanup (braces and/or comments); see vplayer_p21b_cleanup.json.",
+      "review": "vplayer_cleanup_proof.py layer 1 + cross-check; Phase 21b review",
+      "patches": [
+        {
+          "before": [
+            "iptvZapCategory",
+            ")",
+            "_host"
+          ],
+          "after": [
+            "iptvZapCategory",
+            ")",
+            "{",
+            "_host"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "final",
+            "playing",
+            "=",
+            "preservePlayingChannel"
+          ],
+          "after": [
+            "}",
+            "final",
+            "playing",
+            "=",
+            "preservePlayingChannel"
+          ],
+          "count": 1
+        }
+      ]
+    },
+    "lib/features/video_player/presentation/legacy_video_player/vp_media_open.dart": {
+      "reason": "Phase 21b C2 declared cleanup (braces and/or comments); see vplayer_p21b_cleanup.json.",
+      "review": "vplayer_cleanup_proof.py layer 1 + cross-check; Phase 21b review",
+      "patches": [
+        {
+          "before": [
+            "decoderProbeGeneration",
+            ")"
+          ],
+          "after": [
+            "decoderProbeGeneration",
+            ")",
+            "{"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "}",
+            "// `sub-visibility` is player-global. Reset it before a reused player opens"
+          ],
+          "after": [
+            "}",
+            "}",
+            "// `sub-visibility` is player-global. Reset it before a reused player opens"
+          ],
+          "count": 1
+        }
+      ]
+    },
+    "lib/features/video_player/presentation/legacy_video_player/vp_network_tuning.dart": {
+      "reason": "Phase 21b C2 declared cleanup (braces and/or comments); see vplayer_p21b_cleanup.json.",
+      "review": "vplayer_cleanup_proof.py layer 1 + cross-check; Phase 21b review",
+      "patches": [
+        {
+          "before": [
+            "return",
+            ";",
+            "// superseded in queue"
+          ],
+          "after": [
+            "{",
+            "return",
+            ";",
+            "// superseded in queue"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "try"
+          ],
+          "after": [
+            "}",
+            "try"
+          ],
+          "count": 1
+        }
+      ]
+    },
+    "lib/features/video_player/presentation/legacy_video_player/vp_pip_lifecycle.dart": {
+      "reason": "Phase 21b C2 declared cleanup (braces and/or comments); see vplayer_p21b_cleanup.json.",
+      "review": "vplayer_cleanup_proof.py layer 1 + cross-check; Phase 21b review",
+      "patches": [
+        {
+          "before": [
+            "isPipActive",
+            ")"
+          ],
+          "after": [
+            "isPipActive",
+            ")",
+            "{"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "final",
+            "player"
+          ],
+          "after": [
+            "}",
+            "final",
+            "player"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "player",
+            ")",
+            ")",
+            "return"
+          ],
+          "after": [
+            "player",
+            ")",
+            ")",
+            "{",
+            "return"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "if",
+            "(",
+            "_host",
+            ".",
+            "isIOS",
+            ")",
+            "{",
+            "await"
+          ],
+          "after": [
+            "}",
+            "if",
+            "(",
+            "_host",
+            ".",
+            "isIOS",
+            ")",
+            "{",
+            "await"
+          ],
+          "count": 1
+        }
+      ]
+    },
+    "lib/features/video_player/presentation/legacy_video_player/vp_player_instance.dart": {
+      "reason": "Phase 21b C2 declared cleanup (braces and/or comments); see vplayer_p21b_cleanup.json.",
+      "review": "vplayer_cleanup_proof.py layer 1 + cross-check; Phase 21b review",
+      "patches": [
+        {
+          "before": [
+            "playerInstanceGeneration",
+            ")"
+          ],
+          "after": [
+            "playerInstanceGeneration",
+            ")",
+            "{"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "return",
+            ";",
+            "_host"
+          ],
+          "after": [
+            "return",
+            ";",
+            "}",
+            "_host"
+          ],
+          "count": 1
+        }
+      ]
+    },
+    "lib/features/video_player/presentation/legacy_video_player/vp_player_menu.dart": {
+      "reason": "Phase 21b C2 declared cleanup (braces and/or comments); see vplayer_p21b_cleanup.json.",
+      "review": "vplayer_cleanup_proof.py layer 1 + cross-check; Phase 21b review",
+      "patches": [
+        {
+          "before": [
+            "return",
+            "false",
+            ";",
+            "_host",
+            ".",
+            "selectedStremioSubtitleId",
+            "=",
+            "sub"
+          ],
+          "after": [
+            "{",
+            "return",
+            "false",
+            ";",
+            "_host",
+            ".",
+            "selectedStremioSubtitleId",
+            "=",
+            "sub"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "_host",
+            ".",
+            "selectedStremioSubtitleId",
+            "=",
+            "sub"
+          ],
+          "after": [
+            "}",
+            "_host",
+            ".",
+            "selectedStremioSubtitleId",
+            "=",
+            "sub"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "mounted",
+            ")",
+            "return"
+          ],
+          "after": [
+            "mounted",
+            ")",
+            "{",
+            "return"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "false",
+            ";",
+            "_host",
+            ".",
+            "setActiveExternalSubtitlePath"
+          ],
+          "after": [
+            "false",
+            ";",
+            "}",
+            "_host",
+            ".",
+            "setActiveExternalSubtitlePath"
+          ],
+          "count": 1
+        }
+      ]
+    },
+    "lib/features/video_player/presentation/legacy_video_player/vp_resume_save.dart": {
+      "reason": "Phase 21b C2 declared cleanup (braces and/or comments); see vplayer_p21b_cleanup.json.",
+      "review": "vplayer_cleanup_proof.py layer 1 + cross-check; Phase 21b review",
+      "patches": [
+        {
+          "before": [
+            ")",
+            "return",
+            "null"
+          ],
+          "after": [
+            ")",
+            "{",
+            "return",
+            "null"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            ";",
+            "return",
+            "LocalPlaybackResumeResolver"
+          ],
+          "after": [
+            ";",
+            "}",
+            "return",
+            "LocalPlaybackResumeResolver"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "await",
+            "VideoResumeStorage"
+          ],
+          "after": [
+            "{",
+            "await",
+            "VideoResumeStorage"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "// Explicit checkpoints (pause, settled seek, exit-adjacent saves) are the"
+          ],
+          "after": [
+            "}",
+            "// Explicit checkpoints (pause, settled seek, exit-adjacent saves) are the"
+          ],
+          "count": 1
+        }
+      ]
+    },
+    "lib/features/video_player/presentation/legacy_video_player/vp_skip_segment_controller.dart": {
+      "reason": "Phase 21b C2 declared cleanup (braces and/or comments); see vplayer_p21b_cleanup.json.",
+      "review": "vplayer_cleanup_proof.py layer 1 + cross-check; Phase 21b review",
+      "patches": [
+        {
+          "before": [
+            "effectiveContentImdbId",
+            ")",
+            ")"
+          ],
+          "after": [
+            "effectiveContentImdbId",
+            ")",
+            ")",
+            "{"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "// Two stale-media windows, both of which would judge the incoming item"
+          ],
+          "after": [
+            "}",
+            "// Two stale-media windows, both of which would judge the incoming item"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "segments",
+            ";",
+            "if",
+            "(",
+            "!",
+            "_host",
+            ".",
+            "mounted",
+            "||",
+            "generation",
+            "!=",
+            "skipSegmentsFetchGeneration",
+            ")"
+          ],
+          "after": [
+            "segments",
+            ";",
+            "if",
+            "(",
+            "!",
+            "_host",
+            ".",
+            "mounted",
+            "||",
+            "generation",
+            "!=",
+            "skipSegmentsFetchGeneration",
+            ")",
+            "{"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "if",
+            "(",
+            "currentSkipSegmentRequest",
+            "(",
+            ")",
+            "?.",
+            "key",
+            "!=",
+            "request",
+            ".",
+            "key",
+            ")",
+            "return",
+            ";",
+            "_host",
+            ".",
+            "setState",
+            "(",
+            "(",
+            ")",
+            "{",
+            "skipSegments",
+            "=",
+            "segments"
+          ],
+          "after": [
+            "}",
+            "if",
+            "(",
+            "currentSkipSegmentRequest",
+            "(",
+            ")",
+            "?.",
+            "key",
+            "!=",
+            "request",
+            ".",
+            "key",
+            ")",
+            "return",
+            ";",
+            "_host",
+            ".",
+            "setState",
+            "(",
+            "(",
+            ")",
+            "{",
+            "skipSegments",
+            "=",
+            "segments"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "skipSegmentsFetchGeneration",
+            ")",
+            "return"
+          ],
+          "after": [
+            "skipSegmentsFetchGeneration",
+            ")",
+            "{",
+            "return"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            ";",
+            "if",
+            "(",
+            "currentSkipSegmentRequest"
+          ],
+          "after": [
+            ";",
+            "}",
+            "if",
+            "(",
+            "currentSkipSegmentRequest"
+          ],
+          "count": 1
+        }
+      ]
+    },
+    "lib/features/video_player/presentation/legacy_video_player/vp_tvos_video.dart": {
+      "reason": "Phase 21b C2 declared cleanup (braces and/or comments); see vplayer_p21b_cleanup.json.",
+      "review": "vplayer_cleanup_proof.py layer 1 + cross-check; Phase 21b review",
+      "patches": [
+        {
+          "before": [
+            "return",
+            ";",
+            "lastTvosDisplayMatchSignature"
+          ],
+          "after": [
+            "{",
+            "return",
+            ";",
+            "lastTvosDisplayMatchSignature"
+          ],
+          "count": 1
+        },
+        {
+          "before": [
+            "lastTvosDisplayMatchSignature",
+            "=",
+            "signature"
+          ],
+          "after": [
+            "}",
+            "lastTvosDisplayMatchSignature",
+            "=",
+            "signature"
+          ],
+          "count": 1
+        }
+      ]
+    }
   }
 }

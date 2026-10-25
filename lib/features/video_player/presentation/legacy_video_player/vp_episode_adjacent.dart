@@ -66,8 +66,9 @@ class VpEpisodeAdjacent {
       // In sorted mode, files are already pre-sorted A-Z, so sequential = alphabetical
       if (_host.viewMode == PlaylistViewMode.raw ||
           _host.viewMode == PlaylistViewMode.sorted) {
-        if (_host.activePlaylist == null || _host.activePlaylist!.isEmpty)
+        if (_host.activePlaylist == null || _host.activePlaylist!.isEmpty) {
           return -1;
+        }
         if (_host.currentIndex + 1 < _host.activePlaylist!.length) {
           return _host.currentIndex + 1;
         }
@@ -75,8 +76,9 @@ class VpEpisodeAdjacent {
       }
 
       // Collection mode (view mode not specified): navigate within Main group only
-      if (_host.activePlaylist == null || _host.activePlaylist!.isEmpty)
+      if (_host.activePlaylist == null || _host.activePlaylist!.isEmpty) {
         return -1;
+      }
       final indices = getMainGroupIndices(_host.activePlaylist!);
       if (indices.isEmpty) return -1;
 
@@ -163,8 +165,9 @@ class VpEpisodeAdjacent {
       // In sorted mode, files are already pre-sorted A-Z, so sequential = alphabetical
       if (_host.viewMode == PlaylistViewMode.raw ||
           _host.viewMode == PlaylistViewMode.sorted) {
-        if (_host.activePlaylist == null || _host.activePlaylist!.isEmpty)
+        if (_host.activePlaylist == null || _host.activePlaylist!.isEmpty) {
           return -1;
+        }
         if (_host.currentIndex - 1 >= 0) {
           return _host.currentIndex - 1;
         }
@@ -172,8 +175,9 @@ class VpEpisodeAdjacent {
       }
 
       // Collection mode (view mode not specified): navigate within Main group only
-      if (_host.activePlaylist == null || _host.activePlaylist!.isEmpty)
+      if (_host.activePlaylist == null || _host.activePlaylist!.isEmpty) {
         return -1;
+      }
       final indices = getMainGroupIndices(_host.activePlaylist!);
       if (indices.isEmpty) return -1;
 
@@ -374,8 +378,9 @@ class VpEpisodeAdjacent {
   }) {
     // Custom catalogs own their episode order, even after TVMaze fills the guide.
     if (!allowResolverFallback &&
-        _host.seriesSourceFetcher?.resolveAdjacentEpisode != null)
+        _host.seriesSourceFetcher?.resolveAdjacentEpisode != null) {
       return null;
+    }
     final full = _host.seriesPlaylist?.fullTvmazeEpisodes.isNotEmpty == true
         ? _host.seriesPlaylist!.fullTvmazeEpisodes
         : (_host.syntheticGuidePlaylist?.fullTvmazeEpisodes ??

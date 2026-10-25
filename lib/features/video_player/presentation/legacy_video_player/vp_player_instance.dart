@@ -81,8 +81,10 @@ class VpPlayerInstance {
   }
 
   void onPlayerInstanceReady(int instanceGeneration) {
-    if (!_host.mounted || instanceGeneration != _host.playerInstanceGeneration)
+    if (!_host.mounted ||
+        instanceGeneration != _host.playerInstanceGeneration) {
       return;
+    }
     _host.isReady = true;
     _host.armPipAutoEnter();
     if (PlatformUtil.isTelevision && _host.controlsVisible.value) {

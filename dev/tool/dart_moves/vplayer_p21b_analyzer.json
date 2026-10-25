@@ -33,175 +33,7 @@
     {
       "severity": "info",
       "rule": "curly_braces_in_flow_control_structures",
-      "symbol": "_VideoPlayerScreenState._adjacentEpisode",
-      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
-      "maximum": 1
-    },
-    {
-      "severity": "info",
-      "rule": "curly_braces_in_flow_control_structures",
-      "symbol": "_VideoPlayerScreenState._applyIptvAudioPreference",
-      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
-      "maximum": 1
-    },
-    {
-      "severity": "info",
-      "rule": "curly_braces_in_flow_control_structures",
-      "symbol": "_VideoPlayerScreenState._applyNetworkTuningInner",
-      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
-      "maximum": 1
-    },
-    {
-      "severity": "info",
-      "rule": "curly_braces_in_flow_control_structures",
-      "symbol": "_VideoPlayerScreenState._applyStremioSubtitleFromTracksSheet",
-      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
-      "maximum": 1
-    },
-    {
-      "severity": "info",
-      "rule": "curly_braces_in_flow_control_structures",
-      "symbol": "_VideoPlayerScreenState._currentSeriesImdbId",
-      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
-      "maximum": 1
-    },
-    {
-      "severity": "info",
-      "rule": "curly_braces_in_flow_control_structures",
-      "symbol": "_VideoPlayerScreenState._currentSkipSegmentRequest",
-      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
-      "maximum": 2
-    },
-    {
-      "severity": "info",
-      "rule": "curly_braces_in_flow_control_structures",
-      "symbol": "_VideoPlayerScreenState._enterPip",
-      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
-      "maximum": 4
-    },
-    {
-      "severity": "info",
-      "rule": "curly_braces_in_flow_control_structures",
-      "symbol": "_VideoPlayerScreenState._fetchAndMaybeAutoSelectAddonSubtitle",
-      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
-      "maximum": 4
-    },
-    {
-      "severity": "info",
-      "rule": "curly_braces_in_flow_control_structures",
-      "symbol": "_VideoPlayerScreenState._findNextEpisodeIndex",
-      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
-      "maximum": 2
-    },
-    {
-      "severity": "info",
-      "rule": "curly_braces_in_flow_control_structures",
-      "symbol": "_VideoPlayerScreenState._findPreviousEpisodeIndex",
-      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
-      "maximum": 2
-    },
-    {
-      "severity": "info",
-      "rule": "curly_braces_in_flow_control_structures",
-      "symbol": "_VideoPlayerScreenState._getEnhancedPlaybackState",
-      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
-      "maximum": 1
-    },
-    {
-      "severity": "info",
-      "rule": "curly_braces_in_flow_control_structures",
-      "symbol": "_VideoPlayerScreenState._identifyTitleAndFetchSubtitles",
-      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
-      "maximum": 2
-    },
-    {
-      "severity": "info",
-      "rule": "curly_braces_in_flow_control_structures",
       "symbol": "_VideoPlayerScreenState._initializePlayer",
-      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
-      "maximum": 1
-    },
-    {
-      "severity": "info",
-      "rule": "curly_braces_in_flow_control_structures",
-      "symbol": "_VideoPlayerScreenState._installIptvZapWindow",
-      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
-      "maximum": 1
-    },
-    {
-      "severity": "info",
-      "rule": "curly_braces_in_flow_control_structures",
-      "symbol": "_VideoPlayerScreenState._menuSelectAddonSubtitle",
-      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
-      "maximum": 1
-    },
-    {
-      "severity": "info",
-      "rule": "curly_braces_in_flow_control_structures",
-      "symbol": "_VideoPlayerScreenState._onPlayerInstanceReady",
-      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
-      "maximum": 1
-    },
-    {
-      "severity": "info",
-      "rule": "curly_braces_in_flow_control_structures",
-      "symbol": "_VideoPlayerScreenState._openMedia",
-      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
-      "maximum": 1
-    },
-    {
-      "severity": "info",
-      "rule": "curly_braces_in_flow_control_structures",
-      "symbol": "_VideoPlayerScreenState._prepareNextDirectEpisode",
-      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
-      "maximum": 1
-    },
-    {
-      "severity": "info",
-      "rule": "curly_braces_in_flow_control_structures",
-      "symbol": "_VideoPlayerScreenState._refreshEngineRecordingState",
-      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
-      "maximum": 1
-    },
-    {
-      "severity": "info",
-      "rule": "curly_braces_in_flow_control_structures",
-      "symbol": "_VideoPlayerScreenState._saveResumeLocked",
-      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
-      "maximum": 1
-    },
-    {
-      "severity": "info",
-      "rule": "curly_braces_in_flow_control_structures",
-      "symbol": "_VideoPlayerScreenState._scheduleTvosDisplayMatch",
-      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
-      "maximum": 1
-    },
-    {
-      "severity": "info",
-      "rule": "curly_braces_in_flow_control_structures",
-      "symbol": "_VideoPlayerScreenState._showPlaylistSheet",
-      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
-      "maximum": 1
-    },
-    {
-      "severity": "info",
-      "rule": "curly_braces_in_flow_control_structures",
-      "symbol": "_VideoPlayerScreenState._startRecording",
-      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
-      "maximum": 1
-    },
-    {
-      "severity": "info",
-      "rule": "curly_braces_in_flow_control_structures",
-      "symbol": "_VideoPlayerScreenState._syncSkipSegmentsForCurrentContent",
-      "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
-      "maximum": 4
-    },
-    {
-      "severity": "info",
-      "rule": "curly_braces_in_flow_control_structures",
-      "symbol": "_VideoPlayerScreenState._tvScrubBegin",
       "message": "Statements in an if should be enclosed in a block. Try wrapping the statement in a block",
       "maximum": 1
     },
@@ -3183,5 +3015,13 @@
     }
   ],
   "p21_receiver_probe_additions_note": "Documentation only \u2014 the comparator reads `entries`, where these maxima are included. Earlier additions remain under their phase keys. Counts match the Step T prototype (+2: 1 unused facade directive, 1 curly-brace wrap).",
-  "derived_from": "dev/tool/dart_moves/vplayer_p21_analyzer.json"
+  "derived_from": "dev/tool/dart_moves/vplayer_p21_analyzer.json",
+  "excluded_cleanup_sites": [
+    {
+      "rule": "curly_braces_in_flow_control_structures",
+      "symbol": "_VideoPlayerScreenState._initializePlayer",
+      "site": "lib/features/video_player/presentation/legacy_video_player/vp_player_startup.dart: if (_host.engineFlagOn) unawaited(_host.refreshEngineRecordingState());",
+      "reason": "Kept unbraced (Phase 21 review P2-1): braces make vp_player_startup.dart 624 lines and break its exact 623-line size exception (VIDEO_PLAYER_SIZE_EXCEPTIONS). Exit: the startup orchestration decomposition."
+    }
+  ]
 }

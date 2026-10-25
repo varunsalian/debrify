@@ -409,8 +409,9 @@ class VpEpisodeFetch {
         _host.isTransitioning ||
         sources == null ||
         _host.currentSourceIndex < 0 ||
-        _host.currentSourceIndex >= sources.length)
+        _host.currentSourceIndex >= sources.length) {
       return;
+    }
     final current = _host.currentSeasonEpisodeForIdentity();
     if (current == null) return;
     unawaited(

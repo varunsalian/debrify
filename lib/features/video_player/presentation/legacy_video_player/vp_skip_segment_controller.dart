@@ -85,8 +85,9 @@ class VpSkipSegmentController {
 
   ({String imdbId, int season, int episode, Duration duration, String key})?
   currentSkipSegmentRequest() {
-    if (CustomSeriesIdentity.isCustom(_host.effectiveContentImdbId))
+    if (CustomSeriesIdentity.isCustom(_host.effectiveContentImdbId)) {
       return null;
+    }
     // Two stale-media windows, both of which would judge the incoming item
     // against the outgoing one's clock:
     //
@@ -183,8 +184,9 @@ class VpSkipSegmentController {
         )
         .then((segments) {
           skipSegmentsCache[request.key] = segments;
-          if (!_host.mounted || generation != skipSegmentsFetchGeneration)
+          if (!_host.mounted || generation != skipSegmentsFetchGeneration) {
             return;
+          }
           if (currentSkipSegmentRequest()?.key != request.key) return;
           _host.setState(() {
             skipSegments = segments;
@@ -200,8 +202,9 @@ class VpSkipSegmentController {
           debugPrint(
             'SkipSegments: ${provider.displayName} fetch failed: $error',
           );
-          if (!_host.mounted || generation != skipSegmentsFetchGeneration)
+          if (!_host.mounted || generation != skipSegmentsFetchGeneration) {
             return;
+          }
           if (currentSkipSegmentRequest()?.key != request.key) return;
           _host.setState(() {
             skipSegments = SkipSegments.empty;

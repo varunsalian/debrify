@@ -63,8 +63,9 @@ class VpPipLifecycle {
         !_host.playerCreated ||
         _host.isTransitioning ||
         iosPipStarting ||
-        _host.isPipActive)
+        _host.isPipActive) {
       return;
+    }
     final player = _host.player;
     if (_host.isIOS) _host.setState(() => iosPipStarting = true);
     var entered = false;
@@ -72,8 +73,9 @@ class VpPipLifecycle {
       final handle = _host.isIOS ? await player.handle : null;
       if (!_host.mounted ||
           !PipService.isOwner(_host.pipOwner) ||
-          !identical(player, _host.player))
+          !identical(player, _host.player)) {
         return;
+      }
       if (_host.isIOS) {
         await _host.setNativeSubtitleVisibilityForTrack(
           player.state.track.subtitle,

@@ -133,8 +133,9 @@ class VpTvosVideo {
           refreshRate: fps,
           codec: codec,
         );
-        if (_host.screenDisposed || token != _host.tvosDisplayMatchToken)
+        if (_host.screenDisposed || token != _host.tvosDisplayMatchToken) {
           return;
+        }
         lastTvosDisplayMatchSignature = signature;
         debugPrint(
           'DisplayMatch: tvOS requested ${width}x$height@${fps.toStringAsFixed(3)} '

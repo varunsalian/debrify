@@ -51,8 +51,9 @@ class VpNetworkTuning {
     // Standard (and live-before-any-tuning): nothing was ever applied,
     // nothing to restore — the player is untouched.
     if (want.isEmpty && networkTuningDefaults == null) return;
-    if (generation != _host.decoderProbeGeneration)
+    if (generation != _host.decoderProbeGeneration) {
       return; // superseded in queue
+    }
     try {
       if (want.isNotEmpty && networkTuningDefaults == null) {
         final defaults = <String, String>{};

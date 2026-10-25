@@ -201,8 +201,9 @@ class VpMediaOpen {
       await remedy.onNewMedia(generation);
       // A rapid zap can start a newer open while the restore ran; the newer
       // call owns the player now.
-      if (_host.screenDisposed || generation != _host.decoderProbeGeneration)
+      if (_host.screenDisposed || generation != _host.decoderProbeGeneration) {
         return;
+      }
     }
     // `sub-visibility` is player-global. Reset it before a reused player opens
     // new media so a previous bitmap track cannot make auto-selected text draw

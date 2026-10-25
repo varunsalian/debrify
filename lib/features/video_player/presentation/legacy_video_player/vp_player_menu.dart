@@ -279,8 +279,9 @@ class VpPlayerMenu {
       );
       final applied = await _host.applyExternalSubtitleTrack(track);
       if (!applied) return false;
-      if (token != _host.addonSubtitleFetchToken || !_host.mounted)
+      if (token != _host.addonSubtitleFetchToken || !_host.mounted) {
         return false;
+      }
       _host.selectedStremioSubtitleId = sub.id;
       _host.setActiveExternalSubtitlePath(filePath);
       await menuApplyTrackChange(audioId, 'stremio:${sub.id}');
@@ -317,8 +318,9 @@ class VpPlayerMenu {
         ),
       );
       if (!applied) return false;
-      if (token != _host.addonSubtitleFetchToken || !_host.mounted)
+      if (token != _host.addonSubtitleFetchToken || !_host.mounted) {
         return false;
+      }
       _host.setActiveExternalSubtitlePath(filePath);
       return true;
     } catch (e) {

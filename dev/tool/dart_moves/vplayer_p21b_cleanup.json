@@ -478,6 +478,499 @@
    "file": "lib/screens/video_player_screen.dart",
    "uri": "package:flutter/foundation.dart",
    "name": "listEquals"
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_addon_subtitles.dart",
+   "declaration": "VpAddonSubtitles.fetchAndMaybeAutoSelectAddonSubtitle",
+   "ordinal": 0,
+   "head": [
+    "if",
+    "(",
+    "CustomSeriesIdentity",
+    ".",
+    "isCustom",
+    "(",
+    "_host",
+    "."
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_addon_subtitles.dart",
+   "declaration": "VpAddonSubtitles.fetchAndMaybeAutoSelectAddonSubtitle",
+   "ordinal": 1,
+   "head": [
+    "if",
+    "(",
+    "!",
+    "_host",
+    ".",
+    "mounted",
+    "||",
+    "fetchToken"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_episode_adjacent.dart",
+   "declaration": "VpEpisodeAdjacent.findNextEpisodeIndex",
+   "ordinal": 0,
+   "head": [
+    "if",
+    "(",
+    "_host",
+    ".",
+    "activePlaylist",
+    "==",
+    "null",
+    "||"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_episode_adjacent.dart",
+   "declaration": "VpEpisodeAdjacent.findNextEpisodeIndex",
+   "ordinal": 1,
+   "head": [
+    "if",
+    "(",
+    "_host",
+    ".",
+    "activePlaylist",
+    "==",
+    "null",
+    "||"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_episode_adjacent.dart",
+   "declaration": "VpEpisodeAdjacent.findPreviousEpisodeIndex",
+   "ordinal": 0,
+   "head": [
+    "if",
+    "(",
+    "_host",
+    ".",
+    "activePlaylist",
+    "==",
+    "null",
+    "||"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_episode_adjacent.dart",
+   "declaration": "VpEpisodeAdjacent.findPreviousEpisodeIndex",
+   "ordinal": 1,
+   "head": [
+    "if",
+    "(",
+    "_host",
+    ".",
+    "activePlaylist",
+    "==",
+    "null",
+    "||"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_episode_adjacent.dart",
+   "declaration": "VpEpisodeAdjacent.adjacentEpisode",
+   "ordinal": 0,
+   "head": [
+    "if",
+    "(",
+    "!",
+    "allowResolverFallback",
+    "&&",
+    "_host",
+    ".",
+    "seriesSourceFetcher"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_episode_fetch.dart",
+   "declaration": "VpEpisodeFetch.prepareNextDirectEpisode",
+   "ordinal": 0,
+   "head": [
+    "if",
+    "(",
+    "fetcher",
+    "==",
+    "null",
+    "||",
+    "_host",
+    "."
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_episode_guide.dart",
+   "declaration": "VpEpisodeGuide.showPlaylistSheet",
+   "ordinal": 1,
+   "head": [
+    "if",
+    "(",
+    "_host",
+    ".",
+    "activePlaylist",
+    "==",
+    "null",
+    "||"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_identify_title.dart",
+   "declaration": "VpIdentifyTitle.identifyTitleAndFetchSubtitles",
+   "ordinal": 0,
+   "head": [
+    "if",
+    "(",
+    "!",
+    "_host",
+    ".",
+    "mounted",
+    "||",
+    "fetchToken"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_iptv_recording.dart",
+   "declaration": "VpIptvRecording.refreshEngineRecordingState",
+   "ordinal": 1,
+   "head": [
+    "if",
+    "(",
+    "_host",
+    ".",
+    "engineTaskId",
+    "!=",
+    "null",
+    ")"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_iptv_recording.dart",
+   "declaration": "VpIptvRecording.startRecording",
+   "ordinal": 3,
+   "head": [
+    "if",
+    "(",
+    "gen",
+    "!=",
+    "_host",
+    ".",
+    "recordingStartGen",
+    "||"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_iptv_watch_memory.dart",
+   "declaration": "VpIptvWatchMemory.applyIptvAudioPreference",
+   "ordinal": 4,
+   "head": [
+    "if",
+    "(",
+    "lang",
+    "==",
+    "null",
+    "||",
+    "!",
+    "_host"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_iptv_zap_ring.dart",
+   "declaration": "VpIptvZapRing.installIptvZapWindow",
+   "ordinal": 1,
+   "head": [
+    "if",
+    "(",
+    "page",
+    ".",
+    "category",
+    "!=",
+    "_host",
+    "."
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_media_open.dart",
+   "declaration": "VpMediaOpen.openMedia",
+   "ordinal": 1,
+   "head": [
+    "if",
+    "(",
+    "_host",
+    ".",
+    "screenDisposed",
+    "||",
+    "generation",
+    "!="
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_network_tuning.dart",
+   "declaration": "VpNetworkTuning.applyNetworkTuningInner",
+   "ordinal": 1,
+   "head": [
+    "if",
+    "(",
+    "generation",
+    "!=",
+    "_host",
+    ".",
+    "decoderProbeGeneration",
+    ")"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_pip_lifecycle.dart",
+   "declaration": "VpPipLifecycle.enterPip",
+   "ordinal": 0,
+   "head": [
+    "if",
+    "(",
+    "!",
+    "PipService",
+    ".",
+    "isOwner",
+    "(",
+    "_host"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_pip_lifecycle.dart",
+   "declaration": "VpPipLifecycle.enterPip",
+   "ordinal": 2,
+   "head": [
+    "if",
+    "(",
+    "!",
+    "_host",
+    ".",
+    "mounted",
+    "||",
+    "!"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_player_instance.dart",
+   "declaration": "VpPlayerInstance.onPlayerInstanceReady",
+   "ordinal": 0,
+   "head": [
+    "if",
+    "(",
+    "!",
+    "_host",
+    ".",
+    "mounted",
+    "||",
+    "instanceGeneration"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_player_menu.dart",
+   "declaration": "VpPlayerMenu.menuSelectAddonSubtitle",
+   "ordinal": 1,
+   "head": [
+    "if",
+    "(",
+    "token",
+    "!=",
+    "_host",
+    ".",
+    "addonSubtitleFetchToken",
+    "||"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_player_menu.dart",
+   "declaration": "VpPlayerMenu.applyStremioSubtitleFromTracksSheet",
+   "ordinal": 1,
+   "head": [
+    "if",
+    "(",
+    "token",
+    "!=",
+    "_host",
+    ".",
+    "addonSubtitleFetchToken",
+    "||"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_resume_save.dart",
+   "declaration": "VpResumeSave.getEnhancedPlaybackState",
+   "ordinal": 0,
+   "head": [
+    "if",
+    "(",
+    "_host",
+    ".",
+    "effectiveContentSeason",
+    "==",
+    "null",
+    "||"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_resume_save.dart",
+   "declaration": "VpResumeSave.saveResumeLocked",
+   "ordinal": 1,
+   "head": [
+    "if",
+    "(",
+    "!",
+    "CustomSeriesIdentity",
+    ".",
+    "isCustom",
+    "(",
+    "_host"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_skip_segment_controller.dart",
+   "declaration": "VpSkipSegmentController.currentSkipSegmentRequest",
+   "ordinal": 0,
+   "head": [
+    "if",
+    "(",
+    "CustomSeriesIdentity",
+    ".",
+    "isCustom",
+    "(",
+    "_host",
+    "."
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_skip_segment_controller.dart",
+   "declaration": "VpSkipSegmentController.syncSkipSegmentsForCurrentContent",
+   "ordinal": 1,
+   "head": [
+    "if",
+    "(",
+    "!",
+    "_host",
+    ".",
+    "mounted",
+    "||",
+    "generation"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_skip_segment_controller.dart",
+   "declaration": "VpSkipSegmentController.syncSkipSegmentsForCurrentContent",
+   "ordinal": 3,
+   "head": [
+    "if",
+    "(",
+    "!",
+    "_host",
+    ".",
+    "mounted",
+    "||",
+    "generation"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_tv_remote.dart",
+   "declaration": "VpTvRemote.tvScrubBegin",
+   "ordinal": 2,
+   "head": [
+    "if",
+    "(",
+    "_host",
+    ".",
+    "mounted",
+    "&&",
+    "_host",
+    "."
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_tvos_video.dart",
+   "declaration": "VpTvosVideo.scheduleTvosDisplayMatch",
+   "ordinal": 5,
+   "head": [
+    "if",
+    "(",
+    "_host",
+    ".",
+    "screenDisposed",
+    "||",
+    "token",
+    "!="
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/screens/video_player_screen.dart",
+   "declaration": "_VideoPlayerScreenState._currentSeriesImdbId",
+   "ordinal": 0,
+   "head": [
+    "if",
+    "(",
+    "CustomSeriesIdentity",
+    ".",
+    "isCustom",
+    "(",
+    "_effectiveContentImdbId",
+    ")"
+   ]
   }
  ]
 }

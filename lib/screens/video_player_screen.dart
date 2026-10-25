@@ -992,8 +992,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// initialization, this may legitimately appear after launch when TVMaze
   /// enriches a release-only playlist.
   String? get _currentSeriesImdbId {
-    if (CustomSeriesIdentity.isCustom(_effectiveContentImdbId))
+    if (CustomSeriesIdentity.isCustom(_effectiveContentImdbId)) {
       return _effectiveContentImdbId;
+    }
     final value =
         _seriesPlaylist?.imdbId ??
         _syntheticGuidePlaylist?.imdbId ??
