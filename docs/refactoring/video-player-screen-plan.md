@@ -12771,6 +12771,50 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
   `p21b/rereview-fix/`). Not run: the full suite, builds, `flutter test`
   and the moves self-test (commit 7).
 
+### 2026-10-26 — Phase 21b final checks and record, commit 7 (executor: Claude) — PASS
+
+- **Full suite** on `306e9836e`, run serially by the coordinator after the
+  review (`suite_evidence.py run vplayer/final/flutter-final --no-pub
+  --dart-define=DEBRIFY_VP_TEST_HOOKS=true --concurrency=1`, worktree
+  `vplayer-p21b`, tree unchanged during the run). Compared by identity
+  against M5's `m5/gate/flutter-gate.jsonl`: **PASS**.
+  - 15,951 successes, with 0 new failures, 0 missing tests and 0 newly
+    skipped tests.
+  - The 13 failures and 28 errors are the same set as M5.
+  - 222 identities were added, all in the 23 `video_player_p21_*` suites.
+  - The first `compare` call was given the run name and not its path, and
+    exited 1 with `FileNotFoundError`. Re-run with full JSONL paths: exit 0
+    (`final/run.txt`).
+- **`test_baseline.py` replay** (`final/baseline_replay.py`). Its unchanged
+  `run()` parser was replayed over the recorded M5 and final JSONL; it was
+  not re-run, and `--record` was not used. Both runs give the same 41
+  failures by name, with none new and none gone. Against the stale
+  `test/known_failures.txt` it reports 32 new and 0 fixed, which is
+  expected and not the verdict (`final/baseline_replay.txt`).
+- **Release builds**, with nothing installed or run (`final/builds.txt`):
+  - `flutter build apk --release --no-pub` (Android Studio JBR): exit 0,
+    110 s, 102.4 MB.
+  - `flutter build macos --release --no-pub`: exit 0, 99 s.
+  - `flutter build ios --release --no-codesign --no-pub`: exit 0, 100 s.
+  - tvOS, Windows and Linux compilation are **pending** (CI/VM pipelines
+    only).
+- **Revision.** The suite and builds ran on `306e9836e`. `57fd13cc9` changes
+  only `dev/tool/vplayer_host_usage.py`, a docstring in
+  `vplayer_cleanup_proof.py` and this plan: the diff from `306e9836e` is
+  empty for `lib/`, `test/`, `pubspec.lock` and `analysis_options.yaml`,
+  so the suite and build evidence apply to this record. The other final
+  checks are in `p21b/final/checks.log`, `p21b/review-fix/checks.log` and
+  `p21b/rereview-fix/`; the analyzer shows 519 issues and 0 additions.
+- **Pending, not claimed:**
+  - the first `vplayer-structure` CI run, blocked by Actions billing, and
+    making it a required check on `main`;
+  - the device checklist (`video-player-device-checklist.md`);
+  - the user's confirmation that a failed start never arming autosave or
+    preload (Q12) is intended. Until confirmed, it stays a Follow-up.
+- Next: merge `--no-ff` into `refactor/codebase`, run the merge checks and
+  push to `private`. The device pass and the merge to `main` are the user's
+  decisions.
+
 ## Video player end state and completion audit (Phase 21b)
 
 > Completion record for `lib/screens/video_player_screen.dart` (phases 1–21).
