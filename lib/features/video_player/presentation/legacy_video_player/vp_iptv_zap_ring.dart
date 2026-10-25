@@ -208,7 +208,7 @@ class VpIptvZapRing {
     try {
       result = await provider({
         'action': 'zapPage',
-        // The ring's own source, not the guide's — see [_iptvZapSourceId].
+        // The ring's own source, not the guide's — see [iptvZapSourceId].
         'sourceId':
             iptvZapSourceId ??
             _host.iptvGuideContextOverride?.sourceId ??
@@ -282,8 +282,9 @@ class VpIptvZapRing {
     required bool preservePlayingChannel,
   }) {
     if (page.channels.isEmpty) return;
-    if (page.category != _host.iptvZapCategory)
+    if (page.category != _host.iptvZapCategory) {
       _host.clearIptvZapBoundaryCache();
+    }
     final playing = preservePlayingChannel ? _host.currentIptvChannel : null;
     var index = 0;
     if (playing != null) {

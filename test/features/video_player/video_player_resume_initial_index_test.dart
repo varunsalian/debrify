@@ -1,8 +1,8 @@
 import 'package:debrify/screens/video_player_screen.dart';
-import 'package:debrify/services/storage/playback_state_store.dart';
 import 'package:debrify/services/storage/video_progress_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'support/video_player_environment.dart';
+import 'support/physical_resume_store.dart';
 
 void main() {
   testWidgets(
@@ -29,12 +29,15 @@ void main() {
             ),
           );
         }
-        final map = await f.finish(t, PlaybackStateStore.getPlaybackStateMap());
+        final map = await f.finish(
+          t,
+          PhysicalResumeStore.getPlaybackStateMap(),
+        );
         for (final raw in map.values) {
           final row = raw as Map;
           row['updatedAt'] = row['title'] == 'torbox_web_11_33' ? 100 : 200;
         }
-        await f.finish(t, PlaybackStateStore.savePlaybackStateMap(map));
+        await f.finish(t, PhysicalResumeStore.savePlaybackStateMap(map));
         await f.mount(
           t,
           const VideoPlayerScreen(

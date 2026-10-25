@@ -2,7 +2,7 @@
 import copy
 from test_dart_identify_moves import snippet_tokens
 from dart_move_fixture import materialize
-from dart_move_history import load_manifest, git_text, check_earlier, earlier_sources
+from dart_move_history import load_manifest, git_text, check_earlier, earlier_sources, applied_sources
 import check_dart_moves as d
 import re
 
@@ -13,7 +13,7 @@ def run(package):
     original = git_text(spec['base'], spec['source'])
     sources = materialize(spec, original, package)
     assert not d.check(spec, original, sources, package)
-    assert not check_earlier(spec, package)
+    assert not check_earlier(spec, package, current=applied_sources(spec))
     assert len(earlier_sources(spec)) == 25
     assert len([r for r in spec['declarations'] if r['fate'] == 'moved']) == 30
     assert sum(e['count'] for r in spec['declarations'] if r['fate'] == 'retained'

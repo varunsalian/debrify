@@ -218,8 +218,9 @@ class VpIdentifyTitle {
       );
       final subtitles = AddonSubtitleSlot.flatten(slots);
 
-      if (!_host.mounted || fetchToken != _host.addonSubtitleFetchToken)
+      if (!_host.mounted || fetchToken != _host.addonSubtitleFetchToken) {
         return null;
+      }
 
       final cacheKey =
           contentType == 'series' && season != null && episode != null

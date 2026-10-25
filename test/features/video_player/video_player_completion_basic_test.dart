@@ -2,7 +2,6 @@ import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/storage/continue_watching_storage.dart';
 import 'package:debrify/services/storage/local_completion_storage.dart';
 import 'package:debrify/services/storage/movie_progress_storage.dart';
-import 'package:debrify/services/storage/playback_state_store.dart';
 import 'package:debrify/services/storage/video_resume_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 // Existing resolved transport; application dependencies stay frozen.
@@ -12,6 +11,7 @@ import 'package:shared_preferences_platform_interface/shared_preferences_platfor
 import 'support/local_completion_driver.dart';
 import 'support/trakt_transport.dart';
 import 'support/video_player_environment.dart';
+import 'support/physical_resume_store.dart';
 
 void main() {
   TraktTestTransport.install();
@@ -28,7 +28,7 @@ void main() {
           await d.mount(screen);
           await f.finish(
             t,
-            PlaybackStateStore.savePlaybackStateMap({
+            PhysicalResumeStore.savePlaybackStateMap({
               'video_completion': {
                 'type': 'video',
                 'imdbId': 'tt7100000',

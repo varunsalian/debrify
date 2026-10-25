@@ -1,13 +1,13 @@
 import 'package:debrify/screens/video_player/widgets/player_menu_panel.dart';
 import 'package:debrify/screens/video_player/widgets/source_sheet.dart';
 import 'package:debrify/screens/video_player_screen.dart';
-import 'package:debrify/services/storage/playback_state_store.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'support/display_mode_driver.dart';
 import 'support/player_actions.dart';
 import 'support/video_player_environment.dart';
 import 'video_player_source_test.dart' show source;
+import 'support/physical_resume_store.dart';
 
 void main() {
   for (final shape in [
@@ -57,7 +57,7 @@ void main() {
         });
         await f.finish(t, selected.future);
         await f.actions.settle(t);
-        await f.finish(t, PlaybackStateStore.savePlaybackStateMap({}));
+        await f.finish(t, PhysicalResumeStore.savePlaybackStateMap({}));
         final owner = t.state(find.byType(VideoPlayerScreen));
         entries[0] = PlaylistEntry(
           url: shape == 'live stream'
@@ -99,7 +99,10 @@ void main() {
         ).menu(PlayerMenuSection.speed);
         menu.onSpeedSelected(1.5);
         await f.actions.settle(t);
-        final map = await f.finish(t, PlaybackStateStore.getPlaybackStateMap());
+        final map = await f.finish(
+          t,
+          PhysicalResumeStore.getPlaybackStateMap(),
+        );
         final rows = map.values
             .whereType<Map>()
             .where((v) => v['type'] == 'video')

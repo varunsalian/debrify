@@ -1,49 +1,19 @@
-import 'package:debrify/services/storage/alldebrid_storage.dart';
-import 'package:debrify/services/storage/episode_completion_storage.dart';
-import 'package:debrify/services/storage/episode_resume_storage.dart';
-import 'package:debrify/services/storage/iptv_appearance_storage.dart';
-import 'package:debrify/services/storage/iptv_audio_storage.dart';
-import 'package:debrify/services/storage/iptv_history_storage.dart';
-import 'package:debrify/services/storage/iptv_last_channel_storage.dart';
-import 'package:debrify/services/storage/iptv_playlist_storage.dart';
-import 'package:debrify/services/storage/local_completion_storage.dart';
-import 'package:debrify/services/storage/movie_progress_storage.dart';
-import 'package:debrify/services/storage/player_appearance_storage.dart';
-import 'package:debrify/services/storage/player_network_storage.dart';
 import 'package:debrify/services/storage/player_settings_storage.dart';
-import 'package:debrify/services/storage/playlist_artwork_storage.dart';
-import 'package:debrify/services/storage/playlist_metadata_storage.dart';
-import 'package:debrify/services/storage/premiumize_storage.dart';
-import 'package:debrify/services/storage/quick_play_storage.dart';
-import 'package:debrify/services/storage/real_debrid_storage.dart';
-import 'package:debrify/services/storage/series_progress_storage.dart';
-import 'package:debrify/services/storage/skip_segments_storage.dart';
-import 'package:debrify/services/storage/subtitle_settings_storage.dart';
-import 'package:debrify/services/storage/torbox_storage.dart';
-import 'package:debrify/services/storage/track_preferences_storage.dart';
-import 'package:debrify/services/storage/tracker_episode_progress_storage.dart';
-import 'package:debrify/services/storage/video_progress_storage.dart';
 import 'package:debrify/services/storage/video_resume_storage.dart';
 import '../models/source_playlist_resolver.dart';
 import '../widgets/playback_startup_view.dart';
 import '../utils/episode_playback_request.dart';
-import '../utils/show_shuffle.dart';
-import '../models/subtitle_source_priority.dart';
-import 'video_player/utils/subtitle_priority_selection.dart';
 import 'video_player/player_pip_route.dart';
 import 'dart:async';
-import '../services/source_selection_diagnostics.dart';
 import '../services/player_visibility.dart';
 import '../utils/media_kit_init.dart';
 import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart'
-    show kIsWeb, kProfileMode, kReleaseMode, listEquals, visibleForTesting;
+    show kProfileMode, kReleaseMode, visibleForTesting;
 import 'package:flutter/material.dart';
 import '../models/custom_series_identity.dart';
-import 'package:path_provider/path_provider.dart';
-import '../utils/app_storage.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter/services.dart';
 import '../services/player_display_controls.dart';
@@ -52,60 +22,34 @@ import 'package:synchronized/synchronized.dart';
 // Removed volume_controller; using media_kit player volume instead
 import '../services/local_playback_resume_resolver.dart';
 import '../services/startup_stream_policy.dart';
-import '../services/direct_source_authorization.dart';
 import '../services/media_server_watch_sync.dart';
 import '../services/resume_write_guard.dart';
-import '../models/profiles/profile_policy.dart';
-import '../services/profiles/profile_policy_guard.dart';
 import '../services/skip_segment_service.dart';
 import '../services/analytics_service.dart';
 import '../services/pip_service.dart';
-import '../services/audio_effect_session_service.dart';
 import '../services/tvos_decode_remedy.dart';
 import '../services/tvos_display_match_service.dart';
 import '../services/android_native_downloader.dart';
 import '../services/desktop_recording_service.dart';
-import '../services/live_recording_service.dart';
 import '../services/main_page_bridge.dart';
 import '../services/profiles/profile_lock_controller.dart';
-import '../services/tracking_source_policy.dart';
-import '../services/profiles/profile_runtime.dart';
-import '../widgets/recording_limit_dialogs.dart';
-import '../services/debrid_service.dart';
-import '../services/premiumize_service.dart';
-import '../services/alldebrid_service.dart';
 import '../utils/platform_util.dart';
-import '../utils/player_audio_config.dart';
-import '../utils/time_formatters.dart';
 import '../utils/series_parser.dart';
-import '../utils/movie_parser.dart';
-import '../utils/iptv_player_paging.dart';
-import '../services/movie_metadata_service.dart';
 import '../models/iptv_playlist.dart';
 import '../services/stremio_iptv_service.dart';
 import '../services/iptv_epg_service.dart';
 import '../models/playlist_view_mode.dart';
 import '../models/series_playlist.dart';
-import '../services/torbox_service.dart';
-import '../services/pikpak_api_service.dart';
-import '../services/next_episode_service.dart';
 
-import '../widgets/tv_text_field.dart';
-import '../widgets/video_output_lease.dart';
 import 'package:media_kit/media_kit.dart' as mk;
 import 'package:media_kit_video/media_kit_video.dart' as mkv;
 
 // Video Player Components
 import 'video_player/models/playlist_entry.dart';
-import 'video_player/services/external_subtitle_payload.dart';
-import 'video_player/services/subtitle_track_utils.dart';
 import 'video_player/models/gesture_state.dart';
 import 'video_player/models/hud_state.dart';
 import 'video_player/painters/double_tap_ripple_painter.dart';
 import 'video_player/utils/gesture_helpers.dart';
-import 'video_player/utils/language_mapping.dart';
-import 'video_player/utils/subtitle_audio_policy.dart';
-import 'video_player/utils/aspect_mode_utils.dart';
 import 'video_player/constants/timing_constants.dart';
 import 'video_player/widgets/auto_sync_pill.dart';
 import 'video_player/widgets/seek_hud.dart';
@@ -120,7 +64,6 @@ import 'video_player/widgets/pikpak_retry_overlay.dart';
 import 'video_player/widgets/buffering_indicator.dart';
 import 'video_player/widgets/tracks_sheet.dart';
 import 'video_player/widgets/player_menu_panel.dart';
-import 'video_player/widgets/playlist_sheet.dart';
 import 'video_player/widgets/channel_guide.dart';
 import 'video_player/widgets/iptv_channel_sheet.dart';
 import 'video_player/widgets/iptv_zap_banner.dart';
@@ -134,14 +77,10 @@ import 'video_player/services/subtitle_settings_service.dart';
 import 'video_player/services/media_kit_subtitle_auto_sync.dart';
 import 'video_player/services/playback_ui_clock.dart';
 import 'video_player/services/skip_segment_ui_controller.dart';
-import 'video_player/services/android_renderer_startup_fallback.dart';
 import 'video_player/services/iptv_tune_diagnostics.dart';
 import 'video_player/services/iptv_live_recovery.dart';
-import 'video_player/widgets/subtitle_line_picker_overlay.dart';
 import 'video_player/widgets/skip_segment_button.dart';
 import 'video_player/widgets/sleep_timer_sheet.dart';
-import 'video_player/widgets/sync_stepper_overlay.dart';
-import 'video_player/widgets/spotlight_dialog.dart';
 import 'video_player/widgets/debrify_tv_banner.dart';
 import '../models/stremio_subtitle.dart';
 import '../models/stremio_addon.dart';
@@ -149,33 +88,17 @@ import '../models/torrent.dart';
 import '../models/android_video_renderer_mode.dart';
 import '../models/content_display_match_mode.dart';
 import '../services/series_source_fetcher.dart';
-import '../services/stremio_service.dart';
-import '../services/stremio_subtitle_service.dart';
-import '../services/trakt/trakt_service.dart';
-import '../services/simkl/simkl_service.dart';
-import '../services/mdblist/mdblist_models.dart';
-import '../services/mdblist/mdblist_scrobble_session.dart';
-import '../services/mdblist/mdblist_service.dart';
-import 'package:http/http.dart' as http;
-import '../utils/episode_progress_merge.dart';
 import '../utils/tv_keys.dart';
-import '../utils/tv_search_focus_handoff.dart';
 
 // Re-export PlaylistEntry for backward compatibility
 export 'video_player/models/playlist_entry.dart';
 export 'video_player/models/channel_entry.dart';
 export '../features/video_player/models/iptv_catchup_request_gate.dart'
     show IptvCatchupRequestGate;
-import '../features/video_player/models/vp_manual_source_validation_failure.dart';
 import '../features/video_player/models/vp_season_episode_selection.dart';
 import '../features/video_player/models/vp_subtitle_apply_attempt.dart';
 import '../features/video_player/models/vp_iptv_zap_page.dart';
-import '../features/video_player/models/iptv_catchup_request_gate.dart';
-import '../features/video_player/presentation/vp_random_choice_tile.dart';
 import '../features/video_player/application/vp_format.dart';
-import '../features/video_player/application/vp_filename_hash.dart';
-import '../features/video_player/application/vp_identity_text.dart';
-import '../features/video_player/application/vp_subtitle_identity.dart';
 import '../features/video_player/presentation/legacy_video_player/vp_sleep_timer_controller.dart';
 import '../features/video_player/presentation/legacy_video_player/vp_skip_segment_controller.dart';
 import '../features/video_player/presentation/legacy_video_player/vp_display_mode_controller.dart';
@@ -542,7 +465,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   );
 
   late mk.Player _player;
-  // _player is assigned partway through the async _initializePlayer(); if the
+  // _player is assigned partway through the async VpPlayerStartup.initializePlayer(); if the
   // user backs out before that (or init throws first), dispose() must not
   // touch the unassigned late field (LateInitializationError during pop).
   bool _playerCreated = false;
@@ -556,7 +479,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   TvosDecodeRemedy? _tvosDecodeRemedy;
 
   /// tvOS manual escape hatch — forces `hwdec=no` at controller creation.
-  /// Preloaded in [_loadPlayerDefaults]; [_createPlayerInstance] is
+  /// Preloaded in [VpPlayerDefaults.loadPlayerDefaults]; [VpPlayerInstance.createPlayerInstance] is
   /// synchronous and cannot read prefs itself.
   bool _tvosForceSoftwareDecode = false;
   ContentDisplayMatchMode _contentDisplayMatchMode =
@@ -565,7 +488,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Timer? _tvosDisplayMatchTimer;
 
   /// Audio-output settings (AUDIO_FIDELITY_PLAN.md), preloaded in
-  /// [_loadPlayerDefaults] and applied by [_configurePlayerAudio].
+  /// [VpPlayerDefaults.loadPlayerDefaults] and applied by [VpAudioOutput.configurePlayerAudio].
   bool _audioPassthroughEnabled = false;
   bool _systemAudioEffectsEnabled = false;
   bool _appleMultichannelEnabled = false;
@@ -985,13 +908,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// no tee (mpv can't mux on media_kit's libs) and no Android engine — the raw
   /// HTTP copy is the only recorder there — but like the engine it belongs to
   /// the SERVICE, so closing the player leaves it running and nothing here may
-  /// stop it implicitly. [_desktopCaptureForCurrent] asks the service instead,
+  /// stop it implicitly. [VpIptvRecordingResources.desktopCaptureForCurrent] asks the service instead,
   /// which is also what makes a SCHEDULER-started capture stoppable from this
   /// same button.
   VoidCallback? _desktopRecordingRevisionListener;
 
   /// Bumped whenever a stop, a channel change or a teardown supersedes an
-  /// in-flight [_startRecording]. That start does async work (storage lookup,
+  /// in-flight [VpIptvRecording.startRecording]. That start does async work (storage lookup,
   /// mkdir) during which `_isRecording` is still false, so the stop-if-
   /// recording checks elsewhere cannot see it; without this token the awaits
   /// could resume and arm libmpv on the NEW channel under the OLD channel's
@@ -1069,8 +992,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// initialization, this may legitimately appear after launch when TVMaze
   /// enriches a release-only playlist.
   String? get _currentSeriesImdbId {
-    if (CustomSeriesIdentity.isCustom(_effectiveContentImdbId))
+    if (CustomSeriesIdentity.isCustom(_effectiveContentImdbId)) {
       return _effectiveContentImdbId;
+    }
     final value =
         _seriesPlaylist?.imdbId ??
         _syntheticGuidePlaylist?.imdbId ??
@@ -1220,8 +1144,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _isTransitioning = false; // Show black screen during transitions
 
   /// One-shot guard set the moment we pop to hand the next episode back to the
-  /// host for Quick Play. End-of-video auto-advance (_onPlaybackEnded) and a
-  /// manual Next press both funnel into _handleSeriesNextEpisode, which awaits a
+  /// host for Quick Play. End-of-video auto-advance (VpPlaybackEnded.onPlaybackEnded) and a
+  /// manual Next press both funnel into VpEpisodeNext.handleSeriesNextEpisode, which awaits a
   /// network lookup and then pops — without this, the two can race and pop
   /// twice, ejecting the user off the host screen instead of playing the next.
   bool _seriesNextDispatched = false;
@@ -1294,7 +1218,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   // Retro TV static loading messages
   String _tvStaticMessage = '📺 TUNING...';
-  String _tvStaticSubtext = '';
+  String _tvStaticSubtext = ''; // Second line for video title
 
   // Dynamic title for Debrify TV (no-playlist) flow
   String _dynamicTitle = '';
@@ -1346,7 +1270,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         .toList();
     _seriesImdbKnownAtLaunch = widget.contentImdbId?.trim().isNotEmpty == true;
     // The dock and the zap banner share the bottom strip, and the dock is
-    // raised from several places that never go through _toggleControls
+    // raised from several places that never go through VpControlsRuntime.toggleControls
     // (volume keys, pointer wake). Watching the notifier catches all of them.
     _controlsVisible.addListener(_controlsRuntime.onControlsVisibilityChanged);
 
@@ -1460,7 +1384,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     );
     // Held for the LOADING phase only — a slow debrid resolve must not let
     // the screen sleep before the first frame. From the first playing event
-    // onward the lock follows play/pause (see _syncWakelock).
+    // onward the lock follows play/pause (see VpPipLifecycle.syncWakelock).
     unawaited(PlayerDisplayControls.instance.setWakelock(true));
     if (Platform.isWindows || Platform.isLinux) {
       windowManager.setFullScreen(true);
@@ -1501,7 +1425,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // mpv live and can transiently read short on a fresh remote stream —
     // against which the held target could compute as >80% or >100% progress,
     // turning a tracker start/pause into a stop (a watched mark for content
-    // playing at 0:00). Same rule as _saveResume's short-duration skip: fall
+    // playing at 0:00). Same rule as VpResumeSave.saveResume's short-duration skip: fall
     // back to the raw position for the few seconds the reading is off. A raw
     // ~0 start-scrobble in that window is the pre-guard behavior, not a new
     // harm.
@@ -1590,7 +1514,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
-  /// Load default player settings (aspect)
   /// The vertical band at the bottom of the screen the dock occupies.
   ///
   /// `classic` keeps the literal each consumer has always used; only the
@@ -1671,7 +1594,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   final List<int> _iptvZapPendingInputs = [];
 
   /// Monotonic ticket for IPTV channel switches. The Stremio candidate ladder
-  /// can hold [_switchToIptvChannel] open for many seconds; a newer switch
+  /// can hold [VpIptvChannelSwitch.switchToIptvChannel] open for many seconds; a newer switch
   /// must strand the older one (no opens, no winner marks) or an abandoned
   /// ladder would hijack playback back to its channel.
   int _iptvSwitchTicket = 0;
@@ -1681,8 +1604,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// the live path instead of the movie source-switch pipeline.
   String? _iptvChannelKey;
 
-  /// Suppresses [_onIptvStreamError] for errors that aren't the tuned
-  /// channel's to own. Set for the whole of [_switchToIptvChannel] and
+  /// Suppresses [VpIptvLiveSources.onIptvStreamError] for errors that aren't the tuned
+  /// channel's to own. Set for the whole of [VpIptvChannelSwitch.switchToIptvChannel] and
   /// cleared the moment the new media is actually opened, because until then
   /// mpv is still draining the OUTGOING channel — while [_currentIptvIndex]
   /// already points at the new one, so a report would blame the wrong
@@ -1793,7 +1716,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // bump also cancels a start still awaiting its storage setup (it would
     // otherwise arm a disposed player and leave the file untracked).
     //
-    // Done inline rather than through `_stopRecording`: dispose() cannot await,
+    // Done inline rather than through `VpIptvRecording.stopRecording`: dispose() cannot await,
     // so that call would race `_player.dispose()` a few lines below AND reach
     // its own setState() mid-teardown. The order that matters is preserved by
     // hand — state cleared now, publish handed off immediately (it reads the
@@ -2011,7 +1934,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         },
         // `_` on purpose: `context` inside must keep resolving to the State's
         // context, exactly as before this wrapper existed — sheet callbacks
-        // like _showTracksSheet await before using it, and the Builder's own
+        // like VpPlayerMenuUi.showTracksSheet await before using it, and the Builder's own
         // element dies whenever the controls subtree is dropped (PiP,
         // not-ready), which the State's context survives.
         child: Builder(
@@ -2042,7 +1965,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               // rather than parking the remote on it.
               progressFocusable: !_tvNoTimeline,
               // OK is claimed by the dock's own buttons, so those presses never
-              // reach _handleTvKey and never restarted the countdown.
+              // reach VpTvRemote.handleTvKey and never restarted the countdown.
               onInteract: _controlsRuntime.scheduleAutoHide,
               scrubPreview: _tvScrubTarget,
               onPlayPause: _controlsRuntime.togglePlay,

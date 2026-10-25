@@ -209,8 +209,9 @@ class VpAddonSubtitles {
   /// This mirrors the Android TV behavior where subtitles are always fetched on playback start.
   Future<void> fetchAndMaybeAutoSelectAddonSubtitle() async {
     if (CustomSeriesIdentity.isCustom(_host.effectiveContentImdbId) &&
-        _host.manualContentImdbId == null)
+        _host.manualContentImdbId == null) {
       return;
+    }
     // Capture token at start to detect if content changes during async operations
     final fetchToken = _host.addonSubtitleFetchToken;
 
@@ -304,8 +305,9 @@ class VpAddonSubtitles {
           season: season,
           episode: episode,
           onUpdate: (slots) {
-            if (!_host.mounted || fetchToken != _host.addonSubtitleFetchToken)
+            if (!_host.mounted || fetchToken != _host.addonSubtitleFetchToken) {
               return;
+            }
             unawaited(applySubtitleSourcePriority(slots, fetchToken));
           },
         );

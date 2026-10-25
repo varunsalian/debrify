@@ -13,8 +13,6 @@ import 'package:debrify/services/profiles/profile_policy_guard.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/storage/local_completion_storage.dart';
-import 'package:debrify/services/storage/playback_identity_storage.dart';
-import 'package:debrify/services/storage/playback_state_store.dart';
 import 'package:debrify/services/storage/tracking_source_storage.dart';
 import 'package:debrify/services/subtitle_font_service.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -26,6 +24,7 @@ import 'package:shared_preferences_platform_interface/shared_preferences_platfor
 
 import 'secondary_tracker_driver.dart';
 import 'video_player_environment.dart';
+import 'physical_resume_store.dart';
 
 VideoPlayerScreen completionScreen({
   String? type = 'movie',
@@ -190,11 +189,11 @@ class LocalCompletionDriver extends SecondaryTrackerDriver {
   Future<void> percent(double value) =>
       position((1200000 * value / 100).round());
   Future<Map<String, dynamic>> stateMap() =>
-      f.finish(t, PlaybackStateStore.getPlaybackStateMap());
+      f.finish(t, PhysicalResumeStore.getPlaybackStateMap());
   String episodeKey({
     String title = 'Completion title',
     String? id = 'tt7100000',
-  }) => PlaybackIdentityStorage.seriesProgressKey(title, id);
+  }) => PhysicalResumeStore.seriesProgressKey(title, id);
   Future<Map<String, dynamic>?> finishedEpisode({
     String title = 'Completion title',
     String? id = 'tt7100000',

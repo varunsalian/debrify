@@ -4,11 +4,11 @@ import 'package:debrify/screens/video_player/widgets/debrify_tv_banner.dart';
 import 'package:debrify/screens/video_player/widgets/sleep_timer_sheet.dart';
 import 'package:debrify/screens/video_player_screen.dart';
 import 'package:debrify/services/series_source_fetcher.dart';
-import 'package:debrify/services/storage/playback_state_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'support/player_actions.dart';
 import 'support/sleep_timer_driver.dart';
 import 'support/tv_episode_driver.dart';
+import 'support/physical_resume_store.dart';
 
 /// Phase 17 original behaviour that the independent Step-0b mutation sample
 /// found unpinned: header ownership of a first-seen next-channel URL, the
@@ -345,7 +345,7 @@ void main() {
         final task = d.observe<dynamic>(() => b.onEpisodeSelected(1, 3));
         await d.f.until(t, () => entered);
         final atHold = _storedPositions(
-          await d.f.finish(t, PlaybackStateStore.getPlaybackStateMap()),
+          await d.f.finish(t, PhysicalResumeStore.getPlaybackStateMap()),
         );
         expect(atHold, contains(300000));
         // The outgoing stream keeps reporting progress while the switch is
@@ -356,7 +356,7 @@ void main() {
         d.player.emit('position', d.player.state.position);
         await d.f.advance(t, const Duration(seconds: 7));
         final afterTick = _storedPositions(
-          await d.f.finish(t, PlaybackStateStore.getPlaybackStateMap()),
+          await d.f.finish(t, PhysicalResumeStore.getPlaybackStateMap()),
         );
         expect(afterTick, isNot(contains(420000)));
         expect(afterTick, contains(300000));

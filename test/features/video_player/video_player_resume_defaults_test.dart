@@ -1,12 +1,12 @@
 import 'package:debrify/screens/video_player_screen.dart';
 import 'package:debrify/screens/video_player/models/gesture_state.dart';
-import 'package:debrify/services/storage/playback_state_store.dart';
 import 'package:debrify/services/storage/video_resume_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'support/display_mode_driver.dart';
 import 'support/fake_player.dart';
 import 'support/player_actions.dart';
 import 'support/video_player_environment.dart';
+import 'support/physical_resume_store.dart';
 
 void main() {
   testWidgets(
@@ -20,7 +20,7 @@ void main() {
         await display.defaults(aspect: AspectMode.cinemaZoom.index);
         await f.finish(
           t,
-          PlaybackStateStore.savePlaybackStateMap({
+          PhysicalResumeStore.savePlaybackStateMap({
             'video_p14_default_fields': {
               'type': 'video',
               'title': 'P14 default fields',

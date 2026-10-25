@@ -2,7 +2,6 @@ import 'package:debrify/screens/video_player/widgets/player_menu_panel.dart';
 import 'package:debrify/screens/video_player_screen.dart';
 import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
-import 'package:debrify/services/storage/playback_state_store.dart';
 import 'package:debrify/services/storage/video_resume_storage.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -12,6 +11,7 @@ import 'package:shared_preferences_platform_interface/shared_preferences_platfor
 import 'support/display_mode_driver.dart';
 import 'support/local_completion_driver.dart';
 import 'support/video_player_environment.dart';
+import 'support/physical_resume_store.dart';
 
 void main() {
   for (final stage in ['admitted database', 'open transaction']) {
@@ -41,7 +41,7 @@ void main() {
             final b = await completionIncomingProfile(t, f);
             await f.finish(
               t,
-              PlaybackStateStore.savePlaybackStateMap({
+              PhysicalResumeStore.savePlaybackStateMap({
                 'B_unrelated': {'type': 'video', 'title': 'B'},
               }),
             );
@@ -59,7 +59,7 @@ void main() {
             );
             await f.finish(
               t,
-              PlaybackStateStore.savePlaybackStateMap({
+              PhysicalResumeStore.savePlaybackStateMap({
                 'A_unrelated': {'type': 'video', 'title': 'A'},
               }),
             );

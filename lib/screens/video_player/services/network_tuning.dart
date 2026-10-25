@@ -14,12 +14,12 @@ import 'package:debrify/services/storage/player_network_storage.dart';
 /// knob cover the real cases.
 ///
 /// Scope: VOD playback in both players. The Debrify (mpv) player consumes
-/// [mpvProperties]/[vodLavfOptions] in `_openMedia`; the native Android TV
+/// [mpvProperties]/[vodLavfOptions] in `VpMediaOpen.openMedia`; the native Android TV
 /// player receives the raw preset strings via the launch payload
 /// (`networkPatience`/`networkBuffer`, injected in AndroidTvPlayerBridge)
 /// and maps them to data-source timeouts + a DefaultLoadControl itself.
 /// Live IPTV keeps its own tuned pipeline on both sides (ffmpeg-reconnect
-/// flags / resilience ladder) — see the liveStream branch in `_openMedia`
+/// flags / resilience ladder) — see the liveStream branch in `VpMediaOpen.openMedia`
 /// and the `isIptvMode` guards in AndroidTvTorrentPlayerActivity.
 /// Deliberately excluded: Magic TV's Torbox/RealDebrid launches route to
 /// TorboxTvPlayerActivity, which keeps stock timeouts — the card copy's

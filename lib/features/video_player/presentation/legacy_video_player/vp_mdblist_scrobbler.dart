@@ -66,7 +66,7 @@ class VpMdblistScrobbler {
     // Playlist launches resolve their requested/resume episode asynchronously.
     // Before that finishes `_currentIndex` is still zero, so constructing the
     // MDBList target here used to scrobble S1E1 while the player actually
-    // opened (for example) S1E8. Wait until `_initializePlayer` publishes the
+    // opened (for example) S1E8. Wait until `VpPlayerStartup.initializePlayer` publishes the
     // real initial index; its playing-state check below still starts tracking
     // immediately when media became ready during the wait.
     try {
@@ -114,7 +114,7 @@ class VpMdblistScrobbler {
 
   void updateMdblistPosition() {
     if (_host.validationGateActive) return;
-    // Held-target substitution, same reason as _traktProgress.
+    // Held-target substitution, same reason as VpTraktScrobbler.traktProgress.
     mdblistSession?.updatePosition(_host.persistablePosition, _host.duration);
   }
 

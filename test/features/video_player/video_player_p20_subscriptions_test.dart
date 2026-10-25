@@ -6,7 +6,6 @@ import 'package:debrify/screens/video_player/widgets/buffering_indicator.dart';
 import 'package:debrify/screens/video_player/widgets/controls.dart';
 import 'package:debrify/screens/video_player_screen.dart';
 import 'package:debrify/services/player_visibility.dart';
-import 'package:debrify/services/storage/playback_state_store.dart';
 import 'package:debrify/services/storage/player_settings_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,6 +13,7 @@ import 'package:media_kit/media_kit.dart' as mk;
 
 import 'support/engine_driver.dart';
 import 'support/fake_player.dart';
+import 'support/physical_resume_store.dart';
 
 const _failure = 'synthetic MediaCodec video output failure';
 const _screen = VideoPlayerScreen(
@@ -72,7 +72,7 @@ Future<(EngineDriver, FakePlayer)> _rebuilt(
 }
 
 Future<Map?> _saved(EngineDriver d, String key) async {
-  final map = await d.f.finish(d.t, PlaybackStateStore.getPlaybackStateMap());
+  final map = await d.f.finish(d.t, PhysicalResumeStore.getPlaybackStateMap());
   return map[key] as Map?;
 }
 

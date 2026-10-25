@@ -110,6 +110,20 @@ VIDEO_PLAYER_SIZE_EXCEPTIONS = {
     VIDEO_PLAYER_BRIDGE + "vp_player_startup.dart": 623,
 }
 VIDEO_PLAYER_SIZE_CEILING = 800
+# Phase 21b end state: the facade is an exact, shrink-only exception (widget,
+# State lifecycle/shared state/build under D6, the host adapters, the hooks).
+# Exits: startup decomposition, build decomposition, D1 per collaborator
+# (video-player-screen-plan.md "End-state exception"). `lines != cap` fails;
+# a raise needs the reviewed raise procedure in the same commit.
+VIDEO_PLAYER_COMPLETE = True
+VIDEO_PLAYER_FACADE_CAP = 8562
+VIDEO_PLAYER_FACADE_EXPORTS = (
+    "video_player/models/playlist_entry.dart",
+    "video_player/models/channel_entry.dart",
+    "../features/video_player/models/iptv_catchup_request_gate.dart",
+)
+VIDEO_PLAYER_FACADE_CLASSES = ("VideoPlayerScreen", "_VideoPlayerScreenState",
+                               "VideoPlayerScreenTestHooks", "VpS2Hooks")
 # Exact Phase-1 compatibility/type imports. Pure files cannot acquire other
 # legacy dependencies merely because they live in models/ or application/.
 VIDEO_PLAYER_PURE_IMPORTS = {
@@ -643,6 +657,39 @@ DIRECTIVES = re.compile(r"^\s*(?:import|export)\s+([^;]+);", re.MULTILINE)
 URIS = re.compile(r"['\"]([^'\"]+)['\"]")
 
 
+def video_player_facade_problems(source: str, lines: int) -> list[str]:
+    """Exact end-state shape of the video-player facade (Phase 21b)."""
+    problems = []
+    if lines != VIDEO_PLAYER_FACADE_CAP:
+        problems.append(f"{lines} lines does not match the exact {VIDEO_PLAYER_FACADE_CAP}-line video-player facade exception")
+    exports = tuple(re.findall(r"^export\s+'([^']+)'", source, re.MULTILINE))
+    if exports != VIDEO_PLAYER_FACADE_EXPORTS:
+        problems.append("video-player facade exports changed: " + ", ".join(exports))
+    text = source.splitlines()
+    for number, line in enumerate(text, 1):
+        if not line or line[0] in " \t}@" or line.startswith(("//", "import ", "export ")):
+            continue
+        header = re.match(r"class (\w+)\b", line)
+        if not header:
+            problems.append(f"video-player facade top-level declaration other than a class at line {number}")
+            continue
+        name = header.group(1)
+        if name in VIDEO_PLAYER_FACADE_CLASSES:
+            continue
+        declaration = line
+        follow = number
+        while "{" not in declaration and follow < len(text):
+            declaration += " " + text[follow].strip()
+            follow += 1
+        # `_VpXHostAdapter implements VpXHost` only; that the bridge Host exists
+        # and every adapter member overrides it is vplayer_host_usage.py's job.
+        implemented = re.search(r"\bimplements (Vp\w+Host)\s*\{", declaration)
+        adapter = re.fullmatch(r"_(Vp\w+Host)Adapter", name)
+        if not (adapter and implemented and implemented.group(1) == adapter.group(1)):
+            problems.append(f"video-player facade class {name} is not a registered class or a Host adapter")
+    return problems
+
+
 def violations(path: Path) -> list[str]:
     source = path.read_text()
     relative = path.relative_to(ROOT).as_posix()
@@ -1008,7 +1055,9 @@ def violations(path: Path) -> list[str]:
         if layer_hint := next((x for x in ("data", "models") if x in path.parts), None):
             if re.search(r"\bBuildContext\b", source):
                 problems.append(f"{layer_hint} references BuildContext")
-    if lines > max(800, PLAYER_LAUNCH_SIZE_EXCEPTIONS.get(relative, 0), DEBRIFY_TV_SIZE_EXCEPTIONS.get(relative, 0)):
+    # The video-player facade's exact end-state cap is enforced below (`!=`).
+    facade_cap = VIDEO_PLAYER_FACADE_CAP if VIDEO_PLAYER_COMPLETE and relative == VIDEO_PLAYER_FACADE else 0
+    if lines > max(800, PLAYER_LAUNCH_SIZE_EXCEPTIONS.get(relative, 0), DEBRIFY_TV_SIZE_EXCEPTIONS.get(relative, 0), facade_cap):
         problems.append(f"{lines} lines exceeds the 800-line ceiling")
     if re.search(r"^\s*part\s+of\b", source, re.MULTILINE):
         problems.append("handwritten part of a shared library")
@@ -1016,6 +1065,8 @@ def violations(path: Path) -> list[str]:
         if not part.endswith(GENERATED_SUFFIXES):
             problems.append(f"handwritten part directive: {part}")
 
+    if VIDEO_PLAYER_COMPLETE and relative == VIDEO_PLAYER_FACADE:
+        problems.extend(video_player_facade_problems(source, lines))
     if relative.startswith("lib/features/video_player/"):
         exception = VIDEO_PLAYER_SIZE_EXCEPTIONS.get(relative)
         if exception is None and lines > VIDEO_PLAYER_FILE_CAP:
@@ -1369,6 +1420,8 @@ def main() -> int:
     paths.update((ROOT / "lib/features/premiumize_files").rglob("*.dart"))
     if ALLDEBRID_COMPLETE:
         paths.add(ROOT / ALLDEBRID_FACADE)
+    if VIDEO_PLAYER_COMPLETE:
+        paths.add(ROOT / VIDEO_PLAYER_FACADE)
     # Scan the catalog peer even before its independent feature registration.
     paths.update((ROOT / "lib/features/stremio_tv_catalogs").rglob("*.dart"))
     paths.update(ROOT / p for p in EXTRACTED_ELSEWHERE)

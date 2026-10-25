@@ -1,0 +1,1820 @@
+{
+ "schema": 1,
+ "base": "b72ff16f8",
+ "description": "Phase 21b declared cleanup edits (C1 imports, C2 braces, C3 comments). Proved by dev/tool/vplayer_cleanup_proof.py (layer 1) and mirrored in dev/tool/dart_moves/vplayer_p21.json (layer 2).",
+ "edits": [
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "package:debrify/services/storage/alldebrid_storage.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "package:debrify/services/storage/episode_completion_storage.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "package:debrify/services/storage/episode_resume_storage.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "package:debrify/services/storage/iptv_appearance_storage.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "package:debrify/services/storage/iptv_audio_storage.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "package:debrify/services/storage/iptv_history_storage.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "package:debrify/services/storage/iptv_last_channel_storage.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "package:debrify/services/storage/iptv_playlist_storage.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "package:debrify/services/storage/local_completion_storage.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "package:debrify/services/storage/movie_progress_storage.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "package:debrify/services/storage/player_appearance_storage.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "package:debrify/services/storage/player_network_storage.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "package:debrify/services/storage/playlist_artwork_storage.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "package:debrify/services/storage/playlist_metadata_storage.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "package:debrify/services/storage/premiumize_storage.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "package:debrify/services/storage/quick_play_storage.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "package:debrify/services/storage/real_debrid_storage.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "package:debrify/services/storage/series_progress_storage.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "package:debrify/services/storage/skip_segments_storage.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "package:debrify/services/storage/subtitle_settings_storage.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "package:debrify/services/storage/torbox_storage.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "package:debrify/services/storage/track_preferences_storage.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "package:debrify/services/storage/tracker_episode_progress_storage.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "package:debrify/services/storage/video_progress_storage.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../utils/show_shuffle.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../models/subtitle_source_priority.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "video_player/utils/subtitle_priority_selection.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../services/source_selection_diagnostics.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "package:path_provider/path_provider.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../utils/app_storage.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../services/direct_source_authorization.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../models/profiles/profile_policy.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../services/profiles/profile_policy_guard.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../services/audio_effect_session_service.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../services/live_recording_service.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../services/tracking_source_policy.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../services/profiles/profile_runtime.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../widgets/recording_limit_dialogs.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../services/debrid_service.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../services/premiumize_service.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../services/alldebrid_service.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../utils/player_audio_config.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../utils/time_formatters.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../utils/movie_parser.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../utils/iptv_player_paging.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../services/movie_metadata_service.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../services/torbox_service.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../services/pikpak_api_service.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../services/next_episode_service.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../widgets/tv_text_field.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../widgets/video_output_lease.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "video_player/services/external_subtitle_payload.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "video_player/services/subtitle_track_utils.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "video_player/utils/language_mapping.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "video_player/utils/subtitle_audio_policy.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "video_player/utils/aspect_mode_utils.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "video_player/widgets/playlist_sheet.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "video_player/services/android_renderer_startup_fallback.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "video_player/widgets/subtitle_line_picker_overlay.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "video_player/widgets/sync_stepper_overlay.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "video_player/widgets/spotlight_dialog.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../services/stremio_service.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../services/stremio_subtitle_service.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../services/trakt/trakt_service.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../services/simkl/simkl_service.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../services/mdblist/mdblist_models.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../services/mdblist/mdblist_scrobble_session.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../services/mdblist/mdblist_service.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "package:http/http.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../utils/episode_progress_merge.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../utils/tv_search_focus_handoff.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../features/video_player/models/vp_manual_source_validation_failure.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../features/video_player/models/iptv_catchup_request_gate.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../features/video_player/presentation/vp_random_choice_tile.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../features/video_player/application/vp_filename_hash.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../features/video_player/application/vp_identity_text.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_directive",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "../features/video_player/application/vp_subtitle_identity.dart"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_shown_name",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "package:flutter/foundation.dart",
+   "name": "kIsWeb"
+  },
+  {
+   "commit": "C1",
+   "kind": "remove_shown_name",
+   "file": "lib/screens/video_player_screen.dart",
+   "uri": "package:flutter/foundation.dart",
+   "name": "listEquals"
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_addon_subtitles.dart",
+   "declaration": "VpAddonSubtitles.fetchAndMaybeAutoSelectAddonSubtitle",
+   "ordinal": 0,
+   "head": [
+    "if",
+    "(",
+    "CustomSeriesIdentity",
+    ".",
+    "isCustom",
+    "(",
+    "_host",
+    "."
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_addon_subtitles.dart",
+   "declaration": "VpAddonSubtitles.fetchAndMaybeAutoSelectAddonSubtitle",
+   "ordinal": 1,
+   "head": [
+    "if",
+    "(",
+    "!",
+    "_host",
+    ".",
+    "mounted",
+    "||",
+    "fetchToken"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_episode_adjacent.dart",
+   "declaration": "VpEpisodeAdjacent.findNextEpisodeIndex",
+   "ordinal": 0,
+   "head": [
+    "if",
+    "(",
+    "_host",
+    ".",
+    "activePlaylist",
+    "==",
+    "null",
+    "||"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_episode_adjacent.dart",
+   "declaration": "VpEpisodeAdjacent.findNextEpisodeIndex",
+   "ordinal": 1,
+   "head": [
+    "if",
+    "(",
+    "_host",
+    ".",
+    "activePlaylist",
+    "==",
+    "null",
+    "||"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_episode_adjacent.dart",
+   "declaration": "VpEpisodeAdjacent.findPreviousEpisodeIndex",
+   "ordinal": 0,
+   "head": [
+    "if",
+    "(",
+    "_host",
+    ".",
+    "activePlaylist",
+    "==",
+    "null",
+    "||"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_episode_adjacent.dart",
+   "declaration": "VpEpisodeAdjacent.findPreviousEpisodeIndex",
+   "ordinal": 1,
+   "head": [
+    "if",
+    "(",
+    "_host",
+    ".",
+    "activePlaylist",
+    "==",
+    "null",
+    "||"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_episode_adjacent.dart",
+   "declaration": "VpEpisodeAdjacent.adjacentEpisode",
+   "ordinal": 0,
+   "head": [
+    "if",
+    "(",
+    "!",
+    "allowResolverFallback",
+    "&&",
+    "_host",
+    ".",
+    "seriesSourceFetcher"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_episode_fetch.dart",
+   "declaration": "VpEpisodeFetch.prepareNextDirectEpisode",
+   "ordinal": 0,
+   "head": [
+    "if",
+    "(",
+    "fetcher",
+    "==",
+    "null",
+    "||",
+    "_host",
+    "."
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_episode_guide.dart",
+   "declaration": "VpEpisodeGuide.showPlaylistSheet",
+   "ordinal": 1,
+   "head": [
+    "if",
+    "(",
+    "_host",
+    ".",
+    "activePlaylist",
+    "==",
+    "null",
+    "||"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_identify_title.dart",
+   "declaration": "VpIdentifyTitle.identifyTitleAndFetchSubtitles",
+   "ordinal": 0,
+   "head": [
+    "if",
+    "(",
+    "!",
+    "_host",
+    ".",
+    "mounted",
+    "||",
+    "fetchToken"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_iptv_recording.dart",
+   "declaration": "VpIptvRecording.refreshEngineRecordingState",
+   "ordinal": 1,
+   "head": [
+    "if",
+    "(",
+    "_host",
+    ".",
+    "engineTaskId",
+    "!=",
+    "null",
+    ")"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_iptv_recording.dart",
+   "declaration": "VpIptvRecording.startRecording",
+   "ordinal": 3,
+   "head": [
+    "if",
+    "(",
+    "gen",
+    "!=",
+    "_host",
+    ".",
+    "recordingStartGen",
+    "||"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_iptv_watch_memory.dart",
+   "declaration": "VpIptvWatchMemory.applyIptvAudioPreference",
+   "ordinal": 4,
+   "head": [
+    "if",
+    "(",
+    "lang",
+    "==",
+    "null",
+    "||",
+    "!",
+    "_host"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_iptv_zap_ring.dart",
+   "declaration": "VpIptvZapRing.installIptvZapWindow",
+   "ordinal": 1,
+   "head": [
+    "if",
+    "(",
+    "page",
+    ".",
+    "category",
+    "!=",
+    "_host",
+    "."
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_media_open.dart",
+   "declaration": "VpMediaOpen.openMedia",
+   "ordinal": 1,
+   "head": [
+    "if",
+    "(",
+    "_host",
+    ".",
+    "screenDisposed",
+    "||",
+    "generation",
+    "!="
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_network_tuning.dart",
+   "declaration": "VpNetworkTuning.applyNetworkTuningInner",
+   "ordinal": 1,
+   "head": [
+    "if",
+    "(",
+    "generation",
+    "!=",
+    "_host",
+    ".",
+    "decoderProbeGeneration",
+    ")"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_pip_lifecycle.dart",
+   "declaration": "VpPipLifecycle.enterPip",
+   "ordinal": 0,
+   "head": [
+    "if",
+    "(",
+    "!",
+    "PipService",
+    ".",
+    "isOwner",
+    "(",
+    "_host"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_pip_lifecycle.dart",
+   "declaration": "VpPipLifecycle.enterPip",
+   "ordinal": 2,
+   "head": [
+    "if",
+    "(",
+    "!",
+    "_host",
+    ".",
+    "mounted",
+    "||",
+    "!"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_player_instance.dart",
+   "declaration": "VpPlayerInstance.onPlayerInstanceReady",
+   "ordinal": 0,
+   "head": [
+    "if",
+    "(",
+    "!",
+    "_host",
+    ".",
+    "mounted",
+    "||",
+    "instanceGeneration"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_player_menu.dart",
+   "declaration": "VpPlayerMenu.menuSelectAddonSubtitle",
+   "ordinal": 1,
+   "head": [
+    "if",
+    "(",
+    "token",
+    "!=",
+    "_host",
+    ".",
+    "addonSubtitleFetchToken",
+    "||"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_player_menu.dart",
+   "declaration": "VpPlayerMenu.applyStremioSubtitleFromTracksSheet",
+   "ordinal": 1,
+   "head": [
+    "if",
+    "(",
+    "token",
+    "!=",
+    "_host",
+    ".",
+    "addonSubtitleFetchToken",
+    "||"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_resume_save.dart",
+   "declaration": "VpResumeSave.getEnhancedPlaybackState",
+   "ordinal": 0,
+   "head": [
+    "if",
+    "(",
+    "_host",
+    ".",
+    "effectiveContentSeason",
+    "==",
+    "null",
+    "||"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_resume_save.dart",
+   "declaration": "VpResumeSave.saveResumeLocked",
+   "ordinal": 1,
+   "head": [
+    "if",
+    "(",
+    "!",
+    "CustomSeriesIdentity",
+    ".",
+    "isCustom",
+    "(",
+    "_host"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_skip_segment_controller.dart",
+   "declaration": "VpSkipSegmentController.currentSkipSegmentRequest",
+   "ordinal": 0,
+   "head": [
+    "if",
+    "(",
+    "CustomSeriesIdentity",
+    ".",
+    "isCustom",
+    "(",
+    "_host",
+    "."
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_skip_segment_controller.dart",
+   "declaration": "VpSkipSegmentController.syncSkipSegmentsForCurrentContent",
+   "ordinal": 1,
+   "head": [
+    "if",
+    "(",
+    "!",
+    "_host",
+    ".",
+    "mounted",
+    "||",
+    "generation"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_skip_segment_controller.dart",
+   "declaration": "VpSkipSegmentController.syncSkipSegmentsForCurrentContent",
+   "ordinal": 3,
+   "head": [
+    "if",
+    "(",
+    "!",
+    "_host",
+    ".",
+    "mounted",
+    "||",
+    "generation"
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_tv_remote.dart",
+   "declaration": "VpTvRemote.tvScrubBegin",
+   "ordinal": 2,
+   "head": [
+    "if",
+    "(",
+    "_host",
+    ".",
+    "mounted",
+    "&&",
+    "_host",
+    "."
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_tvos_video.dart",
+   "declaration": "VpTvosVideo.scheduleTvosDisplayMatch",
+   "ordinal": 5,
+   "head": [
+    "if",
+    "(",
+    "_host",
+    ".",
+    "screenDisposed",
+    "||",
+    "token",
+    "!="
+   ]
+  },
+  {
+   "commit": "C2",
+   "kind": "insert_braces",
+   "file": "lib/screens/video_player_screen.dart",
+   "declaration": "_VideoPlayerScreenState._currentSeriesImdbId",
+   "ordinal": 0,
+   "head": [
+    "if",
+    "(",
+    "CustomSeriesIdentity",
+    ".",
+    "isCustom",
+    "(",
+    "_effectiveContentImdbId",
+    ")"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_audio_output.dart",
+   "declaration": "VpAudioOutput.audioEffectSessionId",
+   "ordinal": 2,
+   "before": "/// [_attachAudioEffectSession] / [_releaseAudioEffectSession].",
+   "after": [
+    "/// [attachAudioEffectSession] / [releaseAudioEffectSession]."
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_audio_output.dart",
+   "declaration": "VpAudioOutput.attachAudioEffectSession",
+   "ordinal": 22,
+   "before": "// Everything below is inside the catch: _initializePlayer() runs",
+   "after": [
+    "// Everything below is inside the catch: VpPlayerStartup.initializePlayer() runs"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_audio_output.dart",
+   "declaration": "VpAudioOutput.attachAudioEffectSession",
+   "ordinal": 26,
+   "before": "// The CACHED field, deliberately: [_configurePlayerAudio] chose the",
+   "after": [
+    "// The CACHED field, deliberately: [configurePlayerAudio] chose the"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_audio_output.dart",
+   "declaration": "VpAudioOutput.attachAudioEffectSession",
+   "ordinal": 31,
+   "before": "// `ao=audiotrack,...` itself is owned by [_configurePlayerAudio] now",
+   "after": [
+    "// `ao=audiotrack,...` itself is owned by [configurePlayerAudio] now"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_audio_output.dart",
+   "declaration": "VpAudioOutput.configurePlayerAudio",
+   "ordinal": 6,
+   "before": "// matcher (_applyDefaultAudioLanguage) only runs after the track list",
+   "after": [
+    "// matcher (VpSubtitleLanguagePolicy.applyDefaultAudioLanguage) only runs after the track list"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_controls_runtime.dart",
+   "declaration": "VpControlsRuntime.scheduleAutoHide",
+   "ordinal": 23,
+   "before": "// dismisses on. Route through _tvHideBar so focus leaves the bar",
+   "after": [
+    "// dismisses on. Route through tvHideBar so focus leaves the bar"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_decoder_probe.dart",
+   "declaration": "VpDecoderProbe.handleDecoderProbeParams",
+   "ordinal": 2,
+   "before": "// app-owned generation started in _openMedia is the session boundary.",
+   "after": [
+    "// app-owned generation started in VpMediaOpen.openMedia is the session boundary."
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_decoder_probe.dart",
+   "declaration": "VpDecoderProbe.installDecoderObservers",
+   "ordinal": 3,
+   "before": "// (`_scheduleRendererStartupValidation`), which is itself",
+   "after": [
+    "// (`VpRendererFallback.scheduleRendererStartupValidation`), which is itself"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_decoder_probe.dart",
+   "declaration": "VpDecoderProbe.installDecoderObservers",
+   "ordinal": 4,
+   "before": "// gated on `Platform.isAndroid` — so everywhere else they were pure cost.",
+   "after": [
+    "// gated on the Android renderer-validation check (S2f) — so everywhere else they were pure cost."
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_episode_next.dart",
+   "declaration": "VpEpisodeNext.goToNextEpisode",
+   "ordinal": 12,
+   "before": "// _playPikPakVideoWithRetry will increment _pikPakRetryId to cancel previous retries",
+   "after": [
+    "// VpPikPakRetry.playPikPakVideoWithRetry will increment _pikPakRetryId to cancel previous retries"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_iptv_channel_switch.dart",
+   "declaration": "VpIptvChannelSwitch.switchToIptvChannel",
+   "ordinal": 15,
+   "before": "// The zap path never runs _maybeRestoreResume, so the previous channel's",
+   "after": [
+    "// The zap path never runs VpResumeRestore.maybeRestoreResume, so the previous channel's"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_iptv_channel_switch.dart",
+   "declaration": "VpIptvChannelSwitch.switchToIptvChannel",
+   "ordinal": 18,
+   "before": "// _loadPlaylistIndex.",
+   "after": [
+    "// VpPlaylistLoad.loadPlaylistIndex."
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_iptv_channel_switch.dart",
+   "declaration": "VpIptvChannelSwitch.switchToIptvSource",
+   "ordinal": 10,
+   "before": "// Same direct transition-overlay cleanup as _switchToIptvChannel — the",
+   "after": [
+    "// Same direct transition-overlay cleanup as switchToIptvChannel — the"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_iptv_guide_catchup.dart",
+   "declaration": "VpIptvGuideCatchup.switchToIptvGuideChannel",
+   "ordinal": 7,
+   "before": "// Take this tune's generation from the call itself. _switchToIptvChannel",
+   "after": [
+    "// Take this tune's generation from the call itself. VpIptvChannelSwitch.switchToIptvChannel"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_iptv_live_sources.dart",
+   "declaration": "VpIptvLiveSources.tryOpenLiveStream",
+   "ordinal": 6,
+   "before": "// _switchToIptvSource, and mpv makes no promise about `stream-record`",
+   "after": [
+    "// VpIptvChannelSwitch.switchToIptvSource, and mpv makes no promise about `stream-record`"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_iptv_live_sources.dart",
+   "declaration": "VpIptvLiveSources.tryOpenLiveStream",
+   "ordinal": 9,
+   "before": "// the _switchToIptvChannel path, which already stopped before its ladder.",
+   "after": [
+    "// the VpIptvChannelSwitch.switchToIptvChannel path, which already stopped before its ladder."
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_iptv_recording.dart",
+   "declaration": "VpIptvRecording.startRecording",
+   "ordinal": 8,
+   "before": "// next launch even if this process never reaches _stopRecording.",
+   "after": [
+    "// next launch even if this process never reaches stopRecording."
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_iptv_watch_memory.dart",
+   "declaration": "VpIptvWatchMemory.lastLiveChannelSettle",
+   "ordinal": 1,
+   "before": "/// [_lastLiveChannelSettle]. Zapping through twenty channels arms and",
+   "after": [
+    "/// [lastLiveChannelSettle]. Zapping through twenty channels arms and"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_iptv_watch_memory.dart",
+   "declaration": "VpIptvWatchMemory.applyIptvAudioPreference",
+   "ordinal": 11,
+   "before": "// during the wait updated _preferredIptvAudioLanguage, and it should win.",
+   "after": [
+    "// during the wait updated preferredIptvAudioLanguage, and it should win."
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_iptv_zap_ring.dart",
+   "declaration": "VpIptvZapRing.requestIptvZapPage",
+   "ordinal": 2,
+   "before": "// The ring's own source, not the guide's — see [_iptvZapSourceId].",
+   "after": [
+    "// The ring's own source, not the guide's — see [iptvZapSourceId]."
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_local_completion.dart",
+   "declaration": "VpLocalCompletion.checkAndApplyLocalCompletion",
+   "ordinal": 2,
+   "before": "/// unawaited and are guarded one-shot above/in [_markCurrentEpisodeAsFinished].",
+   "after": [
+    "/// unawaited and are guarded one-shot above/in [markCurrentEpisodeAsFinished]."
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_mdblist_scrobbler.dart",
+   "declaration": "VpMdblistScrobbler.initMdblistScrobble",
+   "ordinal": 3,
+   "before": "// opened (for example) S1E8. Wait until `_initializePlayer` publishes the",
+   "after": [
+    "// opened (for example) S1E8. Wait until `VpPlayerStartup.initializePlayer` publishes the"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_mdblist_scrobbler.dart",
+   "declaration": "VpMdblistScrobbler.updateMdblistPosition",
+   "ordinal": 0,
+   "before": "// Held-target substitution, same reason as _traktProgress.",
+   "after": [
+    "// Held-target substitution, same reason as VpTraktScrobbler.traktProgress."
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_media_open.dart",
+   "declaration": "VpMediaOpen.openMedia",
+   "ordinal": 6,
+   "before": "// that re-protects (_seekForResume) re-arms AFTER it.",
+   "after": [
+    "// that re-protects (VpResumeRestore.seekForResume) re-arms AFTER it."
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_network_tuning.dart",
+   "declaration": "VpNetworkTuning.networkTuningDefaults",
+   "ordinal": 0,
+   "before": "/// Stock values of exactly the player-global properties [_networkTuning]",
+   "after": [
+    "/// Stock values of exactly the player-global properties [VpMediaOpen.networkTuning]"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_network_tuning.dart",
+   "declaration": "VpNetworkTuning.networkTuningChain",
+   "ordinal": 0,
+   "before": "/// Serializes tuning applies: a rapid zap starts a newer [_openMedia]",
+   "after": [
+    "/// Serializes tuning applies: a rapid zap starts a newer [VpMediaOpen.openMedia]"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_pikpak_retry.dart",
+   "declaration": "VpPikPakRetry.playPikPakVideoWithRetry",
+   "ordinal": 21,
+   "before": "// Note: Retry state already cleared by _waitForVideoMetadata",
+   "after": [
+    "// Note: Retry state already cleared by VpMediaWaits.waitForVideoMetadata"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_pip_lifecycle.dart",
+   "declaration": "VpPipLifecycle.resumeFromBackground",
+   "ordinal": 0,
+   "before": "/// Undo [_pauseForBackground] when the app returns, restoring the",
+   "after": [
+    "/// Undo [pauseForBackground] when the app returns, restoring the"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_player_defaults.dart",
+   "declaration": "VpPlayerDefaults.loadPlayerDefaults",
+   "ordinal": 1,
+   "before": "// In-player guide look. `_initializePlayer` awaits this before playback",
+   "after": [
+    "// In-player guide look. `VpPlayerStartup.initializePlayer` awaits this before playback"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_player_defaults.dart",
+   "declaration": "VpPlayerDefaults.loadPlayerDefaults",
+   "ordinal": 4,
+   "before": "// Audio-output settings, preloaded for [_configurePlayerAudio] — the",
+   "after": [
+    "// Audio-output settings, preloaded for [VpAudioOutput.configurePlayerAudio] — the"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_player_startup.dart",
+   "declaration": "VpPlayerStartup.initializePlayer",
+   "ordinal": 41,
+   "before": "// below (IPTV is never PikPak). Zaps re-arm this in _switchToIptvChannel.",
+   "after": [
+    "// below (IPTV is never PikPak). Zaps re-arm this in VpIptvChannelSwitch.switchToIptvChannel."
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_player_startup.dart",
+   "declaration": "VpPlayerStartup.initializePlayer",
+   "ordinal": 47,
+   "before": "// The continuation can sleep up to 10s in _waitForVideoReady; the",
+   "after": [
+    "// The continuation can sleep up to 10s in VpMediaWaits.waitForVideoReady; the"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_playlist_load.dart",
+   "declaration": "VpPlaylistLoad.clearTransitionOnFailure",
+   "ordinal": 5,
+   "before": "/// (`_goToNextEpisode`, shuffle). Safe to call redundantly.",
+   "after": [
+    "/// (`VpEpisodeNext.goToNextEpisode`, shuffle). Safe to call redundantly."
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_playlist_load.dart",
+   "declaration": "VpPlaylistLoad.loadPlaylistIndex",
+   "ordinal": 1,
+   "before": "// exactly (see _maybeRestoreResume).",
+   "after": [
+    "// exactly (see VpResumeRestore.maybeRestoreResume)."
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_playlist_load.dart",
+   "declaration": "VpPlaylistLoad.loadPlaylistIndexAttempt",
+   "ordinal": 1,
+   "before": "// exactly (see _maybeRestoreResume).",
+   "after": [
+    "// exactly (see VpResumeRestore.maybeRestoreResume)."
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_playlist_load.dart",
+   "declaration": "VpPlaylistLoad.loadPlaylistIndexAttempt",
+   "ordinal": 6,
+   "before": "// outgoing item's checkpoint _saveResume() below must still run against",
+   "after": [
+    "// outgoing item's checkpoint VpResumeSave.saveResume() below must still run against"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_playlist_load.dart",
+   "declaration": "VpPlaylistLoad.loadPlaylistIndexAttempt",
+   "ordinal": 37,
+   "before": "// _playPikPakVideoWithRetry will increment _pikPakRetryId to cancel previous retries",
+   "after": [
+    "// VpPikPakRetry.playPikPakVideoWithRetry will increment _pikPakRetryId to cancel previous retries"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_resume_restore.dart",
+   "declaration": "VpResumeRestore.maybeRestoreResume",
+   "ordinal": 9,
+   "before": "/// [_seekForResume].",
+   "after": [
+    "/// [seekForResume]."
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_resume_save.dart",
+   "declaration": "VpResumeSave.resumeSaveBlocked",
+   "ordinal": 0,
+   "before": "// An IPTV zap flips _currentIptvIndex — and therefore _resumeKey — before",
+   "after": [
+    "// An IPTV zap flips _currentIptvIndex — and therefore VpResumeKeys.resumeKey — before"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_simkl_scrobbler.dart",
+   "declaration": "VpSimklScrobbler.initSimklScrobble",
+   "ordinal": 2,
+   "before": "// by the same (tracker-agnostic) _traktProgress()/_traktSeasonEpisode()",
+   "after": [
+    "// by the same (tracker-agnostic) VpTraktScrobbler.traktProgress()/_traktSeasonEpisode()"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_simkl_scrobbler.dart",
+   "declaration": "VpSimklScrobbler.initSimklScrobble",
+   "ordinal": 10,
+   "before": "// suppressed at _simklScrobble's guard. Mirrors the Trakt block and the TV",
+   "after": [
+    "// suppressed at simklScrobble's guard. Mirrors the Trakt block and the TV"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_simkl_scrobbler.dart",
+   "declaration": "VpSimklScrobbler.initSimklScrobble",
+   "ordinal": 11,
+   "before": "// launcher's self-healing marker. (Field assignment, NOT _simklScrobble",
+   "after": [
+    "// launcher's self-healing marker. (Field assignment, NOT simklScrobble"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_simkl_scrobbler.dart",
+   "declaration": "VpSimklScrobbler.startSimklHeartbeat",
+   "ordinal": 11,
+   "before": "// make the user's real pause dedup-suppress at _simklScrobble and strand",
+   "after": [
+    "// make the user's real pause dedup-suppress at simklScrobble and strand"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_simkl_scrobbler.dart",
+   "declaration": "VpSimklScrobbler.currentEpisodeSimklPercent",
+   "ordinal": 4,
+   "before": "// [_currentEpisodeTraktPercent].",
+   "after": [
+    "// [VpTraktScrobbler.currentEpisodeTraktPercent]."
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_skip_segment_controller.dart",
+   "declaration": "VpSkipSegmentController.currentSkipSegmentRequest",
+   "ordinal": 3,
+   "before": "// * _skipSegmentsMediaReady covers a playlist switch. _loadPlaylistIndex",
+   "after": [
+    "// * skipSegmentsMediaReady covers a playlist switch. VpPlaylistLoad.loadPlaylistIndex"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_skip_segment_controller.dart",
+   "declaration": "VpSkipSegmentController.currentSkipSegmentRequest",
+   "ordinal": 12,
+   "before": "//   flips before the incoming stream opens (the same window _saveResume",
+   "after": [
+    "//   flips before the incoming stream opens (the same window VpResumeSave.saveResume"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_source_playlist_switch.dart",
+   "declaration": "VpSourcePlaylistSwitch.switchToSourcePlaylist",
+   "ordinal": 10,
+   "before": "// new playlist. _loadPlaylistIndex below is told to skip its own save.",
+   "after": [
+    "// new playlist. VpPlaylistLoad.loadPlaylistIndex below is told to skip its own save."
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_source_playlist_switch.dart",
+   "declaration": "VpSourcePlaylistSwitch.switchToSourcePlaylist",
+   "ordinal": 16,
+   "before": "// otherwise restart at S1E1); _loadPlaylistIndex restores its saved",
+   "after": [
+    "// otherwise restart at S1E1); VpPlaylistLoad.loadPlaylistIndex restores its saved"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_source_playlist_switch.dart",
+   "declaration": "VpSourcePlaylistSwitch.switchToSourcePlaylist",
+   "ordinal": 34,
+   "before": "// `_maybeRestoreResume` bail out and the new source opens at 0:00 instead of",
+   "after": [
+    "// `VpResumeRestore.maybeRestoreResume` bail out and the new source opens at 0:00 instead of"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_source_playlist_switch.dart",
+   "declaration": "VpSourcePlaylistSwitch.switchToSourcePlaylist",
+   "ordinal": 47,
+   "before": "// End transition (same pattern as _switchToStremioSource)",
+   "after": [
+    "// End transition (same pattern as VpSourceSwitch.switchToStremioSource)"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_source_switch.dart",
+   "declaration": "VpSourceSwitch.switchToStremioSource",
+   "ordinal": 13,
+   "before": "// `_loadPlaylistIndex`) so the new media starts clean and addon-subtitle",
+   "after": [
+    "// `VpPlaylistLoad.loadPlaylistIndex`) so the new media starts clean and addon-subtitle"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_source_switch.dart",
+   "declaration": "VpSourceSwitch.switchToStremioSource",
+   "ordinal": 16,
+   "before": "// Seek to the position from the previous source. _seekForResume",
+   "after": [
+    "// Seek to the position from the previous source. VpResumeRestore.seekForResume"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_source_switch.dart",
+   "declaration": "VpSourceSwitch.switchToStremioSource",
+   "ordinal": 26,
+   "before": "// Fire-and-forget: `_restoreTrackPreferences` awaits `_waitForSubtitleTracks`,",
+   "after": [
+    "// Fire-and-forget: `VpTrackPreferences.restoreTrackPreferences` awaits `VpSubtitleApply.waitForSubtitleTracks`,"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_startup_candidates.dart",
+   "declaration": "VpStartupCandidates.openStartupDebridDirect",
+   "ordinal": 17,
+   "before": "// contract as the probe path (see _tryOpenStartupVod).",
+   "after": [
+    "// contract as the probe path (see tryOpenStartupVod)."
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_startup_failover.dart",
+   "declaration": "VpStartupFailover.openInitialVodWithFailover",
+   "ordinal": 17,
+   "before": "// _openStartupDebridDirect); addon direct URLs keep it, and so do",
+   "after": [
+    "// VpStartupCandidates.openStartupDebridDirect); addon direct URLs keep it, and so do"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_tvos_video.dart",
+   "declaration": "VpTvosVideo.installTvosDecodeRemedy",
+   "ordinal": 3,
+   "before": "/// [_installDecoderObservers]); the ladder is driven by the existing",
+   "after": [
+    "/// [VpDecoderProbe.installDecoderObservers]); the ladder is driven by the existing"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/screens/video_player_screen.dart",
+   "declaration": "_VideoPlayerScreenState._playerCreated",
+   "ordinal": 0,
+   "before": "// _player is assigned partway through the async _initializePlayer(); if the",
+   "after": [
+    "// _player is assigned partway through the async VpPlayerStartup.initializePlayer(); if the"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/screens/video_player_screen.dart",
+   "declaration": "_VideoPlayerScreenState._tvosForceSoftwareDecode",
+   "ordinal": 1,
+   "before": "/// Preloaded in [_loadPlayerDefaults]; [_createPlayerInstance] is",
+   "after": [
+    "/// Preloaded in [VpPlayerDefaults.loadPlayerDefaults]; [VpPlayerInstance.createPlayerInstance] is"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/screens/video_player_screen.dart",
+   "declaration": "_VideoPlayerScreenState._audioPassthroughEnabled",
+   "ordinal": 1,
+   "before": "/// [_loadPlayerDefaults] and applied by [_configurePlayerAudio].",
+   "after": [
+    "/// [VpPlayerDefaults.loadPlayerDefaults] and applied by [VpAudioOutput.configurePlayerAudio]."
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/screens/video_player_screen.dart",
+   "declaration": "_VideoPlayerScreenState._desktopRecordingRevisionListener",
+   "ordinal": 9,
+   "before": "/// stop it implicitly. [_desktopCaptureForCurrent] asks the service instead,",
+   "after": [
+    "/// stop it implicitly. [VpIptvRecordingResources.desktopCaptureForCurrent] asks the service instead,"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/screens/video_player_screen.dart",
+   "declaration": "_VideoPlayerScreenState._recordingStartGen",
+   "ordinal": 1,
+   "before": "/// in-flight [_startRecording]. That start does async work (storage lookup,",
+   "after": [
+    "/// in-flight [VpIptvRecording.startRecording]. That start does async work (storage lookup,"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/screens/video_player_screen.dart",
+   "declaration": "_VideoPlayerScreenState._seriesNextDispatched",
+   "ordinal": 2,
+   "before": "/// host for Quick Play. End-of-video auto-advance (_onPlaybackEnded) and a",
+   "after": [
+    "/// host for Quick Play. End-of-video auto-advance (VpPlaybackEnded.onPlaybackEnded) and a"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/screens/video_player_screen.dart",
+   "declaration": "_VideoPlayerScreenState._seriesNextDispatched",
+   "ordinal": 3,
+   "before": "/// manual Next press both funnel into _handleSeriesNextEpisode, which awaits a",
+   "after": [
+    "/// manual Next press both funnel into VpEpisodeNext.handleSeriesNextEpisode, which awaits a"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/screens/video_player_screen.dart",
+   "declaration": "_VideoPlayerScreenState.initState",
+   "ordinal": 1,
+   "before": "// raised from several places that never go through _toggleControls",
+   "after": [
+    "// raised from several places that never go through VpControlsRuntime.toggleControls"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/screens/video_player_screen.dart",
+   "declaration": "_VideoPlayerScreenState.initState",
+   "ordinal": 32,
+   "before": "// onward the lock follows play/pause (see _syncWakelock).",
+   "after": [
+    "// onward the lock follows play/pause (see VpPipLifecycle.syncWakelock)."
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/screens/video_player_screen.dart",
+   "declaration": "_VideoPlayerScreenState._persistablePosition",
+   "ordinal": 10,
+   "before": "// playing at 0:00). Same rule as _saveResume's short-duration skip: fall",
+   "after": [
+    "// playing at 0:00). Same rule as VpResumeSave.saveResume's short-duration skip: fall"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/screens/video_player_screen.dart",
+   "declaration": "_VideoPlayerScreenState._iptvSwitchTicket",
+   "ordinal": 1,
+   "before": "/// can hold [_switchToIptvChannel] open for many seconds; a newer switch",
+   "after": [
+    "/// can hold [VpIptvChannelSwitch.switchToIptvChannel] open for many seconds; a newer switch"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/screens/video_player_screen.dart",
+   "declaration": "_VideoPlayerScreenState._iptvErrorsMuted",
+   "ordinal": 0,
+   "before": "/// Suppresses [_onIptvStreamError] for errors that aren't the tuned",
+   "after": [
+    "/// Suppresses [VpIptvLiveSources.onIptvStreamError] for errors that aren't the tuned"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/screens/video_player_screen.dart",
+   "declaration": "_VideoPlayerScreenState._iptvErrorsMuted",
+   "ordinal": 1,
+   "before": "/// channel's to own. Set for the whole of [_switchToIptvChannel] and",
+   "after": [
+    "/// channel's to own. Set for the whole of [VpIptvChannelSwitch.switchToIptvChannel] and"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/screens/video_player_screen.dart",
+   "declaration": "_VideoPlayerScreenState.dispose",
+   "ordinal": 13,
+   "before": "// Done inline rather than through `_stopRecording`: dispose() cannot await,",
+   "after": [
+    "// Done inline rather than through `VpIptvRecording.stopRecording`: dispose() cannot await,"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/screens/video_player_screen.dart",
+   "declaration": "_VideoPlayerScreenState._buildTvControls",
+   "ordinal": 13,
+   "before": "// like _showTracksSheet await before using it, and the Builder's own",
+   "after": [
+    "// like VpPlayerMenuUi.showTracksSheet await before using it, and the Builder's own"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/screens/video_player_screen.dart",
+   "declaration": "_VideoPlayerScreenState._buildTvControls",
+   "ordinal": 20,
+   "before": "// reach _handleTvKey and never restarted the countdown.",
+   "after": [
+    "// reach VpTvRemote.handleTvKey and never restarted the countdown."
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/screens/video_player/services/network_tuning.dart",
+   "declaration": "NetworkTuning:header",
+   "ordinal": 14,
+   "before": "/// [mpvProperties]/[vodLavfOptions] in `_openMedia`; the native Android TV",
+   "after": [
+    "/// [mpvProperties]/[vodLavfOptions] in `VpMediaOpen.openMedia`; the native Android TV"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/screens/video_player/services/network_tuning.dart",
+   "declaration": "NetworkTuning:header",
+   "ordinal": 19,
+   "before": "/// flags / resilience ladder) — see the liveStream branch in `_openMedia`",
+   "after": [
+    "/// flags / resilience ladder) — see the liveStream branch in `VpMediaOpen.openMedia`"
+   ]
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/screens/video_player_screen.dart",
+   "declaration": "_VideoPlayerScreenState._dockBand",
+   "ordinal": 0,
+   "before": "/// Load default player settings (aspect)",
+   "after": []
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/features/video_player/presentation/legacy_video_player/vp_transition_overlay.dart",
+   "declaration": "VpTransitionOverlay.tvStaticMessages",
+   "ordinal": 0,
+   "before": "// Second line for video title",
+   "after": []
+  },
+  {
+   "commit": "C3",
+   "kind": "replace_comment",
+   "file": "lib/screens/video_player_screen.dart",
+   "declaration": "_VideoPlayerScreenState._dynamicTitle",
+   "ordinal": 0,
+   "before": "// Dynamic title for Debrify TV (no-playlist) flow",
+   "after": [
+    "// Second line for video title",
+    "// Dynamic title for Debrify TV (no-playlist) flow"
+   ]
+  }
+ ]
+}

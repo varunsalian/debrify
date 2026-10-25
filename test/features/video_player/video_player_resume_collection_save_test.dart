@@ -1,7 +1,6 @@
 import 'package:debrify/models/playlist_view_mode.dart';
 import 'package:debrify/screens/video_player_screen.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
-import 'package:debrify/services/storage/playback_state_store.dart';
 import 'package:debrify/services/storage/video_resume_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,6 +10,7 @@ import 'package:shared_preferences_platform_interface/shared_preferences_platfor
 import 'support/local_completion_driver.dart';
 import 'support/player_actions.dart';
 import 'support/video_player_environment.dart';
+import 'support/physical_resume_store.dart';
 
 void main() {
   for (final shape in ['raw fallback', 'raw parsed', 'series', 'sample only']) {
@@ -124,7 +124,7 @@ void main() {
           );
           final cache = await f.finish(
             t,
-            PlaybackStateStore.getPlaybackStateMap(),
+            PhysicalResumeStore.getPlaybackStateMap(),
           );
           expect(cache, physical);
         } finally {

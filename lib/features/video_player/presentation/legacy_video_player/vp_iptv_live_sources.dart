@@ -195,10 +195,10 @@ class VpIptvLiveSources {
   }) async {
     // Every live media replacement ends the recording, not just a channel zap:
     // picking another row in the Sources sheet lands here via
-    // _switchToIptvSource, and mpv makes no promise about `stream-record`
+    // VpIptvChannelSwitch.switchToIptvSource, and mpv makes no promise about `stream-record`
     // across an open() — it may quietly stop or overwrite the file while
     // `_isRecording` still claims it is running. Redundant (and harmless) on
-    // the _switchToIptvChannel path, which already stopped before its ladder.
+    // the VpIptvChannelSwitch.switchToIptvChannel path, which already stopped before its ladder.
     await _host.stopRecording(userInitiated: false);
 
     final completer = Completer<bool>();

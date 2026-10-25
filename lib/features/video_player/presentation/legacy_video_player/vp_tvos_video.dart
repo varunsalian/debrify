@@ -30,7 +30,7 @@ class VpTvosVideo {
   /// tvOS only: the 10-bit remedy ladder, bound to THIS player instance's
   /// property interface. Plain post-create property access — deliberately
   /// not `mpv_observe_property` (see the SIGABRT note in
-  /// [_installDecoderObservers]); the ladder is driven by the existing
+  /// [VpDecoderProbe.installDecoderObservers]); the ladder is driven by the existing
   /// Dart-side videoParams stream instead.
   void installTvosDecodeRemedy(mk.Player player) {
     if (!PlatformUtil.isTvOS) return;
@@ -133,8 +133,9 @@ class VpTvosVideo {
           refreshRate: fps,
           codec: codec,
         );
-        if (_host.screenDisposed || token != _host.tvosDisplayMatchToken)
+        if (_host.screenDisposed || token != _host.tvosDisplayMatchToken) {
           return;
+        }
         lastTvosDisplayMatchSignature = signature;
         debugPrint(
           'DisplayMatch: tvOS requested ${width}x$height@${fps.toStringAsFixed(3)} '

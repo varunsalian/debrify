@@ -106,8 +106,9 @@ class VpResumeSave {
             (_host.effectiveContentImdbId?.startsWith('medialibrary:') ??
                 false)) {
           if (_host.effectiveContentSeason == null ||
-              _host.effectiveContentEpisode == null)
+              _host.effectiveContentEpisode == null) {
             return null;
+          }
           return LocalPlaybackResumeResolver.episode(
             seriesTitle: _host.effectiveContentTitle ?? _host.title,
             season: _host.effectiveContentSeason!,
@@ -188,7 +189,7 @@ class VpResumeSave {
 
   bool resumeSaveBlocked(bool debounced) {
     if (_host.validationGateActive || !_host.isReady) return true;
-    // An IPTV zap flips _currentIptvIndex — and therefore _resumeKey — before
+    // An IPTV zap flips _currentIptvIndex — and therefore VpResumeKeys.resumeKey — before
     // the incoming stream opens, while _position/_duration still describe the
     // OUTGOING one (_isReady is never cleared for the gap). A tick landing in
     // that window would file the old movie's position under the new channel's
@@ -429,7 +430,7 @@ class VpResumeSave {
     } catch (e) {}
 
     // Also save to legacy system for backward compatibility
-    if (!CustomSeriesIdentity.isCustom(_host.effectiveContentImdbId))
+    if (!CustomSeriesIdentity.isCustom(_host.effectiveContentImdbId)) {
       await VideoResumeStorage.upsertVideoResume(
         _host.resumeKey,
         {
@@ -445,6 +446,7 @@ class VpResumeSave {
             _host.iptvGuideContextOverride?.sourceId ??
             _host.iptvSourceId,
       );
+    }
 
     // Explicit checkpoints (pause, settled seek, exit-adjacent saves) are the
     // handoff moments another device would resume from — let sync flush now

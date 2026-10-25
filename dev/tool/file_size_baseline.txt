@@ -25,7 +25,8 @@
 # 2026-10-21: Phase 19 audio output, video-output lease, tvOS decode remedy/display match, decoder probe + renderer fallback extraction (lowers the S2f checkpoint too); remaining player workflows exit in phases 20–21.
 # 2026-10-21: Phase 20 startup orchestration, player instance, subscriptions, media open, network tuning + player defaults extraction; remaining player workflows exit in phase 21.
 # 2026-10-25: Phase 21a controls runtime extraction (auto-hide, TV remote and scrub, gestures, dock layout, transition overlay); build stays (D6), end-state exception in 21b.
-8639 lib/screens/video_player_screen.dart
+# 2026-10-25: Phase 21b end state: facade is an EXACT exception (check_search_architecture.py VIDEO_PLAYER_FACADE_CAP, lines != cap fails; vplayer_end_state.py freezes its declarations). 8639 -> 8562 after C1-C3. Exits: (1) startup orchestration decomposition, (2) build decomposition (interim facade <= T), (3) D1 per-collaborator migration (facade <= 800). Raises only by the reviewed raise procedure (video-player-screen-plan.md).
+8562 lib/screens/video_player_screen.dart
 6919 lib/services/profiles/profile_registry.dart
 6478 android/app/src/main/java/com/debrify/app/tv/TorboxTvPlayerActivity.java
 5475 lib/services/remote_control/remote_command_router.dart

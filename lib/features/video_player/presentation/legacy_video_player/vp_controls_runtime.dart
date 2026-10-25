@@ -112,7 +112,7 @@ class VpControlsRuntime {
           // playing video until the user pressed BACK. Every key that reaches
           // the player and every bar action reschedules this timer, so what
           // actually elapses here is INACTIVITY, which is what an OTT dock
-          // dismisses on. Route through _tvHideBar so focus leaves the bar
+          // dismisses on. Route through tvHideBar so focus leaves the bar
           // before it is excluded; setting the flag alone would strand the
           // remote on a node that no longer exists.
           tvHideBar();

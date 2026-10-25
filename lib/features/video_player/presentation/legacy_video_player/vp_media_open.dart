@@ -137,7 +137,7 @@ class VpMediaOpen {
     // stale guard suppressing the new media's saves or a live verifier
     // re-seeking the old target against it. Ordering is safe by construction:
     // every outgoing checkpoint save runs BEFORE its new open, and every path
-    // that re-protects (_seekForResume) re-arms AFTER it.
+    // that re-protects (VpResumeRestore.seekForResume) re-arms AFTER it.
     _host.resumeVerifyEpoch++;
     _host.resumeWriteGuard.clear();
     beginMediaGeneration(preserveStartupEpoch: preserveStartupEpoch);
@@ -201,8 +201,9 @@ class VpMediaOpen {
       await remedy.onNewMedia(generation);
       // A rapid zap can start a newer open while the restore ran; the newer
       // call owns the player now.
-      if (_host.screenDisposed || generation != _host.decoderProbeGeneration)
+      if (_host.screenDisposed || generation != _host.decoderProbeGeneration) {
         return;
+      }
     }
     // `sub-visibility` is player-global. Reset it before a reused player opens
     // new media so a previous bitmap track cannot make auto-selected text draw

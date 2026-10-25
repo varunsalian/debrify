@@ -1,10 +1,10 @@
 import 'package:debrify/screens/video_player/widgets/source_sheet.dart';
 import 'package:debrify/screens/video_player_screen.dart';
-import 'package:debrify/services/storage/playback_state_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'support/player_actions.dart';
 import 'support/video_player_environment.dart';
 import 'video_player_source_test.dart' show source;
+import 'support/physical_resume_store.dart';
 
 void main() {
   for (final record in ['absent', 'preferences only', 'at duration']) {
@@ -26,7 +26,7 @@ void main() {
             final key = 'P14 empty B'.hashCode.toString();
             await f.finish(
               t,
-              PlaybackStateStore.savePlaybackStateMap({
+              PhysicalResumeStore.savePlaybackStateMap({
                 'video_$key': {
                   'type': 'video',
                   'title': key,

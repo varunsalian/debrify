@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:debrify/services/storage/playback_state_store.dart';
 import 'dart:async';
 import 'package:debrify/screens/video_player/widgets/player_menu_panel.dart';
 import 'package:debrify/screens/video_player/widgets/source_sheet.dart';
@@ -11,6 +10,7 @@ import 'support/display_mode_driver.dart';
 import 'support/player_actions.dart';
 import 'support/video_player_environment.dart';
 import 'video_player_source_test.dart' show source;
+import 'support/physical_resume_store.dart';
 
 void main() {
   testWidgets(
@@ -76,7 +76,7 @@ void main() {
         final menu = await display.menu(PlayerMenuSection.speed);
         final enhancedBefore = jsonDecode(
           jsonEncode(
-            await f.finish(t, PlaybackStateStore.getPlaybackStateMap()),
+            await f.finish(t, PhysicalResumeStore.getPlaybackStateMap()),
           ),
         );
         incoming.removeLast();
@@ -103,7 +103,7 @@ void main() {
         expect(saved?['positionMs'], 300000);
         expect(saved?['speed'], 1.5);
         expect(
-          await f.finish(t, PlaybackStateStore.getPlaybackStateMap()),
+          await f.finish(t, PhysicalResumeStore.getPlaybackStateMap()),
           enhancedBefore,
           reason:
               'An invalid current index skips enhanced series persistence and preserves the old episode map',

@@ -317,7 +317,7 @@ class VpIptvGuideCatchup {
     // coordinates stop describing the ring until the re-anchor lands.
     _host.resetIptvZapPaging();
     _host.iptvChannelsOverride = List<IptvChannel>.from(channels);
-    // Take this tune's generation from the call itself. _switchToIptvChannel
+    // Take this tune's generation from the call itself. VpIptvChannelSwitch.switchToIptvChannel
     // bumps the ticket synchronously before its first await, and it returns
     // normally when a newer tune supersedes it — so reading the ticket AFTER
     // the await would read the newer tune's value and defeat every staleness

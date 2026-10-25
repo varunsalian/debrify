@@ -68,8 +68,9 @@ class VpTvRemote {
     _host.tvScrubTarget = _host.position;
     _host.tvShowBar();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_host.mounted && _host.tvScrubTarget != null)
+      if (_host.mounted && _host.tvScrubTarget != null) {
         _host.tvProgressFocus.requestFocus();
+      }
     });
     tvScrubStep(direction);
   }

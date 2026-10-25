@@ -4,7 +4,6 @@ import 'package:debrify/screens/video_player_screen.dart';
 import 'package:debrify/services/debrify_tv_database.dart';
 import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
-import 'package:debrify/services/storage/playback_state_store.dart';
 import 'package:debrify/services/storage/movie_progress_storage.dart';
 import 'package:debrify/services/storage/video_resume_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,6 +15,7 @@ import 'support/local_completion_driver.dart';
 import 'support/player_actions.dart';
 import 'support/video_player_environment.dart';
 import 'support/trakt_transport.dart';
+import 'support/physical_resume_store.dart';
 
 void main() {
   TraktTestTransport.install();
@@ -114,7 +114,7 @@ void main() {
           expect(
             (await f.finish(
               t,
-              PlaybackStateStore.getPlaybackStateMap(),
+              PhysicalResumeStore.getPlaybackStateMap(),
             ))['video_p14_guard'],
             isNull,
           );
@@ -189,7 +189,7 @@ void main() {
         expect(
           (await f.finish(
             t,
-            PlaybackStateStore.getPlaybackStateMap(),
+            PhysicalResumeStore.getPlaybackStateMap(),
           ))['video_p14_guard'],
           isNull,
         );
@@ -354,7 +354,7 @@ void main() {
         await d.thresholds(80, 80);
         await f.finish(
           t,
-          PlaybackStateStore.savePlaybackStateMap({
+          PhysicalResumeStore.savePlaybackStateMap({
             'video_p14_completion': {
               'type': 'video',
               'title': 'P14 completion',

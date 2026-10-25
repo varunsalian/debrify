@@ -246,8 +246,9 @@ class VpIptvRecording {
     final ticket = ++engineRefreshTicket;
     final playing = _host.playingLiveUrl(channel);
     if (playing == null) {
-      if (_host.engineTaskId != null)
+      if (_host.engineTaskId != null) {
         _host.setState(() => _host.engineTaskId = null);
+      }
       return;
     }
     final twin = LiveRecordingService.xtreamTsTwin(playing);
@@ -283,8 +284,9 @@ class VpIptvRecording {
       // ran. Arming now would tee the NEW stream into the old channel's file.
       if (gen != _host.recordingStartGen ||
           !_host.mounted ||
-          !_host.playerCreated)
+          !_host.playerCreated) {
         return;
+      }
       _host.tapMpvLogsForRecording();
       await platform.setProperty('stream-record', path);
       // Read the property back: proves whether mpv actually ACCEPTED the
@@ -310,7 +312,7 @@ class VpIptvRecording {
         _host.recordingTempPath = path;
       });
       // Crash insurance: registered natively so the file gets published on
-      // next launch even if this process never reaches _stopRecording.
+      // next launch even if this process never reaches stopRecording.
       if (Platform.isAndroid) {
         unawaited(
           AndroidNativeDownloader.registerPendingRecording(

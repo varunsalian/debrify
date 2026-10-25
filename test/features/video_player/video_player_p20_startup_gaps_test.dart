@@ -4,7 +4,6 @@ import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/screens/video_player_screen.dart';
 import 'package:debrify/services/player_display_controls.dart';
 import 'package:debrify/services/storage/player_settings_storage.dart';
-import 'package:debrify/services/storage/playback_state_store.dart';
 import 'package:debrify/services/storage/video_progress_storage.dart';
 import 'package:debrify/screens/video_player/widgets/controls.dart';
 import 'package:debrify/screens/video_player/widgets/tv_controls.dart';
@@ -19,6 +18,7 @@ import 'support/lease_steps.dart';
 import 'support/startup_driver.dart';
 import 'support/trakt_player_driver.dart';
 import 'support/trakt_transport.dart';
+import 'support/physical_resume_store.dart';
 
 final _wakeDrain = Object();
 
@@ -63,7 +63,7 @@ Future<void> _rows(EngineDriver d, List<int?> updatedAt) async {
       ),
     );
   }
-  final map = await d.f.finish(d.t, PlaybackStateStore.getPlaybackStateMap());
+  final map = await d.f.finish(d.t, PhysicalResumeStore.getPlaybackStateMap());
   for (final raw in map.values) {
     final row = raw as Map;
     final index = _movies.indexWhere(
@@ -77,7 +77,7 @@ Future<void> _rows(EngineDriver d, List<int?> updatedAt) async {
       row['updatedAt'] = value;
     }
   }
-  await d.f.finish(d.t, PlaybackStateStore.savePlaybackStateMap(map));
+  await d.f.finish(d.t, PhysicalResumeStore.savePlaybackStateMap(map));
 }
 
 void main() {

@@ -22,7 +22,6 @@ abstract interface class VpTransitionOverlayHost {
 class VpTransitionOverlay {
   VpTransitionOverlay(this._host);
   final VpTransitionOverlayHost _host;
-  // Second line for video title
   final List<String> tvStaticMessages = [
     '📺 BUFFERING... JUST KIDDING',
     '📺 RETICULATING SPLINES...',

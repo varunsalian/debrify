@@ -68,17 +68,35 @@ def check(manifest, original, sources, package):
         return errors
     expected = {p: set() for p in paths}
     located = {}
+    directive_targets = []
     for row in rows:
         key, fate = row['original'], row['fate']
-        if fate not in {'retained', 'moved', 'patched'}:
+        if fate not in {'retained', 'moved', 'patched', 'removed'}:
             errors.append('unknown fate: ' + key)
+            continue
+        directive = key.startswith('@directive:')
+        if fate == 'removed':
+            # Phase 21b C1: an unused facade import is deleted. Only an import
+            # directive, with no comment in its span, and with a reason and test.
+            code = [t['text'] for t in base[key]['tokens'] if not t['comment']] if directive else []
+            if (not directive or not row.get('reason') or not row.get('test')
+                    or row.get('patches') or row.get('substitutions') or 'target' in row
+                    or code[:1] != ['import']
+                    or any(t['comment'] for t in base[key]['tokens'])):
+                errors.append('removed requires an uncommented facade import directive, reason and test: ' + key)
             continue
         path = row.get('destination', source) if fate == 'moved' else source
         target = row.get('target', key)
         if path not in paths or (fate == 'moved' and path == source):
             errors.append('invalid destination: ' + key)
             continue
-        if fate != 'moved' and target != key:
+        if directive and fate != 'moved':
+            # Removing earlier imports renumbers later directive spans; their
+            # tokens are still compared and their order must be preserved.
+            if not target.startswith('@directive:'):
+                errors.append('retained identity changed: ' + key)
+            directive_targets.append((int(key.split(':')[1]), int(target.split(':')[1])))
+        elif fate != 'moved' and target != key:
             errors.append('retained identity changed: ' + key)
         if target in expected[path]:
             errors.append('duplicate destination ownership: ' + path + ':' + target)
@@ -90,7 +108,12 @@ def check(manifest, original, sources, package):
             continue
         if fate == 'patched' and (not row.get('reason') or not row.get('test') or not row.get('patches')):
             errors.append('patched requires exact patches, reason and test: ' + key)
-        if fate != 'patched' and row.get('patches'):
+        if fate == 'moved' and 'patches' in row and (not row.get('reason') or not row.get('test')
+                                                      or not row.get('patches')):
+            # Phase 21b: a declared cleanup edit of a moved body (braces or a
+            # comment), applied after the receiver substitutions.
+            errors.append('moved patches require exact patches, reason and test: ' + key)
+        if fate == 'retained' and row.get('patches'):
             errors.append('patch outside patched fate: ' + key)
         edits = row.get('substitutions', []) + row.get('patches', [])
         if row.get('remove_static'):
@@ -106,6 +129,9 @@ def check(manifest, original, sources, package):
         errors.extend(compare_explicit_tokens(base[key], current[path][target], edits, key))
         if key in original_nodes and target in nodes[path]:
             located[key] = nodes[path][target]
+    ordered_targets = [target for _, target in sorted(directive_targets)]
+    if ordered_targets != sorted(set(ordered_targets)):
+        errors.append('retained directive order changed: ' + source)
     for path in paths:
         scaffold = manifest.get('scaffolding', {}).get(path, {})
         for key, pinned in scaffold.items():
@@ -146,6 +172,7 @@ def check(manifest, original, sources, package):
     from dart_move_fixture import edited_text
     projected = {}
     class_patches = set(manifest.get('patched_class_projection', []))
+    top_level = set()
     for key in class_patches:
         row = next((r for r in rows if r['original'] == key), None)
         node = original_nodes.get(key)
@@ -163,11 +190,26 @@ def check(manifest, original, sources, package):
                 projected[key] = edited_text(original, base[key], row['patches'])
             except ValueError as error:
                 errors.append('class patch projection failed: ' + key + ': ' + str(error))
+        elif row['fate'] == 'moved' and row.get('patches') and node:
+            # A declared cleanup edit must not depend on a receiver rewrite: it
+            # applies to the original body with the same count, and the guard
+            # checks below compare that projection with the destination.
+            try:
+                text = edited_text(original, base[key], row['patches'])
+            except ValueError as error:
+                errors.append('moved patch does not apply to the original body: ' + key + ': ' + str(error))
+                continue
+            if node['owner']:
+                projected[key] = 'class ' + node['owner'] + ' { ' + text + ' }'
+            else:
+                projected[key] = text
+                top_level.add(key)
     if projected:
         units = parse(projected, package, occurrence_bindings=True)
         original_nodes = dict(original_nodes)
         for key, unit in units.items():
-            members = unit['declarations'] if key in class_patches else unit['declarations'][0]['members']
+            members = (unit['declarations'] if key in class_patches or key in top_level
+                       else unit['declarations'][0]['members'])
             if len(members) != 1 or members[0]['name'] != original_nodes[key]['name']:
                 errors.append('patch projection changed declaration ownership: ' + key)
             else:

@@ -107,8 +107,9 @@ class VpEpisodeGuide {
       viewMode: _host.viewMode,
       onSelect: (index, {bool allowResume = false}) async {
         // Synthetic guide: its only playlist row IS the playing stream.
-        if (_host.activePlaylist == null || _host.activePlaylist!.isEmpty)
+        if (_host.activePlaylist == null || _host.activePlaylist!.isEmpty) {
           return;
+        }
         _host.setManualSelectionMode(allowResume: allowResume);
         await _host.loadPlaylistIndex(index, autoplay: true);
       },

@@ -27,6 +27,7 @@ def main():
     assert list(checker.VIDEO_PLAYER_SIZE_EXCEPTIONS) == [startup]
     exact = checker.VIDEO_PLAYER_SIZE_EXCEPTIONS[startup]
     assert 500 < exact <= 800, exact
+    assert checker.VIDEO_PLAYER_SIZE_EXCEPTIONS == {startup: 623}  # Phase 21b: stays exactly 623
     common = Path(subprocess.check_output(
         ['git', 'rev-parse', '--path-format=absolute', '--git-common-dir'],
         cwd=root, text=True).strip())
@@ -108,6 +109,36 @@ def main():
               f'does not match the exact {exact}-line video-player size exception')
         probe('unlisted bridge file at the exception size rejected', bridge + 'probe.dart',
               '\n' * exact, '500-line video-player extraction limit')
+        # Phase 21b end state: exact facade cap and declaration shape.
+        assert checker.VIDEO_PLAYER_COMPLETE is True
+        cap = checker.VIDEO_PLAYER_FACADE_CAP
+        facade_path = checker.VIDEO_PLAYER_FACADE
+        text = (copy / facade_path).read_text()
+        assert len(text.splitlines()) == cap, (len(text.splitlines()), cap)
+        exact = f'does not match the exact {cap}-line video-player facade exception'
+        probe('exact facade cap allowed', facade_path, text)
+        probe('facade cap plus one rejected', facade_path, text + '\n', exact)
+        blank = text.index('\n\n')
+        probe('facade cap minus one without lowering rejected', facade_path, text[:blank] + text[blank + 1:], exact)
+        def same_size(extra):
+            # Drop one blank line so the line count stays exact; only the
+            # declaration rule can fail.
+            blank = text.index('\n\n')
+            return text[:blank] + text[blank + 1:] + extra + '\n'
+        top = 'is not a registered class or a Host adapter'
+        probe('new top-level class rejected', facade_path, same_size('class PlantedFacadeClass {}'), top)
+        probe('adapter implementing another Host rejected', facade_path,
+              same_size('class _VpPlantedHostAdapter implements VpSleepTimerHost {}'), top)
+        probe('adapter implementing no Host rejected', facade_path,
+              same_size('class _VpPlantedHostAdapter {}'), top)
+        other = 'top-level declaration other than a class'
+        probe('top-level function rejected', facade_path, same_size('void plantedFunction() {}'), other)
+        probe('top-level enum rejected', facade_path, same_size('enum PlantedEnum { a }'), other)
+        probe('top-level typedef rejected', facade_path, same_size('typedef PlantedTypedef = int;'), other)
+        first_export = text.index('\nexport ') + 1
+        probe('fourth export rejected', facade_path,
+              text[:first_export] + "export 'dart:async';\n" + text[first_export:].replace('\n\n', '\n', 1),
+              'video-player facade exports changed')
         code, output = run()
         assert code == 0, output
         print(json.dumps(results, indent=2))

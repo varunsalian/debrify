@@ -58,7 +58,7 @@ class VpPlayerDefaults {
     const aspects = AspectMode.values;
     _host.aspectMode = aspects[aspectIndex.clamp(0, aspects.length - 1)];
 
-    // In-player guide look. `_initializePlayer` awaits this before playback
+    // In-player guide look. `VpPlayerStartup.initializePlayer` awaits this before playback
     // setup, so every IPTV surface that can actually appear (first tune,
     // zap, guide) already has the real value.
     _host.playerGuideStyle = PlayerGuideStyle.fromPref(
@@ -80,7 +80,7 @@ class VpPlayerDefaults {
       }
     }
 
-    // Audio-output settings, preloaded for [_configurePlayerAudio] — the
+    // Audio-output settings, preloaded for [VpAudioOutput.configurePlayerAudio] — the
     // single owner of ao / audio-spdif / audio-channels
     // (AUDIO_FIDELITY_PLAN.md).
     if (!kIsWeb && Platform.isAndroid) {

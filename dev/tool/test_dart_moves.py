@@ -146,6 +146,7 @@ def run(package):
     record = original.replace('int _y = 1;', 'Object _y = (1);')
     snap = d.retained_manifest(SOURCE, 'lib/features/video_player', record, 'fixture', package)
     verify('required singleton record comma', {SOURCE: record.replace('(1)', '(1,)')}, snap, record)
+    cleanup_tests(package, original, manifest, current, verify)
     from test_dart_sleep_moves import run as sleep_tests
     from test_dart_skip_moves import run as skip_tests
     from test_dart_display_moves import run as display_tests
@@ -181,6 +182,81 @@ def run(package):
     errors = d.check(real_manifest, real_original, real_sources, package)
     assert not errors, '\n'.join(errors)
     print('Real frozen Phase-1 draft: all moves/retained bodies/imports/scaffolds PASS (virtual only)')
+
+
+def cleanup_tests(package, original, manifest, current, verify):
+    """Phase 21b declared cleanup edits: moved-body patches and import removal."""
+    braced = dict(current, **{DEST: current[DEST].replace(
+        'if (!_host . mounted) return ;', 'if (!_host . mounted) { return ; }')})
+    assert braced[DEST] != current[DEST]
+    brace = dict(before=[')', 'return', ';'], after=[')', '{', 'return', ';', '}'], count=1)
+
+    def moved_spec(**fields):
+        spec = copy.deepcopy(manifest)
+        row = next(r for r in spec['declarations'] if r['original'].endswith('.move'))
+        row.update(fields)
+        return spec
+    verify('declared moved-body brace patch', braced,
+           moved_spec(patches=[brace], reason='C2 braces', test='cleanup proof'), passes=True)
+    verify('moved patch without reason', braced, moved_spec(patches=[brace], test='cleanup proof'))
+    verify('moved patch without test', braced, moved_spec(patches=[brace], reason='C2 braces'))
+    verify('undeclared moved-body brace edit', braced)
+    verify('moved patch before-tokens absent', braced, moved_spec(
+        patches=[dict(brace, before=[')', 'return', 'null', ';'])], reason='C2 braces', test='cleanup proof'))
+    verify('retained row still rejects patches', spec=dict(copy.deepcopy(manifest), declarations=[
+        dict(r, patches=[dict(before=['0'], after=['1'], count=1)]) if r['original'] == '_VideoPlayerScreenState._x'
+        else r for r in manifest['declarations']]))
+    # Import removal renumbers later directive spans; order and tokens stay exact.
+    two = "import 'dart:async';\nimport 'dart:io';"
+    base = original.replace("import 'dart:async';", two, 1)
+
+    def directive_spec(rows, directives):
+        spec = copy.deepcopy(manifest)
+        kept = [r for r in spec['declarations'] if not r['original'].startswith('@directive:')]
+        spec['declarations'] = rows + kept
+        spec['facade_directives'] = directives
+        spec['facade_orders']['@directives'] = ['@directive:' + str(i) for i in range(len(directives))]
+        return spec
+    removed = dict(original='@directive:0', fate='removed', reason='C1 unused import', test='cleanup proof')
+    shifted = dict(original='@directive:1', fate='retained', target='@directive:0')
+    only_io = dict(current, **{SOURCE: current[SOURCE].replace("import 'dart:async';", "import 'dart:io';", 1)})
+    verify('declared import removal with renumbered directive', only_io,
+           directive_spec([removed, shifted], ["import 'dart:io';"]), base, passes=True)
+    for label, row in [('removed import without reason', {k: v for k, v in removed.items() if k != 'reason'}),
+                       ('removed import without test', {k: v for k, v in removed.items() if k != 'test'}),
+                       ('removed import with a target', dict(removed, target='@directive:0'))]:
+        verify(label, only_io, directive_spec([row, shifted], ["import 'dart:io';"]), base)
+    verify('removed directive still present', dict(current, **{SOURCE: current[SOURCE].replace(
+        "import 'dart:async';", two, 1)}), directive_spec([removed, shifted], ["import 'dart:io';"]), base)
+    exported = base.replace("import 'dart:io';", "export 'dart:io';", 1)
+    verify('export removal', dict(current, **{SOURCE: current[SOURCE].replace(
+        "import 'dart:async';", "import 'dart:async';", 1)}), directive_spec(
+        [dict(original='@directive:0', fate='retained'), dict(removed, original='@directive:1')],
+        ["import 'dart:async';"]), exported)
+    commented = original.replace("import 'dart:async';", "// note\n" + two, 1)
+    verify('removed import carrying a comment', only_io,
+           directive_spec([removed, shifted], ["import 'dart:io';"]), commented)
+    swapped = dict(current, **{SOURCE: current[SOURCE].replace("import 'dart:async';", "import 'dart:io';\nimport 'dart:async';", 1)})
+    verify('retained directive order changed', swapped, directive_spec(
+        [dict(original='@directive:0', fate='retained', target='@directive:1'),
+         dict(original='@directive:1', fate='retained', target='@directive:0')],
+        ["import 'dart:io';", "import 'dart:async';"]), base)
+    # History and the live tree stay apart: the P20 ledger at its own applied
+    # revision passes; the live earlier destinations carry the declared 21b
+    # edits, which only the P21 manifest's earlier_patches accept.
+    from dart_move_history import applied_sources
+    p20 = load_manifest('dev/tool/dart_moves/vplayer_p20.json')
+    assert not check_earlier(p20, package, current=applied_sources(p20))
+    p21 = load_manifest('dev/tool/dart_moves/vplayer_p21.json')
+    if p21.get('earlier_patches'):
+        assert check_earlier(p20, package), 'live earlier destinations accepted without earlier_patches'
+        assert not check_earlier(p21, package)
+        undeclared = dict(p21, earlier_patches={})
+        assert check_earlier(undeclared, package), 'earlier destination edits accepted undeclared'
+        print('Dart ownership history: P20 passes at its applied revision; live 21b edits need P21 earlier_patches')
+    verify('removed fate outside directives', spec=dict(copy.deepcopy(manifest), declarations=[
+        dict(r, fate='removed', reason='x', test='y') if r['original'] == 'owner' else r
+        for r in manifest['declarations']]))
 
 
 def history_tests(package):
