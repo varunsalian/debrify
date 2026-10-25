@@ -1,0 +1,699 @@
+{
+ "schema": 1,
+ "facade": "lib/screens/video_player_screen.dart",
+ "procedure": "video-player-screen-plan.md: reviewed raise procedure",
+ "top_level": [
+  {
+   "name": "VideoPlayerScreen",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VideoPlayerScreenState",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpPlayerGesturesHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpTvRemoteHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpControlsRuntimeHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpDockLayoutHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpTransitionOverlayHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpPlayerStartupHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpMediaOpenHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpNetworkTuningHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpPlayerSubscriptionsHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpPlayerInstanceHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpPlayerDefaultsHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpRendererFallbackHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpDecoderProbeHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpTvosVideoHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpVideoOutputLeaseHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpAudioOutputHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpMetadataPreloadHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpPikPakRetryHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpMediaWaitsHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpPlaylistEntryResolveHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpPlaylistLoadHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpEpisodeTitleInfoHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpShuffleHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpEpisodeAdjacentHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpEpisodeNextHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpPlaybackEndedHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpEpisodeGuideHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpEpisodeFetchHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpStremioTvChannelsHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpDebrifyTvBannerHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpDebrifyTvChannelsHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpSourcePlaylistSwitchHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpSourceSwitchHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpStartupGateHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpStartupFailoverHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpStartupCandidatesHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpIptvZapBannerHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpIptvWatchMemoryHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpIptvLiveSourcesHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpIptvChannelSwitchHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpIptvGuideCatchupHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpIptvZapLadderHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpIptvZapRingHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpResumeSaveHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpResumeRestoreHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpResumeKeysHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpIptvRecordingResourcesHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpIptvRecordingHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpPlayerMenuHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpPlayerMenuUiHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpIdentifyTitleUiHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpIdentifyTitleHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpAddonSubtitlesHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpTrackPreferencesHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpSubtitleLanguagePolicyHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpSubtitleApplyHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpSubtitleAutoSyncHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpPipLifecycleHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpLocalCompletionHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpMdblistScrobblerHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpSimklScrobblerHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpTraktScrobblerHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpDisplayModeHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpSkipSegmentHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "_VpSleepTimerHostAdapter",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "VideoPlayerScreenTestHooks",
+   "kind": "ClassDeclaration"
+  },
+  {
+   "name": "VpS2Hooks",
+   "kind": "ClassDeclaration"
+  }
+ ],
+ "state_members": [
+  "_VideoPlayerScreenState",
+  "_vpSetState",
+  "_tvReleaseLogChannel",
+  "_player",
+  "_playerCreated",
+  "_videoController",
+  "_androidVideoRendererMode",
+  "_tvosDecodeRemedy",
+  "_tvosForceSoftwareDecode",
+  "_contentDisplayMatchMode",
+  "_tvosDisplayMatchToken",
+  "_tvosDisplayMatchTimer",
+  "_audioPassthroughEnabled",
+  "_systemAudioEffectsEnabled",
+  "_appleMultichannelEnabled",
+  "_tvosRouteOutputChannels",
+  "_tvosForceStereoAudio",
+  "_tvosLegacyAudioOutput",
+  "_playerInstanceGeneration",
+  "_rendererValidatedForSession",
+  "_rendererFallbackInProgress",
+  "_rendererStartupGuardToken",
+  "_rendererStartupValidationGeneration",
+  "_activeOpenedMedia",
+  "_activeMediaShouldPlay",
+  "_activeMediaUserPaused",
+  "_random",
+  "_cachedSeriesPlaylist",
+  "_activePlaylist",
+  "_seriesImdbKnownAtLaunch",
+  "_episodeMetadataReady",
+  "_playerInitializationFuture",
+  "_playlistIdentityToken",
+  "_controlsVisible",
+  "_currentStreamUrl",
+  "_singleFileImdbId",
+  "_singleFileImdbFetched",
+  "_manualContentImdbId",
+  "_manualContentType",
+  "_manualContentSeason",
+  "_manualContentEpisode",
+  "_manualSubtitleDisplayLabel",
+  "_isPikPakRetrying",
+  "_pikPakRetryCount",
+  "_pikPakRetryMessage",
+  "_pikPakRetryId",
+  "_constructPlaylistItemData",
+  "_seriesPlaylist",
+  "_hideTimer",
+  "_tvBarScope",
+  "_tvPlayPauseFocus",
+  "_tvProgressFocus",
+  "_tvRootFocus",
+  "_tvNoTimeline",
+  "_tvScrubTarget",
+  "_tvScrubGeneration",
+  "_isSeekingWithSlider",
+  "_lastSliderSeekPos",
+  "_showDebrifyBanner",
+  "_debrifyBannerFloatingMounted",
+  "_showIptvZapBanner",
+  "_iptvZapFloatingMounted",
+  "_iptvZapChannel",
+  "_iptvZapEpg",
+  "_iptvZapEpgLoading",
+  "_iptvZapClock",
+  "_ripple",
+  "_currentIndex",
+  "_lastTapLocal",
+  "_isManualEpisodeSelection",
+  "_isAutoAdvancing",
+  "_allowResumeForManualSelection",
+  "_manualSelectionResetTimer",
+  "_continuousShuffleEnabled",
+  "_showShuffleGeneration",
+  "_episodeNavigationGeneration",
+  "_currentChannelName",
+  "_currentChannelNumber",
+  "_currentChannelId",
+  "_showChannelGuide",
+  "_showSyncOverlay",
+  "_channelEntries",
+  "_showIptvChannelSheet",
+  "_currentIptvIndex",
+  "_iptvDiag",
+  "_iptvReconnectText",
+  "_iptvLiveRecovery",
+  "_iptvChannelsOverride",
+  "_iptvGuideContextOverride",
+  "_iptvStartOverActive",
+  "_iptvStartOverLoading",
+  "_iptvStartOverTimelineRequested",
+  "_effectiveIptvChannels",
+  "_iptvZapBannerOwnsIdentity",
+  "_playerGuideStyle",
+  "_dockStyle",
+  "_dockPalette",
+  "_dockSize",
+  "_dockExtent",
+  "_infoPanelHeight",
+  "_dockVolume",
+  "_infoPanelSignature",
+  "_lastInfoPanelSignature",
+  "_infoPanelGeneration",
+  "_dockGeometryGeneration",
+  "didChangeDependencies",
+  "_reservedInfoPanelHeight",
+  "_playerGuideTokens",
+  "_recordingSupported",
+  "_isRecording",
+  "_recordingTempPath",
+  "_lifecycle",
+  "_pausedByLifecycle",
+  "_engineTaskId",
+  "_engineFlagOn",
+  "_recordLogSub",
+  "_subtitleDiagnosticLogSub",
+  "_subtitleDiagnosticGeneration",
+  "_activeSubtitleApplyAttempt",
+  "_subtitleSelectionCorrection",
+  "_desktopRecordingRevisionListener",
+  "_recordingStartGen",
+  "_iptvGuideContextGeneration",
+  "_showSourceSheet",
+  "_currentSourceIndex",
+  "_serverWatch",
+  "_openedWatchSource",
+  "_watchOpenEpoch",
+  "_stremioSourcesOverride",
+  "_resolveStremioSourceOverride",
+  "_augmentedSources",
+  "_showPlayerMenu",
+  "_playerMenuInitialSection",
+  "_playerMenuKey",
+  "_menuImdbId",
+  "_menuContentType",
+  "_menuSeason",
+  "_menuEpisode",
+  "_menuCachedSlots",
+  "_menuCacheKey",
+  "_showStremioTvGuide",
+  "_currentStremioTvChannelId",
+  "_stremioTvChannelsOverride",
+  "_showStremioTvNextLoading",
+  "_currentStremioTvContentImdbId",
+  "_currentStremioTvContentType",
+  "_currentStremioTvContentSeason",
+  "_currentStremioTvContentEpisode",
+  "_currentStremioTvContentTitle",
+  "_effectiveSources",
+  "_effectiveResolver",
+  "_effectiveStremioTvChannels",
+  "_effectiveContentImdbId",
+  "_effectiveContentType",
+  "_effectiveContentSeason",
+  "_effectiveContentEpisode",
+  "_effectiveContentTitle",
+  "_currentSeriesImdbId",
+  "_skip",
+  "_subtitleSettings",
+  "_cachedStremioSubtitles",
+  "_cachedAddonSlots",
+  "_injectedSubtitleSlots",
+  "_cachedSubtitleKey",
+  "_selectedStremioSubtitleId",
+  "_embeddedSubtitleApplied",
+  "_userManuallySelectedSubtitle",
+  "_trackPreferencesReadyForAddonSubtitles",
+  "_addonSubtitleFetchToken",
+  "_activeExternalSubtitlePath",
+  "_subtitleOnlyForeignAudio",
+  "_subtitleForcedOnly",
+  "_hasSubtitlePolicy",
+  "_subtitlePreferredAudio",
+  "_subtitleSelectedAudio",
+  "_subtitleAudioRevision",
+  "_subtitleSync",
+  "_subtitleApply",
+  "_subtitleLanguage",
+  "_trackPreferences",
+  "_addonSubtitles",
+  "_identify",
+  "_identifyUi",
+  "_menuUi",
+  "_menu",
+  "_recording",
+  "_recordingResources",
+  "_resumeKeys",
+  "_resumeRestore",
+  "_resumeSave",
+  "_zapRing",
+  "_zapLadder",
+  "_iptvGuide",
+  "_iptvSwitch",
+  "_iptvSources",
+  "_iptvMemory",
+  "_iptvBanner",
+  "_startupCandidates",
+  "_startupFailover",
+  "_startupGate",
+  "_sourceSwitch",
+  "_sourcePlaylistSwitch",
+  "_debrifyChannels",
+  "_debrifyBanner",
+  "_stremioTv",
+  "_episodeFetch",
+  "_episodeGuide",
+  "_playbackEnded",
+  "_episodeNext",
+  "_episodeAdjacent",
+  "_shuffle",
+  "_episodeTitleInfo",
+  "_playlistLoad",
+  "_playlistEntryResolve",
+  "_mediaWaits",
+  "_pikPakRetry",
+  "_metadataPreload",
+  "_audioOutput",
+  "_videoOutputLease",
+  "_tvosVideo",
+  "_decoderProbe",
+  "_rendererFallback",
+  "_playerDefaults",
+  "_playerInstance",
+  "_playerSubscriptions",
+  "_networkTuner",
+  "_mediaOpen",
+  "_playerStartup",
+  "_transitionOverlay",
+  "_dockLayout",
+  "_controlsRuntime",
+  "_tvRemote",
+  "_gestures",
+  "_autoSyncPill",
+  "_autoSyncPillLastShown",
+  "_isReady",
+  "_startupGateActive",
+  "_startupGateOverlayHidden",
+  "_manualSourceGateActive",
+  "_validationGateActive",
+  "_startupGateMessage",
+  "_resumeWriteGuard",
+  "_resumeSaveLock",
+  "_resumeVerifyEpoch",
+  "_stremioTvStartupSeek",
+  "_stremioTvStartupWatch",
+  "_isPlaying",
+  "_isPipActive",
+  "_position",
+  "_duration",
+  "_playbackUiClock",
+  "_activeSkipSegmentUi",
+  "_isTransitioning",
+  "_seriesNextDispatched",
+  "_completion",
+  "_posSub",
+  "_durSub",
+  "_playSub",
+  "_paramsSub",
+  "_trackSub",
+  "_completedSub",
+  "_bufferingSub",
+  "_iptvErrorSub",
+  "_rendererStartupErrorSub",
+  "_decoderProbeGeneration",
+  "_decoderProbeToken",
+  "_decoderProbeParams",
+  "_decoderProbeTimer",
+  "_lastDecoderDiagnosticSignature",
+  "_showBufferingIndicator",
+  "_bufferingDebounceTimer",
+  "_seekHud",
+  "_verticalHud",
+  "_aspectRatioHud",
+  "_display",
+  "_sleep",
+  "_sleepStopLatched",
+  "_speedHoldHud",
+  "_startsInPortrait",
+  "_rainbowController",
+  "_rainbowOpacity",
+  "_rainbowActive",
+  "_transitionRunning",
+  "_transitionStopTimer",
+  "_transitionPhaseTimer",
+  "_transitionPhase",
+  "_transitionPhase2Started",
+  "_tvStaticMessage",
+  "_tvStaticSubtext",
+  "_dynamicTitle",
+  "_trakt",
+  "_simkl",
+  "_mdblist",
+  "_episodeTrackerProgressImdbId",
+  "_analyticsHeartbeatTimer",
+  "_randomStartOffset",
+  "_percentStartOffset",
+  "initState",
+  "_persistablePosition",
+  "_traktSeasonEpisode",
+  "_startAnalyticsHeartbeat",
+  "_bindEpisodeTrackerProgressIdentity",
+  "_screenDisposed",
+  "didUpdateWidget",
+  "_dockBand",
+  "_skipButtonBottom",
+  "_kIptvZapPageSize",
+  "_iptvZapWindowOffset",
+  "_iptvZapCategoryTotal",
+  "_iptvZapPagingActive",
+  "_iptvZapCategory",
+  "_iptvZapCategories",
+  "_iptvZapRequestInFlight",
+  "_iptvZapPendingInputs",
+  "_iptvSwitchTicket",
+  "_iptvChannelKey",
+  "_iptvErrorsMuted",
+  "_lastIptvErrorShown",
+  "_currentIptvChannel",
+  "_hasIptvNext",
+  "_hasIptvPrevious",
+  "_isIptvSeriesContext",
+  "_activeHttpHeaders",
+  "_hasStremioTvGuide",
+  "_hasStremioTvNext",
+  "_hasAnyNext",
+  "_pip",
+  "dispose",
+  "_autosaveTimer",
+  "_buildTvControls",
+  "_iptvSheetKey",
+  "_overlayJustClosed",
+  "_anyPlayerOverlayOpen",
+  "_buildSubtitleViewConfig",
+  "_buildCustomAspectRatioVideo",
+  "_buildTransitionOverlay",
+  "_buildStremioTvNextLoadingOverlay",
+  "_debrifyTvOwnsIdentity",
+  "_buildDebrifyTvInfoPanel",
+  "_buildIptvInfoPanel",
+  "_canFetchEpisodes",
+  "_episodeFetchInProgress",
+  "_syntheticGuidePlaylist",
+  "build",
+  "_isAnyOverlayOpen",
+  "_resetSubtitleState",
+  "_findSeriesEpisodeForCurrentIndex"
+ ],
+ "adapters": [
+  "_VpPlayerGesturesHostAdapter",
+  "_VpTvRemoteHostAdapter",
+  "_VpControlsRuntimeHostAdapter",
+  "_VpDockLayoutHostAdapter",
+  "_VpTransitionOverlayHostAdapter",
+  "_VpPlayerStartupHostAdapter",
+  "_VpMediaOpenHostAdapter",
+  "_VpNetworkTuningHostAdapter",
+  "_VpPlayerSubscriptionsHostAdapter",
+  "_VpPlayerInstanceHostAdapter",
+  "_VpPlayerDefaultsHostAdapter",
+  "_VpRendererFallbackHostAdapter",
+  "_VpDecoderProbeHostAdapter",
+  "_VpTvosVideoHostAdapter",
+  "_VpVideoOutputLeaseHostAdapter",
+  "_VpAudioOutputHostAdapter",
+  "_VpMetadataPreloadHostAdapter",
+  "_VpPikPakRetryHostAdapter",
+  "_VpMediaWaitsHostAdapter",
+  "_VpPlaylistEntryResolveHostAdapter",
+  "_VpPlaylistLoadHostAdapter",
+  "_VpEpisodeTitleInfoHostAdapter",
+  "_VpShuffleHostAdapter",
+  "_VpEpisodeAdjacentHostAdapter",
+  "_VpEpisodeNextHostAdapter",
+  "_VpPlaybackEndedHostAdapter",
+  "_VpEpisodeGuideHostAdapter",
+  "_VpEpisodeFetchHostAdapter",
+  "_VpStremioTvChannelsHostAdapter",
+  "_VpDebrifyTvBannerHostAdapter",
+  "_VpDebrifyTvChannelsHostAdapter",
+  "_VpSourcePlaylistSwitchHostAdapter",
+  "_VpSourceSwitchHostAdapter",
+  "_VpStartupGateHostAdapter",
+  "_VpStartupFailoverHostAdapter",
+  "_VpStartupCandidatesHostAdapter",
+  "_VpIptvZapBannerHostAdapter",
+  "_VpIptvWatchMemoryHostAdapter",
+  "_VpIptvLiveSourcesHostAdapter",
+  "_VpIptvChannelSwitchHostAdapter",
+  "_VpIptvGuideCatchupHostAdapter",
+  "_VpIptvZapLadderHostAdapter",
+  "_VpIptvZapRingHostAdapter",
+  "_VpResumeSaveHostAdapter",
+  "_VpResumeRestoreHostAdapter",
+  "_VpResumeKeysHostAdapter",
+  "_VpIptvRecordingResourcesHostAdapter",
+  "_VpIptvRecordingHostAdapter",
+  "_VpPlayerMenuHostAdapter",
+  "_VpPlayerMenuUiHostAdapter",
+  "_VpIdentifyTitleUiHostAdapter",
+  "_VpIdentifyTitleHostAdapter",
+  "_VpAddonSubtitlesHostAdapter",
+  "_VpTrackPreferencesHostAdapter",
+  "_VpSubtitleLanguagePolicyHostAdapter",
+  "_VpSubtitleApplyHostAdapter",
+  "_VpSubtitleAutoSyncHostAdapter",
+  "_VpPipLifecycleHostAdapter",
+  "_VpLocalCompletionHostAdapter",
+  "_VpMdblistScrobblerHostAdapter",
+  "_VpSimklScrobblerHostAdapter",
+  "_VpTraktScrobblerHostAdapter",
+  "_VpDisplayModeHostAdapter",
+  "_VpSkipSegmentHostAdapter",
+  "_VpSleepTimerHostAdapter"
+ ]
+}

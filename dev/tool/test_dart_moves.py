@@ -241,6 +241,19 @@ def cleanup_tests(package, original, manifest, current, verify):
         [dict(original='@directive:0', fate='retained', target='@directive:1'),
          dict(original='@directive:1', fate='retained', target='@directive:0')],
         ["import 'dart:io';", "import 'dart:async';"]), base)
+    # History and the live tree stay apart: the P20 ledger at its own applied
+    # revision passes; the live earlier destinations carry the declared 21b
+    # edits, which only the P21 manifest's earlier_patches accept.
+    from dart_move_history import applied_sources
+    p20 = load_manifest('dev/tool/dart_moves/vplayer_p20.json')
+    assert not check_earlier(p20, package, current=applied_sources(p20))
+    p21 = load_manifest('dev/tool/dart_moves/vplayer_p21.json')
+    if p21.get('earlier_patches'):
+        assert check_earlier(p20, package), 'live earlier destinations accepted without earlier_patches'
+        assert not check_earlier(p21, package)
+        undeclared = dict(p21, earlier_patches={})
+        assert check_earlier(undeclared, package), 'earlier destination edits accepted undeclared'
+        print('Dart ownership history: P20 passes at its applied revision; live 21b edits need P21 earlier_patches')
     verify('removed fate outside directives', spec=dict(copy.deepcopy(manifest), declarations=[
         dict(r, fate='removed', reason='x', test='y') if r['original'] == 'owner' else r
         for r in manifest['declarations']]))

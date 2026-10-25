@@ -5,7 +5,7 @@ from pathlib import Path
 
 import check_dart_moves as d
 from dart_move_fixture import materialize
-from dart_move_history import git_text
+from dart_move_history import git_text, applied_sources
 from test_dart_identify_moves import snippet_tokens
 import re
 
@@ -23,7 +23,7 @@ def run(package):
     assert len(spec['patched_class_projection']) == 3
     from dart_move_history import earlier_sources, check_earlier
     assert len(earlier_sources(spec)) == 29
-    assert not check_earlier(spec, package)
+    assert not check_earlier(spec, package, current=applied_sources(spec))
     for adapter in spec['patched_class_projection']:
         row = next(r for r in spec['declarations'] if r['original'] == adapter)
         assert row['fate'] == 'patched' and len(row['patches']) == 1

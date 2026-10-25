@@ -78,3 +78,19 @@ def check_earlier(manifest, package, current=None, root=ROOT):
         errors.extend(compare_explicit_tokens(left, right, spec.get('patches', []),
                                                'earlier destination: ' + path))
     return errors
+
+
+# Revision at which each applied phase is checked as history (the CI `--at`
+# list). Since Phase 21b the live tree carries later declared edits in earlier
+# destinations (the P21 manifest's earlier_patches, proved by the current P21
+# check), so a historical self-test compares a phase's earlier destinations
+# at its own applied revision, not in the live tree.
+APPLIED_AT = {1: '31a347ad2', 2: 'fc24e32ae', 3: '890df14d8', 4: '315028407', 5: 'ea7901ead',
+              6: '2defa5100', 7: '491bf1fea', 8: '0df6ccd4e', 9: '5c7b704bd', 10: '7fdf59370',
+              11: '0c2fb62e8', 12: '1d7699d2e', 13: '238df16f4', 14: 'be4cd78aa', 15: 'ed7c6717a',
+              16: 'c094c864c', 17: '249566376', 18: '46bc00ce7', 19: '0f5bfb161', 20: '5214f7a7e'}
+
+
+def applied_sources(manifest, root=ROOT):
+    revision = APPLIED_AT[manifest['phase']]
+    return {p: git_text(revision, p, root) for p in earlier_sources(manifest, root)}
