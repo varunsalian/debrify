@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PROVISIONAL P21 (21a) evidence-only materialization on the phase-20 merge; never writes lib/.
+"""FINAL P21 (21a) evidence-only materialization on the phase-20 merge; never writes lib/.
 
 Controls runtime: chrome visibility and auto-hide, the TV remote's key routing
 and cinema scrub, touch/pointer gestures, dock preferences and geometry
@@ -145,7 +145,7 @@ def build(package):
   g['host_names']=[host_name(f) for f in g['forwarders']]
   assert len(g['forwarders'])==len(set(g['forwarders'])),g['name']
   if EXPECTED_HOSTS is not None:assert (len(set(g['host_names'])),len(g['host_names']))==EXPECTED_HOSTS[g['name']],(g['name'],g['host_names'])
- spec.update(phase=21,status='provisional',span_order=list(spans),patched_class_projection=PATCHED,finalization=dict(label='PROVISIONAL',preparation_base=BASE,accepted_p20=BASE,seam_original=BASE,history='All twenty applied phases; every earlier destination derived without a whitelist.'),provisional=dict(label='PROVISIONAL',preparation_base=BASE,pending=['M5 record (re-baseline only if M5 lands a non-docs fix)'],host_contracts={g['name']:g['forwarders'] for g in GROUPS},construction='Five inert eager late-final assignments follow all six P20 collaborators.'))
+ spec.update(phase=21,status='applied',span_order=list(spans),patched_class_projection=PATCHED,finalization=dict(label='FINAL',preparation_base=BASE,accepted_p20=BASE,seam_original=BASE,history='All twenty applied phases; every earlier destination derived without a whitelist.'),provisional=dict(label='FINAL',preparation_base=BASE,pending=[],host_contracts={g['name']:g['forwarders'] for g in GROUPS},construction='Five inert eager late-final assignments follow all six P20 collaborators.'))
  registrations=[dict(before=['widget','.',n],after=['_host','.',n],binding='unbound',role_change='live widget selector') for n in WIDGET]+[dict(before=c['before'],after=['_host','.',c['name']],binding='unbound',role_change='Complete live collaborator chain via facade routing') for c in CHAINS]
  spec['guards']=dict(occurrence_field_bindings=dict(owners=[STATE],state_classes=[STATE],mandatory_qualification=True,owner_scoped_bare_fields={STATE+'.'+n:byname[n]['name'] for n in FIELDS}),record_owners=[STATE],record_fields={STATE:FIELDS},receiver_owners={g['receiver']:g['name'] for g in GROUPS},receiver_paths={g['receiver']:g['name'] for g in GROUPS},receiver_members={g['name']:[n[1:] for n in g['names']] for g in GROUPS},receivers=['_host',*[g['receiver'] for g in GROUPS]],live_state_receivers=['_host'],adapter_state_prefixes=['_s'],require_live_state_callbacks=True,host_property_bindings=hostbindings,registered_occurrence_substitutions=registrations)
  retained_sites=[];patched=[]
@@ -200,8 +200,8 @@ def main():
  errors=[] if a.no_check else check(spec,original,formatted,a.parser_package)
  hosts={g['name']:dict(names=len(set(g['host_names'])),declarations=len(g['host_names'])) for g in GROUPS}
  if not a.no_check and not errors and all(v<=SIZE_LIMIT.get(k,500) for k,v in sizes.items() if k!='facade'):(R/'dev/tool/dart_moves/vplayer_p21.json').write_text(json.dumps(spec,indent=2)+'\n')
- for file,value in [('membership.json',measured),('retained-sites.json',sites),('hosts.json',spec['provisional']['host_contracts']),('spec.json',spec),('result.json',dict(label='PROVISIONAL',comparison_errors=errors,sizes=sizes,hosts=hosts,retained_references=len(sites)))]: (a.probe/file).write_text(json.dumps(value,indent=2)+'\n')
- print('PROVISIONAL differences',len(errors),sizes,hosts,'retained',len(sites))
+ for file,value in [('membership.json',measured),('retained-sites.json',sites),('hosts.json',spec['provisional']['host_contracts']),('spec.json',spec),('result.json',dict(label='FINAL',comparison_errors=errors,sizes=sizes,hosts=hosts,retained_references=len(sites)))]: (a.probe/file).write_text(json.dumps(value,indent=2)+'\n')
+ print('FINAL differences',len(errors),sizes,hosts,'retained',len(sites))
  for e in errors[:40]:print(' ',e)
  assert all(v<=SIZE_LIMIT.get(k,500) for k,v in sizes.items() if k!='facade'),sizes
 if __name__=='__main__':main()

@@ -2,7 +2,7 @@
   "schema": 1,
   "series": "vplayer",
   "phase": 21,
-  "status": "provisional",
+  "status": "applied",
   "base": "5214f7a7e",
   "source": "lib/screens/video_player_screen.dart",
   "feature": "lib/features/video_player",
@@ -10692,18 +10692,16 @@
     "_VpSleepTimerHostAdapter"
   ],
   "finalization": {
-    "label": "PROVISIONAL",
+    "label": "FINAL",
     "preparation_base": "5214f7a7e",
     "accepted_p20": "5214f7a7e",
     "seam_original": "5214f7a7e",
     "history": "All twenty applied phases; every earlier destination derived without a whitelist."
   },
   "provisional": {
-    "label": "PROVISIONAL",
+    "label": "FINAL",
     "preparation_base": "5214f7a7e",
-    "pending": [
-      "M5 record (re-baseline only if M5 lands a non-docs fix)"
-    ],
+    "pending": [],
     "host_contracts": {
       "VpTransitionOverlay": [
         "Timer? get bufferingDebounceTimer => _s._bufferingDebounceTimer;",

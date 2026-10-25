@@ -360,3 +360,17 @@ forwarders. `vp_player_startup.dart` carries an exact-count size exception
 (`VIDEO_PLAYER_SIZE_EXCEPTIONS`). The P20 analyzer inventory records the Step T
 receiver-probe additions (13 unused facade directives, also allowlisted pending
 phase 21; three formatter `if` wraps). Facade ratchet 8,986.
+
+Phase 21a Step 1 applies `vplayer_p21.json` (FINAL, `draft_vplayer_controls_moves.py`
+on the phase-20 merge `5214f7a7e`): the controls runtime (auto-hide, TV bar
+raise/lower, close-top, play toggle, pointer wake, visibility listener), the TV
+remote's key routing and cinema scrub, touch/pointer gestures, dock preferences
+and geometry invalidation, and the transition/buffering overlay actions move into
+five `legacy_video_player/` files. CI checks P21 current and `--self-test` and
+adds P20 history at `5214f7a7e`. The five collaborators are `late final` and
+assigned after the six P20 collaborators; siblings are reached through facade
+routing. No seam relocation (both seam proofs are unchanged apart from the active
+phase). The P21 analyzer inventory records the Step T receiver-probe additions
+(the unused facade `player_appearance_storage` directive, also allowlisted
+pending 21b C1; one formatter `if` wrap in `VpTvRemote.tvScrubBegin`). `build`
+stays in the facade (D6). Facade ratchet 8,639.

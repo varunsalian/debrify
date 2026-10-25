@@ -188,3 +188,6 @@ warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 
 warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/live_recording_service.dart'. Try removing the import directive
 warning | unused_import | lib/screens/video_player_screen.dart | Unused import: '../services/profiles/profile_runtime.dart'. Try removing the import directive
 warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'video_player/services/android_renderer_startup_fallback.dart'. Try removing the import directive
+# Phase 21a frozen move/probe: the facade directive left unused by the controls-runtime moves
+# (`_loadDockPrefs` moved to VpDockLayout; end-state import cleanup in 21b C1).
+warning | unused_import | lib/screens/video_player_screen.dart | Unused import: 'package:debrify/services/storage/player_appearance_storage.dart'. Try removing the import directive
