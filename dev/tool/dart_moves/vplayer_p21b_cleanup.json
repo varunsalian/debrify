@@ -1,0 +1,6 @@
+{
+ "schema": 1,
+ "base": "b72ff16f8",
+ "description": "Phase 21b declared cleanup edits (C1 imports, C2 braces, C3 comments). Proved by dev/tool/vplayer_cleanup_proof.py (layer 1) and mirrored in dev/tool/dart_moves/vplayer_p21.json (layer 2).",
+ "edits": []
+}

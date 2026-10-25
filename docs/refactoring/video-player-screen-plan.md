@@ -12338,6 +12338,93 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
   startup-shield source-text test on both sides.
 - Next: merge into `refactor/codebase`, then 21b.
 
+### 2026-10-25 — Phase 21b Step T(b) (executor: Claude)
+
+- **Base** `b72ff16f8` (the 21a merge), branch `refactor/vplayer-p21b`,
+  worktree `../debrify-wt/vplayer-p21b`. Evidence `p21b/stepT/` and
+  `p21b/cleanup/`; parser package `.dart_tool/vplayer_parser/p21_stepT`.
+- **Composition** (`p21b/stepT/composition.py`, disjoint partition spans;
+  each line belongs to the span holding its first character, so the parts
+  sum exactly): directives 243 (233 directives), widget 200, State header
+  and closing 4, constructor/lifecycle/heartbeat 499, fields 668 + 5 (the
+  21a collaborator fields), shared derivations 368, **`build` and build-only
+  helpers 1,549**, 65 adapters 5,010 (1,921 members), hooks 93, **total
+  8,639**. The step 6 re-measurement after C1–C3 gives the end-state total.
+- **Cleanup inventories** (`p21b/cleanup/`):
+  - `imports.txt`: 77 `unused_import` + 2 `unused_shown_name` (`kIsWeb`,
+    `listEquals`) in the facade, from `p21/merge/analyze.txt`. 0
+    `vm:entry-point` pragmas in `lib/`; no removed import carries a comment.
+  - `braces.txt`: the actual count from the 21a-merge analyzer output is
+    **30 sites** (29 bridge files' sites in 18 files plus the facade's
+    `_currentSeriesImdbId`); 29 are braced, `vp_player_startup.dart:341`
+    (`initializePlayer`, ordinal 3) is excluded. Post-C2 sizes measured on a
+    scratch worktree with `dart format`: no bridge file passes 500 (largest
+    `vp_iptv_recording.dart` 465, `vp_resume_save.dart` 459); the excluded
+    site would make startup 624. The facade grows by 1.
+  - `comments.txt`: the full scan (`stepT/comment_scan_raw.txt`) of every
+    `//`/`///` comment in the facade, `lib/features/video_player/**` and
+    `network_tuning.dart` for names a p1–p21 manifest moved: 78 names on
+    73 lines, all replaced by the current owner (`VpOwner.member`, or the
+    bare name inside the owner's own file), plus the P20 stale "Load default
+    player settings (aspect)" line, the P19 S2f "gated on
+    `Platform.isAndroid`" text and the P21a misplaced `// Second line for
+    video title` (deleted from `vp_transition_overlay.dart`, restored as the
+    trailing comment of `_tvStaticSubtext`): 77 edits. The design's line
+    references (facade 519/533/542, the moved docs 2442/2450 at
+    `5214f7a7e`) are covered by the scan. Comment edits keep the line count
+    of every file except the two deletions.
+- **Checker extension** (`check_dart_moves.py`, R2-P2-2 option b): `moved`
+  rows accept `patches` with mandatory `reason` and `test`, applied after
+  `substitutions`; `retained` rows still reject patches. A moved patch must
+  also apply to the original body with the same count; the original is then
+  projected (as for `patched` rows) so the context and occurrence/guard-scope
+  checks compare like with like. **Deviation (directive renumbering):** the
+  design's premise that rewriting `facade_directives` is enough does not
+  hold, because every facade directive is also a partition row
+  `@directive:N`, keyed by index, and removing an import renumbers the rest.
+  So a directive row may carry fate `removed` (only an uncommented `import`,
+  with `reason` and `test`) and a kept directive row may carry a renumbered
+  `target`, with the original order enforced. Negatives in `test_dart_moves`:
+  moved patch without reason, without test, undeclared moved-body brace,
+  moved patch whose before-tokens do not occur, retained row with a patch;
+  removed import without reason/test or with a target, removed directive
+  still present, export removal, removed import carrying a comment,
+  reordered directives, `removed` outside directives.
+- **Dry run** (`p21b/stepT/dry-run.log`, in memory): the P21-destination
+  guard site `if (_host.mounted && _host.tvScrubTarget != null)` in
+  `VpTvRemote.tvScrubBegin` braced. Declared (two derived patches,
+  `null )` + `{` and `}` before the closure's `)`): PASS. Undeclared: FAIL
+  (non-verbatim, and the occurrence-scope check reports the new block for
+  `_tvProgressFocus`/`requestFocus`). Declared braces with the `mounted`
+  operand dropped: FAIL (context/guard scope changed).
+- **Layer 1** `dev/tool/vplayer_cleanup_proof.py` (declared edits in
+  `dev/tool/dart_moves/vplayer_p21b_cleanup.json`, base `b72ff16f8`, file
+  set = facade + every feature file + `network_tuning.dart`, 77 files).
+  **Deviation:** a fourth edit kind `remove_shown_name` (C1's `show`-list
+  drop, which `remove_directive` cannot express); `replace_comment` takes a
+  list of 0..n single comments (deletion, rewording, and the restored
+  trailing comment). Formatter commas are excluded, as in every move check.
+  It also rejects any `lib/` change outside the set. Normal mode runs the
+  layer cross-check against the real manifest (per-span projections and
+  difflib records `(file, declaration, ordinal, before, after)`).
+  Self-test negatives (each checked for its own reason): planted undeclared
+  token change, undeclared brace (the excluded startup site braced), the
+  excluded site declared, an extra removed import, an export removal, a code
+  token hidden in a comment replacement, stale comment and brace sites, an
+  edit outside the set, a `lib/` change outside the set, a dropped layer-2
+  edit and an undeclared layer-2 edit.
+- **Generator** `dev/tool/draft_vplayer_cleanup_edits.py`: declares each
+  stage's edits, applies them to the text and derives the layer-2 manifest
+  additions (directive fates, counted patches, `earlier_patches`).
+- **Storage guard** exemption, `vplayer_end_state.py`, `vplayer_host_usage.py`
+  and the `vplayer-structure` job draft were built and self-tested here and
+  land with commits 4 and 5. Host usage at the 21a merge: 65 Hosts, 1,605
+  members, all used; 65 adapters with no adapter-only member; 1,168
+  accessor and 436 method same-name forwarders, 0 renamed (the one rule is
+  `setState` → `_vpSetState`). **The same-name forwarder check is included**
+  (the P21a post-gate candidate). End state at the 21a merge: 69 top-level
+  declarations, 347 State members, 65 adapters.
+
 ## Phase 16 design review resolution (Codex `vp-design`, 2026-10-16) — "No P1s"
 
 Reviewed at `c5c8e3500` (facade byte-identical to `be4cd78aa`; split,
