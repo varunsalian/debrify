@@ -12856,6 +12856,18 @@ precedent) — removal milestone: the end-state import cleanup in phase 21.
   `vplayer-structure` CI run (Actions billing), the device checklist,
   tvOS/Windows/Linux builds and the merge to `main` (the user's decisions).
 
+### 2026-10-26 — User decisions after the series
+
+- **Review order accepted.** The user accepted the recorded deviation: the
+  post-gate review ran after the merge `88475abad` and found no P1s. No
+  re-merge.
+- **Q12 deferred for discussion.** The user has set Q12 aside to discuss
+  later. Q12: a failed ranked or direct start never arms the 6 s resume
+  autosave timer or the episode preload. It is not confirmed as intended
+  and not fixed; current behaviour stays pinned by the P20/P21 tests. It is
+  an open post-series Follow-up, and any change is a separate behaviour
+  fix, not part of this series.
+
 ## Video player end state and completion audit (Phase 21b)
 
 > Completion record for `lib/screens/video_player_screen.dart` (phases 1–21).
