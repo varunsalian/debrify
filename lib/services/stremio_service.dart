@@ -218,7 +218,6 @@ class StremioService {
     bool forRemoteTransfer = false,
   }) async {
     final owner = ProfileSessionMemory.captureOwner();
-    final generation = _addonsGeneration;
     final startingScope =
         ProfileRuntime.isInitialized && ProfileRuntime.isProfileCommitted
         ? ProfileRuntime.capture()
@@ -239,8 +238,7 @@ class StremioService {
       if (forSettings ||
           forRemoteTransfer ||
           (ProfileRuntime.scope.value == startingScope &&
-              owner == ProfileSessionMemory.captureOwner() &&
-              generation == _addonsGeneration)) {
+              owner == ProfileSessionMemory.captureOwner())) {
         rethrow;
       }
       return [];
@@ -256,11 +254,14 @@ class StremioService {
     final generation = _addonsGeneration;
     void checkCurrent() {
       if (owner != ProfileSessionMemory.captureOwner() ||
-          generation != _addonsGeneration ||
           (owner.scope != null && ProfileRuntime.capture() != owner.scope)) {
         throw StateError('Addon inventory read retired');
       }
     }
+
+    // A same-profile save during the read still returns what was read, as
+    // before; it only keeps that stale list out of the cache and storage.
+    bool inventoryCurrent() => generation == _addonsGeneration;
 
     checkCurrent();
     if (_hydrationCacheOwner != owner) {
@@ -365,7 +366,11 @@ class StremioService {
         // recreation instant, a settings-read persist becomes an endless
         // save→notify→reload loop that re-seals secrets and bumps every
         // addon's authorization revision each turn.
-        if (anyReal && persistHydration && !forRemoteTransfer && !forSettings) {
+        if (anyReal &&
+            persistHydration &&
+            inventoryCurrent() &&
+            !forRemoteTransfer &&
+            !forSettings) {
           // Best-effort: a profile allowed to USE addons but not manage
           // them cannot write the collection — serve the hydrated list for
           // this session and let a manager's read repair it durably. The
@@ -409,8 +414,10 @@ class StremioService {
         if (authorization != null && !authorization.isCurrentlyActive) {
           throw StateError('Profile session changed before addon publication');
         }
-        _addonsCache = addons;
-        _addonsCacheOwner = owner;
+        if (inventoryCurrent()) {
+          _addonsCache = addons;
+          _addonsCacheOwner = owner;
+        }
       }
       return List<StremioAddon>.from(addons);
     }
@@ -428,11 +435,14 @@ class StremioService {
     try {
       final List<dynamic> jsonList = await decodeJsonAsync(jsonString);
       checkCurrent();
-      _addonsCache = jsonList
+      final decoded = jsonList
           .map((j) => StremioAddon.fromJson(j as Map<String, dynamic>))
           .toList();
-      _addonsCacheOwner = owner;
-      return List.from(_addonsCache!);
+      if (inventoryCurrent()) {
+        _addonsCache = decoded;
+        _addonsCacheOwner = owner;
+      }
+      return List.from(decoded);
     } catch (_) {
       checkCurrent();
       debugPrint('StremioService: Addon storage could not be decoded');

@@ -352,7 +352,30 @@ void main() {
           }
           release.complete();
           final result = await pending;
-          if (retirement != 'none') {
+          if (retirement == 'invalidation') {
+            // A same-profile addon save mid-read still returns the inventory
+            // that was read, as on main. The stale list is neither cached nor
+            // persisted, so the next read hydrates and saves it again.
+            expect(result.single.connectionResourceId, restored.id);
+            expect(result.single.enabled, !failed);
+            if (!failed) expect(result.single.name, 'Hydrated');
+            expect(
+              (await registry.getSealedResourceSecret(restored.id))!.envelope,
+              original,
+            );
+            final next = (await stremio.getAddons()).singleWhere(
+              (addon) => addon.connectionResourceId == restored.id,
+            );
+            // A failed manifest stays memoized for the session, as on main.
+            expect(next.enabled, !failed);
+            expect(fetches, failed ? 1 : 2);
+            if (!failed) {
+              expect(
+                (await registry.getSealedResourceSecret(restored.id))!.envelope,
+                isNot(original),
+              );
+            }
+          } else if (retirement != 'none') {
             expect(result, isEmpty);
             expect(
               (await registry.getSealedResourceSecret(restored.id))!.envelope,
