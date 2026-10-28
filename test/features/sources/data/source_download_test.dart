@@ -143,56 +143,105 @@ void main() {
     expect(client.closed, isTrue);
   });
 
-  for (final switchProfile in [false, true]) {
-    test(
-      'retirement during HEAD stops redirects and enqueue: profile=$switchProfile',
-      () async {
-        final entered = Completer<void>();
-        final release = Completer<http.Response>();
-        var current = true;
-        var requests = 0;
-        var enqueues = 0;
-        final client = Client((_) async {
-          requests++;
-          entered.complete();
-          return release.future;
-        });
-        final operation = SourceDownload(
-          clientFactory: () => client,
-          enqueue: (_, _, _) async {
-            enqueues++;
-          },
-        );
-        final pending = operation.download(
-          source(),
-          canContinue: () => current,
-        );
-        await entered.future;
-        if (switchProfile) {
-          ProfileRuntime.publish(incoming);
-        } else {
-          current = false;
-        }
-        release.complete(
-          http.Response('', 302, headers: {'location': '/next'}),
-        );
-        expect(await pending, SourceDownloadStatus.retired);
-        expect(requests, 1);
-        expect(enqueues, 0);
-        expect(client.closed, isTrue);
+  test('profile switch during HEAD stops redirects and enqueue', () async {
+    final entered = Completer<void>();
+    final release = Completer<http.Response>();
+    var requests = 0;
+    var enqueues = 0;
+    final client = Client((_) async {
+      requests++;
+      entered.complete();
+      return release.future;
+    });
+    final operation = SourceDownload(
+      clientFactory: () => client,
+      enqueue: (_, _, _) async {
+        enqueues++;
       },
     );
-  }
+    final pending = operation.download(source(), canContinue: () => true);
+    await entered.future;
+    ProfileRuntime.publish(incoming);
+    release.complete(http.Response('', 302, headers: {'location': '/next'}));
+    expect(await pending, SourceDownloadStatus.retired);
+    expect(requests, 1);
+    expect(enqueues, 0);
+    expect(client.closed, isTrue);
+  });
 
   test(
-    'queue receives the same live action guard through asynchronous preparation',
+    'leaving the screen while resolving still follows redirects and queues',
     () async {
-      var current = true;
+      // Main queued once past "Resolving download URL…"; only the snackbars
+      // depended on the screen still being mounted.
+      final entered = Completer<void>();
+      final release = Completer<http.Response>();
+      var screen = true;
+      var requests = 0;
+      String? queued;
+      bool? guardAtEnqueue;
+      final operation = SourceDownload(
+        clientFactory: () => Client((request) async {
+          requests++;
+          if (requests == 1) {
+            entered.complete();
+            return release.future;
+          }
+          return http.Response('', 200);
+        }),
+        enqueue: (url, _, current) async {
+          guardAtEnqueue = current();
+          queued = url;
+        },
+      );
+      final pending = operation.download(source(), canContinue: () => screen);
+      await entered.future;
+      screen = false;
+      release.complete(http.Response('', 302, headers: {'location': '/next'}));
+      expect(await pending, SourceDownloadStatus.queued);
+      expect(requests, 2);
+      expect(queued, 'https://fixture.test/next');
+      expect(guardAtEnqueue, isTrue);
+    },
+  );
+
+  test(
+    'leaving before resolving still stops at the first authorization',
+    () async {
+      var checks = 0;
+      var requests = 0;
+      var enqueues = 0;
+      final progress = <SourceDownloadStatus>[];
+      final operation = SourceDownload(
+        clientFactory: () => Client((_) async {
+          requests++;
+          return http.Response('', 200);
+        }),
+        enqueue: (_, _, _) async {
+          enqueues++;
+        },
+      );
+      // Current at the start, gone by the check after the first authorization.
+      final result = await operation.download(
+        source(),
+        canContinue: () => ++checks == 1,
+        onProgress: progress.add,
+      );
+      expect(result, SourceDownloadStatus.retired);
+      expect(progress, isEmpty);
+      expect(requests, 0);
+      expect(enqueues, 0);
+    },
+  );
+
+  test(
+    'queue receives the profile guard through asynchronous preparation',
+    () async {
       final operation = SourceDownload(
         clientFactory: () => Client((_) async => http.Response('', 200)),
         enqueue: (_, _, active) async {
           expect(active(), isTrue);
-          current = false;
+          ProfileRuntime.publish(incoming);
           await expectLater(
             DownloadService.instance.enqueueDownload(
               url: 'https://fixture.test/file',
@@ -203,7 +252,7 @@ void main() {
         },
       );
       expect(
-        await operation.download(source(), canContinue: () => current),
+        await operation.download(source(), canContinue: () => true),
         SourceDownloadStatus.retired,
       );
     },

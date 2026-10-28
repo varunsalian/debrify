@@ -47,14 +47,19 @@ class SourceDownload {
     );
   }
 
+  /// [canContinue] is the requesting screen's lifetime. As before the
+  /// refactor, it stops the action only up to "Resolving download URL…" (the
+  /// IPTV episode lookup and the first authorization). From then on the
+  /// accepted download is queued even if the user leaves; only a change of the
+  /// captured profile session retires it.
   Future<SourceDownloadStatus> download(
     Torrent source, {
     required bool Function() canContinue,
     void Function(SourceDownloadStatus)? onProgress,
   }) {
     final owner = ProfileSessionMemory.captureOwner();
-    bool active() =>
-        owner == ProfileSessionMemory.captureOwner() && canContinue();
+    bool ownerCurrent() => owner == ProfileSessionMemory.captureOwner();
+    bool active() => ownerCurrent() && canContinue();
     Future<SourceDownloadStatus> run() async {
       if (!active()) return SourceDownloadStatus.retired;
       if (!supports(source)) return SourceDownloadStatus.unsupported;
@@ -82,17 +87,17 @@ class SourceDownload {
       final raw = source.directUrl ?? '';
       if (raw.isEmpty) return SourceDownloadStatus.noUrl;
       onProgress?.call(SourceDownloadStatus.resolving);
-      final resolved = await _resolve(raw, active);
-      if (!active()) return SourceDownloadStatus.retired;
+      final resolved = await _resolve(raw, ownerCurrent);
+      if (!ownerCurrent()) return SourceDownloadStatus.retired;
       try {
         await DirectSourceAuthorization.authorize(source);
-        if (!active()) return SourceDownloadStatus.retired;
-        await enqueue(resolved, source, active);
-        return active()
+        if (!ownerCurrent()) return SourceDownloadStatus.retired;
+        await enqueue(resolved, source, ownerCurrent);
+        return ownerCurrent()
             ? SourceDownloadStatus.queued
             : SourceDownloadStatus.retired;
       } catch (_) {
-        return active()
+        return ownerCurrent()
             ? SourceDownloadStatus.failed
             : SourceDownloadStatus.retired;
       }
