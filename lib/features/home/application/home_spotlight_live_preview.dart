@@ -26,9 +26,15 @@ class HomeSpotlightLivePreview {
     required void Function(String? url, bool notify) publish,
     bool notify = true,
   }) {
-    if (!_active) return;
+    if (_disposed) return;
     final generation = ++_generation;
     _candidates = null;
+    // A retired owner never resolves for the incoming profile, but the card
+    // must not keep the previous channel's stream for the new one either.
+    if (!_isOwnerCurrent()) {
+      publish(null, notify);
+      return;
+    }
     if (isSeries) {
       publish(null, notify);
       return;

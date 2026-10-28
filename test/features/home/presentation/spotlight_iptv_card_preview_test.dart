@@ -52,6 +52,23 @@ void main() {
   });
   tearDown(ProfileRuntime.debugReset);
 
+  testWidgets('a retired card handed a new channel drops the previous stream', (
+    tester,
+  ) async {
+    final f = _Fixture();
+    final first = channel('https://fixture.invalid/first');
+    await tester.pumpWidget(f.host(first));
+    expect(backdrop(tester).videoUrl, first.url);
+    ProfileRuntime.promoteLegacyToCommitted(
+      ProfileScope(profileId: 'incoming', dataGeneration: 1, sessionEpoch: 1),
+    );
+    await tester.pumpWidget(f.host(channel('addon:second')));
+    await tester.pump();
+    expect(find.byType(HeroTrailerBackdrop), findsNothing);
+    expect(f.requests, isEmpty);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets(
     'direct preview retains audio, headers, delay and element across volume updates',
     (tester) async {

@@ -87,7 +87,8 @@ void main() {
         publish: published.add,
       );
       load();
-      expect(published, [null, null, 'only']);
+      // A retired owner clears the old stream without a new lookup.
+      expect(published, [null, null, 'only', null]);
       expect(invalidations, isEmpty);
       expect(reads, 2);
       preview.dispose();
