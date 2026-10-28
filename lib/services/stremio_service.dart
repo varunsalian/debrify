@@ -446,8 +446,10 @@ class StremioService {
     } catch (_) {
       checkCurrent();
       debugPrint('StremioService: Addon storage could not be decoded');
-      _addonsCache = [];
-      _addonsCacheOwner = owner;
+      if (inventoryCurrent()) {
+        _addonsCache = [];
+        _addonsCacheOwner = owner;
+      }
       return [];
     }
   }
