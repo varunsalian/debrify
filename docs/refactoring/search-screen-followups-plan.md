@@ -239,3 +239,33 @@ Third review (`b55e729b`):
   removed.
 - Guard wording corrected to name exactly what it rejects.
 
+## Regression fixes (`fix/refactor-regressions`, 2026-10-28)
+
+Fixes for the regressions the 2026-10-28 bug hunt found against `main`
+(9619c10b0). Evidence: `.git/refactor-evidence/regfix/` (`SUMMARY.txt`).
+
+Temporary size exceptions (`dev/tool/file_size_baseline.txt`, raised by hand):
+- `lib/services/stremio_service.dart` 3858 -> 3870 (P3-1 and its review
+  follow-up): a same-profile addon read returns the list it read, and the
+  `inventoryCurrent()` checks keep that stale list out of the cache and
+  storage. Exit: the next `stremio_service.dart` extraction.
+- `lib/services/android_tv_player_bridge.dart` 2153 -> 2159 (P3-6): the
+  retired launch rethrows out of the network-tuning reads, plus the
+  `@visibleForTesting debugLaunchOnAndroid` hook. Exit: the next
+  `android_tv_player_bridge.dart` extraction.
+
+Accepted intentional deviation from `main`:
+- **Filter sheet title (P3-5):** on `main` the "Filter Results" title is a plain
+  `Text` in a `spaceBetween` row, which overflows on narrow or scaled windows.
+  The branch keeps its title at its intrinsic one-line width when it fits (same
+  look and Clear/Close positions as `main`), but in a loose `Flexible` with
+  `maxLines: 2` and an ellipsis, so at large text scale it wraps or ellipsizes
+  instead of overflowing. Only the earlier `Expanded` stretch was reverted.
+  Evidence: `source_filters_dialog_layout_test.dart` "filter header fits" at
+  390x844 (1.0 and 1.6) and 500x900 (1.0 and 2.0), which overflow on main's
+  layout, and "filter title keeps its intrinsic one-line width" at 844x390 and
+  1280x720.
+
+Not fixed here (same on `main`): a Continue Watching row can still show a title
+removed from its detail page when the user backs out before the writes finish
+(the route-return reload runs before the removal lands).

@@ -6602,8 +6602,8 @@ filter dialog its opening values through `presentation/source_filters_dialog.dar
 Keep active-action messages, native arguments, modal appearance and dismissal
 unchanged. This does not cancel already-started legacy playback/download work.
 The shared `lib/widgets/torrent_filters_sheet.dart` now uses
-`lib/ui/core/filter_sheet_header.dart` (77 lines); the title is constrained to
-remaining header space, fixing the observed narrow/scaled-text overflow. Both shared paths join the measured source set because Sources and
+`lib/ui/core/filter_sheet_header.dart` (79 lines since fix/refactor-regressions; see
+search-screen-followups-plan.md); the title shrinks within the remaining header space, fixing the observed narrow/scaled-text overflow. Both shared paths join the measured source set because Sources and
 Keyword search reuse this editor. Preserve the editor's owned focus nodes,
 keyboard activation, live Clear eligibility and selection/result semantics.
 The remaining 700-line editor owns local facet selection, focus and scrolling
