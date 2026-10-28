@@ -1,0 +1,86 @@
+{
+ "MRData": {
+  "RaceTable": {
+   "season": "2026",
+   "Races": [
+    {
+     "season": "2026",
+     "round": "20",
+     "raceName": "Brazilian Grand Prix",
+     "date": "2026-11-08",
+     "time": "17:00:00Z",
+     "Circuit": {
+      "circuitName": "Autódromo José Carlos Pace",
+      "Location": {
+       "lat": "-23.7036",
+       "long": "-46.6997",
+       "locality": "São Paulo",
+       "country": "Brazil"
+      }
+     }
+    },
+    {
+     "season": "2026",
+     "round": "21",
+     "raceName": "Las Vegas Grand Prix",
+     "date": "2026-11-22",
+     "time": "04:00:00Z",
+     "Circuit": {
+      "circuitName": "Las Vegas Strip Street Circuit",
+      "Location": {
+       "lat": "36.1147",
+       "long": "-115.173",
+       "locality": "Las Vegas",
+       "country": "USA"
+      }
+     }
+    },
+    {
+     "season": "2026",
+     "round": "22",
+     "raceName": "Qatar Grand Prix",
+     "date": "2026-11-29",
+     "time": "16:00:00Z",
+     "Circuit": {
+      "circuitName": "Lusail International Circuit",
+      "Location": {
+       "lat": "25.49",
+       "long": "51.4542",
+       "locality": "Lusail",
+       "country": "Qatar"
+      }
+     }
+    },
+    {
+     "season": "2026",
+     "round": "23",
+     "raceName": "Abu Dhabi Grand Prix",
+     "date": "2026-12-06",
+     "time": "13:00:00Z",
+     "Circuit": {
+      "circuitName": "Yas Marina Circuit",
+      "Location": {
+       "lat": "24.4672",
+       "long": "54.6031",
+       "locality": "Abu Dhabi",
+       "country": "UAE"
+      }
+     }
+    },
+    {
+     "season": "2026",
+     "round": "99",
+     "raceName": "Test Grand Prix (no time)",
+     "date": "2026-12-20",
+     "Circuit": {
+      "circuitName": "Test Circuit",
+      "Location": {
+       "locality": "Nowhere",
+       "country": "Testland"
+      }
+     }
+    }
+   ]
+  }
+ }
+}

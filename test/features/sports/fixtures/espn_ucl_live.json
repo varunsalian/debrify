@@ -1,0 +1,172 @@
+{
+ "leagues": [
+  {
+   "id": "775",
+   "name": "UEFA Champions League",
+   "abbreviation": "UEFA Champions League",
+   "slug": "uefa.champions"
+  }
+ ],
+ "events": [
+  {
+   "id": "401915395",
+   "date": "2026-10-21T16:45Z",
+   "name": "Manchester United at Como",
+   "shortName": "MAN @ COMO",
+   "status": {
+    "displayClock": "41'",
+    "period": 1,
+    "type": {
+     "id": "2",
+     "name": "STATUS_FIRST_HALF",
+     "state": "in",
+     "completed": false,
+     "description": "First Half",
+     "detail": "41'",
+     "shortDetail": "41'"
+    }
+   },
+   "competitions": [
+    {
+     "id": "401915395",
+     "date": "2026-10-21T16:45Z",
+     "competitors": [
+      {
+       "homeAway": "home",
+       "score": "1",
+       "team": {
+        "id": "2572",
+        "displayName": "Como",
+        "shortDisplayName": "Como",
+        "name": "Como",
+        "abbreviation": "COMO",
+        "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/2572.png",
+        "color": "4169E1"
+       }
+      },
+      {
+       "homeAway": "away",
+       "score": "0",
+       "team": {
+        "id": "360",
+        "displayName": "Manchester United",
+        "shortDisplayName": "Man Utd",
+        "name": "Manchester United",
+        "abbreviation": "MAN",
+        "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/360.png",
+        "color": "da020e"
+       }
+      }
+     ],
+     "broadcasts": [
+      {
+       "market": "national",
+       "names": [
+        "Paramount+"
+       ]
+      }
+     ],
+     "geoBroadcasts": [
+      {
+       "type": {
+        "id": "4",
+        "shortName": "STREAMING"
+       },
+       "market": {
+        "id": "1",
+        "type": "National"
+       },
+       "media": {
+        "shortName": "Paramount+"
+       },
+       "region": "us"
+      }
+     ],
+     "venue": {
+      "fullName": "Giuseppe Sinigaglia"
+     }
+    }
+   ]
+  },
+  {
+   "id": "401915396",
+   "date": "2026-10-21T16:45Z",
+   "name": "Galatasaray at Lille",
+   "shortName": "GAL @ LILL",
+   "status": {
+    "displayClock": "90'+4'",
+    "period": 2,
+    "type": {
+     "id": "5",
+     "name": "STATUS_POSTPONED",
+     "state": "post",
+     "completed": false,
+     "description": "Postponed",
+     "detail": "Postponed",
+     "shortDetail": "Postponed"
+    }
+   },
+   "competitions": [
+    {
+     "id": "401915396",
+     "date": "2026-10-21T16:45Z",
+     "competitors": [
+      {
+       "homeAway": "home",
+       "score": "2",
+       "team": {
+        "id": "166",
+        "displayName": "Lille",
+        "shortDisplayName": "Lille",
+        "name": "Lille",
+        "abbreviation": "LILL",
+        "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/166.png",
+        "color": "c2051b"
+       }
+      },
+      {
+       "homeAway": "away",
+       "score": "4",
+       "team": {
+        "id": "432",
+        "displayName": "Galatasaray",
+        "shortDisplayName": "Galatasaray",
+        "name": "Galatasaray",
+        "abbreviation": "GAL",
+        "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/432.png",
+        "color": "aa0031"
+       }
+      }
+     ],
+     "broadcasts": [
+      {
+       "market": "national",
+       "names": [
+        "Paramount+"
+       ]
+      }
+     ],
+     "geoBroadcasts": [
+      {
+       "type": {
+        "id": "4",
+        "shortName": "STREAMING"
+       },
+       "market": {
+        "id": "1",
+        "type": "National"
+       },
+       "media": {
+        "shortName": "Paramount+"
+       },
+       "region": "us"
+      }
+     ],
+     "venue": {
+      "fullName": "Decathlon Arena - Stade Pierre-Mauroy"
+     }
+    }
+   ]
+  }
+ ]
+}

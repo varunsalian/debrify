@@ -1,0 +1,252 @@
+{
+ "leagues": [
+  {
+   "id": "28",
+   "name": "National Football League",
+   "abbreviation": "NFL",
+   "slug": "nfl"
+  }
+ ],
+ "events": [
+  {
+   "id": "401873023",
+   "date": "2026-10-30T00:15Z",
+   "name": "Carolina Panthers at Green Bay Packers",
+   "shortName": "CAR @ GB",
+   "status": {
+    "displayClock": "0:00",
+    "period": 0,
+    "type": {
+     "id": "1",
+     "name": "STATUS_SCHEDULED",
+     "state": "pre",
+     "completed": false,
+     "description": "Scheduled",
+     "detail": "Thu, October 29th at 8:15 PM EDT",
+     "shortDetail": "10/29 - 8:15 PM EDT"
+    }
+   },
+   "competitions": [
+    {
+     "id": "401873023",
+     "date": "2026-10-30T00:15Z",
+     "competitors": [
+      {
+       "homeAway": "home",
+       "score": "0",
+       "team": {
+        "id": "9",
+        "displayName": "Green Bay Packers",
+        "shortDisplayName": "Packers",
+        "name": "Packers",
+        "abbreviation": "GB",
+        "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/gb.png",
+        "color": "204e32"
+       }
+      },
+      {
+       "homeAway": "away",
+       "score": "0",
+       "team": {
+        "id": "29",
+        "displayName": "Carolina Panthers",
+        "shortDisplayName": "Panthers",
+        "name": "Panthers",
+        "abbreviation": "CAR",
+        "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/car.png",
+        "color": "0085ca"
+       }
+      }
+     ],
+     "broadcasts": [
+      {
+       "market": "national",
+       "names": [
+        "Prime Video"
+       ]
+      }
+     ],
+     "geoBroadcasts": [
+      {
+       "type": {
+        "id": "4",
+        "shortName": "Streaming"
+       },
+       "market": {
+        "id": "1",
+        "type": "National"
+       },
+       "media": {
+        "shortName": "Prime Video"
+       },
+       "region": "us"
+      }
+     ],
+     "venue": {
+      "fullName": "Lambeau Field"
+     }
+    }
+   ]
+  },
+  {
+   "id": "401873026",
+   "date": "2026-11-01T18:00Z",
+   "name": "Baltimore Ravens at Buffalo Bills",
+   "shortName": "BAL @ BUF",
+   "status": {
+    "displayClock": "0:00",
+    "period": 0,
+    "type": {
+     "id": "1",
+     "name": "STATUS_SCHEDULED",
+     "state": "pre",
+     "completed": false,
+     "description": "Scheduled",
+     "detail": "Sun, November 1st at 1:00 PM EST",
+     "shortDetail": "11/1 - 1:00 PM EST"
+    }
+   },
+   "competitions": [
+    {
+     "id": "401873026",
+     "date": "2026-11-01T18:00Z",
+     "competitors": [
+      {
+       "homeAway": "home",
+       "score": "0",
+       "team": {
+        "id": "2",
+        "displayName": "Buffalo Bills",
+        "shortDisplayName": "Bills",
+        "name": "Bills",
+        "abbreviation": "BUF",
+        "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/buf.png",
+        "color": "00338d"
+       }
+      },
+      {
+       "homeAway": "away",
+       "score": "0",
+       "team": {
+        "id": "33",
+        "displayName": "Baltimore Ravens",
+        "shortDisplayName": "Ravens",
+        "name": "Ravens",
+        "abbreviation": "BAL",
+        "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/bal.png",
+        "color": "29126f"
+       }
+      }
+     ],
+     "broadcasts": [
+      {
+       "market": "national",
+       "names": [
+        "CBS"
+       ]
+      }
+     ],
+     "geoBroadcasts": [
+      {
+       "type": {
+        "id": "1",
+        "shortName": "TV"
+       },
+       "market": {
+        "id": "1",
+        "type": "National"
+       },
+       "media": {
+        "shortName": "CBS"
+       },
+       "region": "us"
+      }
+     ],
+     "venue": {
+      "fullName": "Highmark Stadium"
+     }
+    }
+   ]
+  },
+  {
+   "id": "401873031",
+   "date": "2026-11-01T18:00Z",
+   "name": "Tennessee Titans at Cincinnati Bengals",
+   "shortName": "TEN @ CIN",
+   "status": {
+    "displayClock": "0:00",
+    "period": 0,
+    "type": {
+     "id": "1",
+     "name": "STATUS_SCHEDULED",
+     "state": "pre",
+     "completed": false,
+     "description": "Scheduled",
+     "detail": "Sun, November 1st at 1:00 PM EST",
+     "shortDetail": "11/1 - 1:00 PM EST"
+    }
+   },
+   "competitions": [
+    {
+     "id": "401873031",
+     "date": "2026-11-01T18:00Z",
+     "competitors": [
+      {
+       "homeAway": "home",
+       "score": "0",
+       "team": {
+        "id": "4",
+        "displayName": "Cincinnati Bengals",
+        "shortDisplayName": "Bengals",
+        "name": "Bengals",
+        "abbreviation": "CIN",
+        "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/cin.png",
+        "color": "fb4f14"
+       }
+      },
+      {
+       "homeAway": "away",
+       "score": "0",
+       "team": {
+        "id": "10",
+        "displayName": "Tennessee Titans",
+        "shortDisplayName": "Titans",
+        "name": "Titans",
+        "abbreviation": "TEN",
+        "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/ten.png",
+        "color": "4495d2"
+       }
+      }
+     ],
+     "broadcasts": [
+      {
+       "market": "national",
+       "names": [
+        "CBS"
+       ]
+      }
+     ],
+     "geoBroadcasts": [
+      {
+       "type": {
+        "id": "1",
+        "shortName": "TV"
+       },
+       "market": {
+        "id": "1",
+        "type": "National"
+       },
+       "media": {
+        "shortName": "CBS"
+       },
+       "region": "us"
+      }
+     ],
+     "venue": {
+      "fullName": "Paycor Stadium"
+     }
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,362 @@
+{
+ "leagues": [
+  {
+   "id": "700",
+   "name": "English Premier League",
+   "abbreviation": "Premier League",
+   "slug": "eng.1"
+  }
+ ],
+ "events": [
+  {
+   "id": "401879248",
+   "date": "2026-10-31T12:30Z",
+   "name": "Manchester United at Chelsea",
+   "shortName": "MAN @ CHE",
+   "status": {
+    "displayClock": "0'",
+    "period": null,
+    "type": {
+     "id": "1",
+     "name": "STATUS_SCHEDULED",
+     "state": "pre",
+     "completed": false,
+     "description": "Scheduled",
+     "detail": "Sat, October 31st at 8:30 AM EDT",
+     "shortDetail": "Scheduled"
+    }
+   },
+   "competitions": [
+    {
+     "id": "401879248",
+     "date": "2026-10-31T12:30Z",
+     "competitors": [
+      {
+       "homeAway": "home",
+       "score": "0",
+       "team": {
+        "id": "363",
+        "displayName": "Chelsea",
+        "shortDisplayName": "Chelsea",
+        "name": "Chelsea",
+        "abbreviation": "CHE",
+        "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/363.png",
+        "color": "144992"
+       }
+      },
+      {
+       "homeAway": "away",
+       "score": "0",
+       "team": {
+        "id": "360",
+        "displayName": "Manchester United",
+        "shortDisplayName": "Man Utd",
+        "name": "Manchester United",
+        "abbreviation": "MAN",
+        "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/360.png",
+        "color": "da020e"
+       }
+      }
+     ],
+     "broadcasts": [
+      {
+       "market": "national",
+       "names": [
+        "USA Net",
+        "Tele"
+       ]
+      }
+     ],
+     "geoBroadcasts": [
+      {
+       "type": {
+        "id": "1",
+        "shortName": "TV"
+       },
+       "market": {
+        "id": "1",
+        "type": "National"
+       },
+       "media": {
+        "shortName": "USA Net"
+       },
+       "region": "us"
+      },
+      {
+       "type": {
+        "id": "1",
+        "shortName": "TV"
+       },
+       "market": {
+        "id": "1",
+        "type": "National"
+       },
+       "media": {
+        "shortName": "Tele"
+       },
+       "region": "us"
+      }
+     ],
+     "venue": {
+      "fullName": "Stamford Bridge"
+     }
+    }
+   ]
+  },
+  {
+   "id": "401879251",
+   "date": "2026-10-31T15:00Z",
+   "name": "Leeds United at AFC Bournemouth",
+   "shortName": "LEE @ BOU",
+   "status": {
+    "displayClock": "0'",
+    "period": null,
+    "type": {
+     "id": "1",
+     "name": "STATUS_SCHEDULED",
+     "state": "pre",
+     "completed": false,
+     "description": "Scheduled",
+     "detail": "Sat, October 31st at 11:00 AM EDT",
+     "shortDetail": "Scheduled"
+    }
+   },
+   "competitions": [
+    {
+     "id": "401879251",
+     "date": "2026-10-31T15:00Z",
+     "competitors": [
+      {
+       "homeAway": "home",
+       "score": "0",
+       "team": {
+        "id": "349",
+        "displayName": "AFC Bournemouth",
+        "shortDisplayName": "Bournemouth",
+        "name": "AFC Bournemouth",
+        "abbreviation": "BOU",
+        "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/349.png",
+        "color": "f42727"
+       }
+      },
+      {
+       "homeAway": "away",
+       "score": "0",
+       "team": {
+        "id": "357",
+        "displayName": "Leeds United",
+        "shortDisplayName": "Leeds",
+        "name": "Leeds United",
+        "abbreviation": "LEE",
+        "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/357.png",
+        "color": "ffffff"
+       }
+      }
+     ],
+     "broadcasts": [
+      {
+       "market": "national",
+       "names": [
+        "Peacock"
+       ]
+      }
+     ],
+     "geoBroadcasts": [
+      {
+       "type": {
+        "id": "4",
+        "shortName": "STREAMING"
+       },
+       "market": {
+        "id": "1",
+        "type": "National"
+       },
+       "media": {
+        "shortName": "Peacock"
+       },
+       "region": "us"
+      }
+     ],
+     "venue": {
+      "fullName": "Vitality Stadium"
+     }
+    }
+   ]
+  },
+  {
+   "id": "401879249",
+   "date": "2026-10-31T15:00Z",
+   "name": "Nottingham Forest at Brentford",
+   "shortName": "NFO @ BRE",
+   "status": {
+    "displayClock": "0'",
+    "period": null,
+    "type": {
+     "id": "1",
+     "name": "STATUS_SCHEDULED",
+     "state": "pre",
+     "completed": false,
+     "description": "Scheduled",
+     "detail": "Sat, October 31st at 11:00 AM EDT",
+     "shortDetail": "Scheduled"
+    }
+   },
+   "competitions": [
+    {
+     "id": "401879249",
+     "date": "2026-10-31T15:00Z",
+     "competitors": [
+      {
+       "homeAway": "home",
+       "score": "0",
+       "team": {
+        "id": "337",
+        "displayName": "Brentford",
+        "shortDisplayName": "Brentford",
+        "name": "Brentford",
+        "abbreviation": "BRE",
+        "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/337.png",
+        "color": "f42727"
+       }
+      },
+      {
+       "homeAway": "away",
+       "score": "0",
+       "team": {
+        "id": "393",
+        "displayName": "Nottingham Forest",
+        "shortDisplayName": "Nottm Forest",
+        "name": "Nottingham Forest",
+        "abbreviation": "NFO",
+        "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/393.png",
+        "color": "c8102e"
+       }
+      }
+     ],
+     "broadcasts": [
+      {
+       "market": "national",
+       "names": [
+        "USA Net",
+        "Universo"
+       ]
+      }
+     ],
+     "geoBroadcasts": [
+      {
+       "type": {
+        "id": "1",
+        "shortName": "TV"
+       },
+       "market": {
+        "id": "1",
+        "type": "National"
+       },
+       "media": {
+        "shortName": "USA Net"
+       },
+       "region": "us"
+      },
+      {
+       "type": {
+        "id": "4",
+        "shortName": "STREAMING"
+       },
+       "market": {
+        "id": "1",
+        "type": "National"
+       },
+       "media": {
+        "shortName": "Universo"
+       },
+       "region": "us"
+      }
+     ],
+     "venue": {
+      "fullName": "Gtech Community Stadium"
+     }
+    }
+   ]
+  },
+  {
+   "id": "401879247",
+   "date": "2026-10-31T15:00Z",
+   "name": "Sunderland at Coventry City",
+   "shortName": "SUN @ COV",
+   "status": {
+    "displayClock": "0'",
+    "period": null,
+    "type": {
+     "id": "1",
+     "name": "STATUS_SCHEDULED",
+     "state": "pre",
+     "completed": false,
+     "description": "Scheduled",
+     "detail": "Sat, October 31st at 11:00 AM EDT",
+     "shortDetail": "Scheduled"
+    }
+   },
+   "competitions": [
+    {
+     "id": "401879247",
+     "date": "2026-10-31T15:00Z",
+     "competitors": [
+      {
+       "homeAway": "home",
+       "score": "0",
+       "team": {
+        "id": "388",
+        "displayName": "Coventry City",
+        "shortDisplayName": "Coventry",
+        "name": "Coventry City",
+        "abbreviation": "COV",
+        "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/388.png",
+        "color": "87cced"
+       }
+      },
+      {
+       "homeAway": "away",
+       "score": "0",
+       "team": {
+        "id": "366",
+        "displayName": "Sunderland",
+        "shortDisplayName": "Sunderland",
+        "name": "Sunderland",
+        "abbreviation": "SUN",
+        "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/366.png",
+        "color": "EB172B"
+       }
+      }
+     ],
+     "broadcasts": [
+      {
+       "market": "national",
+       "names": [
+        "Peacock"
+       ]
+      }
+     ],
+     "geoBroadcasts": [
+      {
+       "type": {
+        "id": "4",
+        "shortName": "STREAMING"
+       },
+       "market": {
+        "id": "1",
+        "type": "National"
+       },
+       "media": {
+        "shortName": "Peacock"
+       },
+       "region": "us"
+      }
+     ],
+     "venue": {
+      "fullName": "Coventry Building Society Arena"
+     }
+    }
+   ]
+  }
+ ]
+}

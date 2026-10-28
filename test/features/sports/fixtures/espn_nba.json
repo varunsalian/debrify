@@ -1,0 +1,238 @@
+{
+ "leagues": [
+  {
+   "id": "46",
+   "name": "National Basketball Association",
+   "abbreviation": "NBA",
+   "slug": "nba"
+  }
+ ],
+ "events": [
+  {
+   "id": "401909877",
+   "date": "2026-10-27T23:30Z",
+   "name": "Brooklyn Nets at Boston Celtics",
+   "shortName": "BKN @ BOS",
+   "status": {
+    "displayClock": "0.0",
+    "period": 5,
+    "type": {
+     "id": "3",
+     "name": "STATUS_FINAL",
+     "state": "post",
+     "completed": true,
+     "description": "Final",
+     "detail": "Final/OT",
+     "shortDetail": "Final/OT"
+    }
+   },
+   "competitions": [
+    {
+     "id": "401909877",
+     "date": "2026-10-27T23:30Z",
+     "competitors": [
+      {
+       "homeAway": "home",
+       "score": "125",
+       "team": {
+        "id": "2",
+        "displayName": "Boston Celtics",
+        "shortDisplayName": "Celtics",
+        "name": "Celtics",
+        "abbreviation": "BOS",
+        "logo": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/bos.png",
+        "color": "008348"
+       }
+      },
+      {
+       "homeAway": "away",
+       "score": "124",
+       "team": {
+        "id": "17",
+        "displayName": "Brooklyn Nets",
+        "shortDisplayName": "Nets",
+        "name": "Nets",
+        "abbreviation": "BKN",
+        "logo": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/bkn.png",
+        "color": "000000"
+       }
+      }
+     ],
+     "broadcasts": [
+      {
+       "market": "away",
+       "names": [
+        "NBA League Pass",
+        "DAZN (YES)"
+       ]
+      }
+     ],
+     "geoBroadcasts": [
+      {
+       "type": {
+        "id": "4",
+        "shortName": "Streaming"
+       },
+       "market": {
+        "id": "3",
+        "type": "Away"
+       },
+       "media": {
+        "shortName": "DAZN (YES)"
+       },
+       "region": "us"
+      }
+     ],
+     "venue": {
+      "fullName": "TD Garden"
+     }
+    }
+   ]
+  },
+  {
+   "id": "401909878",
+   "date": "2026-10-28T00:00Z",
+   "name": "Detroit Pistons at New York Knicks",
+   "shortName": "DET @ NY",
+   "status": {
+    "displayClock": "0.0",
+    "period": 4,
+    "type": {
+     "id": "3",
+     "name": "STATUS_FINAL",
+     "state": "post",
+     "completed": true,
+     "description": "Final",
+     "detail": "Final",
+     "shortDetail": "Final"
+    }
+   },
+   "competitions": [
+    {
+     "id": "401909878",
+     "date": "2026-10-28T00:00Z",
+     "competitors": [
+      {
+       "homeAway": "home",
+       "score": "111",
+       "team": {
+        "id": "18",
+        "displayName": "New York Knicks",
+        "shortDisplayName": "Knicks",
+        "name": "Knicks",
+        "abbreviation": "NY",
+        "logo": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/ny.png",
+        "color": "1d428a"
+       }
+      },
+      {
+       "homeAway": "away",
+       "score": "97",
+       "team": {
+        "id": "8",
+        "displayName": "Detroit Pistons",
+        "shortDisplayName": "Pistons",
+        "name": "Pistons",
+        "abbreviation": "DET",
+        "logo": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/det.png",
+        "color": "1d428a"
+       }
+      }
+     ],
+     "broadcasts": [
+      {
+       "market": "national",
+       "names": [
+        "NBC"
+       ]
+      }
+     ],
+     "geoBroadcasts": [
+      {
+       "type": {
+        "id": "1",
+        "shortName": "TV"
+       },
+       "market": {
+        "id": "1",
+        "type": "National"
+       },
+       "media": {
+        "shortName": "NBC"
+       },
+       "region": "us"
+      }
+     ],
+     "venue": {
+      "fullName": "Madison Square Garden"
+     }
+    }
+   ]
+  },
+  {
+   "id": "401909879",
+   "date": "2026-10-28T00:00Z",
+   "name": "Sacramento Kings at San Antonio Spurs",
+   "shortName": "SAC @ SA",
+   "status": {
+    "displayClock": "12:00",
+    "period": 4,
+    "type": {
+     "id": "3",
+     "name": "STATUS_FINAL",
+     "state": "post",
+     "completed": true,
+     "description": "Final",
+     "detail": "Final",
+     "shortDetail": "Final"
+    }
+   },
+   "competitions": [
+    {
+     "id": "401909879",
+     "date": "2026-10-28T00:00Z",
+     "competitors": [
+      {
+       "homeAway": "home",
+       "score": "130",
+       "team": {
+        "id": "24",
+        "displayName": "San Antonio Spurs",
+        "shortDisplayName": "Spurs",
+        "name": "Spurs",
+        "abbreviation": "SA",
+        "logo": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/sa.png",
+        "color": "000000"
+       }
+      },
+      {
+       "homeAway": "away",
+       "score": "103",
+       "team": {
+        "id": "23",
+        "displayName": "Sacramento Kings",
+        "shortDisplayName": "Kings",
+        "name": "Kings",
+        "abbreviation": "SAC",
+        "logo": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/sac.png",
+        "color": "5a2d81"
+       }
+      }
+     ],
+     "broadcasts": [
+      {
+       "market": "away",
+       "names": [
+        "NBA League Pass"
+       ]
+      }
+     ],
+     "geoBroadcasts": [],
+     "venue": {
+      "fullName": "Frost Bank Center"
+     }
+    }
+   ]
+  }
+ ]
+}
