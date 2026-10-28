@@ -123,6 +123,44 @@ void main() {
     expect(reads, 8);
   });
 
+  test(
+    'a settings refresh started during startup does not drop the first read',
+    () async {
+      final initial = Completer<bool>();
+      final refreshed = Completer<bool>();
+      var reads = 0;
+      final container = ProviderContainer.test(
+        overrides: [
+          homeContinuationLayoutRepositoryProvider.overrideWithValue(
+            HomeContinuationLayoutRepository(
+              readMerged: (_) =>
+                  ++reads <= 4 ? initial.future : refreshed.future,
+            ),
+          ),
+        ],
+      );
+      final controller = mount(container, session());
+      final first = controller.ensureLoaded(isCurrent: () => true);
+      final refresh = controller.refresh(isCurrent: () => true);
+      initial.complete(true);
+      await first;
+      // Loaders awaiting the first read size their rows with the real flags.
+      expect(
+        controller.current,
+        const HomeContinuationLayout(
+          local: true,
+          trakt: true,
+          simkl: true,
+          mdblist: true,
+        ),
+      );
+      refreshed.complete(false);
+      expect(await refresh, isTrue);
+      expect(controller.current, const HomeContinuationLayout());
+      expect(reads, 8);
+    },
+  );
+
   for (final reason in ['dispose', 'profile', 'recompute', 'view']) {
     test('$reason rejects pending layout reads', () async {
       final pending = Completer<bool>();
