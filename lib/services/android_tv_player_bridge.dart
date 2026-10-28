@@ -1821,6 +1821,10 @@ class AndroidTvPlayerBridge {
     _iptvBrowseProvider = null;
   }
 
+  /// Lets host tests drive [launchTorrentPlayback]; production reads Platform.
+  @visibleForTesting
+  static bool? debugLaunchOnAndroid;
+
   static Future<bool> launchTorrentPlayback({
     required Map<String, dynamic> payload,
     AndroidTvProgressCallback? onProgress,
@@ -1863,7 +1867,7 @@ class AndroidTvPlayerBridge {
     ProfileSessionOwner? sourceOwner,
     bool Function()? canContinue,
   }) async {
-    if (!Platform.isAndroid) {
+    if (!(debugLaunchOnAndroid ?? Platform.isAndroid)) {
       return false;
     }
     if (payload.isEmpty) {
@@ -1991,6 +1995,8 @@ class AndroidTvPlayerBridge {
           payloadWithFont['iptvDecoder'] = iptvDecoder;
         }
       } catch (e) {
+        // A retired launch is not a tuning failure; let it stop the launch.
+        if (!active()) rethrow;
         debugPrint('AndroidTvPlayerBridge: network tuning read failed: $e');
       }
 
