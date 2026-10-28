@@ -29,9 +29,6 @@ class RecordingAlarmReceiver : BroadcastReceiver() {
 		/** Don't bother starting a recording with less than this left. */
 		private const val MIN_REMAINING_MS = 60_000L
 
-		/** EPG stop times are approximate; run past them a little. */
-		private const val END_PAD_MS = 2L * 60 * 1000
-
 		/** Late-join alarms fire this far out — effectively "now", but through
 		 *  the exemption-carrying alarm path. */
 		private const val LATE_JOIN_DELAY_MS = 5_000L
@@ -72,10 +69,13 @@ class RecordingAlarmReceiver : BroadcastReceiver() {
 					cancelAlarm(context, id)
 					continue
 				}
-				val triggerAt = if (schedule.startMs <= now) {
+				// "Start early" moves only the alarm; the stored schedule keeps the
+				// programme's own times, which the overlap checks compare.
+				val startAt = schedule.startMs - RecordingOutputPrefs.read(context).startPadMs
+				val triggerAt = if (startAt <= now) {
 					now + LATE_JOIN_DELAY_MS
 				} else {
-					schedule.startMs
+					startAt
 				}
 				val pi = alarmPendingIntent(context, id)
 				// New schedules are only ACCEPTED while the exact-alarm grant is
@@ -134,7 +134,10 @@ class RecordingAlarmReceiver : BroadcastReceiver() {
 			schedule.programmeTitle.ifBlank { schedule.channelName },
 		)
 		val fileName = "${base}_$stamp.ts"
-		val maxDuration = (schedule.endMs - now + END_PAD_MS)
+		// EPG stop times are approximate: run past them by the user's end pad
+		// (two minutes unless they chose otherwise).
+		val endPadMs = RecordingOutputPrefs.read(context).endPadMs
+		val maxDuration = (schedule.endMs - now + endPadMs)
 			.coerceAtMost(LiveRecordingService.MAX_DURATION_DEFAULT_MS)
 
 		val start = LiveRecordingService.buildStartIntent(

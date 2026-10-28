@@ -3,8 +3,8 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 
-import '../features/recordings/data/recording_output_store.dart';
-import '../features/recordings/models/recording_output_settings.dart';
+import '../features/recording_output/data/recording_output_store.dart';
+import '../features/recording_output/models/recording_output_settings.dart';
 import '../utils/platform_util.dart';
 import '../models/profiles/profile_policy.dart';
 import 'profiles/device_job_store.dart';

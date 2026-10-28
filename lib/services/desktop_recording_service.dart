@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
-import '../features/recordings/data/recording_output_store.dart';
+import '../features/recording_output/data/recording_output_store.dart';
 import '../utils/app_storage.dart';
 import '../models/profiles/profile_policy.dart';
 import 'profiles/device_job_store.dart';

@@ -5,7 +5,6 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
-import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -15,15 +14,12 @@ import android.os.Environment
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
-import android.os.ParcelFileDescriptor
 import android.os.PowerManager
 import android.os.StatFs
-import android.provider.MediaStore
 import androidx.core.app.NotificationCompat
 import androidx.core.app.TaskStackBuilder
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
-import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.net.HttpURLConnection
@@ -536,48 +532,16 @@ class LiveRecordingService : Service() {
 	 * Never throws.
 	 */
 	private fun runCapture(state: RecordingState): Outcome {
-		if (freeSpaceBytes() in 0 until MIN_FREE_BYTES) {
+		// Local free space says nothing about a picked folder (USB, network share).
+		if (RecordingDestination.usableTree(this) == null &&
+			freeSpaceBytes() in 0 until MIN_FREE_BYTES
+		) {
 			return Outcome.Failed("not enough free storage")
 		}
 
-		val uri: Uri
-		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-			try {
-				val values = ContentValues().apply {
-					put(MediaStore.Downloads.DISPLAY_NAME, state.fileName)
-					put(MediaStore.Downloads.MIME_TYPE, MIME_TYPE)
-					put(MediaStore.Downloads.RELATIVE_PATH, RELATIVE_PATH)
-					put(MediaStore.Downloads.IS_PENDING, 1)
-				}
-				uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-					?: return Outcome.Failed("could not create destination")
-			} catch (e: Exception) {
-				return Outcome.Failed(e.message ?: "could not create destination")
-			}
-		} else {
-			// Legacy (API 21-28): a plain file in public Download/. No pending
-			// rows, no publish step — a file that exists is already visible,
-			// which also collapses the crash-reconcile story to a media scan.
-			try {
-				val dir = legacyRecordingsDir()
-				if (!dir.exists() && !dir.mkdirs()) {
-					return Outcome.Failed("could not create recordings folder")
-				}
-				var file = java.io.File(dir, state.fileName)
-				if (file.exists()) {
-					// Same collision rule as everywhere else: an existing file
-					// means "in use" — step aside with a suffix.
-					val base = state.fileName.removeSuffix(".ts")
-					var n = 2
-					while (file.exists() && n < 100) {
-						file = java.io.File(dir, "${base}_$n.ts")
-						n++
-					}
-				}
-				uri = Uri.fromFile(file)
-			} catch (e: Exception) {
-				return Outcome.Failed(e.message ?: "could not create destination")
-			}
+		val uri = when (val created = RecordingDestination.create(this, state.fileName, MIME_TYPE)) {
+			is RecordingDestination.Created.Ok -> created.uri
+			is RecordingDestination.Created.Failed -> return Outcome.Failed(created.reason)
 		}
 		state.uri = uri
 
@@ -597,23 +561,14 @@ class LiveRecordingService : Service() {
 		RecordingRegistry.notifyChanged()
 		persist(state, status = "recording")
 
-		var outPfd: ParcelFileDescriptor? = null
-		var outFd: java.io.FileDescriptor? = null
+		var output: RecordingDestination.Output? = null
 		var out: BufferedOutputStream? = null
 		var endedNote: String? = null
 		var storageFailed = false
 		try {
-			if (uri.scheme == "file") {
-				val fos = FileOutputStream(java.io.File(uri.path!!))
-				outFd = fos.fd
-				out = BufferedOutputStream(fos)
-			} else {
-				val pfd = contentResolver.openFileDescriptor(uri, "rw")
-					?: return Outcome.Failed("could not open destination")
-				outPfd = pfd
-				outFd = pfd.fileDescriptor
-				out = BufferedOutputStream(FileOutputStream(pfd.fileDescriptor))
-			}
+			output = RecordingDestination.open(this, uri)
+				?: return Outcome.Failed("could not open destination")
+			out = BufferedOutputStream(output.stream)
 
 			val buffer = ByteArray(256 * 1024)
 			var consecutiveDeadConnects = 0
@@ -816,9 +771,7 @@ class LiveRecordingService : Service() {
 		} finally {
 			// Bytes must be durable before ANY terminal state is applied.
 			try { out?.flush() } catch (_: Exception) {}
-			try { outFd?.sync() } catch (_: Exception) {}
-			try { out?.close() } catch (_: Exception) {}
-			try { outPfd?.close() } catch (_: Exception) {}
+			output?.syncAndClose()
 		}
 
 		if (state.timeUp && endedNote == null && !state.stopRequested) {
@@ -851,7 +804,7 @@ class LiveRecordingService : Service() {
 				notifyTask(
 					state,
 					if (published) {
-						"Saved to Downloads/Debrify/Recordings · $sizeText$suffix"
+						"Saved to ${RecordingDestination.label(this, uri)} · $sizeText$suffix"
 					} else {
 						"Recording finished ($sizeText) but couldn't be added to " +
 							"Downloads yet — will retry"

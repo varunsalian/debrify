@@ -1,7 +1,5 @@
 import 'dart:async';
 
-import 'package:debrify/features/recordings/data/recording_output_store.dart';
-import 'package:debrify/features/recordings/models/recording_output_settings.dart';
 import 'package:debrify/features/recordings/presentation/legacy_recordings/recordings_hub_dependencies.dart';
 import 'package:debrify/features/recordings/presentation/legacy_recordings/recordings_hub_owners.dart';
 import 'package:debrify/features/recordings/presentation/legacy_recordings/recordings_hub_schedule_row.dart';
@@ -239,15 +237,12 @@ class RecordingsHubLayout {
                             ),
                         const SizedBox(height: 20),
                         Text(
-                          // The footer keeps its full sentence shape; only the
-                          // folder part comes from the chosen location.
                           _sections.data.desktop
                               ? 'Recordings run while Debrify is open and '
                                     'the computer is awake · saved in '
-                                    '${recordingLocationLabel(RecordingOutputStore.cached)}'
+                                    'Downloads/Debrify/Recordings'
                               : 'Recordings run even with the app closed '
-                                    '· saved in '
-                                    '${recordingLocationLabel(RecordingOutputStore.cached)}',
+                                    '· saved in Downloads/Debrify/Recordings',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 11,

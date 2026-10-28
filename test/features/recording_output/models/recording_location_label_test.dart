@@ -4,7 +4,7 @@
 // everything else falls back to the default folder text. Pure function, so
 // no SharedPreferences or store setup is needed here.
 
-import 'package:debrify/features/recordings/models/recording_output_settings.dart';
+import 'package:debrify/features/recording_output/models/recording_output_settings.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

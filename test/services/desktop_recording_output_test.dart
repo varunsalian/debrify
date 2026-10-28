@@ -6,8 +6,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:debrify/features/recordings/data/recording_output_store.dart';
-import 'package:debrify/features/recordings/models/recording_output_settings.dart';
+import 'package:debrify/features/recording_output/data/recording_output_store.dart';
+import 'package:debrify/features/recording_output/models/recording_output_settings.dart';
 import 'package:debrify/services/desktop_recording_service.dart';
 
 void main() {

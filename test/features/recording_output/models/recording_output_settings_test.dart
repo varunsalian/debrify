@@ -2,8 +2,8 @@
 // with native Kotlin, the tolerant decode a corrupted store must never break
 // on, the platform padding defaults, and the store round-trip.
 
-import 'package:debrify/features/recordings/data/recording_output_store.dart';
-import 'package:debrify/features/recordings/models/recording_output_settings.dart';
+import 'package:debrify/features/recording_output/data/recording_output_store.dart';
+import 'package:debrify/features/recording_output/models/recording_output_settings.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

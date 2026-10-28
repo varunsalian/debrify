@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:io';
-import 'package:debrify/features/recordings/models/recording_output_settings.dart';
+import 'package:debrify/features/recording_output/models/recording_output_settings.dart';
 import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/services/android_native_downloader.dart';
 import 'package:debrify/services/desktop_recording_service.dart';

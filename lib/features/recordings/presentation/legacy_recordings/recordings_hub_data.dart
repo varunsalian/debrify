@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:debrify/features/recordings/data/recording_output_store.dart';
 import 'package:debrify/features/recordings/presentation/legacy_recordings/recordings_hub_dependencies.dart';
 import 'package:debrify/features/recordings/presentation/legacy_recordings/recordings_hub_owners.dart';
 import 'package:debrify/features/recordings/presentation/legacy_recordings/recordings_hub_sections.dart';
@@ -53,9 +52,6 @@ class RecordingsHubData {
   }
 
   Future<void> loadAll() async {
-    // The footer names the chosen recording folder; refresh the cached setting
-    // before this load's rebuild reads it.
-    await RecordingOutputStore.read();
     final results = await Future.wait<Object>([
       isAndroid
           ? LiveRecordingService.query()

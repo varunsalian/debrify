@@ -1,5 +1,5 @@
-import 'package:debrify/features/recordings/presentation/recording_output_settings_page.dart';
-import 'package:debrify/features/recordings/models/recording_output_settings.dart';
+import 'package:debrify/features/recording_output/presentation/recording_output_settings_page.dart';
+import 'package:debrify/features/recording_output/models/recording_output_settings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';

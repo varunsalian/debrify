@@ -189,6 +189,11 @@ object ProfilePreferenceProjection {
         }
     }
 
+    /** String twin of [getDeviceLong] for registered device-owned settings. */
+    @JvmStatic
+    fun getDeviceString(context: Context, logicalKey: String): String? =
+        flutterPrefs(context).all["flutter.$logicalKey"] as? String
+
     /** Native-only settings use one file per opaque profile ID. */
     @JvmStatic
     fun scopedPreferences(context: Context, legacyName: String): SharedPreferences {

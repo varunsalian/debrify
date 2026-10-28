@@ -258,6 +258,14 @@ object RecordingTaskStore {
 				java.io.File(uri.path!!).exists()
 			} catch (_: Exception) { null }
 		}
+		if (RecordingDestination.isDocument(context, uri)) {
+			// A picked folder (USB stick, network share) can be briefly
+			// unreachable; only a provider that answers "absent" prunes.
+			return try {
+				androidx.documentfile.provider.DocumentFile
+					.fromSingleUri(context, uri)?.exists()
+			} catch (_: Exception) { null }
+		}
 		if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
 		return try {
 			val projection = arrayOf(MediaStore.MediaColumns._ID)
@@ -307,6 +315,8 @@ object RecordingTaskStore {
 	 *  MediaStore row could NOT be published (callers persist that so the
 	 *  file stays recoverable instead of silently invisible). */
 	fun publishRow(context: Context, uri: Uri): Boolean {
+		// A file in a picked folder is visible as soon as it is written.
+		if (RecordingDestination.isDocument(context, uri)) return true
 		if (uri.scheme == "file") {
 			runCatching {
 				android.media.MediaScannerConnection.scanFile(
@@ -332,6 +342,16 @@ object RecordingTaskStore {
 				val file = java.io.File(uri.path!!)
 				!file.exists() || file.delete()
 			}.getOrDefault(false)
+		}
+		if (RecordingDestination.isDocument(context, uri)) {
+			return try {
+				android.provider.DocumentsContract.deleteDocument(context.contentResolver, uri)
+				true
+			} catch (_: java.io.FileNotFoundException) {
+				true // already gone: an idempotent delete is satisfied
+			} catch (_: Exception) {
+				false
+			}
 		}
 		return runCatching {
 			// A provider returning zero means the row was already absent, which
