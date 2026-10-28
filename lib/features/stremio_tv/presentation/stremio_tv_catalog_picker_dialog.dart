@@ -106,7 +106,10 @@ class _StremioTvCatalogPickerDialogState
 
   Future<void> _loadCatalogs() async {
     final compatibleCatalogs = await widget.editor.load(widget.item.type);
-    if (!_current || compatibleCatalogs == null) return;
+    if (!_current || compatibleCatalogs == null) {
+      _closeIfRetired();
+      return;
+    }
 
     while (_catalogFocusNodes.length > compatibleCatalogs.length) {
       _catalogFocusNodes.removeLast().dispose();
@@ -131,7 +134,7 @@ class _StremioTvCatalogPickerDialogState
   }
 
   Future<void> _appendToCatalog(StremioTvCatalogOption catalog) async {
-    if (!_current || _saving) return;
+    if (_closeIfRetired() || !_current || _saving) return;
     setState(() => _saving = true);
 
     final result = await widget.editor.addItemToCatalog(
@@ -142,7 +145,7 @@ class _StremioTvCatalogPickerDialogState
 
     if (!mounted) return;
     setState(() => _saving = false);
-    if (!_current) return;
+    if (_closeIfRetired()) return;
 
     if (result == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -191,7 +194,7 @@ class _StremioTvCatalogPickerDialogState
   }
 
   Future<void> _createCatalog() async {
-    if (!_current || _saving) return;
+    if (_closeIfRetired() || !_current || _saving) return;
     final name = _nameController.text.trim();
     if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -214,7 +217,7 @@ class _StremioTvCatalogPickerDialogState
 
     if (!mounted) return;
     setState(() => _saving = false);
-    if (!_current) return;
+    if (_closeIfRetired()) return;
 
     if (result == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -237,6 +240,14 @@ class _StremioTvCatalogPickerDialogState
     }
 
     _finish(result);
+  }
+
+  /// A picker whose profile session retired never writes into the incoming
+  /// profile; it closes itself rather than staying inert on screen.
+  bool _closeIfRetired() {
+    if (!mounted || _current) return false;
+    _finish(null);
+    return true;
   }
 
   void _finish(StremioTvCatalogPickerResult? result) {

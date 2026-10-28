@@ -126,9 +126,9 @@ void main() {
           await tester.pumpAndSettle();
           expect(await pending, isNull);
         } else if (scenario == 'retired') {
+          // The refused write stays silent and the stale picker closes itself.
           expect(find.byType(SnackBar), findsNothing);
-          await tester.tap(find.text('Cancel'));
-          await tester.pumpAndSettle();
+          expect(find.byType(StremioTvCatalogPickerDialog), findsNothing);
           expect(await pending, isNull);
         } else if (scenario != 'unmount') {
           expect((await pending)!.message, 'Added "Fixture" to "Mine"');
@@ -141,6 +141,59 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+  testWidgets('a profile switch during catalog load closes the picker', (
+    tester,
+  ) async {
+    final ready = Completer<List<Map<String, dynamic>>>();
+    var current = true;
+    var writes = 0;
+    final editor = StremioTvCatalogEditor(
+      isCurrent: () => current,
+      read: () => ready.future,
+      add: (_, _) async => ++writes > 0,
+      update: (_, _) async => ++writes > 0,
+    );
+    Future<StremioTvCatalogPickerResult?>? pending;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          stremioTvCatalogEditorFactoryProvider.overrideWithValue(() => editor),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => pending = StremioTvCatalogPickerDialog.show(
+                  context,
+                  item: const StremioMeta(
+                    id: 'tt1',
+                    type: 'movie',
+                    name: 'Fixture',
+                  ),
+                ),
+                child: const Text('Open'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.byType(StremioTvCatalogPickerDialog), findsOneWidget);
+    current = false;
+    ready.complete([
+      {'id': 'mine', 'name': 'Mine', 'type': 'movie'},
+    ]);
+    await tester.pumpAndSettle();
+    expect(find.byType(StremioTvCatalogPickerDialog), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(await pending, isNull);
+    expect(writes, 0);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('disposing during catalog load creates no late focus nodes', (
     tester,
   ) async {
