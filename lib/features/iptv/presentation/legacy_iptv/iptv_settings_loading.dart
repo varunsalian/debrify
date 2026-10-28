@@ -113,6 +113,7 @@ class IptvSettingsLoading {
       playlists = [
         IptvMembershipState.favoritesPlaylist,
         if (hasContinue) IptvMembershipState.continuePlaylist,
+        IptvMembershipState.sportsPlaylist,
         for (final list in customLists) _deps.listPlaylist(list),
         ...playlists,
       ];
@@ -134,7 +135,10 @@ class IptvSettingsLoading {
       // custom list reads exactly as broken as landing on empty Favorites.
       // (Stremio addon shelves stay eligible: they are a remote catalog with
       // content of their own, not a view over stored rows.)
-      if (!p.isFavorites && !p.isContinueWatching && !p.isCustomList) {
+      if (!p.isFavorites &&
+          !p.isContinueWatching &&
+          !p.isCustomList &&
+          !p.isSports) {
         firstRealPlaylist = p;
         break;
       }

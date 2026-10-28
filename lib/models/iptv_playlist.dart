@@ -70,6 +70,10 @@ class IptvPlaylist {
   /// channel list (never persisted — the membership store is the truth).
   bool get isCustomList => url.startsWith('list://');
 
+  /// Returns true if this is the virtual Sports shelf (never persisted —
+  /// fixtures come from public feeds, channels from the saved playlists).
+  bool get isSports => url.startsWith('sports://');
+
   /// The list id behind [isCustomList], or null for anything else.
   String? get customListId =>
       isCustomList ? url.substring('list://'.length) : null;
@@ -81,7 +85,11 @@ class IptvPlaylist {
   /// twice (once stored, once injected) under the same id, and equality here
   /// is id-only — so lookups would start resolving the stale copy.
   bool get isVirtual =>
-      isFavorites || isContinueWatching || isStremioAddon || isCustomList;
+      isFavorites ||
+      isContinueWatching ||
+      isStremioAddon ||
+      isCustomList ||
+      isSports;
 
   Map<String, dynamic> toJson() => {
     'id': id,

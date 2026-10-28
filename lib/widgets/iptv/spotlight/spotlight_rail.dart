@@ -72,6 +72,7 @@ class SpotlightRail extends StatelessWidget {
     final continueWatching = playlists
         .where((p) => p.isContinueWatching)
         .toList();
+    final sports = playlists.where((p) => p.isSports).toList();
     final lists = playlists.where((p) => p.isCustomList).toList();
     final sources = playlists.where((p) => !p.isVirtual).toList();
     final addons = playlists.where((p) => p.isStremioAddon).toList();
@@ -95,6 +96,15 @@ class SpotlightRail extends StatelessWidget {
               label: 'Continue Watching',
               icon: Icons.history_rounded,
               count: continueWatchingCount,
+              selected: _selected(playlist),
+              onPressed: () => onSelectPlaylist(playlist),
+            ),
+          for (final playlist in sports)
+            _RailEntry.playlist(
+              playlist: playlist,
+              label: 'Sports',
+              icon: Icons.sports_soccer_rounded,
+              count: null,
               selected: _selected(playlist),
               onPressed: () => onSelectPlaylist(playlist),
             ),

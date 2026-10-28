@@ -11,7 +11,6 @@
 // apart in focus colour, ink, radius or size ramp.
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:debrify/features/sports/models/sports_models.dart';
-import 'package:debrify/services/debrify_image_cache.dart';
 import 'package:debrify/utils/tv_keys.dart';
 import 'package:debrify/widgets/iptv/styles/iptv_style.dart';
 import 'package:flutter/material.dart';
@@ -167,7 +166,6 @@ class _ImagePlate extends StatelessWidget {
             ? fallback
             : CachedNetworkImage(
                 imageUrl: logo,
-                cacheManager: DebrifyImageCache.iptvLogos,
                 fit: BoxFit.contain,
                 memCacheHeight: memCacheHeight,
                 placeholder: (_, _) => fallback,

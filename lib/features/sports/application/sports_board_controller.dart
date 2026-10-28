@@ -23,6 +23,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// mutable board state.
 typedef SportsSession = ({ProfileSessionOwner owner, Object viewIdentity});
 
+/// A fresh board session for one mounted view in the active profile session.
+SportsSession captureSportsSession() =>
+    (owner: ProfileSessionMemory.captureOwner(), viewIdentity: Object());
+
 /// Shown when no league feed produced anything at all.
 const String kSportsBoardLoadFailed =
     "Couldn't load fixtures. Check your connection and try again.";

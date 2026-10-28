@@ -177,14 +177,19 @@ class IptvPlaybackRefresh {
         entries.map((p) => '${p.id}\x00${p.name}').join('\x01');
     if (signature(desired) == signature(current)) return;
 
-    // Rebuild in canonical order: Favorites, Continue, lists, real providers.
+    // Rebuild in canonical order: Favorites, Continue, Sports, lists, real
+    // providers.
     final keptVirtuals = [
       for (final p in _settingsState.playlists)
-        if (p.isFavorites || p.isContinueWatching) p,
+        if (p.isFavorites || p.isContinueWatching || p.isSports) p,
     ];
     final realPlaylists = [
       for (final p in _settingsState.playlists)
-        if (!p.isFavorites && !p.isContinueWatching && !p.isCustomList) p,
+        if (!p.isFavorites &&
+            !p.isContinueWatching &&
+            !p.isSports &&
+            !p.isCustomList)
+          p,
     ];
     _deps.setState(() {
       _settingsState.playlists = [

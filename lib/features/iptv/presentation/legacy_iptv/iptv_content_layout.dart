@@ -9,6 +9,7 @@ import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/services/iptv_media_store.dart' show IptvListMeta;
 import 'package:debrify/widgets/iptv/iptv_channel_row.dart';
 import 'package:debrify/widgets/iptv/iptv_empty_state.dart';
+import 'package:debrify/widgets/iptv/sports/iptv_sports_board.dart';
 import 'package:debrify/widgets/iptv/styles/iptv_style.dart';
 import 'package:flutter/material.dart';
 
@@ -81,6 +82,11 @@ class IptvContentLayout {
     // Empty state when no playlist selected
     if (_settingsState.selectedPlaylist == null) {
       return const IptvEmptyState(hasPlaylists: true);
+    }
+
+    // The Sports shelf renders its own board instead of a channel list.
+    if (_settingsState.selectedPlaylist!.isSports) {
+      return SportsIptvBoard(onPlay: (channel) => _deps.playChannel(channel));
     }
 
     // Loading

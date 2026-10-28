@@ -19,6 +19,7 @@ PREMIUMIZE_FACADE_CAP = 251  # Measured final facade, including the frozen acces
 FEATURES += ("debrify_tv",)
 FEATURES += ("stremio_tv_catalogs",)
 FEATURES += ("recordings",)
+FEATURES += ("sports",)
 RECORDINGS_COMPLETE = True
 RECORDINGS_FACADE = "lib/screens/settings/recordings_page.dart"
 RECORDINGS_BRIDGE = "lib/features/recordings/presentation/legacy_recordings/"

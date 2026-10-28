@@ -13,7 +13,6 @@ import 'package:debrify/features/sports/application/sports_board_sections.dart';
 import 'package:debrify/features/sports/application/sports_providers.dart';
 import 'package:debrify/features/sports/models/sports_leagues.dart';
 import 'package:debrify/features/sports/models/sports_models.dart';
-import 'package:debrify/services/profiles/profile_session_memory.dart';
 import 'package:debrify/utils/platform_util.dart';
 import 'package:debrify/widgets/iptv/styles/iptv_style.dart';
 import 'package:flutter/material.dart';
@@ -52,10 +51,7 @@ class _SportsBoardViewState extends ConsumerState<SportsBoardView> {
   @override
   void initState() {
     super.initState();
-    _session = (
-      owner: ProfileSessionMemory.captureOwner(),
-      viewIdentity: Object(),
-    );
+    _session = captureSportsSession();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       ref.read(sportsBoardProvider(_session).notifier).refresh();

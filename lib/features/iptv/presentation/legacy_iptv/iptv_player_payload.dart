@@ -29,7 +29,8 @@ class IptvPlayerPayload {
 
   List<Map<String, dynamic>> playerSourcePayload() => [
     for (final playlist in _settingsState.playlists)
-      if (!playlist.isContinueWatching)
+      // Sports has no channel catalog for the native guide to switch to.
+      if (!playlist.isContinueWatching && !playlist.isSports)
         {
           'id': playlist.id,
           'name': playlist.name,

@@ -239,6 +239,9 @@ class IptvCatalogLoading {
       result = await _deps.buildListResult(playlist.customListId!);
     } else if (playlist.isContinueWatching) {
       result = await _deps.buildContinueResult();
+    } else if (playlist.isSports) {
+      // The Sports board loads its own fixtures; there is no channel catalog.
+      result = const IptvParseResult(channels: [], categories: []);
     } else if (playlist.isStremioAddon) {
       final addonId = StremioIptvService.addonIdFromPlaylist(playlist);
       result = addonId == null

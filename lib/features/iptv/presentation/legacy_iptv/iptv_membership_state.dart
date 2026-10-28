@@ -41,6 +41,15 @@ class IptvMembershipState {
     addedAt: DateTime.fromMillisecondsSinceEpoch(0),
   );
 
+  /// Virtual "Sports" shelf — never persisted; fixtures and scores come from
+  /// public feeds and channels are matched against the saved playlists.
+  static final IptvPlaylist sportsPlaylist = IptvPlaylist(
+    id: 'iptv-sports',
+    name: 'Sports',
+    url: 'sports://',
+    addedAt: DateTime.fromMillisecondsSinceEpoch(0),
+  );
+
   /// Resume fraction (0-1) per channel URL for the loaded list — drives the
   /// bar across each poster. Only on-demand items ever have an entry.
   Map<String, double> progressByUrl = {};
