@@ -167,7 +167,7 @@ class IptvQuietFilters {
   List<StremioDropdownOption<String>> sourceDropdownOptions() {
     final quickAccess = [
       for (final p in _settingsState.playlists)
-        if (p.isFavorites || p.isContinueWatching) p,
+        if (p.isFavorites || p.isContinueWatching || p.isSports) p,
     ];
     final lists = [
       for (final p in _settingsState.playlists)

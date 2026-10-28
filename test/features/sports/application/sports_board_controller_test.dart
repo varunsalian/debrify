@@ -92,12 +92,14 @@ class FakePrefs implements SportsPrefs {
   final Map<String, List<String>> lists = {};
   final Map<String, bool> flags = {};
   int writes = 0;
+  bool failWrites = false;
 
   @override
   List<String>? getStringList(String key) => lists[key];
 
   @override
   Future<bool> setStringList(String key, List<String> value) async {
+    if (failWrites) throw StateError('profile session retired');
     writes++;
     lists[key] = value;
     return true;
@@ -556,6 +558,75 @@ void main() {
       h.dispose();
       time.elapse(const Duration(minutes: 20));
       expect(h.fetch.callCount, first);
+    });
+  });
+
+  group('review fixes', () {
+    test('a follow toggled while a refresh loads is not reverted', () async {
+      final h = BoardHarness(
+        leagues: [_ucl],
+        bodies: {'ucl': fixture('espn_ucl_finished.json')},
+      );
+      addTearDown(h.dispose);
+      final held = Completer<String>();
+      h.fetch.gate = held;
+      final refreshing = h.controller.refresh();
+      await Future<void>.delayed(Duration.zero);
+      await h.controller.toggleLeague('ucl');
+      held.complete(fixture('espn_ucl_finished.json'));
+      await refreshing;
+      expect(h.state.follows.leagueIds, contains('ucl'));
+      expect(h.prefs.lists[SportsFollowStore.leaguesKey], ['ucl']);
+    });
+
+    test(
+      'a failing follow write keeps the choice and does not throw',
+      () async {
+        final h = BoardHarness(
+          leagues: [_ucl],
+          bodies: {'ucl': fixture('espn_ucl_finished.json')},
+        );
+        addTearDown(h.dispose);
+        h.prefs.failWrites = true;
+        await h.controller.toggleTeam('ucl:1');
+        expect(h.state.follows.teamKeys, contains('ucl:1'));
+      },
+    );
+
+    test('live refreshes reuse the last guide search; force rescans', () async {
+      final h = BoardHarness(
+        leagues: [_ucl],
+        bodies: {'ucl': fixture('espn_ucl_live.json')},
+      );
+      addTearDown(h.dispose);
+      await h.controller.refresh();
+      await h.controller.refresh();
+      expect(h.guide.queries, hasLength(1));
+      h.advance(const Duration(minutes: 11));
+      await h.controller.refresh();
+      expect(h.guide.queries, hasLength(2));
+      await h.controller.refresh(force: true);
+      expect(h.guide.queries, hasLength(3));
+    });
+
+    test('timed refreshes wait while the board cannot poll', () {
+      fakeAsync((async) {
+        final h = BoardHarness(
+          leagues: [_ucl],
+          bodies: {'ucl': fixture('espn_ucl_finished.json')},
+        );
+        h.controller.refresh();
+        async.flushMicrotasks();
+        final calls = h.fetch.callCount;
+        h.controller.canPoll = () => false;
+        async.elapse(const Duration(hours: 1));
+        expect(h.fetch.callCount, calls);
+        h.controller.canPoll = () => true;
+        h.advance(const Duration(hours: 2));
+        async.elapse(const Duration(minutes: 16));
+        expect(h.fetch.callCount, greaterThan(calls));
+        h.dispose();
+      });
     });
   });
 }

@@ -65,7 +65,8 @@ class IptvPlayerPayload {
     final listId = source.isFavorites
         ? IptvFavoritesStorage.iptvFavoritesListId
         : source.customListId;
-    final shelfOrigin = (source.isFavorites || source.isCustomList)
+    final shelfOrigin =
+        (source.isFavorites || source.isCustomList || source.isSports)
         // Prefer the row's own origin (see [_kListOriginAttribute]); the map
         // is only a fallback for rows that predate it.
         ? (channel

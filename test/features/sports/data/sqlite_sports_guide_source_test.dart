@@ -208,6 +208,30 @@ void main() {
   });
 
   group('listings', () {
+    test('finds accented guide titles from folded needles', () {
+      final db = _GuideDatabase(path);
+      db.catalog();
+      db.channel(
+        name: 'Sky Sports Main Event',
+        url: 'http://h/a.ts',
+        attributes: const {'tvg-id': 'sky.main'},
+      );
+      db.guide();
+      db.programme(
+        channelId: 'sky.main',
+        title: 'Atlético Madrid v Bayern München',
+        startMs: _ms(-1),
+        stopMs: _ms(2),
+      );
+
+      final listings = run(
+        db,
+        titleNeedles: const ['atletico madrid'],
+      ).listings;
+
+      expect(listings.single.title, 'Atlético Madrid v Bayern München');
+    });
+
     test('finds a listing through tvg-id, in UTC', () {
       final db = _GuideDatabase(path);
       db.catalog();

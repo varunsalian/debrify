@@ -44,7 +44,8 @@ class SportsBoardView extends ConsumerStatefulWidget {
   ConsumerState<SportsBoardView> createState() => _SportsBoardViewState();
 }
 
-class _SportsBoardViewState extends ConsumerState<SportsBoardView> {
+class _SportsBoardViewState extends ConsumerState<SportsBoardView>
+    with WidgetsBindingObserver {
   /// Captured once: the profile session and view identity this board owns.
   late final SportsSession _session;
 
@@ -52,10 +53,29 @@ class _SportsBoardViewState extends ConsumerState<SportsBoardView> {
   void initState() {
     super.initState();
     _session = captureSportsSession();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      ref.read(sportsBoardProvider(_session).notifier).refresh();
+      final controller = ref.read(sportsBoardProvider(_session).notifier);
+      // Timed refreshes wait while the player covers the board or the app
+      // is in the background, so polling never competes with the stream.
+      controller.canPoll = () =>
+          mounted && _foreground && (ModalRoute.of(context)?.isCurrent ?? true);
+      controller.refresh();
     });
+  }
+
+  bool _foreground = true;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foreground = state == AppLifecycleState.resumed;
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   SportsBoardController get _controller =>

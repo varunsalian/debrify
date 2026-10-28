@@ -110,6 +110,11 @@ class IptvSpotlightFocus {
         return KeyEventResult.handled;
       }
       if (key == LogicalKeyboardKey.arrowDown) {
+        // Sports draws its own board below the controls and has no channel
+        // list: let directional traversal move focus into the board.
+        if (_settingsState.selectedPlaylist?.isSports ?? false) {
+          return KeyEventResult.ignored;
+        }
         if (_selectionState.scheduleChannel == null &&
             !_focusState.spotlightTimelineController.restoreFocus()) {
           _deps.focusFirstChannel();

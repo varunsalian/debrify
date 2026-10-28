@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_catalog_state.dart';
+import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_membership_state.dart';
 import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_player_state.dart';
 import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_preview_state.dart';
 import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_selection_state.dart';
@@ -177,7 +178,16 @@ class IptvPlayback {
     // The in-player guide mirrors what the user was browsing: the current
     // category/search filter, not the whole playlist. (Also what keeps the
     // launch payload small when a filter is active.)
-    var channels = _catalogState.filteredChannels.contains(channel)
+    // Sports has no catalog of its own: the matched channel plays alone, as
+    // part of the playlist it came from.
+    final selected = _settingsState.selectedPlaylist;
+    final sportsOrigin = (selected?.isSports ?? false)
+        ? _sportsOrigin(channel)
+        : null;
+    final playSource = sportsOrigin ?? selected;
+    var channels = (selected?.isSports ?? false)
+        ? <IptvChannel>[channel]
+        : _catalogState.filteredChannels.contains(channel)
         ? _catalogState.filteredChannels
         : _catalogState.allChannels;
     var channelIndex = channels is DbChannelList
@@ -221,7 +231,7 @@ class IptvPlayback {
       channels = channels.sublist(lo, lo + IptvPlayerState.kMaxPlayerChannels);
       channelIndex -= lo;
     }
-    final launchSource = _settingsState.selectedPlaylist;
+    final launchSource = selected;
     final playerChannels = launchSource == null
         ? channels
         : [
@@ -245,10 +255,12 @@ class IptvPlayback {
         iptvChannels: playerChannels,
         iptvStartIndex: channelIndex,
         iptvCategories: _deps.fullCategoryList(),
-        iptvSourceId: _settingsState.selectedPlaylist?.id,
-        iptvSourceName: _settingsState.selectedPlaylist?.name,
+        iptvSourceId: playSource?.id,
+        iptvSourceName: playSource?.name,
         iptvSelectedCategory: _effectiveCategory,
-        iptvContentType: _settingsState.selectedPlaylist?.isXtreamCodes == true
+        iptvContentType: (selected?.isSports ?? false)
+            ? 'live'
+            : _settingsState.selectedPlaylist?.isXtreamCodes == true
             ? _catalogState.selectedContentType
             : (channel.isLive ? 'live' : 'vod'),
         iptvSources: _deps.playerSourcePayload(),
@@ -287,5 +299,15 @@ class IptvPlayback {
         await _deps.refreshAfterPlayback();
       }
     }
+  }
+
+  /// The saved playlist a Sports match was found in (carried on the channel
+  /// as its list origin), or null when it is no longer configured.
+  IptvPlaylist? _sportsOrigin(IptvChannel channel) {
+    final id = channel.attributes[IptvMembershipState.kListOriginAttribute];
+    for (final p in _settingsState.playlists) {
+      if (p.id == id && !p.isVirtual) return p;
+    }
+    return null;
   }
 }

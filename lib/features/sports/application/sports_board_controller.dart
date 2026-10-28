@@ -123,6 +123,20 @@ class SportsBoardController extends Notifier<SportsBoardState> {
   int _generation = 0;
   Timer? _timer;
 
+  /// Bumped on every follow change, so a refresh that read the store before
+  /// the change does not publish the older follows over it.
+  int _followsRevision = 0;
+
+  /// The last guide search and when it ran: live refreshes reuse it instead of
+  /// scanning the guide again every 90 s.
+  SportsGuideSnapshot? _guide;
+  DateTime? _guideAt;
+  String _guideKey = '';
+
+  /// Set by the view: false while the board is covered (player open) or the
+  /// app is in the background. Timed refreshes wait while it says no.
+  bool Function() canPoll = _always;
+
   @override
   SportsBoardState build() {
     _client = ref.watch(sportsFeedClientProvider);
@@ -159,6 +173,7 @@ class SportsBoardController extends Notifier<SportsBoardState> {
     final toUtc = now.add(_windowForward).toUtc();
 
     var follows = state.follows;
+    final followsRevision = _followsRevision;
     try {
       final stored = await _store.read();
       if (!current()) return;
@@ -194,12 +209,13 @@ class SportsBoardController extends Notifier<SportsBoardState> {
 
     state = state.copyWith(
       events: events,
-      follows: follows,
+      // A follow toggled while this refresh was loading wins over the read.
+      follows: followsRevision == _followsRevision ? follows : state.follows,
       loading: false,
       clearError: true,
       updatedAt: now,
     );
-    await _applyGuide(now, events, current);
+    await _applyGuide(now, events, current, force: force);
     if (!current()) return;
     _schedule(events);
   }
@@ -236,9 +252,15 @@ class SportsBoardController extends Notifier<SportsBoardState> {
   /// One owner for both follow writes: publish, then persist for this session.
   Future<void> _commitFollows(SportsFollows follows) async {
     if (!ref.mounted) return;
+    _followsRevision++;
     state = state.copyWith(follows: follows);
     if (session.owner != ProfileSessionMemory.captureOwner()) return;
-    await _store.write(follows);
+    try {
+      await _store.write(follows);
+    } catch (e) {
+      // The choice stays on screen; it is re-read from the store next refresh.
+      debugPrint('Sports: saving follows failed: $e');
+    }
   }
 
   /// One league's fixtures, or null when that league failed entirely.
@@ -265,27 +287,42 @@ class SportsBoardController extends Notifier<SportsBoardState> {
   Future<void> _applyGuide(
     DateTime now,
     List<SportsEvent> events,
-    bool Function() current,
-  ) async {
+    bool Function() current, {
+    bool force = false,
+  }) async {
     final near = [
       for (final event in events)
         if (_isNear(now, event)) event,
     ];
-    var snapshot = SportsGuideSnapshot.empty;
-    try {
-      final loaded = await _guideSource.load(
-        SportsGuideQuery(
-          fromUtc: now.subtract(_guidePast).toUtc(),
-          toUtc: now.add(_guideFuture).toUtc(),
-          nowUtc: now.toUtc(),
-          titleNeedles: _titleNeedles(near),
-          channelNeedles: _channelNeedles(near),
-        ),
-      );
-      if (!current()) return;
-      snapshot = loaded;
-    } catch (_) {
-      // An unreadable guide means no watch options this round, nothing more.
+    final titleNeedles = _titleNeedles(near);
+    final channelNeedles = _channelNeedles(near);
+    final key = '${titleNeedles.join('|')}#${channelNeedles.join('|')}';
+    final cached = _guide;
+    final fresh =
+        cached != null &&
+        key == _guideKey &&
+        _guideAt != null &&
+        now.difference(_guideAt!) < _guideReuse;
+    var snapshot = cached ?? SportsGuideSnapshot.empty;
+    if (force || !fresh) {
+      try {
+        final loaded = await _guideSource.load(
+          SportsGuideQuery(
+            fromUtc: now.subtract(_guidePast).toUtc(),
+            toUtc: now.add(_guideFuture).toUtc(),
+            nowUtc: now.toUtc(),
+            titleNeedles: titleNeedles,
+            channelNeedles: channelNeedles,
+          ),
+        );
+        if (!current()) return;
+        snapshot = loaded;
+        _guide = loaded;
+        _guideAt = now;
+        _guideKey = key;
+      } catch (_) {
+        // An unreadable guide means no watch options this round, nothing more.
+      }
     }
     if (!current()) return;
     state = state.copyWith(
@@ -304,11 +341,23 @@ class SportsBoardController extends Notifier<SportsBoardState> {
   /// Short while anything is live, quiet otherwise.
   void _schedule(List<SportsEvent> events) {
     _timer?.cancel();
+    final now = _clock();
     final live = events.any((event) => event.status == SportsEventStatus.live);
-    _timer = Timer(
-      live ? _liveRefresh : _idleRefresh,
-      () => unawaited(refresh()),
-    );
+    var delay = live ? _liveRefresh : _idleRefresh;
+    // Wake shortly after the next kick-off so it turns live on time.
+    for (final event in events) {
+      if (event.status != SportsEventStatus.scheduled) continue;
+      final untilStart = event.start.difference(now) + _kickOffGrace;
+      if (untilStart > Duration.zero && untilStart < delay) delay = untilStart;
+    }
+    _timer = Timer(delay, () {
+      if (!ref.mounted) return;
+      if (canPoll()) {
+        unawaited(refresh());
+      } else {
+        _schedule(state.events); // check again later; nothing fetched now
+      }
+    });
   }
 
   bool _isNear(DateTime now, SportsEvent event) =>
@@ -345,6 +394,10 @@ const Duration _guidePast = Duration(hours: 3);
 const Duration _guideFuture = Duration(hours: 36);
 const Duration _liveRefresh = Duration(seconds: 90);
 const Duration _idleRefresh = Duration(minutes: 15);
+const Duration _kickOffGrace = Duration(seconds: 30);
+const Duration _guideReuse = Duration(minutes: 10);
+
+bool _always() => true;
 
 int _byStartThenId(SportsEvent a, SportsEvent b) {
   final byStart = a.start.compareTo(b.start);

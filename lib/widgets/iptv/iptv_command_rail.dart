@@ -71,6 +71,7 @@ class IptvCommandRail extends StatelessWidget {
     final continueWatching = playlists
         .where((p) => p.isContinueWatching)
         .toList();
+    final sports = playlists.where((p) => p.isSports).toList();
     final sources = playlists.where((p) => !p.isVirtual).toList();
     final addonSources = playlists.where((p) => p.isStremioAddon).toList();
     final listPlaylists = playlists.where((p) => p.isCustomList).toList();
@@ -89,8 +90,7 @@ class IptvCommandRail extends StatelessWidget {
               // than the stage (#080B18 vs stageBg's #0B0914) and no token
               // carries that value, so pinning it is the only way the shipped
               // pixel survives while every other theme still flips.
-              color:
-                  app.iptv.railBg.withValues(alpha: 0.65),
+              color: app.iptv.railBg.withValues(alpha: 0.65),
               border: Border(
                 right: BorderSide(color: app.core.tx.withValues(alpha: 0.07)),
               ),
@@ -125,6 +125,14 @@ class IptvCommandRail extends StatelessWidget {
                 tokens: t,
                 icon: Icons.history_rounded,
                 label: 'Continue',
+                selected: selectedPlaylist?.id == p.id,
+                onSelect: () => onSelectPlaylist(p),
+              ),
+            for (final p in sports)
+              _RailItem(
+                tokens: t,
+                icon: Icons.sports_soccer_rounded,
+                label: 'Sports',
                 selected: selectedPlaylist?.id == p.id,
                 onSelect: () => onSelectPlaylist(p),
               ),

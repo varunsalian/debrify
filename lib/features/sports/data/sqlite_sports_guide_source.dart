@@ -384,9 +384,20 @@ List<String> _titleTokens(List<String> needles) {
       if (word.length > longest.length) longest = word;
     }
     if (longest.length < _minTokenLength) continue;
-    if (!tokens.contains(longest)) tokens.add(longest);
+    final token = _accentTolerant(longest);
+    if (!tokens.contains(token)) tokens.add(token);
   }
   return tokens;
+}
+
+/// Needles are accent-folded but guide titles are not ("München",
+/// "Atlético"), so letters that have accented forms become LIKE's
+/// single-character wildcard. This only widens the SQL pre-filter; every row
+/// is still checked against the full needle after normalization.
+String _accentTolerant(String word) {
+  final token = word.replaceAll(RegExp('[aeiouync]'), '_');
+  final literal = token.replaceAll('_', '').length;
+  return literal >= 2 ? token : word;
 }
 
 /// A JSON object of string→string. NULL, a non-object or a malformed blob is

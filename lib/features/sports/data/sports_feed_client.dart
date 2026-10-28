@@ -185,9 +185,19 @@ class SportsFeedClient {
   }
 
   bool _isFresh(_CacheEntry entry) {
-    final ttl = entry.events.any(_isLive) ? liveTtl : scheduleTtl;
-    return _clock().difference(entry.fetchedAt) < ttl;
+    final now = _clock();
+    // Live scores, and fixtures whose kick-off has arrived but are still
+    // listed as scheduled, use the short lifetime so they turn live promptly.
+    final hot = entry.events.any(
+      (event) => _isLive(event) || _isDue(event, now),
+    );
+    return now.difference(entry.fetchedAt) < (hot ? liveTtl : scheduleTtl);
   }
+
+  static bool _isDue(SportsEvent event, DateTime now) =>
+      event.status == SportsEventStatus.scheduled &&
+      !event.start.isAfter(now.toUtc()) &&
+      now.toUtc().difference(event.start) < const Duration(hours: 3);
 
   static bool _isLive(SportsEvent event) =>
       event.status == SportsEventStatus.live;
