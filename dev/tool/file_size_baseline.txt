@@ -29,6 +29,7 @@
 # 2026-10-28 regfix P3-1 (+review P3-a): same-profile addon read returns the read list; stale lists kept out of cache/storage (+12, 3858 -> 3870); exit: next stremio_service.dart extraction.
 # 2026-10-28 regfix review P3-e: @visibleForTesting debugAddonDecoder hook for a deterministic decode-race test (+4, 3870 -> 3874); exit: next stremio_service.dart extraction.
 # 2026-10-28 regfix P3-6: retired-launch rethrow in network tuning reads + debugLaunchOnAndroid test hook (+6, 2153 -> 2159); exit: next android_tv_player_bridge.dart extraction.
+# 2026-10-28 recording output: one device key registered in the profile key lists (+1 each); no other growth.
 8562 lib/screens/video_player_screen.dart
 6919 lib/services/profiles/profile_registry.dart
 6478 android/app/src/main/java/com/debrify/app/tv/TorboxTvPlayerActivity.java
@@ -126,14 +127,14 @@
 1021 lib/screens/settings/settings_spotlight_shell.dart
 1021 lib/services/webdav_sync/webdav_sync_tombstones.dart
 1016 lib/widgets/see_all/stremio_dropdown.dart
-1011 lib/services/profiles/profile_preferences.dart
+1012 lib/services/profiles/profile_preferences.dart
 1004 lib/widgets/remote/remote_pairing_dialog.dart
 1003 lib/screens/debrify_tv/layouts/spotlight_layout.dart
 999 lib/widgets/iptv/iptv_stage_panel.dart
 993 lib/services/webdav_sync/webdav_sync_binding_store.dart
 991 lib/screens/settings/real_debrid_settings_page.dart
 991 lib/screens/stremio_tv/widgets/stremio_tv_repo_browser_dialog.dart
-990 lib/services/profiles/profile_migration_service.dart
+991 lib/services/profiles/profile_migration_service.dart
 976 lib/widgets/remote/remote_control_screen.dart
 973 lib/screens/video_player/widgets/styled_dock.dart
 958 lib/widgets/playlist_grid_card.dart
@@ -158,7 +159,7 @@
 873 lib/screens/settings/premiumize_settings_page.dart
 871 lib/screens/video_player/widgets/tv_controls.dart
 846 lib/services/profiles/local_backup/local_backup_zip.dart
-836 lib/services/profiles/profile_bootstrap.dart
+837 lib/services/profiles/profile_bootstrap.dart
 836 lib/services/profiles/profile_database_snapshot.dart
 836 lib/widgets/file_selection_dialog.dart
 833 lib/screens/settings/theme_tokens_page.dart

@@ -776,6 +776,7 @@ class ProfileBootstrap {
     'support_remote_config_cache_v1',
     'dismissed_donation_campaign_ids_v1',
     'recording_max_concurrent',
+    'recording_output_v1',
     'recording_battery_nudge_dismissed_at',
     'iptv_ios_recording_notice_dismissed',
     'desktop_recording_schedules_v1',
