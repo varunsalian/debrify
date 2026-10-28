@@ -181,6 +181,9 @@ class StremioService {
   Future<StremioAddon> Function(String manifestUrl)? debugManifestFetcher;
 
   @visibleForTesting
+  Future<dynamic> Function(String source)? debugAddonDecoder;
+
+  @visibleForTesting
   http.Client Function()? debugStreamHttpClientFactory;
 
   final _streamRequests = PreparedStreamRequests<List<StremioStream>>(
@@ -433,7 +436,8 @@ class StremioService {
     }
 
     try {
-      final List<dynamic> jsonList = await decodeJsonAsync(jsonString);
+      final List<dynamic> jsonList =
+          await (debugAddonDecoder ?? decodeJsonAsync)(jsonString);
       checkCurrent();
       final decoded = jsonList
           .map((j) => StremioAddon.fromJson(j as Map<String, dynamic>))

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:debrify/models/stremio_addon.dart';
@@ -13,6 +14,7 @@ void main() {
     ProfileRuntime.initializeLegacy();
   });
   tearDown(() {
+    StremioService.instance.debugAddonDecoder = null;
     StremioService.instance.invalidateCache();
     ProfileRuntime.debugReset();
   });
@@ -20,14 +22,19 @@ void main() {
   test(
     'a same-profile save during a failing decode does not cache an empty list',
     () async {
-      // Large enough to decode off the UI isolate, so the read is still
-      // decoding while the save lands. It fails only at its final byte.
-      final corrupt = '[${List.filled(400000, '"x"').join(',')},';
-      SharedPreferences.setMockInitialValues({'stremio_addons_v1': corrupt});
+      SharedPreferences.setMockInitialValues({'stremio_addons_v1': '[corrupt'});
       final stremio = StremioService.instance..invalidateCache();
+      final decoding = Completer<void>();
+      final release = Completer<void>();
+      stremio.debugAddonDecoder = (source) async {
+        decoding.complete();
+        await release.future;
+        return jsonDecode(source);
+      };
       final pending = stremio.getAddons();
-      // Let the read fetch the stored string and start decoding it.
-      await Future<void>.delayed(const Duration(milliseconds: 5));
+      // The read has fetched the corrupt value and is paused in its decode.
+      await decoding.future;
+      stremio.debugAddonDecoder = null;
       final saved = StremioAddon(
         id: 'saved',
         name: 'Saved',
@@ -39,7 +46,8 @@ void main() {
       await prefs.setString('stremio_addons_v1', jsonEncode([saved.toJson()]));
       // The same-profile addon save moves the inventory generation.
       stremio.invalidateCache();
-      expect(await pending, isEmpty, reason: 'read the corrupt value');
+      release.complete();
+      expect(await pending, isEmpty, reason: 'the read decoded the old value');
       expect((await stremio.getAddons()).map((a) => a.id), ['saved']);
     },
   );

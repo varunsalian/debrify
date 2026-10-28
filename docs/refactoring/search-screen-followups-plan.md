@@ -245,10 +245,11 @@ Fixes for the regressions the 2026-10-28 bug hunt found against `main`
 (9619c10b0). Evidence: `.git/refactor-evidence/regfix/` (`SUMMARY.txt`).
 
 Temporary size exceptions (`dev/tool/file_size_baseline.txt`, raised by hand):
-- `lib/services/stremio_service.dart` 3858 -> 3870 (P3-1 and its review
-  follow-up): a same-profile addon read returns the list it read, and the
+- `lib/services/stremio_service.dart` 3858 -> 3874 (P3-1 and its review
+  follow-ups): a same-profile addon read returns the list it read, and the
   `inventoryCurrent()` checks keep that stale list out of the cache and
-  storage. Exit: the next `stremio_service.dart` extraction.
+  storage; a `@visibleForTesting debugAddonDecoder` hook makes the decode
+  race test deterministic. Exit: the next `stremio_service.dart` extraction.
 - `lib/services/android_tv_player_bridge.dart` 2153 -> 2159 (P3-6): the
   retired launch rethrows out of the network-tuning reads, plus the
   `@visibleForTesting debugLaunchOnAndroid` hook. Exit: the next

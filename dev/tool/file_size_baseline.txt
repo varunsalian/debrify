@@ -27,6 +27,7 @@
 # 2026-10-25: Phase 21a controls runtime extraction (auto-hide, TV remote and scrub, gestures, dock layout, transition overlay); build stays (D6), end-state exception in 21b.
 # 2026-10-25: Phase 21b end state: facade is an EXACT exception (check_search_architecture.py VIDEO_PLAYER_FACADE_CAP, lines != cap fails; vplayer_end_state.py freezes its declarations). 8639 -> 8562 after C1-C3. Exits: (1) startup orchestration decomposition, (2) build decomposition (interim facade <= T), (3) D1 per-collaborator migration (facade <= 800). Raises only by the reviewed raise procedure (video-player-screen-plan.md).
 # 2026-10-28 regfix P3-1 (+review P3-a): same-profile addon read returns the read list; stale lists kept out of cache/storage (+12, 3858 -> 3870); exit: next stremio_service.dart extraction.
+# 2026-10-28 regfix review P3-e: @visibleForTesting debugAddonDecoder hook for a deterministic decode-race test (+4, 3870 -> 3874); exit: next stremio_service.dart extraction.
 # 2026-10-28 regfix P3-6: retired-launch rethrow in network tuning reads + debugLaunchOnAndroid test hook (+6, 2153 -> 2159); exit: next android_tv_player_bridge.dart extraction.
 8562 lib/screens/video_player_screen.dart
 6919 lib/services/profiles/profile_registry.dart
@@ -36,7 +37,7 @@
 4685 lib/services/download_service.dart
 4182 lib/main.dart
 4086 lib/services/iptv_catalog_db.dart
-3870 lib/services/stremio_service.dart
+3874 lib/services/stremio_service.dart
 3776 android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt
 3667 lib/screens/video_player/widgets/iptv_channel_sheet.dart
 3035 android/app/src/main/kotlin/com/debrify/app/MainActivity.kt
