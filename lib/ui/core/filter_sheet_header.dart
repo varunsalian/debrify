@@ -25,13 +25,9 @@ class FilterSheetHeader extends StatelessWidget {
   Widget build(BuildContext context) => Row(
     mainAxisAlignment: MainAxisAlignment.spaceBetween,
     children: [
-      const Expanded(
-        child: Text(
-          'Filter Results',
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-        ),
+      const Text(
+        'Filter Results',
+        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
       ),
       Row(
         mainAxisSize: MainAxisSize.min,
