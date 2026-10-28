@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:debrify/features/recordings/models/recording_output_settings.dart';
 import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/services/android_native_downloader.dart';
 import 'package:debrify/services/desktop_recording_service.dart';
@@ -80,12 +81,14 @@ class VpIptvRecording {
     if (engineTask != null) {
       _host.setState(() => _host.engineTaskId = null);
       final ok = await LiveRecordingService.stop(engineTask);
+      final output = await AndroidNativeDownloader.readRecordingOutput();
       if (!_host.mounted) return;
+      final savedIn = recordingLocationLabel(output);
       ScaffoldMessenger.of(_host.context).showSnackBar(
         SnackBar(
           content: Text(
             ok
-                ? 'Recording stopped — saving to Downloads/Debrify/Recordings'
+                ? 'Recording stopped — saving to $savedIn'
                 : "Couldn't stop recording",
           ),
         ),
@@ -427,12 +430,16 @@ class VpIptvRecording {
     required bool userInitiated,
   }) async {
     var published = false;
+    // One snapshot for both the native publish and its result text, so the
+    // snackbar can never name a folder other than the one the file went to.
+    final output = await AndroidNativeDownloader.readRecordingOutput();
     try {
       final fileName = path.split(Platform.pathSeparator).last;
       final uri = await AndroidNativeDownloader.saveLocalFile(
         path: path,
         fileName: fileName,
         mimeType: 'video/x-matroska',
+        treeUri: output.treeUri,
       );
       published = uri != null;
     } catch (e) {
@@ -446,7 +453,7 @@ class VpIptvRecording {
       SnackBar(
         content: Text(
           published
-              ? 'Recording saved to Downloads/Debrify/Recordings'
+              ? 'Recording saved to ${recordingLocationLabel(output)}'
               : "Recording couldn't be added to Downloads — "
                     'will retry next launch',
         ),

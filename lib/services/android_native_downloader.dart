@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 
+import '../features/recordings/data/recording_output_store.dart';
+import '../features/recordings/models/recording_output_settings.dart';
 import '../utils/platform_util.dart';
 import '../models/profiles/profile_policy.dart';
 import 'profiles/device_job_store.dart';
@@ -338,6 +340,20 @@ class AndroidNativeDownloader {
       return null;
     }
   }
+
+  /// Synchronous snapshot of the device-wide recording-output preference.
+  /// The video-player feature may not import another feature's data layer
+  /// (features meet through models only), so this Android recording bridge —
+  /// which already owns the MediaStore `Debrify/Recordings` convention —
+  /// relays the preference to the tee-publishing call instead.
+  static RecordingOutputSettings get recordingOutput =>
+      RecordingOutputStore.cached;
+
+  /// Fresh read of the same preference. Use this where the call is already
+  /// async (publishing a finished recording): nothing on Android loads the
+  /// store at start-up, so [recordingOutput] can still hold the defaults.
+  static Future<RecordingOutputSettings> readRecordingOutput() =>
+      RecordingOutputStore.read();
 
   /// Invoke a bool-returning channel method, mapping channel-level failures
   /// (PlatformException such as fgs_not_allowed, MissingPluginException) to
