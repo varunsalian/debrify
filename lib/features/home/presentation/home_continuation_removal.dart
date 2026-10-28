@@ -42,6 +42,8 @@ class HomeContinuationRemoval {
 
   /// Detail-screen action for a Continue Watching title. Only handles removal;
   /// closes its own detail and lets the route return callback refresh the row.
+  /// The live page admits the action; feedback follows the board (rule C1),
+  /// so backing out before the writes finish still shows the message.
   Future<void> handleContinueDetailAction(
     TraktItemMenuAction action,
     String imdbId,
@@ -53,7 +55,7 @@ class HomeContinuationRemoval {
     }
     if (!await removeLocalHistory(imdbId) ||
         !_deps.mounted() ||
-        !detailRoute.isActive) {
+        !_playback.catalogNavigationCurrent()) {
       return;
     }
     detailRoute.closeIfCurrent();

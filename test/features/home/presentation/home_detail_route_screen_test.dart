@@ -470,6 +470,64 @@ void main() {
         },
       );
     }
+    testWidgets(
+      'real detail local removal reports on the board after back-out: merged=$merged',
+      (tester) async {
+        final release = Completer<void>();
+        final entered = Completer<void>();
+        final writes = <String>[];
+        final home = HomeFixture(tester);
+        await home.mount(
+          initialPreferences: {'merged_series_page_enabled': merged},
+          wrap: (child) => ProviderScope(
+            overrides: [
+              homeCatalogOriginRepositoryProvider.overrideWith(
+                (ref, owner) => ReadyOrigin(),
+              ),
+              homeLocalHistoryRemovalProvider.overrideWith(
+                (ref, owner) => LocalHistoryRemoval(
+                  isOwnerCurrent: () => true,
+                  write: (id) async {
+                    writes.add(id);
+                    entered.complete();
+                    await release.future;
+                  },
+                ),
+              ),
+            ],
+            child: child,
+          ),
+        );
+        await home.settle();
+        await home.focusFast();
+        await home.key(LogicalKeyboardKey.enter);
+        await home.settle();
+        final dispatch = merged
+            ? tester
+                  .widget<MergedDetailScreen>(find.byType(MergedDetailScreen))
+                  .onTraktAction
+            : tester
+                  .widget<CatalogItemDetailScreen>(
+                    find.byType(CatalogItemDetailScreen),
+                  )
+                  .onTraktAction;
+        dispatch!(TraktItemMenuAction.removeFromPlayback);
+        await entered.future.timeout(const Duration(seconds: 3));
+        home.navigator.currentState!.pop();
+        await home.settle();
+        release.complete();
+        await LocalHistoryRemoval.drain();
+        await home.settle();
+        expect(writes, ['tt123']);
+        expect(
+          find.byType(merged ? MergedDetailScreen : CatalogItemDetailScreen),
+          findsNothing,
+        );
+        expect(find.text('Removed from Continue Watching'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await home.dispose();
+      },
+    );
     for (final replace in [false, true]) {
       testWidgets(
         'real detail delayed removal retains newer route: merged=$merged replaced=$replace',
