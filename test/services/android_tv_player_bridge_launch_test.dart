@@ -5,6 +5,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// Upper bound on the guard checks one launch makes before the native call.
+/// It only stops a runaway loop; raise it if the launch path gains checks.
+const _maxGuardChecks = 40;
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   const player = MethodChannel('com.debrify.app/android_tv_player');
@@ -46,7 +50,11 @@ void main() {
       });
       // Retire the launch at each successive guard check until it reaches the
       // native call, covering every await of the launch preparation.
-      for (var stopAt = 1; stopAt < 40 && launches == 0; stopAt++) {
+      for (
+        var stopAt = 1;
+        stopAt <= _maxGuardChecks && launches == 0;
+        stopAt++
+      ) {
         var checks = 0;
         final launched = await AndroidTvPlayerBridge.launchTorrentPlayback(
           payload: const {'title': 'Fixture'},
@@ -54,7 +62,13 @@ void main() {
         );
         if (launches == 0) expect(launched, isFalse, reason: 'stop at $stopAt');
       }
-      expect(launches, 1, reason: 'the unretired launch still reaches native');
+      expect(
+        launches,
+        1,
+        reason:
+            'The launch never reached native within $_maxGuardChecks guard '
+            'checks. If the launch path gained checks, raise _maxGuardChecks.',
+      );
       expect(
         logs.where((line) => line.contains('network tuning read failed')),
         isEmpty,

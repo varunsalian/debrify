@@ -93,6 +93,11 @@ void main() {
     });
   }
 
+  // Guards main's title layout where the title fits: the title keeps its
+  // natural one-line box (which is also its semantics/accessibility rect and
+  // hit area) instead of claiming the free row space, leaving main's
+  // spaceBetween gap before Clear. An Expanded title paints the same pixels
+  // but fails this test.
   for (final size in [const Size(844, 390), const Size(1280, 720)]) {
     testWidgets('filter title keeps its intrinsic one-line width at $size', (
       tester,
