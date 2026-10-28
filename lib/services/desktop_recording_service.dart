@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
+import '../features/recordings/data/recording_output_store.dart';
 import '../utils/app_storage.dart';
 import '../models/profiles/profile_policy.dart';
 import 'profiles/device_job_store.dart';
@@ -436,14 +437,41 @@ class DesktopRecordingService {
     }
   }
 
-  /// Where desktop recordings live: `<Downloads>/Debrify/Recordings`. One
-  /// truth shared by the capture path builder and the library listing. Not
-  /// created here — captures create it on first write.
+  /// Where desktop recordings live: the custom folder from the
+  /// recording-output settings when it exists and is writable, otherwise
+  /// `<Downloads>/Debrify/Recordings`. One truth shared by the capture path
+  /// builder and the library listing. Not created here — captures create it
+  /// on first write.
   static Future<Directory> recordingsDir() async {
+    final custom = await customRecordingsDir(
+      RecordingOutputStore.cached.directoryPath,
+    );
+    if (custom != null) return custom;
     final base =
         (await getDownloadsDirectory()) ?? await AppStorage.documents();
     final sep = Platform.pathSeparator;
     return Directory('${base.path}${sep}Debrify${sep}Recordings');
+  }
+
+  /// The custom folder only when [path] is non-empty, exists, and a probe
+  /// file can be created and deleted inside it; null otherwise. Never
+  /// throws — an unreadable custom folder falls back to the default instead
+  /// of breaking every recording.
+  @visibleForTesting
+  static Future<Directory?> customRecordingsDir(String? path) async {
+    if (path == null || path.isEmpty) return null;
+    try {
+      final dir = Directory(path);
+      if (!await dir.exists()) return null;
+      final probe = File(
+        '${dir.path}${Platform.pathSeparator}.debrify_write_probe',
+      );
+      await probe.writeAsString('', flush: true);
+      await probe.delete();
+      return dir;
+    } on Object catch (_) {
+      return null;
+    }
   }
 
   static const _libraryExtensions = {'ts', 'mts', 'm2ts', 'mkv', 'mp4'};
