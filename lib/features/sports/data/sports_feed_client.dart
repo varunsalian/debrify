@@ -25,6 +25,7 @@ import 'package:debrify/features/sports/models/sports_leagues.dart';
 import 'package:debrify/features/sports/models/sports_models.dart';
 import 'package:flutter/foundation.dart';
 
+import 'cricket_series_discovery.dart';
 import 'espn_scoreboard_parser.dart';
 import 'jolpica_f1_parser.dart';
 
@@ -49,6 +50,31 @@ class _CacheEntry {
   final List<SportsEvent> events;
   final DateTime fetchedAt;
 }
+
+/// One header discovery result and when it was fetched. Kept per sport —
+/// never in the event cache — with the shared in-flight fetch and the last
+/// stale value, so a failing refresh keeps the series remembered.
+class _HeaderEntry {
+  const _HeaderEntry({required this.series, required this.fetchedAt});
+
+  final List<CricketSeries> series;
+  final DateTime fetchedAt;
+}
+
+/// Discovers the cricket series running now and fetches their boards. Only
+/// international series count: [internationalCricketSeries] drops the
+/// domestic competitions, including the Ranji Trophy board whose body is
+/// 300 KB+.
+const String _cricketDiscoverySport = 'cricket';
+
+/// A discovered series keeps being refreshed for this long after it was last
+/// seen on the header, so a rest day between Tests does not drop the series.
+const Duration _seriesMemory = Duration(days: 3);
+
+/// The series a sport's header currently lists, plus the header failure that
+/// produced an empty list (null unless the fetch itself failed with nothing
+/// remembered).
+typedef SeriesSnapshot = ({List<CricketSeries> series, Object? failure});
 
 /// The league whose feed is the Jolpica season rather than an ESPN board.
 const String _f1LeagueId = 'f1';
@@ -125,6 +151,29 @@ class SportsFeedClient {
 
   final Map<Uri, _CacheEntry> _cache = {};
   final Map<Uri, Future<List<SportsEvent>>> _inFlight = {};
+
+  /// Header discovery state per ESPN sport: the cached series list (its own
+  /// lifetime, keyed by sport rather than by day) plus the series still
+  /// remembered from a header they no longer appear on.
+  final Map<String, _HeaderEntry> _headers = {};
+  final Map<String, Future<SeriesSnapshot>> _headersInFlight = {};
+  final Map<String, Map<String, DateTime>> _seriesSeen = {};
+
+  /// The scoreboard header URI listing the competitions currently running in
+  /// [sport] (what a `discoverSport` league gathers its series from).
+  static Uri espnHeaderUri(String sport) => Uri.https(
+    'site.api.espn.com',
+    '/apis/v2/scoreboard/header',
+    {'sport': sport, 'lang': 'en', 'region': 'in'},
+  );
+
+  /// Series-day scoreboard URI: [espnScoreboardUri] shaped for a discovered
+  /// series whose id is [seriesId] instead of a fixed league path.
+  static Uri _cricketSeriesUri(String seriesId, DateTime dayUtc) => Uri.parse(
+    'https://site.api.espn.com/apis/site/v2/sports/$_cricketDiscoverySport'
+    '/$seriesId/scoreboard'
+    '?dates=${_compactUtcDate(dayUtc)}&limit=200',
+  );
 
   /// ESPN scoreboard URIs for [league] covering `[fromUtc, toUtc]`: one per
   /// UTC calendar day, in order, at most [maxWindowDays]. Throws
@@ -211,6 +260,16 @@ class SportsFeedClient {
       final season = await _entry(league, jolpicaSeasonUri, force);
       return _window(season, league, fromUtc, toUtc);
     }
+    final sport = league.discoverSport;
+    if (sport != null) {
+      return _fetchDiscoveredLeague(
+        league,
+        sport,
+        fromUtc: fromUtc,
+        toUtc: toUtc,
+        force: force,
+      );
+    }
     if (league.espnPath == null) return const [];
     final uris = espnFetchUris(league, fromUtc, toUtc, nowUtc: _clock());
     final results = await Future.wait([
@@ -247,6 +306,141 @@ class SportsFeedClient {
     }
     final trimmed = _trimToWindow(league, byId, fromUtc, toUtc);
     return trimmed..sort(_byStartThenId);
+  }
+
+  /// Discovers [league]'s series (its [SportsLeague.discoverSport] header,
+  /// cached per sport like an event entry) and then fetches every remembered
+  /// series' day boards over `[fromUtc, toUtc]` with the same per-day rules
+  /// as a fixed ESPN league. Series stay remembered for [_seriesMemory] after
+  /// they were last seen, so a rest day between Tests still fetches them; a
+  /// header failure with nothing remembered throws.
+  Future<List<SportsEvent>> _fetchDiscoveredLeague(
+    SportsLeague league,
+    String sport, {
+    required DateTime fromUtc,
+    required DateTime toUtc,
+    required bool force,
+  }) async {
+    final now = _clock();
+    final header = await _seriesOf(sport, force);
+    // Forget series that vanished from the header longer ago than the memory
+    // window, then keep everything still remembered — including series a
+    // failed or empty header no longer lists.
+    final remembered = _seriesSeen.putIfAbsent(
+      sport,
+      () => <String, DateTime>{},
+    );
+    remembered.removeWhere(
+      (id, seenAt) => now.difference(seenAt) > _seriesMemory,
+    );
+    for (final series in header.series) {
+      remembered[series.id] = now;
+    }
+    if (remembered.isEmpty) {
+      // Nothing known and the header itself failed: the league has no feed
+      // for this call rather than an empty one.
+      final failure = header.failure;
+      if (failure != null) {
+        if (failure is SportsFeedException) throw failure;
+        throw SportsFeedException(espnHeaderUri(sport), '$failure');
+      }
+      return const [];
+    }
+    final days = <DateTime>[
+      for (
+        var day = _utcDay(fromUtc), n = 0;
+        !day.isAfter(_utcDay(toUtc)) && n < maxWindowDays;
+        day = day.add(const Duration(days: 1)), n++
+      )
+        day,
+    ];
+    if (days.isEmpty) return const [];
+    final boards = <Future<List<SportsEvent>>>[
+      for (final series in remembered.keys)
+        for (final day in days) _seriesFeed(league, series, day),
+    ];
+    final byId = <String, SportsEvent>{};
+    Object? failure;
+    var succeeded = 0;
+    // Awaited one by one: every board goes through the same
+    // [maxConcurrentFetches] cap as the fixed-league day fetches.
+    for (final board in boards) {
+      final events = await board.then<Object?>(
+        (events) => events,
+        onError: (Object error) => error,
+      );
+      if (events is! List<SportsEvent>) {
+        failure ??= events;
+        continue;
+      }
+      succeeded++;
+      for (final event in events) {
+        byId[event.id] = event;
+      }
+    }
+    if (succeeded == 0 && failure != null) {
+      if (failure is SportsFeedException) throw failure;
+      throw SportsFeedException(
+        _cricketSeriesUri(remembered.keys.first, days.first),
+        '$failure',
+      );
+    }
+    final events = List<SportsEvent>.of(byId.values)..sort(_byStartThenId);
+    return events;
+  }
+
+  /// The sport's current series list: a fresh cache entry (kept for
+  /// [scheduleTtl]) unless [force], one shared in-flight fetch, and the
+  /// stale value when a refresh fails.
+  Future<SeriesSnapshot> _seriesOf(String sport, bool force) async {
+    final cached = _headers[sport];
+    final fresh =
+        cached != null &&
+        _clock().difference(cached.fetchedAt) < scheduleTtl &&
+        !force;
+    if (fresh) return (series: cached.series, failure: null);
+    final inFlight = _headersInFlight[sport];
+    if (inFlight != null) return inFlight;
+    final refresh = _loadHeader(sport);
+    _headersInFlight[sport] = refresh;
+    try {
+      return await refresh;
+    } finally {
+      _headersInFlight.remove(sport);
+    }
+  }
+
+  Future<SeriesSnapshot> _loadHeader(String sport) async {
+    final uri = espnHeaderUri(sport);
+    try {
+      final series = internationalCricketSeries(
+        jsonDecode(await _limitedFetch(uri)),
+      );
+      _headers[sport] = _HeaderEntry(series: series, fetchedAt: _clock());
+      return (series: series, failure: null);
+    } catch (error) {
+      // A failed refresh keeps whatever the last successful header remembered.
+      debugPrint('Sports: $sport header refresh failed: $error');
+      final stale = _headers[sport]?.series;
+      if (stale != null) return (series: stale, failure: null);
+      return (series: const <CricketSeries>[], failure: error);
+    }
+  }
+
+  /// One series' board on one UTC day: [espnScoreboardUri]'s per-day rules
+  /// (event cache keyed by URI, one shared in-flight fetch, stale on
+  /// failure), parsed as [league].
+  Future<List<SportsEvent>> _seriesFeed(
+    SportsLeague league,
+    String seriesId,
+    DateTime dayUtc,
+  ) async {
+    final uri = _cricketSeriesUri(seriesId, dayUtc);
+    final cached = _cache[uri];
+    if (cached != null && _isFresh(cached)) {
+      return List<SportsEvent>.of(cached.events);
+    }
+    return List<SportsEvent>.of(await _pendingOrStart(league, uri));
   }
 
   /// `sets` payloads are tournament-wide, so they carry matches outside the
