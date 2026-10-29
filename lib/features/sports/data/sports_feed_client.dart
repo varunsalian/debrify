@@ -127,7 +127,7 @@ class SportsFeedClient {
   static const int maxWindowDays = 16;
 
   /// Cap on simultaneous feed requests across all leagues and days.
-  static const int maxConcurrentFetches = 8;
+  static const int maxConcurrentFetches = 12;
 
   /// Bodies longer than this are parsed in [Isolate.run]; smaller ones
   /// inline (tennis and Ranji payloads are 300 KB+ and jank a TV box).
@@ -355,20 +355,23 @@ class SportsFeedClient {
         day,
     ];
     if (days.isEmpty) return const [];
-    final boards = <Future<List<SportsEvent>>>[
+    // Every board is started at once (the [maxConcurrentFetches] cap still
+    // applies inside the fetch) and gets its error handler immediately: a
+    // board that failed before it was awaited would otherwise surface as an
+    // unhandled async error.
+    final results = await Future.wait<Object?>([
       for (final series in remembered.keys)
-        for (final day in days) _seriesFeed(league, series, day),
-    ];
+        for (final day in days)
+          _seriesFeed(
+            league,
+            series,
+            day,
+          ).then<Object?>((events) => events, onError: (Object error) => error),
+    ]);
     final byId = <String, SportsEvent>{};
     Object? failure;
     var succeeded = 0;
-    // Awaited one by one: every board goes through the same
-    // [maxConcurrentFetches] cap as the fixed-league day fetches.
-    for (final board in boards) {
-      final events = await board.then<Object?>(
-        (events) => events,
-        onError: (Object error) => error,
-      );
+    for (final events in results) {
       if (events is! List<SportsEvent>) {
         failure ??= events;
         continue;
