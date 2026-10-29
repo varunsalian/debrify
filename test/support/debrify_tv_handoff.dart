@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:debrify/models/playback_resume_policy.dart';
 import 'package:debrify/screens/video_player_screen.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -72,11 +73,26 @@ Map<String, Object?> debrifyTvPlayerFields(VideoPlayerScreen p) => {
   'initialSubtitles': p.initialSubtitles,
 };
 
-/// The player constructor's own defaults: only the required URL and title are
-/// supplied, so every other field holds the value an omitted argument gets.
-final Map<String, Object?> _constructorDefaults = debrifyTvPlayerFields(
-  VideoPlayerScreen(videoUrl: '', title: ''),
-);
+/// The player's non-null constructor defaults, pinned (every other omitted
+/// field must be null). Pinned rather than derived from a live constructor,
+/// so a changed default (auto-resume, scrobbling, resume policy) fails every
+/// handoff test instead of silently passing.
+const Map<String, Object?> _pinnedDefaults = {
+  'initialContinuousShuffle': false,
+  'startFromRandom': false,
+  'randomStartMaxPercent': 40,
+  'hideSeekbar': false,
+  'showChannelName': false,
+  'showVideoTitle': true,
+  'hideOptions': false,
+  'hideBackButton': false,
+  'disableAutoResume': false,
+  'resumePolicy': PlaybackResumePolicy.sourceSpecific,
+  'startupFailoverEnabled': false,
+  'traktScrobble': false,
+  'simklScrobble': false,
+  'mdblistScrobble': false,
+};
 const _requiredFields = {'videoUrl', 'title'};
 
 /// Every named parameter of the current `VideoPlayerScreen` constructor.
@@ -128,7 +144,7 @@ void expectDebrifyTvPlayer(
       );
       expect(
         fields[name],
-        _constructorDefaults[name],
+        _pinnedDefaults[name],
         reason: '$site retains constructor default $name',
       );
     }
