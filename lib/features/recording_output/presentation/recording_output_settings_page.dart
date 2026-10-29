@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 
 import '../data/recording_output_store.dart';
 import '../models/recording_output_settings.dart';
+import 'smb_upload_section.dart';
 
 /// The persistence the page needs. Tests pass a fake; production uses the
 /// private default that delegates to [RecordingOutputStore].
@@ -184,6 +185,11 @@ class _RecordingOutputSettingsPageState
                     ),
                   ],
                 ),
+                const Divider(),
+                // Both platforms this page exists for (Android and desktop)
+                // have recordings, so the section has no platform guard of
+                // its own; RecordingPlatform has no other value.
+                const SmbUploadSection(),
               ],
             ),
     );

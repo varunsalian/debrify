@@ -1,8 +1,17 @@
-import 'package:debrify/features/recording_output/presentation/recording_output_settings_page.dart';
+import 'package:debrify/features/recording_output/application/smb_upload_coordinator.dart';
+import 'package:debrify/features/recording_output/application/smb_upload_providers.dart';
+import 'package:debrify/features/recording_output/application/smb_uploader.dart';
+import 'package:debrify/features/recording_output/data/smb_settings_store.dart';
 import 'package:debrify/features/recording_output/models/recording_output_settings.dart';
+import 'package:debrify/features/recording_output/presentation/recording_output_settings_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../application/smb_fakes.dart';
 
 Future<({String? treeUri, String? displayName, String? path})?>
 _cancelPick() async => null;
@@ -23,6 +32,40 @@ class FakeStore implements RecordingOutputStoreApi {
   }
 }
 
+/// The page now hosts the SMB section, which reads the SMB providers. These
+/// overrides keep it off the network, off SecretVault (no key material here)
+/// and off a real upload pass.
+List<Override> _smbOverrides() {
+  final share = FakeShare();
+  final store = SmbSettingsStore(
+    seal: (plain) async => 'sealed:$plain',
+    open: (stored) async => stored != null && stored.startsWith('sealed:')
+        ? stored.substring(7)
+        : null,
+  );
+  return [
+    smbSettingsStoreProvider.overrideWithValue(store),
+    smbUploaderProvider.overrideWithValue(
+      SmbUploader(connector: share, source: (_) => const Stream.empty()),
+    ),
+    smbUploadCoordinatorProvider.overrideWithValue(
+      SmbUploadCoordinator(
+        settings: store,
+        uploader: SmbUploader(
+          connector: share,
+          source: (_) => const Stream.empty(),
+        ),
+        listRecordings: () async => const [],
+        activeUris: () async => const {},
+        deleteLocal: (_) async => true,
+        nowMs: () => 0,
+        scopeId: () => 'page-test',
+        onStatus: (_) {},
+      ),
+    ),
+  ];
+}
+
 Future<FakeStore> pumpPage(
   WidgetTester tester, {
   RecordingPlatform platform = RecordingPlatform.desktop,
@@ -31,11 +74,14 @@ Future<FakeStore> pumpPage(
 }) async {
   final store = FakeStore(initial ?? const RecordingOutputSettings());
   await tester.pumpWidget(
-    MaterialApp(
-      home: RecordingOutputSettingsPage(
-        platform: platform,
-        folderPicker: folderPicker,
-        store: store,
+    ProviderScope(
+      overrides: _smbOverrides(),
+      child: MaterialApp(
+        home: RecordingOutputSettingsPage(
+          platform: platform,
+          folderPicker: folderPicker,
+          store: store,
+        ),
       ),
     ),
   );
@@ -44,6 +90,10 @@ Future<FakeStore> pumpPage(
 }
 
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
   testWidgets('renders the four rows when a custom folder exists', (
     tester,
   ) async {
@@ -148,11 +198,14 @@ void main() {
       const RecordingOutputSettings(directoryPath: '/videos', endPadMinutes: 5),
     );
     await tester.pumpWidget(
-      MaterialApp(
-        home: RecordingOutputSettingsPage(
-          platform: RecordingPlatform.android,
-          folderPicker: _cancelPick,
-          store: store,
+      ProviderScope(
+        overrides: _smbOverrides(),
+        child: MaterialApp(
+          home: RecordingOutputSettingsPage(
+            platform: RecordingPlatform.android,
+            folderPicker: _cancelPick,
+            store: store,
+          ),
         ),
       ),
     );
@@ -183,5 +236,28 @@ void main() {
       isTrue,
       reason: 'arrow-up returns to row one',
     );
+  });
+
+  testWidgets('the SMB section sits under the timing rows', (tester) async {
+    // A tall surface so nothing sits below the fold: what this checks is the
+    // page's shape, not its pixels. Both timing rows, the divider and the new
+    // section are all built, and the timing dialog still opens on top.
+    tester.view.physicalSize = const Size(1200, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await pumpPage(tester);
+
+    expect(find.text('Start recording early'), findsOneWidget);
+    expect(find.text('Keep recording after the end'), findsOneWidget);
+    expect(
+      find.text('Copy recordings to a network share (SMB)'),
+      findsOneWidget,
+    );
+    // The divider that separates the new section is rendered.
+    expect(find.byType(Divider), findsWidgets);
+
+    await tester.tap(find.text('Start recording early'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SimpleDialogOption), findsNWidgets(5));
   });
 }
