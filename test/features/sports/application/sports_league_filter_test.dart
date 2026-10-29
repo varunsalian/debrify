@@ -1,8 +1,6 @@
-import 'package:debrify/features/sports/application/sports_league_filter_notifier.dart';
 import 'package:debrify/features/sports/application/sports_providers.dart';
 import 'package:debrify/features/sports/data/sports_follow_store.dart';
 import 'package:debrify/features/sports/data/sports_league_filter_store.dart';
-import 'package:debrify/features/sports/models/sports_league_filter.dart';
 import 'package:debrify/features/sports/models/sports_leagues.dart';
 import 'package:debrify/features/sports/models/sports_models.dart';
 import 'package:flutter/foundation.dart';
@@ -69,6 +67,25 @@ void main() {
       expect(f, const SportsLeagueFilter(on: {'ncaaf'}));
       f = f.withLeague(_l('ncaaf'), false);
       expect(f, const SportsLeagueFilter());
+    });
+
+    test('switching one league keeps every other choice', () {
+      var f = const SportsLeagueFilter();
+      f = f.withLeague(_l('epl'), false);
+      f = f.withLeague(_l('ncaaf'), true);
+      f = f.withLeague(_l('ucl'), false);
+      f = f.withLeague(_l('wnba'), true);
+      expect(
+        f,
+        const SportsLeagueFilter(off: {'epl', 'ucl'}, on: {'ncaaf', 'wnba'}),
+      );
+    });
+
+    test('equal filters hash equally regardless of insertion order', () {
+      expect(
+        SportsLeagueFilter(on: {'a', 'b'}, off: {'c', 'd'}).hashCode,
+        SportsLeagueFilter(on: {'b', 'a'}, off: {'d', 'c'}).hashCode,
+      );
     });
 
     test('value equality', () {
