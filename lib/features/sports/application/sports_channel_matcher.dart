@@ -4,6 +4,7 @@
 // touches a database or a playlist; the guide snapshot is handed in by the
 // caller so matching stays deterministic and testable.
 import 'package:debrify/features/sports/application/sports_names.dart';
+import 'package:debrify/features/sports/models/sports_leagues.dart';
 import 'package:debrify/features/sports/models/sports_models.dart';
 
 /// Programme titles containing one of these are recap shows, not the live game.
@@ -23,8 +24,27 @@ const List<String> kSportsNonLiveWords = [
 /// A listing may start this far from kick-off and still be the live broadcast.
 const Duration _timingTolerance = Duration(hours: 2);
 
-/// Motor-sport context words a non-team listing title must also mention.
-const List<String> _motorsportPhrases = ['grand prix', 'formula 1', 'f1'];
+/// Context words a non-team listing title must also mention, per sport, so a
+/// venue or tournament name alone (a news show, a travel programme) does not
+/// count as the broadcast.
+const Map<SportKind, List<String>> _contextPhrases = {
+  SportKind.motorsport: [
+    'grand prix',
+    'formula 1',
+    'f1',
+    'nascar',
+    'indycar',
+    'indy',
+  ],
+  SportKind.golf: ['golf', 'pga', 'lpga'],
+  SportKind.combat: ['ufc', 'mma'],
+};
+
+/// Before the tournament proper: `'Xfinity 500 at Martinsville'` names the
+/// venue after `at`; `'UFC Fight Night: Moicano vs. Nolan'` names the fighters
+/// after the colon.
+final RegExp _atVenue = RegExp(r'\bat\s+(.+)$');
+final RegExp _versus = RegExp(r'\s+(?:vs?\.?)\s+');
 
 const int _maxPossibleOptions = 8;
 
@@ -44,8 +64,31 @@ List<String> sportsTitleNeedles(SportsEvent event) {
     }
     return needles;
   }
-  final title = normalizeSportsText(event.title ?? '');
+  final raw = event.title ?? '';
+  final title = normalizeSportsText(raw);
   if (title.isEmpty) return const [];
+  switch (sportsLeagueById(event.leagueId)?.sport) {
+    case SportKind.combat:
+      // Fighter surnames: listings say "Moicano v Nolan" or "Moicano vs Nolan".
+      final colon = raw.indexOf(':');
+      final bout = colon >= 0 ? raw.substring(colon + 1) : raw;
+      return [
+        for (final side in bout.split(_versus))
+          if (normalizeSportsText(side).split(' ').last case final name
+              when name.length > 2)
+            name,
+      ];
+    case SportKind.golf:
+      // Sponsors come and go in listings ("Mexico Open" vs "VidantaWorld
+      // Mexico Open"): match the last two words.
+      final words = title.split(' ');
+      return [words.skip(words.length > 2 ? words.length - 2 : 0).join(' ')];
+    case SportKind.motorsport:
+      final venue = _atVenue.firstMatch(title)?.group(1);
+      if (venue != null && venue.isNotEmpty) return [venue];
+    default:
+      break;
+  }
   final needle = normalizeSportsText(title.replaceAll(_grandPrixPhrase, ' '));
   return needle.isEmpty ? const [] : [needle];
 }
@@ -59,8 +102,9 @@ SportsWatchOptions matchSportsEvent(
   SportsEvent event, {
   required List<SportsGuideListing> listings,
   required List<SportsChannelRef> channels,
+  DateTime? now,
 }) {
-  final guideGroups = _guideGroups(event, listings);
+  final guideGroups = _guideGroups(event, listings, now);
   final guide = _guideOptions(event, guideGroups);
   final possible = _possibleOptions(
     event,
@@ -74,6 +118,7 @@ SportsWatchOptions matchSportsEvent(
 Map<String, List<SportsGuideListing>> _guideGroups(
   SportsEvent event,
   List<SportsGuideListing> listings,
+  DateTime? now,
 ) {
   final homeVariants = event.isTeamEvent
       ? teamNameVariants(event.home!)
@@ -89,6 +134,7 @@ Map<String, List<SportsGuideListing>> _guideGroups(
     if (!_qualifies(
       listing,
       event,
+      now: now,
       homeVariants: homeVariants,
       awayVariants: awayVariants,
       needles: needles,
@@ -138,11 +184,12 @@ List<SportsWatchOption> _guideOptions(
 bool _qualifies(
   SportsGuideListing listing,
   SportsEvent event, {
+  required DateTime? now,
   required List<String> homeVariants,
   required List<String> awayVariants,
   required List<String> needles,
 }) {
-  if (!_timingMatches(listing, event)) return false;
+  if (!_timingMatches(listing, event, now)) return false;
   final title = normalizeSportsText(listing.title);
   if (kSportsNonLiveWords.any((word) => sportsTextContains(title, word))) {
     return false;
@@ -152,15 +199,34 @@ bool _qualifies(
         awayVariants.any((v) => sportsTextContains(title, v));
   }
   if (needles.isEmpty) return false;
-  return sportsTextContains(title, needles.first) &&
-      _motorsportPhrases.any((phrase) => sportsTextContains(title, phrase));
+  final sport = sportsLeagueById(event.leagueId)?.sport ?? SportKind.motorsport;
+  final context =
+      _contextPhrases[sport] ?? _contextPhrases[SportKind.motorsport]!;
+  if (!context.any((phrase) => sportsTextContains(title, phrase))) return false;
+  // A fight card is found by either fighter; other events by their needle.
+  return sport == SportKind.combat
+      ? needles.any((needle) => sportsTextContains(title, needle))
+      : sportsTextContains(title, needles.first);
 }
 
-bool _timingMatches(SportsGuideListing listing, SportsEvent event) {
+bool _timingMatches(
+  SportsGuideListing listing,
+  SportsEvent event,
+  DateTime? now,
+) {
   final delta = listing.start.difference(event.start).abs();
   if (delta <= _timingTolerance) return true;
-  return !listing.start.isAfter(event.start) &&
-      listing.stop.isAfter(event.start);
+  if (!listing.start.isAfter(event.start) &&
+      listing.stop.isAfter(event.start)) {
+    return true;
+  }
+  // Multi-day events (Test cricket, golf) started days ago: while they are
+  // live, today's broadcast is the listing airing now or starting soon.
+  if (now != null && event.status == SportsEventStatus.live) {
+    final airing = !listing.start.isAfter(now) && listing.stop.isAfter(now);
+    return airing || listing.start.difference(now).abs() <= _timingTolerance;
+  }
+  return false;
 }
 
 List<SportsWatchOption> _possibleOptions(

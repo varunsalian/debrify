@@ -351,6 +351,7 @@ class SportsBoardController extends Notifier<SportsBoardState> {
             event,
             listings: snapshot.listings,
             channels: snapshot.channels,
+            now: now,
           ),
       },
       liveSportsListings: snapshot.liveSportsListings,

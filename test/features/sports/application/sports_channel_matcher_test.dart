@@ -599,4 +599,102 @@ void main() {
       expect(result.possible.single.channel.name, 'UK: Sky Sports F1 HD');
     });
   });
+
+  group('new sports', () {
+    SportsEvent titled(
+      String leagueId,
+      String title, {
+      SportsEventStatus? status,
+      DateTime? start,
+    }) => SportsEvent(
+      id: '$leagueId-1',
+      leagueId: leagueId,
+      start: start ?? _kickOff,
+      status: status ?? SportsEventStatus.scheduled,
+      title: title,
+    );
+
+    List<String> guideNames(
+      SportsEvent event,
+      List<SportsGuideListing> listings, {
+      DateTime? now,
+    }) => matchSportsEvent(
+      event,
+      listings: listings,
+      channels: const [],
+      now: now,
+    ).guide.map((o) => o.channel.name).toList();
+
+    test('a fight card matches a UFC listing naming either fighter', () {
+      final card = titled('ufc', 'UFC Fight Night: Moicano vs. Nolan');
+      expect(sportsTitleNeedles(card), ['moicano', 'nolan']);
+      expect(
+        guideNames(card, [
+          _listing(
+            'Sony Ten 2',
+            'UFC Fight Night: Moicano v Nolan - Main Card',
+          ),
+          _listing('TNT Sports 1', 'UFC 312 Prelims: Nolan v Silva'),
+          _listing('News 24', 'Moicano interview'),
+        ]),
+        ['Sony Ten 2', 'TNT Sports 1'],
+      );
+    });
+
+    test('a golf tournament matches without its sponsor name', () {
+      final golf = titled('pga', 'VidantaWorld Mexico Open');
+      expect(sportsTitleNeedles(golf), ['mexico open']);
+      expect(
+        guideNames(golf, [
+          _listing('Golf Channel', 'PGA Tour Golf: Mexico Open, Round 1'),
+          _listing('Travel HD', 'Mexico Open Road Trip'),
+        ]),
+        ['Golf Channel'],
+      );
+    });
+
+    test('a NASCAR race matches by its venue', () {
+      final race = titled('nascar', 'NASCAR Cup Series at Martinsville');
+      expect(sportsTitleNeedles(race), ['martinsville']);
+      expect(
+        guideNames(race, [
+          _listing('FS1', 'NASCAR Cup Series: Martinsville'),
+          _listing('Local News', 'Martinsville weather'),
+        ]),
+        ['FS1'],
+      );
+    });
+
+    test('a live multi-day match matches today\'s broadcast', () {
+      final test = SportsEvent(
+        id: 'test-1',
+        leagueId: 'intl-cricket',
+        start: _kickOff.subtract(const Duration(days: 2)),
+        status: SportsEventStatus.live,
+        home: _team('sa', 'South Africa'),
+        away: _team('aus', 'Australia'),
+      );
+      final today = _listing(
+        'SuperSport Cricket',
+        'Live Cricket: South Africa v Australia, 3rd Test Day 3',
+        start: _kickOff.subtract(const Duration(hours: 1)),
+        stop: _kickOff.add(const Duration(hours: 7)),
+      );
+      expect(
+        guideNames(test, [today]),
+        isEmpty,
+        reason: 'without now, day 3 is too far from the start',
+      );
+      expect(guideNames(test, [today], now: _kickOff), ['SuperSport Cricket']);
+      final scheduled = SportsEvent(
+        id: 'test-2',
+        leagueId: 'intl-cricket',
+        start: _kickOff.subtract(const Duration(days: 2)),
+        status: SportsEventStatus.finished,
+        home: _team('sa', 'South Africa'),
+        away: _team('aus', 'Australia'),
+      );
+      expect(guideNames(scheduled, [today], now: _kickOff), isEmpty);
+    });
+  });
 }
