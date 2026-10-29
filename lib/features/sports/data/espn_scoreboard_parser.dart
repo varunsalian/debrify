@@ -4,6 +4,7 @@
 // Data layer: pure Dart, no UI and no network access. The feed is untrusted,
 // so every accessor is defensive and this library never throws; a malformed
 // event is dropped while its siblings survive.
+import 'package:debrify/features/sports/data/espn_individual_parser.dart';
 import 'package:debrify/features/sports/models/sports_leagues.dart';
 import 'package:debrify/features/sports/models/sports_models.dart';
 
@@ -26,11 +27,21 @@ List<SportsEvent> parseEspnScoreboard(
 }) {
   final events = _list(_map(json)?['events']);
   if (events == null) return const [];
+  final league = sportsLeagueById(leagueId);
+  final shape = league == null
+      ? SportsEventShape.teams
+      : sportsEventShapeOf(league);
+  // Cards that are not team v team (tennis draws, fight cards, golf and
+  // racing) are laid out per competitor, not per team; F1 stays on Jolpica
+  // and never reaches this parser.
+  if (shape == SportsEventShape.sets ||
+      shape == SportsEventShape.card ||
+      shape == SportsEventShape.event) {
+    return parseEspnIndividual(json, leagueId: leagueId, shape: shape);
+  }
   // Cricket cards carry text scores and a match situation instead of numbers;
   // unknown league ids keep the team (numeric score) behaviour.
-  final league = sportsLeagueById(leagueId);
-  final innings =
-      league != null && sportsEventShapeOf(league) == SportsEventShape.innings;
+  final innings = shape == SportsEventShape.innings;
   final series = innings ? _seriesName(json) : null;
   final parsed = <SportsEvent>[];
   for (final raw in events) {
