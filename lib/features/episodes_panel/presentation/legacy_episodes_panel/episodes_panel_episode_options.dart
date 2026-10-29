@@ -1,8 +1,10 @@
+import 'package:debrify/features/episodes_panel/application/earlier_episodes.dart';
 import 'package:debrify/features/episodes_panel/application/episodes_panel_policies.dart';
 import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_auth.dart';
 import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_deps.dart';
 import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_navigation.dart';
 import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_progress.dart';
+import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_view_state.dart';
 import 'package:debrify/services/mdblist/mdblist_menu_helpers.dart';
 import 'package:debrify/services/trakt/trakt_episode_model.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
@@ -16,6 +18,7 @@ class EpisodesPanelEpisodeOptions {
   EpisodesPanelProgress get _p => _deps.parts.progress;
   EpisodesPanelAuth get _a => _deps.parts.auth;
   EpisodesPanelNavigation get _n => _deps.parts.navigation;
+  EpisodesPanelViewState get _s => _deps.parts.viewState;
 
   /// Per-episode options menu (opened with Right / the ⋮ button): Play, Sources,
   /// a single Mark Watched/Unwatched that acts on local storage plus every
@@ -74,6 +77,19 @@ class EpisodesPanelEpisodeOptions {
           );
         }
 
+        // Batch shortcut next to the single-episode toggle: mark every
+        // aired episode before this one watched (local + every tracker a
+        // normal watched-write would touch). Only for the merged-union
+        // ticks — direct sources have no watched storage to write.
+        final earlier = !_a.isDirectSource
+            ? earlierEpisodes(
+                _s.episodeSeasons,
+                season: episode.season,
+                episode: episode.number,
+                now: DateTime.now(),
+              )
+            : const <EpisodeRef>[];
+
         final tiles = <Widget>[
           // Autofocus Play on TV so the sheet opens with a live target.
           tile(
@@ -112,6 +128,13 @@ class EpisodesPanelEpisodeOptions {
                       1
                   ? 'On ${EpisodesPanelPolicies.joinNames(_deps.parts.watchedActions.watchedSyncTargets(watched: true))}'
                   : null,
+            ),
+          if (earlier.isNotEmpty)
+            tile(
+              Icons.done_all_rounded,
+              'Mark earlier episodes watched',
+              () => _deps.parts.watchedActions.markEarlierWatched(episode),
+              subtitle: '${earlier.length} episodes before this one',
             ),
           if (watched && !_a.isDirectSource)
             tile(

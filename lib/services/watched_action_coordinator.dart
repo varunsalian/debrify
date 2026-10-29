@@ -171,6 +171,36 @@ class WatchedActionCoordinator {
     return WatchedActionResult(failures);
   }
 
+  /// The providers a watched-write for this series id would actually touch,
+  /// in fan-out order: this device first, then every authenticated tracker
+  /// the Scrobble selection targets. Mirrors the auth/policy checks
+  /// [setEpisodeWatched] makes, so "mark earlier" writes exactly where a
+  /// single-episode mark would.
+  static Future<List<TrackingSource>> episodeWriteProviders(
+    String imdbId,
+  ) async {
+    if (CustomSeriesIdentity.isCustom(imdbId)) {
+      return const [TrackingSource.local];
+    }
+    final providers = <TrackingSource>[TrackingSource.local];
+    final policy = (await TrackingSourcePolicy.load()).forContent(imdbId);
+    if (_writes(policy, const <TrackingSource>{}, TrackingSource.trakt) &&
+        await TraktService.instance.isAuthenticated()) {
+      providers.add(TrackingSource.trakt);
+    }
+    if (_writes(policy, const <TrackingSource>{}, TrackingSource.simkl) &&
+        await SimklService.instance.isAuthenticated()) {
+      providers.add(TrackingSource.simkl);
+    }
+    if ((MediaIdentity.isImdb(imdbId) || MediaIdentity.isNative(imdbId)) &&
+        _writes(policy, const <TrackingSource>{}, TrackingSource.mdblist) &&
+        await MdblistService.instance.isAuthenticated() &&
+        !MdblistMediaIds.forContent(imdbId).isEmpty) {
+      providers.add(TrackingSource.mdblist);
+    }
+    return providers;
+  }
+
   static Future<WatchedActionResult> setEpisodeWatched({
     required String imdbId,
     required String seriesTitle,

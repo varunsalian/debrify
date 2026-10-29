@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:debrify/features/episodes_panel/application/earlier_episodes.dart';
 import 'package:debrify/features/episodes_panel/application/episodes_panel_policies.dart';
 import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_auth.dart';
 import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_deps.dart';
@@ -9,6 +10,8 @@ import 'package:debrify/models/media_identity.dart';
 import 'package:debrify/services/mdblist/mdblist_continue_watching_service.dart';
 import 'package:debrify/services/mdblist/mdblist_menu_helpers.dart';
 import 'package:debrify/services/mdblist/mdblist_models.dart';
+import 'package:debrify/services/profiles/profile_runtime.dart';
+import 'package:debrify/services/season_watched_service.dart';
 import 'package:debrify/services/tracking_source_policy.dart';
 import 'package:debrify/services/trakt/trakt_episode_model.dart';
 import 'package:debrify/services/watched_action_coordinator.dart';
@@ -23,6 +26,105 @@ class EpisodesPanelWatchedActions {
   EpisodesPanelAuth get _a => _deps.parts.auth;
   EpisodesPanelServices get _sv => _deps.parts.services;
   bool get mounted => _deps.mounted();
+
+  /// One earlier-episodes batch at a time (the season retry coordinator keeps
+  /// its own re-entrancy guard; this one covers the whole multi-provider run).
+  bool earlierActionBusy = false;
+
+  /// "Mark earlier episodes watched": batch-mark every aired episode before
+  /// this one on this device plus every tracker a single watched-write would
+  /// touch. The ticks are re-read (not painted) afterwards, so failed trackers
+  /// never show a false tick.
+  Future<void> markEarlierWatched(TraktEpisode episode) async {
+    if (earlierActionBusy) return;
+    final show = _s.selectedShow;
+    if (show == null) return;
+    final imdbId = show.progressId ?? show.id;
+    final refs = earlierEpisodes(
+      _s.episodeSeasons,
+      season: episode.season,
+      episode: episode.number,
+      now: DateTime.now(),
+    );
+    if (refs.isEmpty) return;
+    final messenger = ScaffoldMessenger.of(_deps.context());
+    final confirmed = await showDialog<bool>(
+      useRootNavigator: true,
+      context: _deps.context(),
+      builder: (ctx) => AlertDialog(
+        title: const Text('Mark earlier episodes watched?'),
+        content: Text(
+          'Marks ${refs.length} earlier episodes of ${show.name} as watched.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            autofocus: true,
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Mark watched'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    earlierActionBusy = true;
+    // Capture the originating profile: a switch mid-batch must stop writes.
+    final scope = ProfileRuntime.scope.value;
+    messenger.showSnackBar(
+      SnackBar(content: Text('Marking ${refs.length} episodes watched…')),
+    );
+    try {
+      final providers = await WatchedActionCoordinator.episodeWriteProviders(
+        imdbId,
+      );
+      final result = await markEarlierEpisodesWatched(
+        imdbId: imdbId,
+        seriesTitle: show.name,
+        episodes: refs,
+        providers: providers,
+        canContinue: () => ProfileRuntime.scope.value == scope && mounted,
+        mark: (id, season, eps, provider, {seriesTitle}) =>
+            SeasonWatchedService.mark(
+              id,
+              season,
+              eps,
+              provider,
+              seriesTitle: seriesTitle,
+            ),
+      );
+      if (!mounted || result.cancelled) return;
+      MdblistContinueWatchingService.instance.invalidate();
+      // Re-read the real ticks instead of painting them: a tracker whose
+      // write failed must not keep a fake tick.
+      await _deps.refreshWatchProgress();
+      if (!mounted) return;
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            result.hasFailures
+                ? 'Marked ${refs.length} episodes; some trackers failed. '
+                      'Try again to retry them.'
+                : 'Marked ${refs.length} episodes watched',
+          ),
+        ),
+      );
+    } catch (_) {
+      if (mounted) {
+        messenger.hideCurrentSnackBar();
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('Could not mark earlier episodes. Please retry.'),
+          ),
+        );
+      }
+    } finally {
+      earlierActionBusy = false;
+    }
+  }
 
   /// Everywhere a watched-state change will be written: the connected
   /// trackers, plus this device's own playback storage — always on unwatch
