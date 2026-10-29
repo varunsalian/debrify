@@ -416,8 +416,8 @@ void main() {
   });
 
   group('league catalog', () {
-    test('contains exactly the 13 ids in order', () {
-      expect(kSportsLeagues.map((l) => l.id).toList(), const [
+    test('keeps the original 13 ids first, in order', () {
+      expect(kSportsLeagues.take(13).map((l) => l.id).toList(), const [
         'ucl',
         'epl',
         'nfl',
@@ -468,7 +468,7 @@ void main() {
         'mlb': ['MLB', 'MLB', SportKind.baseball, 'baseball/mlb', 55],
         'mls': ['MLS', 'MLS', SportKind.soccer, 'soccer/usa.1', 50],
       };
-      for (final league in kSportsLeagues) {
+      for (final league in kSportsLeagues.take(13)) {
         final row = expected[league.id];
         expect(row, isNotNull, reason: 'unexpected league ${league.id}');
         expect(league.name, row![0], reason: league.id);
@@ -477,7 +477,49 @@ void main() {
         expect(league.espnPath, row[3], reason: league.id);
         expect(league.importance, row[4], reason: league.id);
       }
-      expect(expected.length, kSportsLeagues.length);
+      expect(expected.length, 13);
+      for (final league in kSportsLeagues.take(13)) {
+        expect(league.enabledByDefault, isTrue, reason: league.id);
+      }
+    });
+
+    test('every league has a unique id, a feed and a unique ESPN path', () {
+      final ids = kSportsLeagues.map((l) => l.id).toList();
+      expect(ids.toSet(), hasLength(ids.length));
+      final paths = [
+        for (final l in kSportsLeagues)
+          if (l.espnPath != null) l.espnPath!,
+      ];
+      expect(paths.toSet(), hasLength(paths.length));
+      for (final league in kSportsLeagues) {
+        final hasFeed =
+            league.id == 'f1' ||
+            league.espnPath != null ||
+            league.discoverSport != null;
+        expect(hasFeed, isTrue, reason: league.id);
+      }
+      expect(sportsLeagueById('intl-cricket')?.discoverSport, 'cricket');
+    });
+
+    test('niche leagues start off; headline ones start on', () {
+      for (final id in ['intl-cricket', 'ipl', 'isl', 'atp', 'wta', 'ufc']) {
+        expect(sportsLeagueById(id)!.enabledByDefault, isTrue, reason: id);
+      }
+      for (final id in ['ncaam', 'ncaaf', 'wnba', 'spfl', 'lpga', 'top14']) {
+        expect(sportsLeagueById(id)!.enabledByDefault, isFalse, reason: id);
+      }
+    });
+
+    test('card shape follows the sport', () {
+      SportsEventShape shape(String id) =>
+          sportsEventShapeOf(sportsLeagueById(id)!);
+      expect(shape('epl'), SportsEventShape.teams);
+      expect(shape('six-nations'), SportsEventShape.teams);
+      expect(shape('ipl'), SportsEventShape.innings);
+      expect(shape('atp'), SportsEventShape.sets);
+      expect(shape('ufc'), SportsEventShape.card);
+      expect(shape('pga'), SportsEventShape.event);
+      expect(shape('f1'), SportsEventShape.event);
     });
 
     test('sportsLeagueById finds leagues and returns null when unknown', () {

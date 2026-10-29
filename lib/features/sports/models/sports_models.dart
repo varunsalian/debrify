@@ -12,6 +12,29 @@ enum SportKind {
   hockey,
   baseball,
   motorsport,
+  cricket,
+  tennis,
+  combat,
+  golf,
+  rugby,
+}
+
+/// How an event card is laid out; derived from the league's sport.
+enum SportsEventShape {
+  /// Two teams with crests and numeric scores (football, NBA, rugby...).
+  teams,
+
+  /// Two teams with text scores and a match situation (cricket).
+  innings,
+
+  /// Two players with per-set games (tennis).
+  sets,
+
+  /// A fight card: main event plus bout count (UFC).
+  card,
+
+  /// A single race or tournament: title, venue, optional leader.
+  event,
 }
 
 /// Lifecycle of a fixture as shown on the board.
@@ -27,6 +50,8 @@ class SportsLeague {
     required this.sport,
     this.espnPath,
     this.importance = 0,
+    this.enabledByDefault = true,
+    this.discoverSport,
   });
 
   /// Stable identifier, e.g. `'ucl'`.
@@ -46,6 +71,15 @@ class SportsLeague {
 
   /// Higher values render more prominently.
   final int importance;
+
+  /// Shown on the board until the user turns it off in Sports & leagues.
+  /// Niche leagues start off so the board is not flooded.
+  final bool enabledByDefault;
+
+  /// ESPN sport whose currently running competitions this league gathers
+  /// (via the scoreboard header feed), e.g. `'cricket'` for international
+  /// series that are not one fixed league. Null for fixed leagues.
+  final String? discoverSport;
 
   @override
   bool operator ==(Object other) =>
@@ -118,6 +152,17 @@ class SportsEvent {
     this.clock,
     this.statusLabel = '',
     this.broadcasts = const [],
+    this.homeScoreText,
+    this.awayScoreText,
+    this.homeLines = const [],
+    this.awayLines = const [],
+    this.homeWon,
+    this.format,
+    this.note,
+    this.group,
+    this.itemCount,
+    this.leaderName,
+    this.leaderScore,
   });
 
   final String id;
@@ -146,6 +191,33 @@ class SportsEvent {
   /// Broadcaster names, deduped, in feed order.
   final List<String> broadcasts;
 
+  /// Text scores where numbers do not fit, e.g. cricket `'330/4 (90 ov)'`.
+  final String? homeScoreText;
+  final String? awayScoreText;
+
+  /// Per-period scores, e.g. tennis games per set `[6, 2, 6]`.
+  final List<int> homeLines;
+  final List<int> awayLines;
+
+  /// True when home won, false when away won, null when undecided/unknown.
+  final bool? homeWon;
+
+  /// Short format badge, e.g. `'TEST'`, `'T20'`, `'R16'`, `'W Flyweight'`.
+  final String? format;
+
+  /// Match situation, e.g. `'Australia lead by 1 run'`.
+  final String? note;
+
+  /// Containing tournament, series or card, e.g. `'Guangzhou Open'`.
+  final String? group;
+
+  /// Items inside the event, e.g. bouts on a fight card.
+  final int? itemCount;
+
+  /// Tournament leader and score, e.g. golf `('Patton Kizzire', '-6')`.
+  final String? leaderName;
+  final String? leaderScore;
+
   bool get isTeamEvent => home != null && away != null;
 
   String get displayTitle => title ?? '${home!.name} v ${away!.name}';
@@ -170,7 +242,18 @@ class SportsEvent {
           other.subtitle == subtitle &&
           other.clock == clock &&
           other.statusLabel == statusLabel &&
-          listEquals(other.broadcasts, broadcasts));
+          listEquals(other.broadcasts, broadcasts) &&
+          other.homeScoreText == homeScoreText &&
+          other.awayScoreText == awayScoreText &&
+          listEquals(other.homeLines, homeLines) &&
+          listEquals(other.awayLines, awayLines) &&
+          other.homeWon == homeWon &&
+          other.format == format &&
+          other.note == note &&
+          other.group == group &&
+          other.itemCount == itemCount &&
+          other.leaderName == leaderName &&
+          other.leaderScore == leaderScore);
 
   @override
   int get hashCode => Object.hash(
@@ -187,6 +270,19 @@ class SportsEvent {
     clock,
     statusLabel,
     Object.hashAll(broadcasts),
+    Object.hash(
+      homeScoreText,
+      awayScoreText,
+      Object.hashAll(homeLines),
+      Object.hashAll(awayLines),
+      homeWon,
+      format,
+      note,
+      group,
+      itemCount,
+      leaderName,
+      leaderScore,
+    ),
   );
 
   @override
