@@ -290,8 +290,9 @@ void main() {
         prefs = a;
         await container.read(sportsLeagueFilterProvider.future);
         final notifier = container.read(sportsLeagueFilterProvider.notifier);
-        final first = notifier.setLeague(_l('epl'), false); // held at the gate
+        final first = notifier.setLeague(_l('epl'), false); // made in profile A
         final second = notifier.setLeague(_l('ucl'), false); // queued behind it
+        // Both run only after the switch below, so both must be rejected.
         // Switch to profile B and let the notifier rebuild for it.
         final b = _MemoryPrefs();
         prefs = b;
