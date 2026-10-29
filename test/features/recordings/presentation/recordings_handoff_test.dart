@@ -1,7 +1,5 @@
-import 'dart:convert';
 import 'dart:io';
 
-import 'package:debrify/models/playback_resume_policy.dart';
 import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/storage/external_player_storage.dart';
 import 'package:flutter/material.dart';
@@ -23,55 +21,13 @@ void main() {
         await f.tap(t, find.text('Original Title'));
         await f.until(t, () => f.observer.players.isNotEmpty);
         expect(f.observer.players, hasLength(1));
-        final fields = debrifyTvPlayerFields(f.observer.players.single);
-        expect(
-          fields['videoUrl'],
-          file!.path,
-          reason: 'recordings handoff uses entry URI',
-        );
-        expect(
-          fields['title'],
-          'Original Title',
-          reason: 'recordings handoff uses display title',
-        );
-        expect(
-          fields['showVideoTitle'],
-          true,
-          reason: 'recordings handoff shows video title',
-        );
-        final ledger =
-            jsonDecode(
-                  File(
-                    'dev/tool/recordings_handoff_ledger.json',
-                  ).readAsStringSync(),
-                )
-                as Map;
-        for (final item in (ledger['parameters'] as List).cast<Map>()) {
-          if (item['classification'] != 'observable' ||
-              item['supplied'] == true) {
-            continue;
-          }
-          final name = item['name'] as String;
-          final Object? expected = switch (item['default']) {
-            null => null,
-            'false' => false,
-            'true' => true,
-            '40' => 40,
-            'PlaybackResumePolicy.sourceSpecific' =>
-              PlaybackResumePolicy.sourceSpecific,
-            _ => throw StateError('Unclassified launch default: $name'),
-          };
-          expect(
-            fields,
-            contains(name),
-            reason: 'typed observer covers ledger field $name',
-          );
-          expect(
-            fields[name],
-            expected,
-            reason: 'recordings retains observable default $name',
-          );
-        }
+        // The supplied URI, title and visible title; every other observable
+        // field keeps its constructor default.
+        expectDebrifyTvPlayer(f.observer.players.single, 'recordings play', {
+          'videoUrl': file!.path,
+          'title': 'Original Title',
+          'showVideoTitle': true,
+        });
         MainPageBridge.notifyContentPlaybackStopped();
       });
     },

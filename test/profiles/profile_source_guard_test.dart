@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:debrify/services/profiles/privacy_log.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../support/edit_profile_source.dart';
+import '../support/lib_source.dart';
 
 void main() {
   test(
@@ -114,17 +114,24 @@ void main() {
   });
 
   test('profile editor keeps feature controls hidden behind one switch', () {
-    final source = editProfileOriginalSource();
+    // The profile editor: its screen plus every feature file.
+    final source = libJoined(
+      libSourceSet(
+        files: ['lib/screens/profiles/edit_profile_screen.dart'],
+        directories: ['lib/features/edit_profile'],
+      ),
+    );
     // The switch moved onto the widget (public, @visibleForTesting) when the
-    // save rule was extracted into EditProfileScreen.policyFor.
+    // save rule was extracted into EditProfileScreen.policyFor; the forms read
+    // it through their dependencies.
     expect(
       source,
       contains('static const bool showFeaturePolicyControls = false;'),
     );
     expect(
-      'if (EditProfileScreen.showFeaturePolicyControls) ...['
-          .allMatches(source)
-          .length,
+      RegExp(
+        r'if \((?:EditProfileScreen|_deps)\.showFeaturePolicyControls\) \.\.\.\[',
+      ).allMatches(source).length,
       1,
       reason: 'The existing feature controls must stay present but hidden.',
     );
@@ -138,9 +145,10 @@ void main() {
       reason: 'policyFor must fall back to role defaults on create.',
     );
     expect(
-      source,
+      source.replaceAll(RegExp(r'\s+'), ' '),
       contains(
-        "profile?.policy.enabled ?? ProfilePolicy.defaultsFor(_role).enabled",
+        'profile?.policy.enabled ?? '
+        'ProfilePolicy.defaultsFor(_owners.form.role).enabled',
       ),
       reason: 'Initialization must seed from the stored policy, not a preset.',
     );

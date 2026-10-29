@@ -684,8 +684,8 @@ def video_player_facade_problems(source: str, lines: int) -> list[str]:
         while "{" not in declaration and follow < len(text):
             declaration += " " + text[follow].strip()
             follow += 1
-        # `_VpXHostAdapter implements VpXHost` only; that the bridge Host exists
-        # and every adapter member overrides it is vplayer_host_usage.py's job.
+        # `_VpXHostAdapter implements VpXHost` only; the compiler checks that
+        # the bridge Host exists and every adapter member overrides it.
         implemented = re.search(r"\bimplements (Vp\w+Host)\s*\{", declaration)
         adapter = re.fullmatch(r"_(Vp\w+Host)Adapter", name)
         if not (adapter and implemented and implemented.group(1) == adapter.group(1)):

@@ -1,8 +1,0 @@
-{
-  "source": "lib/screens/settings/iptv_settings_page.dart",
-  "feature": "lib/features/iptv_settings",
-  "sidecars": {
-    "scaffolding": "dev/tool/iptv_settings_scaffolding.json",
-    "context_exceptions": "dev/tool/iptv_settings_context_exceptions.json"
-  }
-}

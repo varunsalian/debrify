@@ -1,16 +1,10 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'features/video_player/support/vp_source_reader.dart';
+import 'support/lib_source.dart';
 
-/// Phase 18 moved the EOF ladder, playlist load and PikPak retry into
-/// collaborators that reach State members through their Host.
-bool _p18Applied() =>
-    (jsonDecode(File('dev/tool/dart_moves/vplayer_p18.json').readAsStringSync())
-        as Map)['status'] ==
-    'applied';
+const _vp = 'lib/features/video_player/presentation/legacy_video_player';
 
 String _between(String source, String start, String end) {
   final from = source.indexOf(start);
@@ -237,11 +231,15 @@ void main() {
   test(
     'Flutter explicit source picks validate only the selected candidate',
     () {
-      final selection = vpSourceDeclaration(
-        '_VideoPlayerScreenState._handleSourceSelected',
+      final selection = libMember(
+        '$_vp/vp_source_switch.dart',
+        'handleSourceSelected',
+        owner: 'VpSourceSwitch',
       );
-      final directSwitch = vpSourceDeclaration(
-        '_VideoPlayerScreenState._switchToStremioSource',
+      final directSwitch = libMember(
+        '$_vp/vp_source_switch.dart',
+        'switchToStremioSource',
+        owner: 'VpSourceSwitch',
       );
 
       expect(selection, contains('validateExplicitSelection: true'));
@@ -258,36 +256,39 @@ void main() {
   );
 
   test('Flutter rejected candidates cannot complete or scrobble', () {
-    final ended = vpSourceDeclaration(
-      '_VideoPlayerScreenState._onPlaybackEnded',
+    final ended = libMember(
+      '$_vp/vp_playback_ended.dart',
+      'onPlaybackEnded',
+      owner: 'VpPlaybackEnded',
     );
-    final resume = vpSourceDeclaration('_VideoPlayerScreenState._saveResume');
+    final resume = libMember(
+      '$_vp/vp_resume_save.dart',
+      'saveResume',
+      owner: 'VpResumeSave',
+    );
     // The gate moved into _resumeSaveBlocked when saves became serialized;
     // the contract follows the indirection: every save path consults the
     // blocker, and the blocker still enforces the validation gate.
-    final resumeBlocked = vpSourceDeclaration(
-      '_VideoPlayerScreenState._resumeSaveBlocked',
+    final resumeBlocked = libMember(
+      '$_vp/vp_resume_save.dart',
+      'resumeSaveBlocked',
+      owner: 'VpResumeSave',
     );
     const method = '';
     expect(resume, contains('Future<void> saveResume('));
     const fields = '_host.';
-    final locked = vpSourceDeclaration(
-      '_VideoPlayerScreenState._saveResumeLocked',
+    final locked = libMember(
+      '$_vp/vp_resume_save.dart',
+      'saveResumeLocked',
+      owner: 'VpResumeSave',
     );
 
-    final gate =
-        'if (${_p18Applied() ? '_host.' : '_'}validationGateActive) return;';
+    const gate = 'if (_host.validationGateActive) return;';
     expect(ended, contains(gate));
     // Still the first statement of the EOF handler.
     expect(
       ended.indexOf(gate),
-      lessThan(
-        ended.indexOf(
-          _p18Applied()
-              ? '_host.observeServerWatch'
-              : '_resumeSave.observeServerWatch',
-        ),
-      ),
+      lessThan(ended.indexOf('_host.observeServerWatch')),
     );
     expect(resume, contains('${method}resumeSaveBlocked(debounced)'));
     expect(locked, contains('${method}resumeSaveBlocked(debounced)'));
@@ -297,16 +298,20 @@ void main() {
       lessThan(resumeBlocked.indexOf('${fields}isReady')),
     );
     expect(
-      vpSourceDeclaration(
-        '_VideoPlayerScreenState._resumeTrackingAfterValidationGate',
+      libMember(
+        '$_vp/vp_startup_gate.dart',
+        'resumeTrackingAfterValidationGate',
+        owner: 'VpStartupGate',
       ),
       contains('void resumeTrackingAfterValidationGate()'),
     );
   });
 
   test('Flutter failed playlist picks restore an outgoing direct stream', () {
-    final playlistSwitch = vpSourceDeclaration(
-      '_VideoPlayerScreenState._switchToSourcePlaylist',
+    final playlistSwitch = libMember(
+      '$_vp/vp_source_playlist_switch.dart',
+      'switchToSourcePlaylist',
+      owner: 'VpSourcePlaylistSwitch',
     );
 
     expect(playlistSwitch, contains('final outgoingDirectUrl'));
@@ -321,11 +326,15 @@ void main() {
   });
 
   test('PikPak keeps cold-storage retries but reports manual exhaustion', () {
-    final playlistLoad = vpSourceDeclaration(
-      '_VideoPlayerScreenState._loadPlaylistIndexAttempt',
+    final playlistLoad = libMember(
+      '$_vp/vp_playlist_load.dart',
+      'loadPlaylistIndexAttempt',
+      owner: 'VpPlaylistLoad',
     );
-    final pikPakRetry = vpSourceDeclaration(
-      '_VideoPlayerScreenState._playPikPakVideoWithRetry',
+    final pikPakRetry = libMember(
+      '$_vp/vp_pikpak_retry.dart',
+      'playPikPakVideoWithRetry',
+      owner: 'VpPikPakRetry',
     );
 
     expect(playlistLoad, contains('final pikPakLoaded'));
@@ -396,8 +405,10 @@ void main() {
         '(requireExactStartupEpisode || host.manualSourceSwitchSnapshot != null)',
       ),
     );
-    final playlistSwitch = vpSourceDeclaration(
-      '_VideoPlayerScreenState._switchToSourcePlaylist',
+    final playlistSwitch = libMember(
+      '$_vp/vp_source_playlist_switch.dart',
+      'switchToSourcePlaylist',
+      owner: 'VpSourcePlaylistSwitch',
     );
     expect(playlistSwitch, contains('containsRequestedEpisode = false'));
     expect(playlistSwitch, contains('if (containsRequestedEpisode)'));
@@ -406,8 +417,10 @@ void main() {
   test(
     'Flutter startup failures unpin the failed source and still recover',
     () {
-      final startup = vpSourceDeclaration(
-        '_VideoPlayerScreenState._openInitialVodWithFailover',
+      final startup = libMember(
+        '$_vp/vp_startup_failover.dart',
+        'openInitialVodWithFailover',
+        owner: 'VpStartupFailover',
       );
       final directBinding = _between(
         boundPlaybackCode,
@@ -417,7 +430,11 @@ void main() {
 
       expect(startup, isNot(contains('_reportRejectedStremioSource')));
       expect(
-        vpSourceDeclaration('_VideoPlayerScreenState._reportStartupFailure'),
+        libMember(
+          '$_vp/vp_startup_gate.dart',
+          'reportStartupFailure',
+          owner: 'VpStartupGate',
+        ),
         contains("'startupSourcesExhausted': true"),
       );
       expect(
@@ -552,8 +569,10 @@ void main() {
   });
 
   test('delayed startup recovery waits for the exact player route', () {
-    final failure = vpSourceDeclaration(
-      '_VideoPlayerScreenState._reportStartupFailure',
+    final failure = libMember(
+      '$_vp/vp_startup_gate.dart',
+      'reportStartupFailure',
+      owner: 'VpStartupGate',
     );
     // P16 moved the report into VpStartupGate; State context/mounted are the
     // facade Host's live forwarders.

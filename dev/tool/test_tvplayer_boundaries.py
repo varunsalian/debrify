@@ -5,16 +5,16 @@ from pathlib import Path
 import tempfile
 import unittest
 
-import check_kotlin_moves as k
-from check_tvplayer_boundaries import audit, CONFIG, TV, MAIN, discover_sources
+import kotlin_psi_parser as k
+from check_tvplayer_boundaries import audit, audited_sources, CONFIG, TV, MAIN, discover_sources
 
 
 class TvBoundariesTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.config = json.loads(CONFIG.read_text())
-        cls.sources = {p: (k.ROOT / p).read_text() for p in cls.config['source_set']}
         cls.paths = discover_sources()
+        cls.sources = {p: (k.ROOT / p).read_text() for p in audited_sources(cls.config, cls.paths)}
         cls.path = TV + '/TvMediaPipelineController.kt'
 
     def check(self, sources=None, config=None, paths=None, reason=None):
@@ -31,7 +31,7 @@ class TvBoundariesTest(unittest.TestCase):
         sources[p] = sources[p][:offset] + text + sources[p][offset:]
         return sources
 
-    def test_completed_tree_and_reviewed_owner_child_hosts(self):
+    def test_current_tree_and_reviewed_owner_child_hosts(self):
         self.check()
 
     def test_same_package_peer_bypass(self):
@@ -67,14 +67,24 @@ class TvBoundariesTest(unittest.TestCase):
             'interface Host {\nval unexpected: TvSourceSwitchController', 1)
         self.check(sources, reason='unapproved Host edge')
 
-    def test_unclassified_new_file_and_exclusion_widening(self):
-        self.check(paths=self.paths + [TV + '/UnclassifiedController.kt'], reason='unclassified TV source')
+    def test_exclusion_widening_and_stale_entries(self):
         config = copy.deepcopy(self.config)
         config['legacy_exclusions'].append(self.path)
         self.check(config=config, reason='legacy exclusion overlaps')
+        config = copy.deepcopy(self.config)
+        config['legacy_exclusions'].append(TV + '/DeletedController.kt')
+        self.check(config=config, reason='stale reviewed TV source or legacy exclusion')
+        config = copy.deepcopy(self.config)
+        config['source_set'].append(TV + '/DeletedController.kt')
+        self.check(config=config, reason='stale reviewed TV source or legacy exclusion')
+
+    def test_audit_must_cover_discovered_sources(self):
+        sources = dict(self.sources)
+        del sources[self.path]
+        self.check(sources, reason='audited sources differ')
 
     def check_discovered_bypass(self, path):
-        folder = k.evidence_root(k.ROOT) / 'p20/boundary-selftests'
+        folder = k.evidence_root(k.ROOT) / 'boundary-selftests'
         folder.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=folder) as directory:
             root = Path(directory)
@@ -95,7 +105,10 @@ class TvBoundariesTest(unittest.TestCase):
             self.assertIn(path, paths)
             self.assertNotIn(decoy_path, paths)
             self.assertEqual(set(self.paths) | {path}, set(paths))
-            self.check(paths=paths, reason='unclassified TV source')
+            # A new, unlisted TV source is audited like every reviewed one.
+            self.assertIn(path, audited_sources(self.config, paths))
+            sources = {p: (root / p).read_text() for p in audited_sources(self.config, paths)}
+            self.check(sources, paths=paths, reason='direct peer bypass:')
 
     def test_nested_peer_bypass_is_discovered_and_rejected(self):
         self.check_discovered_bypass(TV + '/extra/Bypass.kt')

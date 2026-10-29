@@ -1,2 +1,0 @@
-original_name	destination_file	destination_class	new_name	expected_difference
-VideoPlayerLauncher.run	owner.dart	Owner	run	-

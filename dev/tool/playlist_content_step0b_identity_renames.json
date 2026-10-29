@@ -1,7 +1,0 @@
-{
-  "renames": {
-    "test/features/playlist_content/presentation/legacy_playlist_content/playlist_content_progress_test.dart::latest updatedAt 2000000000000 selects same season and episode": "test/features/playlist_content/presentation/legacy_playlist_content/playlist_content_progress_test.dart::latest updatedAt String 2000000000000 selects same season and episode"
-  },
-  "new_distinct_identity": "test/features/playlist_content/presentation/legacy_playlist_content/playlist_content_progress_test.dart::latest updatedAt int 2000000000000 selects same season and episode",
-  "reason": "The old identity collapsed int and String cases. Its last recorded outcome belonged to String; int now has a separate identity. Only identity spelling changes, never outcomes."
-}

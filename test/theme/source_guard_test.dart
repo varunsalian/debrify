@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:debrify/theme/app_surfaces.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../support/debrify_tv_source.dart';
+import '../support/lib_source.dart';
 
 /// Files inside a still-frozen surface that have been converted to the token
 /// layer ahead of their root's classification flip.
@@ -120,11 +120,17 @@ const List<String> kStillFrozenPaths = [
 /// construction someone adds — these greps can. They are deliberately dumb:
 /// a determined evasion will beat them, but the realistic failure (a new
 /// call site written by pattern-matching on neighbouring code) will not.
+/// The Debrify TV screen: its facade plus every feature file.
+Set<String> _debrifyTvSourceFiles() => libSourceSet(
+  files: ['lib/screens/magic_tv_screen.dart'],
+  directories: ['lib/features/debrify_tv'],
+).toSet();
+
 void main() {
   test('VideoPlayerScreen is constructed only where the freeze exists', () {
     final allowed = {
       'lib/screens/video_player_screen.dart', // itself
-      ...debrifyTvSourceFiles(),
+      ..._debrifyTvSourceFiles(),
       'lib/features/player_launch/presentation/legacy_launch/video_player_launch_widget.dart', // the shared factory
     };
     final factory = _code(
@@ -137,7 +143,7 @@ void main() {
       hasLength(1),
       reason: 'the shared extension must construct exactly one frozen player',
     );
-    for (final path in debrifyTvSourceFiles()) {
+    for (final path in _debrifyTvSourceFiles()) {
       final source = _code(File(path)).replaceAll(RegExp(r'\s+'), '');
       expect(
         RegExp(
@@ -166,7 +172,7 @@ void main() {
   });
 
   test('magic_tv_screen pushes the player only via FrozenLegacyPageRoute', () {
-    final source = debrifyTvSourceFiles()
+    final source = _debrifyTvSourceFiles()
         .map((path) => _code(File(path)))
         .join();
     expect(

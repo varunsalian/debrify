@@ -47,8 +47,9 @@ import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-import 'features/video_player/support/vp_source_reader.dart';
-import 'support/stremio_tv_source.dart';
+import 'support/lib_source.dart';
+
+const _vp = 'lib/features/video_player/presentation/legacy_video_player';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -1268,7 +1269,12 @@ void main() {
         engineStates: const {},
       );
       expect(enabled['torrents'], hasLength(2));
-      final tvCode = stremioTvCurrentSource();
+      final tvCode = libJoined(
+        libSourceSet(
+          files: ['lib/screens/stremio_tv/stremio_tv_screen.dart'],
+          directories: ['lib/features/stremio_tv'],
+        ),
+      );
       final calls = RegExp(
         r'searchByImdbWithStremio\([\s\S]*?\);',
       ).allMatches(tvCode).toList();
@@ -1460,9 +1466,13 @@ void main() {
   test(
     'Flutter startup passes source identity through the final player-open barrier',
     () {
-      // P19: the whole live _openMedia declaration (validated move reader),
-      // not a slice ending at a member that moves to the decoder probe.
-      final open = vpSourceDeclaration('_VideoPlayerScreenState._openMedia');
+      // The whole live openMedia declaration, not a slice ending at a member
+      // that lives in the decoder probe.
+      final open = libMember(
+        '$_vp/vp_media_open.dart',
+        'openMedia',
+        owner: 'VpMediaOpen',
+      );
       expect(
         open,
         contains(
@@ -1473,16 +1483,20 @@ void main() {
         open.indexOf('runIfAuthorized'),
         greaterThan(open.indexOf('await remedy.onNewMedia')),
       );
-      final probe = vpSourceDeclaration(
-        '_VideoPlayerScreenState._tryOpenStartupVod',
+      final probe = libMember(
+        '$_vp/vp_startup_candidates.dart',
+        'tryOpenStartupVod',
+        owner: 'VpStartupCandidates',
       );
       expect(probe, contains('source: source,'));
       expect(
         probe,
         contains(RegExp(r'beforeOpen:\s*\(\)\s*\{\s*armed\s*=\s*true;')),
       );
-      final failover = vpSourceDeclaration(
-        '_VideoPlayerScreenState._openInitialVodWithFailover',
+      final failover = libMember(
+        '$_vp/vp_startup_failover.dart',
+        'openInitialVodWithFailover',
+        owner: 'VpStartupFailover',
       );
       // P16 moved the ladder into VpStartupFailover; the probe is reached
       // through its facade Host.

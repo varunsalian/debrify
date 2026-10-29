@@ -1,11 +1,12 @@
 # Kotlin PSI adapter
 
-`check_kotlin_moves.py` compiles `KotlinPsi.java` using the Android Studio JBR
+`kotlin_psi_parser.py` compiles `KotlinPsi.java` using the Android Studio JBR
 and **only** cached Gradle artifacts: Kotlin compiler embeddable/stdlib 2.2.20,
 annotations 13.0, and coroutines 1.8.0 (the compiler's runtime dependency).
-No application dependency or lockfile changes; no network resolution.
-Compilation, temporary source files and evidence live under the git common
-directory's `refactor-evidence/tvplayer/p1/psi/`.
+`bootstrap_kotlin_tools.py` provisions the checksum-pinned jars listed in
+`kotlin_artifacts.json`. No application dependency or lockfile changes.
+Compilation and temporary source files live under the evidence root's `psi/`
+(`TVPLAYER_EVIDENCE_ROOT` when set).
 
 The adapter emits real PSI declaration selectors/tree/spans and Kotlin lexer
 tokens with Unicode code-point offsets (Python string indices). Local declarations,
@@ -13,24 +14,6 @@ constructor properties, accessors, anonymous objects and init blocks are invento
 Signature parameters/type parameters belong to their owning declaration header.
 Unknown declaration types and PSI syntax errors fail closed. Comments and every
 line break outside literal/comment tokens are retained; literal contents are exact.
-The Python checker partitions only explicitly split class bodies. All other
-subtrees are compared whole and their descendant ownership is validated.
 
-Phase 17 also records exact property delegate text and the syntax of the
-standard trailing-lambda lazy allocation. Its receiver inventory adds the
-implicit Activity `addContentView` call inside `TextView.apply`; the view's
-inner `this` expressions remain separately inventoried and unchanged. The
-compiled auditor checks the inherited virtual owner, descriptor and opcode,
-borrowed volatile Host accessors, deferred constructors, and earlier binding
-and identity pins. Historical phase inventories retain their existing filters.
-
-Phase 19 adds implicit `getSystemService`, both `registerReceiver` overloads,
-and the `cacheDir` getter, including calls inside anonymous callbacks. These
-sites carry `introduced_phase: 19`, so historical audit inventories stay exact.
-The compiled pipeline audit separately follows all four volatile loader reads,
-with descriptor/role checks for Kotlin's final owner and extractor-factory
-captures. It rejects real captured Map/Pair/Boolean values and Host backing
-fields; every computed getter must reach the original Activity volatile field.
-Metadata writer pins have distinct before/after owner maps. Complete extraction,
-compiled controls and every historical fixture run through
-`check_kotlin_moves.py --manifest dev/tool/kotlin_moves/tvplayer_p19.json --self-test`.
+`check_tvplayer_boundaries.py` uses it to audit the TV player's collaborator
+edges, Host interfaces and forbidden Flutter types.

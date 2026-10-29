@@ -2,7 +2,9 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import '../../features/video_player/support/vp_source_reader.dart';
+import '../../support/lib_source.dart';
+
+const _vp = 'lib/features/video_player/presentation/legacy_video_player';
 
 String _between(String source, String start, String end) {
   final from = source.indexOf(start);
@@ -18,11 +20,13 @@ void main() {
   ).readAsStringSync();
 
   test('pause and settled seek issue explicit persisted checkpoints', () {
-    // The play toggle's live declaration, resolved through the ownership
-    // manifests: `_VideoPlayerScreenState._togglePlay` in the facade until
-    // phase 21 moves it to `VpControlsRuntime.togglePlay`. Each form is
-    // matched exactly; nothing else satisfies these expectations.
-    final toggle = vpSourceDeclaration('_VideoPlayerScreenState._togglePlay');
+    // The play toggle's live declaration, `VpControlsRuntime.togglePlay`.
+    // Each form is matched exactly; nothing else satisfies these expectations.
+    final toggle = libMember(
+      '$_vp/vp_controls_runtime.dart',
+      'togglePlay',
+      owner: 'VpControlsRuntime',
+    );
     expect(toggle, matches(RegExp(r'^void _?togglePlay\(\) \{')));
     final seek = _between(
       player,
@@ -46,12 +50,20 @@ void main() {
   test(
     'resume saves serialize and recheck transition guards after queueing',
     () {
-      final save = vpSourceDeclaration('_VideoPlayerScreenState._saveResume');
-      final locked = vpSourceDeclaration(
-        '_VideoPlayerScreenState._saveResumeLocked',
+      final save = libMember(
+        '$_vp/vp_resume_save.dart',
+        'saveResume',
+        owner: 'VpResumeSave',
       );
-      final blocked = vpSourceDeclaration(
-        '_VideoPlayerScreenState._resumeSaveBlocked',
+      final locked = libMember(
+        '$_vp/vp_resume_save.dart',
+        'saveResumeLocked',
+        owner: 'VpResumeSave',
+      );
+      final blocked = libMember(
+        '$_vp/vp_resume_save.dart',
+        'resumeSaveBlocked',
+        owner: 'VpResumeSave',
       );
       const method = '';
       expect(save, contains('Future<void> saveResume('));

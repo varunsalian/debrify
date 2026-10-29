@@ -2,7 +2,9 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'features/video_player/support/vp_source_reader.dart';
+import 'support/lib_source.dart';
+
+const _vp = 'lib/features/video_player/presentation/legacy_video_player';
 
 String _between(String source, String start, String end) {
   final from = source.indexOf(start);
@@ -151,8 +153,10 @@ void main() {
     final player = File(
       'lib/screens/video_player_screen.dart',
     ).readAsStringSync();
-    final sourceSwitch = vpSourceDeclaration(
-      '_VideoPlayerScreenState._switchToSourcePlaylist',
+    final sourceSwitch = libMember(
+      '$_vp/vp_source_playlist_switch.dart',
+      'switchToSourcePlaylist',
+      owner: 'VpSourcePlaylistSwitch',
     );
 
     expect(sourceSwitch, contains('final carriedImdbId'));
@@ -161,25 +165,34 @@ void main() {
     final carry = sourceSwitch.indexOf('rebuilt.imdbId ??= carriedImdbId');
     expect(capture, isNonNegative);
     expect(carry, greaterThan(capture));
-    for (final reader in {
-      '_currentEpisodeTraktPercent': '_host.',
-      '_currentEpisodeSimklPercent': '_host.',
-      '_currentEpisodeMdblistPercent': '_host.',
-    }.entries) {
-      final body = vpSourceDeclaration('_VideoPlayerScreenState.${reader.key}');
-      expect(
-        body,
-        contains('final imdbId = ${reader.value}currentSeriesImdbId;'),
-      );
+    for (final (file, owner, member) in [
+      (
+        'vp_trakt_scrobbler.dart',
+        'VpTraktScrobbler',
+        'currentEpisodeTraktPercent',
+      ),
+      (
+        'vp_simkl_scrobbler.dart',
+        'VpSimklScrobbler',
+        'currentEpisodeSimklPercent',
+      ),
+      (
+        'vp_mdblist_scrobbler.dart',
+        'VpMdblistScrobbler',
+        'currentEpisodeMdblistPercent',
+      ),
+    ]) {
+      final body = libMember('$_vp/$file', member, owner: owner);
+      expect(body, contains('final imdbId = _host.currentSeriesImdbId;'));
       expect(
         body,
         contains(
-          'if (${reader.value}episodeTrackerProgressImdbId != imdbId) return null;',
+          'if (_host.episodeTrackerProgressImdbId != imdbId) return null;',
         ),
       );
     }
-    // The reader validates the complete current facade, including this frozen
-    // computed adapter, before it returns a moved percentage declaration.
+    // Each moved percentage declaration reads the identity through this
+    // computed adapter on the facade.
     expect(
       player,
       contains('String? get currentSeriesImdbId => _s._currentSeriesImdbId;'),
@@ -209,7 +222,11 @@ void main() {
     // P17 moved the guide into VpEpisodeGuide; the shared preload future is
     // still the State field, read through the live guide-host forwarder.
     expect(
-      vpSourceDeclaration('_VideoPlayerScreenState._showPlaylistSheet'),
+      libMember(
+        '$_vp/vp_episode_guide.dart',
+        'showPlaylistSheet',
+        owner: 'VpEpisodeGuide',
+      ),
       contains('metadataReady: _host.episodeMetadataReady'),
     );
     expect(
@@ -223,8 +240,10 @@ void main() {
       ),
     );
 
-    final resume = vpSourceDeclaration(
-      '_VideoPlayerScreenState._maybeRestoreResume',
+    final resume = libMember(
+      '$_vp/vp_resume_restore.dart',
+      'maybeRestoreResume',
+      owner: 'VpResumeRestore',
     );
     expect(resume, contains('Future<void> maybeRestoreResume('));
     expect(resume, contains('hasActiveTraktEpisodeRewatch'));

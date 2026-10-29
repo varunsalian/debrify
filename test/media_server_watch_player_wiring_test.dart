@@ -1,24 +1,10 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'features/video_player/support/vp_source_reader.dart';
+import 'support/lib_source.dart';
 
-/// Phase 18 moved the EOF ladder, playlist load and PikPak retry into
-/// collaborators that reach State members through their Host.
-bool _p18Applied() =>
-    (jsonDecode(File('dev/tool/dart_moves/vplayer_p18.json').readAsStringSync())
-        as Map)['status'] ==
-    'applied';
-
-/// Phase 20 moved `_openMedia` into `VpMediaOpen`; State members are reached
-/// through its Host.
-bool _p20Applied() {
-  final manifest = File('dev/tool/dart_moves/vplayer_p20.json');
-  return manifest.existsSync() &&
-      (jsonDecode(manifest.readAsStringSync()) as Map)['status'] == 'applied';
-}
+const _vp = 'lib/features/video_player/presentation/legacy_video_player';
 
 String between(String source, String start, String end) {
   final first = source.indexOf(start);
@@ -42,10 +28,11 @@ void main() {
   test(
     'Flutter prepares before opening, arms validation after asynchronous work',
     () {
-      // P20: the validated declaration, wherever its owner now lives.
-      final host = _p20Applied() ? '_host.' : '_';
+      // `_openMedia` lives in VpMediaOpen; State members are reached through
+      // its Host.
+      const host = '_host.';
       final open = between(
-        vpSourceDeclaration('_VideoPlayerScreenState._openMedia'),
+        libMember('$_vp/vp_media_open.dart', 'openMedia', owner: 'VpMediaOpen'),
         'Future<void> commitOpen()',
         '// Startup direct fallbacks',
       );
@@ -59,8 +46,10 @@ void main() {
       expect(open.indexOf('beforeOpen()'), greaterThan(prepare));
       expect(open.indexOf('beforeOpen()'), greaterThan(authorize));
       expect(open, contains('watchEpoch != ${host}watchOpenEpoch'));
-      final commit = vpSourceDeclaration(
-        '_VideoPlayerScreenState._commitValidatedStremioSource',
+      final commit = libMember(
+        '$_vp/vp_startup_candidates.dart',
+        'commitValidatedStremioSource',
+        owner: 'VpStartupCandidates',
       );
       // P16 moved the commit into VpStartupCandidates; the State-owned watch
       // controller is reached through its facade Host.
@@ -74,8 +63,10 @@ void main() {
   test(
     'Flutter watch reports respect validation, transitions and resume hold',
     () {
-      final observe = vpSourceDeclaration(
-        '_VideoPlayerScreenState._observeServerWatch',
+      final observe = libMember(
+        '$_vp/vp_resume_save.dart',
+        'observeServerWatch',
+        owner: 'VpResumeSave',
       );
       const fields = '_host.';
       expect(observe, contains('void observeServerWatch('));
@@ -95,15 +86,13 @@ void main() {
       final closing = dispose.indexOf('_serverWatch.close()');
       expect(observation, isNonNegative);
       expect(closing, greaterThan(observation));
-      final eof = vpSourceDeclaration(
-        '_VideoPlayerScreenState._onPlaybackEnded',
+      final eof = libMember(
+        '$_vp/vp_playback_ended.dart',
+        'onPlaybackEnded',
+        owner: 'VpPlaybackEnded',
       );
       final live = eof.indexOf('// LIVE IPTV:');
-      final watch = eof.indexOf(
-        _p18Applied()
-            ? '_host.observeServerWatch(completed: true)'
-            : '_resumeSave.observeServerWatch(completed: true)',
-      );
+      final watch = eof.indexOf('_host.observeServerWatch(completed: true)');
       expect(live, isNonNegative);
       expect(watch, isNonNegative);
       expect(watch, lessThan(live));

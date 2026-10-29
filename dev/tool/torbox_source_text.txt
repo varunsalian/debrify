@@ -1,8 +1,0 @@
-Original-source inventory (191ab849):
-- dev/tool/theme_surface_manifest.txt cloud entry: expand feature patterns at step 1.
-- test/theme/shape_manifest_test.dart: retain 14 bare radii and 23 shape calls; port owning registrations at each move, facade final at step 7.
-- New test/support/torbox_downloads_source.dart resolves owning methods through manifest from step 0.
-- Generic theme/profile guards, storage reference/key scans and file-size ratchet scan the repo; verify each batch.
-- Public facade callers remain unchanged; no TorBox implementation back-import is allowed.
-- .github/workflows/checks.yml formats/analyzes lib/features already; facade format/analyze entry at step 7.
-- ci_behavior_tests.txt: all affected concrete paths added at step 0.

@@ -1,6 +1,0 @@
-class RecordingsPage extends StatefulWidget {
-  const RecordingsPage({super.key});
-
-  @override
-  State<RecordingsPage> createState() => _RecordingsPageState();
-}

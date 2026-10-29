@@ -5,14 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../../../support/episodes_panel_fixture.dart';
-import '../../../../support/episodes_panel_source.dart';
 
-const _captureLinux = bool.fromEnvironment(
-  'EPISODES_PANEL_CAPTURE_ORIGINAL_LINUX',
-);
-const _requireLinux = bool.fromEnvironment(
-  'EPISODES_PANEL_REQUIRE_ORIGINAL_LINUX',
-);
 const _reverse = bool.fromEnvironment('EPISODES_PANEL_REVERSE_GOLDENS');
 
 void main() {
@@ -111,21 +104,13 @@ void main() {
           // options adds exactly 400 ms. Capture never waits on image/network art.
           await t.pump();
           final platform = Platform.isLinux ? 'linux' : 'macos';
-          final path = 'test/goldens/episodes_panel/$platform/$scene.png';
-          final strict =
-              !Platform.isLinux ||
-              _captureLinux ||
-              _requireLinux ||
-              File(path).existsSync() ||
-              (episodesCheckerConfig()['completed_step'] as int) >= 6;
-          if (strict) {
-            await expectLater(
-              find.byKey(const ValueKey('episodes-application-canvas')),
-              matchesGoldenFile(
-                '../../../../goldens/episodes_panel/$platform/$scene.png',
-              ),
-            );
-          }
+          // The migration is complete: every platform compares strictly.
+          await expectLater(
+            find.byKey(const ValueKey('episodes-application-canvas')),
+            matchesGoldenFile(
+              '../../../../goldens/episodes_panel/$platform/$scene.png',
+            ),
+          );
         });
       },
     );

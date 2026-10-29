@@ -14,9 +14,9 @@ def main():
     spec = importlib.util.spec_from_file_location('alldebrid_architecture', root / 'dev/tool/check_search_architecture.py')
     checker = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(checker)
-    config = json.loads((root / 'dev/tool/alldebrid_files_checker_config.json').read_text())
-    assert set(config['playback_files']) == checker.ALLDEBRID_PLAYBACK_FILES
-    assert set(config['download_files']) == checker.ALLDEBRID_DOWNLOAD_FILES
+    legacy = 'lib/features/alldebrid_files/presentation/legacy_alldebrid/'
+    assert checker.ALLDEBRID_PLAYBACK_FILES == {legacy + 'alldebrid_playback.dart'}
+    assert checker.ALLDEBRID_DOWNLOAD_FILES == {legacy + 'alldebrid_downloads.dart'}
     with tempfile.TemporaryDirectory(prefix='alldebrid-architecture-', dir=root / '.dart_tool') as directory:
         copy = Path(directory)
         shutil.copytree(root / 'lib', copy / 'lib')

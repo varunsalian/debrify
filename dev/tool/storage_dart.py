@@ -13,7 +13,6 @@ import subprocess
 ROOT = Path(__file__).resolve().parents[2]
 LEGACY = 'lib/services/storage_service.dart'
 RESET = 'lib/services/storage/storage_profile_caches.dart'
-BASE = '072407c3'
 MAP = ROOT / 'dev/tool/storage_member_map.tsv'
 ENUM_FILES = ('lib/models/ambient_trailer_surface.dart',
               'lib/models/tv_render_quality.dart')
@@ -207,11 +206,6 @@ def type_declaration(source, name):
         if t.text == '}' and depth == 0:
             return source[a:t.end]
     raise ValueError(name)
-
-
-def original():
-    return subprocess.run(['git', 'show', f'{BASE}:{LEGACY}'], cwd=ROOT,
-                          capture_output=True, text=True, check=True).stdout
 
 
 def read_map():

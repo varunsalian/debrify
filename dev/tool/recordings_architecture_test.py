@@ -24,7 +24,8 @@ def main():
         bridge = checker.RECORDINGS_BRIDGE
         facade = checker.RECORDINGS_FACADE
         results = {}
-        completed_tree = json.loads((root / 'dev/tool/recordings_checker_config.json').read_text())['completed_step'] >= 4
+        # The recordings migration completed at step 4.
+        completed_tree = True
         assert checker.RECORDINGS_COMPLETE == completed_tree
         if completed_tree:
             assert facade in checker.COMPOSITION_ROOTS

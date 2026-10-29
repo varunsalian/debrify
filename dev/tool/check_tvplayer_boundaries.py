@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
-"""Guard the completed TV-player source set and its reviewed collaborator edges."""
+"""Guard the TV-player sources and their reviewed collaborator edges.
+
+Audited: every `source_set` file plus any other TV Kotlin source that is not
+an exact legacy exclusion, so new files get the same edge and forbidden-type
+rules instead of failing as unclassified.
+"""
 import argparse
 import json
 from pathlib import Path
 import sys
 
-import check_kotlin_moves as k
+import kotlin_psi_parser as k
 
 CONFIG = k.ROOT / 'dev/tool/tvplayer_boundaries.json'
 TV = 'android/app/src/main/kotlin/com/debrify/app/tv'
@@ -13,9 +18,10 @@ MAIN = 'android/app/src/main'
 PACKAGE = 'com.debrify.app.tv'
 
 
-def completed_sources():
-    return {p for phase in range(1, 20) for p in json.loads(
-        (k.ROOT / f'dev/tool/kotlin_moves/tvplayer_p{phase}.json').read_text())['destinations']}
+def audited_sources(config, all_paths):
+    """The reviewed source set plus every unexcluded TV source."""
+    legacy = set(config['legacy_exclusions'])
+    return sorted(set(config['source_set']) | (set(all_paths) - legacy))
 
 
 def discover_sources(root=None):
@@ -44,16 +50,19 @@ def import_ranges(tokens):
     return ranges, aliases
 
 
-def audit(sources, config, all_paths=None, expected_sources=None):
-    expected = completed_sources() if expected_sources is None else set(expected_sources)
+def audit(sources, config, all_paths=None):
     errors = []
-    if set(config['source_set']) != expected or set(sources) != expected:
-        errors.append('completed source-set coverage differs from manifests')
+    reviewed = set(config['source_set'])
     legacy = set(config['legacy_exclusions'])
-    if legacy & expected:
-        errors.append('legacy exclusion overlaps a completed destination')
-    if all_paths is not None and set(all_paths) != expected | legacy:
-        errors.append('unclassified TV source or stale legacy exclusion')
+    if legacy & reviewed:
+        errors.append('legacy exclusion overlaps a reviewed TV source')
+    if all_paths is not None:
+        if not reviewed | legacy <= set(all_paths):
+            errors.append('stale reviewed TV source or legacy exclusion')
+        if set(sources) != set(audited_sources(config, all_paths)):
+            errors.append('audited sources differ from the discovered TV sources')
+    elif not reviewed <= set(sources):
+        errors.append('reviewed TV source missing from the audit')
     units = k.parse(sources)
     peers = set(config['collaborator_types'])
     forbidden = set(config['forbidden_types'])
@@ -131,12 +140,12 @@ def main():
             unittest.defaultTestLoader.loadTestsFromModule(test_tvplayer_boundaries))
         return not result.wasSuccessful()
     config = json.loads(CONFIG.read_text())
-    sources = {p: (k.ROOT / p).read_text() for p in config['source_set']}
     all_paths = discover_sources()
+    sources = {p: (k.ROOT / p).read_text() for p in audited_sources(config, all_paths)}
     errors = audit(sources, config, all_paths)
     for error in errors:
         print(error)
-    print(f'{"FAIL" if errors else "PASS"}: {len(sources)} TV destinations; '
+    print(f'{"FAIL" if errors else "PASS"}: {len(sources)} audited TV sources; '
           f'{len(config["host_interfaces"])} approved Hosts; '
           f'{len(config["owner_child_edges"]) // 2} owner/child pairs; '
           f'{len(config["legacy_exclusions"])} exact legacy exclusions')

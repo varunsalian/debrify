@@ -7,11 +7,13 @@ import 'package:debrify/services/storage/video_resume_storage.dart';
 import 'package:debrify/services/video_player_launcher.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'features/video_player/support/vp_source_reader.dart';
+import 'support/lib_source.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:debrify/services/debrify_tv_database.dart';
 import 'package:debrify/services/iptv_media_store.dart';
+
+const _vp = 'lib/features/video_player/presentation/legacy_video_player';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -105,8 +107,10 @@ void main() {
   }
 
   test('Flutter load path uses the guarded final selection', () {
-    final source = vpSourceDeclaration(
-      '_VideoPlayerScreenState._maybeRestoreResume',
+    final source = libMember(
+      '$_vp/vp_resume_restore.dart',
+      'maybeRestoreResume',
+      owner: 'VpResumeRestore',
     );
     final start = source.indexOf('final state = locallyFinishedMovie');
     expect(start, isNonNegative);
