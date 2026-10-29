@@ -85,6 +85,27 @@ class SportsTeamCrest extends StatelessWidget {
   }
 }
 
+/// What a flag plate shows while the flag image is unavailable: the country
+/// code from ESPN's flag URL (`.../countries/500/aus.png` → `AUS`), else the
+/// player's initials (`Alex de Minaur` → `AM`).
+String sportsFlagLabel(SportsTeam team) {
+  final code = _flagCode.firstMatch(team.logoUrl ?? '')?.group(1);
+  if (code != null) return code.toUpperCase();
+  final words = team.name
+      .trim()
+      .split(RegExp(r'\s+'))
+      .where((w) => w.isNotEmpty);
+  if (words.isEmpty) return '';
+  final first = words.first[0];
+  final last = words.length > 1 ? words.last[0] : '';
+  return '$first$last'.toUpperCase();
+}
+
+final RegExp _flagCode = RegExp(
+  r'/countries/\d+/([a-z]{2,3})\.png',
+  caseSensitive: false,
+);
+
 /// A player's flag on a small rounded plate (tennis athletes carry their
 /// flag as the logo), or the abbreviation while the flag is unavailable.
 class SportsFlagPlate extends StatelessWidget {
@@ -102,7 +123,7 @@ class SportsFlagPlate extends StatelessWidget {
     fallback: FittedBox(
       fit: BoxFit.scaleDown,
       child: sportsLabelText(
-        team.abbreviation.trim().isEmpty ? team.name : team.abbreviation,
+        sportsFlagLabel(team),
         _tokens.fgMid,
         size: 9,
         weight: FontWeight.w700,
