@@ -9,6 +9,8 @@ import 'package:debrify/services/live_recording_service.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:flutter/material.dart';
 
+import 'recording_output_route.dart';
+
 // The DVR's front door — three zones on one page:
 //   RECORDING NOW  live captures with a Stop button each
 //   SCHEDULED      upcoming recordings + the manual channel/time/duration flow
@@ -37,6 +39,9 @@ class _RecordingsPageState extends State<RecordingsPage>
       mounted: () => mounted,
       setState: setState,
       sections: () => _sections,
+      openOutputSettings: recordingOutputSettingsAvailable
+          ? () => openRecordingOutputSettings(context)
+          : null,
     ),
   );
 

@@ -9,10 +9,15 @@ class RecordingsHubDependencies {
     required this.mounted,
     required this.setState,
     required this.sections,
+    this.openOutputSettings,
   });
   final RecordingsHubOwners owners;
   final BuildContext Function() context;
   final bool Function() mounted;
   final void Function(VoidCallback) setState;
   final RecordingsHubSections Function() sections;
+
+  /// Opens "Recording location & timing" (folder, padding, SMB copy); null
+  /// where recording settings are unavailable. Wired by the screen facade.
+  final Future<void> Function()? openOutputSettings;
 }

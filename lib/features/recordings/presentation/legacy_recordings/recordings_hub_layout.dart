@@ -42,6 +42,9 @@ class RecordingsHubLayout {
               onBack: () => Navigator.of(context).maybePop(),
               onSchedule: () =>
                   unawaited(_sections.scheduling.createManualSchedule()),
+              onSettings: _deps.openOutputSettings == null
+                  ? null
+                  : () => unawaited(_sections.actions.openOutputSettings()),
               // Redirect DOWN only when the first focusable below would be a
               // library delete icon: no alarm banner, no live Stop, no
               // schedule rows, and no desktop folder button in between.

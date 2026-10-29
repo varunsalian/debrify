@@ -24,8 +24,9 @@ FEATURES += ("sports",)
 RECORDINGS_COMPLETE = True
 RECORDINGS_FACADE = "lib/screens/settings/recordings_page.dart"
 RECORDINGS_BRIDGE = "lib/features/recordings/presentation/legacy_recordings/"
-# Measured on the completed facade, matching the compiling Step 0b probe.
-RECORDINGS_FACADE_CAP = 101
+# Measured on the completed facade (101); +5 on 2026-10-29 to wire the
+# recording location & timing route into the hub dependencies.
+RECORDINGS_FACADE_CAP = 106
 RECORDINGS_SIZE_EXCEPTIONS = {}
 RECORDINGS_HANDOFF_FILES = {RECORDINGS_BRIDGE + "recordings_hub_actions.dart"}
 STREMIO_TV_CATALOGS_COMPLETE = True

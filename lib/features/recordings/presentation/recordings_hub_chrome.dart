@@ -7,6 +7,9 @@ class _HubBar extends StatelessWidget {
   final VoidCallback onBack;
   final VoidCallback onSchedule;
 
+  /// Opens recording location & timing; the button is hidden when null.
+  final VoidCallback? onSettings;
+
   /// Non-null exactly when no focusable row sits between the hub bar and
   /// the library — the state where geometric DOWN would hit a delete icon.
   final VoidCallback? onScheduleDown;
@@ -14,6 +17,7 @@ class _HubBar extends StatelessWidget {
   const _HubBar({
     required this.onBack,
     required this.onSchedule,
+    this.onSettings,
     this.onScheduleDown,
   });
 
@@ -45,6 +49,15 @@ class _HubBar extends StatelessWidget {
             ),
           ),
           const Spacer(),
+          if (onSettings != null) ...[
+            RecordingsHubHubIconButton(
+              icon: Icons.tune_rounded,
+              tooltip: 'Recording location & timing',
+              onPressed: onSettings!,
+              onDown: onScheduleDown,
+            ),
+            const SizedBox(width: 10),
+          ],
           RecordingsHubHubButton(
             icon: Icons.add_rounded,
             label: 'Schedule',

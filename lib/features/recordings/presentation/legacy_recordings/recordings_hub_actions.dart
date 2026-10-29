@@ -129,6 +129,15 @@ class RecordingsHubActions {
     await _sections.data.loadAll();
   }
 
+  /// Recording location & timing, then a reload so the footer shows the
+  /// chosen folder.
+  Future<void> openOutputSettings() async {
+    final open = _deps.openOutputSettings;
+    if (open == null) return;
+    await open();
+    if (_deps.mounted()) await _sections.data.loadAll();
+  }
+
   Future<void> openFolder() async {
     final dir = await DesktopRecordingService.recordingsDir();
     try {
