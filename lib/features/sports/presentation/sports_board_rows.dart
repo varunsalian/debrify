@@ -1,15 +1,18 @@
-// The sports board's repeating rows: the filter controls, one fixture
-// section, the live-channels strip and the loading skeletons.
+// The sports board's repeating parts: a day section (heading plus a grid of
+// fixture cards), the live-channels strip and the loading skeletons.
 //
-// Presentation layer. Each row renders state handed to it and reports one
+// Presentation layer. Each part renders state handed to it and reports one
 // intent upward — the board view owns the controller, the navigation and the
 // play callback. Everything paints with the Spotlight tokens and every
 // control is a [SportsFocusPill], so the D-pad contract is identical to the
 // card and the details panel.
+import 'dart:math' as math;
+
 import 'package:debrify/features/sports/application/sports_board_sections.dart';
 import 'package:debrify/features/sports/models/sports_models.dart';
 import 'package:debrify/widgets/iptv/styles/iptv_style.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:intl/intl.dart';
 
 import 'sports_event_card.dart';
@@ -17,147 +20,68 @@ import 'sports_team_crest.dart';
 
 const _tokens = IptvStyleTokens.spotlight;
 
-/// Height of a fixture row: the card's own content height plus room for its
-/// focus scale and glow.
-const sectionRowHeight = 158.0;
-
-/// Below this board width a card takes 78 % of the visible width instead of
-/// its fixed rail width, so a phone still shows "one card and a hint".
-const _narrowBoardWidth = 640.0;
-const _cardWidthFixed = 236.0;
+/// Cards fill columns of at least this width, like CSS
+/// `repeat(auto-fill, minmax(258px, 1fr))`, so a lone fixture takes one cell
+/// instead of leaving a row of empty rail behind it.
+const _cardMinWidth = 258.0;
+const _gridGap = 12.0;
 const _channelTileWidth = 300.0;
 const _channelTileHeight = 116.0;
 
 final _boardTimeFormat = DateFormat('HH:mm');
 
-/// The row heading every board section shares: uppercase 11 px title and,
-/// when given, the number of fixtures in the row.
-Widget sportsBoardSectionTitle(String title, {int? count}) => Padding(
-  padding: const EdgeInsets.only(bottom: 8),
-  child: Row(
-    children: [
-      sportsLabelText(
-        title.toUpperCase(),
-        _tokens.fgDim,
-        size: 11,
-        weight: FontWeight.w700,
-        tracking: 0.8,
+/// The heading every board section shares: an uppercase title, the number of
+/// fixtures when given, and a hairline running to the edge. The live section
+/// reads in the live red.
+Widget sportsBoardSectionTitle(String title, {int? count, bool live = false}) =>
+    Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          sportsLabelText(
+            title.toUpperCase(),
+            live ? _tokens.rec : _tokens.fgDim,
+            size: 11.5,
+            weight: FontWeight.w800,
+            tracking: 1.4,
+          ),
+          if (count != null) ...[
+            const SizedBox(width: 8),
+            sportsLabelText(
+              '$count',
+              live ? _tokens.rec.withValues(alpha: 0.7) : _tokens.fgFaint,
+              size: 11.5,
+              weight: FontWeight.w700,
+              tabular: true,
+            ),
+          ],
+          const SizedBox(width: 10),
+          Expanded(child: Container(height: 1, color: _tokens.hairline)),
+        ],
       ),
-      if (count != null) ...[
-        const SizedBox(width: 6),
-        sportsLabelText(
-          '$count',
-          _tokens.fgFaint,
-          size: 11,
-          weight: FontWeight.w700,
-          tabular: true,
-        ),
-      ],
-    ],
-  ),
-);
+    );
 
-/// The board's filter segments plus the two board-wide actions.
-class SportsBoardControlsRow extends StatelessWidget {
-  const SportsBoardControlsRow({
-    super.key,
-    required this.filter,
-    required this.liveCount,
-    required this.hideScores,
-    required this.onSelectFilter,
-    required this.onToggleScores,
-    required this.onRefresh,
-  });
-
-  final SportsBoardFilter filter;
-
-  /// Shown inside the `Live` segment so the count follows the loaded board.
-  final int liveCount;
-
-  final bool hideScores;
-  final void Function(SportsBoardFilter filter) onSelectFilter;
-  final VoidCallback onToggleScores;
-  final VoidCallback onRefresh;
-
-  String _segmentLabel(SportsBoardFilter value) => switch (value) {
-    SportsBoardFilter.live => 'Live $liveCount',
-    SportsBoardFilter.today => 'Today',
-    SportsBoardFilter.week => 'This week',
-    SportsBoardFilter.following => 'Following',
-  };
-
-  @override
-  Widget build(BuildContext context) => Wrap(
-    spacing: 8,
-    runSpacing: 8,
-    children: [
-      for (final value in SportsBoardFilter.values)
-        _segment(
-          key: ValueKey('sports-filter-${value.name}'),
-          label: _segmentLabel(value),
-          selected: value == filter,
-          onPressed: () => onSelectFilter(value),
-        ),
-      _segment(
-        key: const ValueKey('sports-toggle-scores'),
-        label: hideScores ? 'Scores hidden' : 'Scores shown',
-        selected: hideScores,
-        onPressed: onToggleScores,
-      ),
-      _segment(
-        key: const ValueKey('sports-refresh'),
-        label: 'Refresh',
-        selected: false,
-        onPressed: onRefresh,
-      ),
-    ],
-  );
-
-  Widget _segment({
-    required Key key,
-    required String label,
-    required bool selected,
-    required VoidCallback onPressed,
-  }) => SportsFocusPill.row(
-    key: key,
-    label: label,
-    selected: selected,
-    outlined: false,
-    onPressed: onPressed,
-    builder: (_, ink, _) => Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6),
-      child: sportsLabelText(
-        label,
-        ink,
-        weight: FontWeight.w700,
-        ellipsize: true,
-      ),
-    ),
-  );
-}
-
-/// One titled section: heading plus a horizontal rail of fixture cards.
+/// One titled section as slivers: its heading, then its cards in a grid.
 ///
-/// The rail is its own [FocusTraversalGroup] so left/right stays inside the
-/// row while up/down crosses rows through the default directional policy.
-class SportsBoardSectionRow extends StatelessWidget {
-  const SportsBoardSectionRow({
+/// Directional traversal moves across and down the grid geometrically; a
+/// focused card scrolls itself into view, which builds the next grid row.
+class SportsBoardSectionSliver extends StatelessWidget {
+  const SportsBoardSectionSliver({
     super.key,
     required this.section,
     required this.hideScores,
-    required this.viewportWidth,
     required this.isFollowed,
     required this.watchFor,
     required this.onCardPressed,
     this.autofocusFirst = false,
+    this.now,
   });
 
   final SportsBoardSection section;
+
+  /// The board's "now", handed to every card's kick-off label.
+  final DateTime? now;
   final bool hideScores;
-
-  /// Board width, so the narrow rule can size a card as 78 % of it.
-  final double viewportWidth;
-
   final bool Function(SportsEvent event) isFollowed;
   final SportsWatchOptions Function(SportsEvent event) watchFor;
   final void Function(SportsEvent event) onCardPressed;
@@ -165,41 +89,81 @@ class SportsBoardSectionRow extends StatelessWidget {
   /// Only the first card of the first section may claim focus on mount.
   final bool autofocusFirst;
 
-  double get _cardWidth => viewportWidth < _narrowBoardWidth
-      ? viewportWidth * 0.78
-      : _cardWidthFixed;
-
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      sportsBoardSectionTitle(section.title, count: section.events.length),
-      SizedBox(
-        height: sectionRowHeight,
-        child: FocusTraversalGroup(
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            clipBehavior: Clip.none,
-            itemCount: section.events.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 12),
-            itemBuilder: (_, index) {
-              final event = section.events[index];
-              return SportsEventCard(
-                key: ValueKey('sports-card-${event.leagueId}-${event.id}'),
-                event: event,
-                hideScores: hideScores,
-                followed: isFollowed(event),
-                watch: watchFor(event),
-                onPressed: () => onCardPressed(event),
-                autofocus: autofocusFirst && index == 0,
-                width: _cardWidth,
-              );
-            },
-          ),
+  Widget build(BuildContext context) => SliverMainAxisGroup(
+    slivers: [
+      SliverToBoxAdapter(
+        child: sportsBoardSectionTitle(
+          section.title,
+          count: section.events.length,
+          live: section.id == 'live',
         ),
+      ),
+      SliverGrid.builder(
+        gridDelegate: SportsAutoFillGridDelegate(
+          minTileWidth: _cardMinWidth,
+          spacing: _gridGap,
+          tileHeight: sportsEventCardHeight(context),
+        ),
+        itemCount: section.events.length,
+        itemBuilder: (_, index) {
+          final event = section.events[index];
+          return SportsEventCard(
+            key: ValueKey('sports-card-${event.leagueId}-${event.id}'),
+            event: event,
+            hideScores: hideScores,
+            followed: isFollowed(event),
+            watch: watchFor(event),
+            onPressed: () => onCardPressed(event),
+            autofocus: autofocusFirst && index == 0,
+            now: now,
+          );
+        },
       ),
     ],
   );
+}
+
+/// As many equal columns of at least [minTileWidth] as fit, each
+/// [tileHeight] tall.
+class SportsAutoFillGridDelegate extends SliverGridDelegate {
+  const SportsAutoFillGridDelegate({
+    required this.minTileWidth,
+    required this.spacing,
+    required this.tileHeight,
+  });
+
+  final double minTileWidth;
+  final double spacing;
+  final double tileHeight;
+
+  /// Columns that fit in [width].
+  static int columnsFor(double width, double minTileWidth, double spacing) =>
+      math.max(1, ((width + spacing) / (minTileWidth + spacing)).floor());
+
+  @override
+  SliverGridLayout getLayout(SliverConstraints constraints) {
+    final width = constraints.crossAxisExtent;
+    final columns = columnsFor(width, minTileWidth, spacing);
+    final tileWidth = math.max(
+      0.0,
+      (width - spacing * (columns - 1)) / columns,
+    );
+    return SliverGridRegularTileLayout(
+      crossAxisCount: columns,
+      mainAxisStride: tileHeight + spacing,
+      crossAxisStride: tileWidth + spacing,
+      childMainAxisExtent: tileHeight,
+      childCrossAxisExtent: tileWidth,
+      reverseCrossAxis: axisDirectionIsReversed(constraints.crossAxisDirection),
+    );
+  }
+
+  @override
+  bool shouldRelayout(SportsAutoFillGridDelegate oldDelegate) =>
+      oldDelegate.minTileWidth != minTileWidth ||
+      oldDelegate.spacing != spacing ||
+      oldDelegate.tileHeight != tileHeight;
 }
 
 /// "Live sports channels": what is airing right now on the user's own guide.
@@ -324,22 +288,34 @@ class SportsBoardLiveChannelsRow extends StatelessWidget {
       '${_boardTimeFormat.format(listing.stop.toLocal())}';
 }
 
-/// Three placeholder rows while the first refresh is in flight.
+/// Three placeholder sections while the first refresh is in flight.
 class SportsBoardSkeletonRows extends StatelessWidget {
   const SportsBoardSkeletonRows({super.key});
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      for (final row in const [0, 1, 2]) ...[
-        _row(row),
-        const SizedBox(height: 18),
-      ],
-    ],
-  );
+  Widget build(BuildContext context) {
+    final height = sportsEventCardHeight(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = SportsAutoFillGridDelegate.columnsFor(
+          constraints.maxWidth,
+          _cardMinWidth,
+          _gridGap,
+        );
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final row in const [0, 1, 2]) ...[
+              _row(row, math.min(columns, 3), height),
+              const SizedBox(height: 18),
+            ],
+          ],
+        );
+      },
+    );
+  }
 
-  Widget _row(int index) => Column(
+  Widget _row(int index, int cards, double height) => Column(
     key: ValueKey('sports-board-skeleton-$index'),
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
@@ -351,32 +327,27 @@ class SportsBoardSkeletonRows extends StatelessWidget {
           borderRadius: BorderRadius.circular(5),
         ),
       ),
-      const SizedBox(height: 8),
-      SizedBox(
-        height: sectionRowHeight,
-        child: ListView(
-          scrollDirection: Axis.horizontal,
-          physics: const NeverScrollableScrollPhysics(),
-          children: const [
-            _SkeletonCard(),
-            SizedBox(width: 12),
-            _SkeletonCard(),
-            SizedBox(width: 12),
-            _SkeletonCard(),
+      const SizedBox(height: 10),
+      Row(
+        children: [
+          for (var card = 0; card < cards; card++) ...[
+            if (card > 0) const SizedBox(width: _gridGap),
+            Expanded(child: _SkeletonCard(height: height)),
           ],
-        ),
+        ],
       ),
     ],
   );
 }
 
 class _SkeletonCard extends StatelessWidget {
-  const _SkeletonCard();
+  const _SkeletonCard({required this.height});
+
+  final double height;
 
   @override
   Widget build(BuildContext context) => Container(
-    width: _cardWidthFixed,
-    height: sectionRowHeight - 14,
+    height: height,
     decoration: BoxDecoration(
       color: _tokens.panel,
       borderRadius: BorderRadius.circular(14),

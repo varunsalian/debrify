@@ -4,7 +4,10 @@
 // together with the watch options found for it and reports a single intent
 // through [onPressed]; the board decides what opening a card means. It is a
 // [SportsFocusPill] in the card style, so focus, activation and semantics are
-// the same contract the details panel's rows have. All colours are the
+// the same contract the details panel's rows have. Every shape shares one
+// frame — header (league or series, format badge, time / live clock / FT),
+// the shape's body from [SportsEventCardBody], and the channel footer — and
+// one fixed height, so cards line up in the board's grid. All colours are the
 // Spotlight tokens.
 import 'package:debrify/features/sports/application/sports_names.dart';
 import 'package:debrify/features/sports/models/sports_leagues.dart';
@@ -13,12 +16,22 @@ import 'package:debrify/widgets/iptv/styles/iptv_style.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import 'sports_event_card_bodies.dart';
 import 'sports_team_crest.dart';
 
 const _tokens = IptvStyleTokens.spotlight;
 
-/// Stand-in for a score the user chose to hide.
+/// Stand-in for a score the user chose to hide (the hero; cards draw a bar).
 const hiddenScoresGlyph = '···';
+
+/// A card's height at the default text size: the tallest body (golf with a
+/// leader, cricket with a match note) plus the header and footer.
+const _cardExtent = 178.0;
+
+/// The fixed card height the board's grid uses, grown with the text scale so
+/// larger text never clips a card.
+double sportsEventCardHeight(BuildContext context) =>
+    MediaQuery.textScalerOf(context).scale(_cardExtent);
 
 /// The status string a card shows, reused verbatim by the details header.
 ///
@@ -75,7 +88,7 @@ String sportsMatchupConnector(SportKind? sport) => switch (sport) {
   _ => 'v',
 };
 
-/// A fixture row: league, status, both teams with scores, where to watch.
+/// A fixture card: header, the shape's body, and where to watch it.
 class SportsEventCard extends StatelessWidget {
   const SportsEventCard({
     super.key,
@@ -86,7 +99,8 @@ class SportsEventCard extends StatelessWidget {
     required this.onPressed,
     this.focusNode,
     this.autofocus = false,
-    this.width = 236,
+    this.width,
+    this.now,
   });
 
   final SportsEvent event;
@@ -105,12 +119,39 @@ class SportsEventCard extends StatelessWidget {
   final FocusNode? focusNode;
 
   final bool autofocus;
-  final double width;
 
-  String get _leagueShortName =>
-      sportsLeagueById(event.leagueId)?.shortName ?? event.leagueId;
+  /// Null fills the grid cell.
+  final double? width;
 
-  /// The bottom badge, as the plain sentence the card paints.
+  /// The board's "now", so a kick-off reads "today" exactly when the day
+  /// headings do; null reads the wall clock.
+  final DateTime? now;
+
+  String get _leagueName =>
+      sportsLeagueById(event.leagueId)?.name ?? event.leagueId;
+
+  SportsEventShape get _shape => sportsCardShapeOf(event);
+
+  /// Series or tournament first, then a fight card's own name, then the
+  /// league.
+  String get _headerName {
+    final group = (event.group ?? '').trim();
+    if (group.isNotEmpty) return group;
+    if (_shape == SportsEventShape.card) {
+      final (card, _) = sportsFightCardTitle(event.displayTitle);
+      if (card != null) return card;
+    }
+    return _leagueName;
+  }
+
+  /// A fight card names its weight class in the body instead.
+  String? get _badge {
+    final format = (event.format ?? '').trim();
+    if (format.isEmpty || _shape == SportsEventShape.card) return null;
+    return format;
+  }
+
+  /// The footer, as the plain sentence the card paints.
   String get _watchText {
     final guide = watch.guide;
     if (guide.isNotEmpty) {
@@ -119,63 +160,70 @@ class SportsEventCard extends StatelessWidget {
       return extra > 0 ? '$name +$extra' : name;
     }
     if (watch.possible.isNotEmpty) return '${watch.possible.length} possible';
-    return 'No listing yet';
+    return 'Not on your channels yet';
   }
 
   /// The whole card is one control, so the sentence a screen reader needs is
   /// built here rather than from the painted text runs.
   String get _semanticLabel => <String>[
     if (followed) 'Followed',
-    sportsLeagueById(event.leagueId)?.name ?? event.leagueId,
+    _leagueName,
+    if ((event.group ?? '').trim().isNotEmpty) event.group!.trim(),
     event.displayTitle,
-    sportsEventStatusText(event),
+    sportsEventStatusText(event, now: now),
+    ?_badge,
     _watchText,
   ].join(', ');
 
   @override
   Widget build(BuildContext context) => SizedBox(
     width: width,
+    height: sportsEventCardHeight(context),
     child: SportsFocusPill(
       label: _semanticLabel,
-      style: SportsFocusPillStyle.card,
+      style: event.status == SportsEventStatus.live
+          ? _liveCardStyle
+          : _cardStyle,
       selected: followed,
       focusNode: focusNode,
       autofocus: autofocus,
       onPressed: onPressed,
-      padding: const EdgeInsets.all(12),
-      builder: (context, ink, subtle) => _body(),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 11),
+      builder: (context, ink, subtle) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _header(),
+          const SizedBox(height: 10),
+          Expanded(
+            child: ClipRect(
+              child: OverflowBox(
+                alignment: Alignment.topLeft,
+                maxHeight: double.infinity,
+                child: SportsEventCardBody(
+                  event: event,
+                  hideScores: hideScores,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          _footer(),
+        ],
+      ),
     ),
   );
 
-  Widget _body() => Column(
-    mainAxisSize: MainAxisSize.min,
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      _topRow(),
-      const SizedBox(height: 10),
-      if (event.isTeamEvent) ..._teamRows() else _title(),
-      const SizedBox(height: 2),
-      Container(
-        height: 1,
-        color: _tokens.hairline,
-        margin: const EdgeInsets.only(bottom: 8),
-      ),
-      _watchBadge(),
-    ],
-  );
-
-  Widget _topRow() => Row(
+  Widget _header() => Row(
     children: [
       Expanded(
         child: Row(
           children: [
             Flexible(
               child: sportsLabelText(
-                _leagueShortName,
+                _headerName,
                 _tokens.accent,
-                size: 11,
+                size: 11.5,
                 weight: FontWeight.w700,
-                tracking: 0.6,
                 ellipsize: true,
               ),
             ),
@@ -188,136 +236,155 @@ class SportsEventCard extends StatelessWidget {
                   color: _tokens.accent,
                 ),
               ),
+            if (_badge case final badge?) ...[
+              const SizedBox(width: 8),
+              _formatBadge(badge),
+            ],
           ],
         ),
       ),
-      const SizedBox(width: 6),
+      const SizedBox(width: 8),
       _status(),
     ],
   );
 
-  Widget _status() {
-    final color = switch (event.status) {
-      SportsEventStatus.live => _tokens.live,
-      SportsEventStatus.postponed => _tokens.rec,
-      SportsEventStatus.finished => _tokens.fgDim,
-      SportsEventStatus.scheduled => _tokens.fgMid,
-    };
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (event.status == SportsEventStatus.live) ...[
-          Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(
-              color: _tokens.live,
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 5),
-        ],
-        sportsLabelText(
-          sportsEventStatusText(event),
-          color,
-          size: 11,
-          weight: FontWeight.w700,
-          tracking: 0.3,
-        ),
-      ],
-    );
-  }
-
-  List<Widget> _teamRows() => [
-    _teamRow(event.home, event.homeScore),
-    _teamRow(event.away, event.awayScore),
-  ];
-
-  Widget _teamRow(SportsTeam? team, int? score) => Padding(
-    padding: const EdgeInsets.only(bottom: 6),
-    child: Row(
-      children: [
-        SportsTeamCrest(team: team!, size: 28),
-        const SizedBox(width: 8),
-        Expanded(
-          child: sportsLabelText(
-            team.name,
-            _tokens.fg,
-            size: 13.5,
-            weight: FontWeight.w600,
-            ellipsize: true,
-          ),
-        ),
-        if (score != null && hideScores)
-          sportsLabelText(
-            hiddenScoresGlyph,
-            _tokens.fgFaint,
-            size: 11,
-            tracking: 1,
-          )
-        else if (score != null)
-          sportsLabelText(
-            '$score',
-            _tokens.fg,
-            size: 15,
-            weight: FontWeight.w700,
-            tabular: true,
-          ),
-      ],
+  Widget _formatBadge(String text) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+    decoration: BoxDecoration(
+      border: Border.all(color: _tokens.hairline2),
+      borderRadius: BorderRadius.circular(6),
+    ),
+    child: sportsLabelText(
+      text,
+      _tokens.fgDim,
+      size: 10,
+      weight: FontWeight.w600,
+      tabular: true,
     ),
   );
 
-  Widget _title() => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      sportsLabelText(
-        event.displayTitle,
-        _tokens.fg,
-        size: 14,
-        weight: FontWeight.w700,
-        maxLines: 2,
-        ellipsize: true,
-      ),
-      if ((event.subtitle ?? '').isNotEmpty)
-        Padding(
-          padding: const EdgeInsets.only(top: 3),
-          child: sportsLabelText(
-            event.subtitle!,
-            _tokens.fgDim,
-            size: 11.5,
-            ellipsize: true,
-          ),
-        ),
-    ],
-  );
-
-  Widget _watchBadge() {
-    final guide = watch.guide;
-    if (guide.isEmpty) {
-      final color = watch.isEmpty ? _tokens.fgFaint : _tokens.fgDim;
-      return sportsLabelText(_watchText, color, size: 11.5, ellipsize: true);
-    }
-    final extra = guide.length - 1;
-    return Row(
-      children: [
-        Icon(Icons.check_rounded, size: 12, color: _tokens.live),
-        const SizedBox(width: 5),
-        Expanded(
-          child: sportsLabelText(
-            sportsChannelDisplayName(guide.first.channel.name),
-            _tokens.fgMid,
-            size: 11.5,
-            ellipsize: true,
-          ),
-        ),
-        if (extra > 0)
+  Widget _status() {
+    if (event.status == SportsEventStatus.live) {
+      final clock = event.clock?.trim() ?? '';
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SportsLiveDot(),
+          const SizedBox(width: 6),
           sportsLabelText(
-            '+$extra',
-            _tokens.live,
+            clock.isEmpty ? 'LIVE' : clock,
+            _tokens.rec,
             size: 11.5,
             weight: FontWeight.w700,
+            tabular: true,
           ),
-      ],
+        ],
+      );
+    }
+    final color = switch (event.status) {
+      SportsEventStatus.postponed => _tokens.rec,
+      SportsEventStatus.finished => _tokens.fgDim,
+      _ => _tokens.fg,
+    };
+    return sportsLabelText(
+      sportsEventStatusText(event, now: now),
+      color,
+      size: 11.5,
+      weight: FontWeight.w700,
+      tabular: true,
+    );
+  }
+
+  Widget _footer() {
+    final guide = watch.guide;
+    final Widget content;
+    if (guide.isNotEmpty) {
+      final extra = guide.length - 1;
+      content = Row(
+        children: [
+          Icon(Icons.live_tv_rounded, size: 14, color: _tokens.live),
+          const SizedBox(width: 8),
+          Expanded(
+            child: sportsLabelText(
+              sportsChannelDisplayName(guide.first.channel.name),
+              _tokens.live,
+              size: 12,
+              weight: FontWeight.w600,
+              ellipsize: true,
+            ),
+          ),
+          if (extra > 0)
+            sportsLabelText('+$extra', _tokens.fgDim, size: 11, tabular: true),
+        ],
+      );
+    } else if (watch.possible.isNotEmpty) {
+      content = Row(
+        children: [
+          Icon(Icons.live_tv_outlined, size: 14, color: _tokens.fgDim),
+          const SizedBox(width: 8),
+          Expanded(
+            child: sportsLabelText(
+              _watchText,
+              _tokens.fgDim,
+              size: 12,
+              ellipsize: true,
+            ),
+          ),
+        ],
+      );
+    } else {
+      content = sportsLabelText(
+        _watchText,
+        _tokens.fgFaint,
+        size: 12,
+        ellipsize: true,
+      );
+    }
+    return Container(
+      padding: const EdgeInsets.only(top: 9),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: _tokens.hairline)),
+      ),
+      child: content,
     );
   }
 }
+
+/// The red dot that marks live play, with its soft halo.
+class SportsLiveDot extends StatelessWidget {
+  const SportsLiveDot({super.key});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 7,
+    height: 7,
+    decoration: BoxDecoration(
+      color: _tokens.rec,
+      shape: BoxShape.circle,
+      boxShadow: [
+        BoxShadow(color: _tokens.rec.withValues(alpha: 0.14), spreadRadius: 3),
+      ],
+    ),
+  );
+}
+
+/// The board card ramp ([SportsFocusPillStyle.card]) with an edge at rest:
+/// a hairline, or red while the fixture is live.
+SportsFocusPillStyle _cardStyleWith(Color restBorder) {
+  const card = SportsFocusPillStyle.card;
+  return SportsFocusPillStyle(
+    radius: card.radius,
+    restColor: card.restColor,
+    hoverColor: card.hoverColor,
+    focusedFill: card.focusedFill,
+    focusedBorderColor: card.focusedBorderColor,
+    focusedBorderWidth: card.focusedBorderWidth,
+    glow: card.glow,
+    scale: card.scale,
+    invertInkOnFocus: card.invertInkOnFocus,
+    restBorderColor: restBorder,
+  );
+}
+
+final _cardStyle = _cardStyleWith(_tokens.hairline);
+final _liveCardStyle = _cardStyleWith(_tokens.rec.withValues(alpha: 0.45));

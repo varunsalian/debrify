@@ -4,13 +4,15 @@
 // persistence, no UI. Each base list owns its eligibility rule and its sort;
 // the active [SportsBoardFilter] only decides which lists appear, in which
 // order, and empty lists are dropped so the view never renders a blank row.
+// Following narrows any of the three views to followed fixtures.
 import 'package:debrify/features/sports/data/sports_follow_store.dart';
 import 'package:debrify/features/sports/models/sports_leagues.dart';
 import 'package:debrify/features/sports/models/sports_models.dart';
 import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
 
-/// Board filters, one per segmented-control choice.
-enum SportsBoardFilter { live, today, week, following }
+/// The board's time windows, one per segment of the When switch.
+enum SportsBoardFilter { live, today, week }
 
 /// One titled row of the board.
 @immutable
@@ -46,38 +48,42 @@ class SportsBoardSection {
 }
 
 const Duration _oneDay = Duration(days: 1);
+const int _weekDays = 6;
 const Duration _oneWeek = Duration(days: 7);
 const Duration _twentyFourHours = Duration(hours: 24);
 
 /// The rows for [filter], in display order, omitting empty ones.
 ///
-/// "Today" and the week window are local calendar days of [now], never UTC
-/// days, so a 23:00 UTC fixture lands on the day the user sees.
+/// "Today" and the week's day rows are local calendar days of [now], never
+/// UTC days, so a 23:00 UTC fixture lands on the day the user sees. With
+/// [followingOnly] every row keeps only followed fixtures, "Your teams" is
+/// dropped as redundant, and the week ends with the last two days' results
+/// instead of today's.
 List<SportsBoardSection> buildSportsBoardSections({
   required List<SportsEvent> events,
   required SportsFollows follows,
   required DateTime now,
   required SportsBoardFilter filter,
+  bool followingOnly = false,
 }) {
+  final pool = followingOnly
+      ? events.where(follows.followsEvent).toList()
+      : events;
   final sections = switch (filter) {
-    SportsBoardFilter.live => [_live(events, follows)],
+    SportsBoardFilter.live => [_live(pool, follows)],
     SportsBoardFilter.today => [
-      _live(events, follows),
-      _yourTeams(events, follows, now, todayOnly: true),
-      _laterToday(events, now),
-      _earlierToday(events, now),
+      _live(pool, follows),
+      if (!followingOnly) _yourTeams(pool, follows, now, todayOnly: true),
+      _laterToday(pool, now),
+      _earlierToday(pool, now),
     ],
     SportsBoardFilter.week => [
-      _live(events, follows),
-      _yourTeams(events, follows, now),
-      _laterToday(events, now),
-      _thisWeek(events, now),
-      _earlierToday(events, now),
-    ],
-    SportsBoardFilter.following => [
-      _live(events, follows, followedOnly: true),
-      _upcoming(events, follows, now),
-      _recentResults(events, follows, now),
+      _live(pool, follows),
+      if (!followingOnly) _yourTeams(pool, follows, now),
+      _laterToday(pool, now),
+      for (var offset = 1; offset <= _weekDays; offset++)
+        _day(pool, now, offset),
+      followingOnly ? _recentResults(pool, now) : _earlierToday(pool, now),
     ],
   };
   return [
@@ -85,6 +91,31 @@ List<SportsBoardSection> buildSportsBoardSections({
       if (section != null) section,
   ];
 }
+
+/// Distinct fixtures across [sections] ("Your teams" repeats some).
+int sportsBoardEventCount(List<SportsBoardSection> sections) => {
+  for (final section in sections)
+    for (final event in section.events) '${event.leagueId}/${event.id}',
+}.length;
+
+/// How many fixtures each When segment would show, for its count badge.
+Map<SportsBoardFilter, int> sportsBoardFilterCounts({
+  required List<SportsEvent> events,
+  required SportsFollows follows,
+  required DateTime now,
+  bool followingOnly = false,
+}) => {
+  for (final filter in SportsBoardFilter.values)
+    filter: sportsBoardEventCount(
+      buildSportsBoardSections(
+        events: events,
+        follows: follows,
+        now: now,
+        filter: filter,
+        followingOnly: followingOnly,
+      ),
+    ),
+};
 
 /// The event to feature above the rows, or null when nothing deserves it.
 ///
@@ -142,16 +173,13 @@ SportsEvent? _bestUpcoming(
   );
 }
 
-SportsBoardSection? _live(
-  List<SportsEvent> events,
-  SportsFollows follows, {
-  bool followedOnly = false,
-}) => _row(
-  id: 'live',
-  title: 'Live now',
-  section: _liveEvents(events, follows, followedOnly: followedOnly),
-  compare: (a, b) => _byLiveRow(a, b, follows),
-);
+SportsBoardSection? _live(List<SportsEvent> events, SportsFollows follows) =>
+    _row(
+      id: 'live',
+      title: 'Live now',
+      section: _liveEvents(events, follows),
+      compare: (a, b) => _byLiveRow(a, b, follows),
+    );
 
 /// Followed, live or scheduled, starting before [now] + 7 days; the today
 /// filter narrows that to the current local day.
@@ -186,18 +214,22 @@ SportsBoardSection? _laterToday(List<SportsEvent> events, DateTime now) => _row(
   compare: _byStartAsc,
 );
 
-/// Scheduled fixtures on local days one through six.
-SportsBoardSection? _thisWeek(List<SportsEvent> events, DateTime now) => _row(
-  id: 'this-week',
-  title: 'This week',
-  section: events.where(
-    (event) =>
-        event.status == SportsEventStatus.scheduled &&
-        _localDayOffset(event.start, now) >= 1 &&
-        _localDayOffset(event.start, now) <= 6,
-  ),
-  compare: _byStartAsc,
-);
+/// Scheduled fixtures on the local day [offset] days after [now]'s, titled
+/// "Tomorrow" or by the weekday and date.
+SportsBoardSection? _day(List<SportsEvent> events, DateTime now, int offset) {
+  final local = now.toLocal();
+  final day = DateTime(local.year, local.month, local.day + offset);
+  return _row(
+    id: 'day-$offset',
+    title: offset == 1 ? 'Tomorrow' : DateFormat('EEEE d MMM').format(day),
+    section: events.where(
+      (event) =>
+          event.status == SportsEventStatus.scheduled &&
+          _localDayOffset(event.start, now) == offset,
+    ),
+    compare: _byStartAsc,
+  );
+}
 
 SportsBoardSection? _earlierToday(List<SportsEvent> events, DateTime now) =>
     _row(
@@ -211,39 +243,18 @@ SportsBoardSection? _earlierToday(List<SportsEvent> events, DateTime now) =>
       compare: _byStartDesc,
     );
 
-SportsBoardSection? _upcoming(
-  List<SportsEvent> events,
-  SportsFollows follows,
-  DateTime now,
-) => _row(
-  id: 'upcoming',
-  title: 'Upcoming',
-  section: events.where(
-    (event) =>
-        follows.followsEvent(event) &&
-        event.status == SportsEventStatus.scheduled &&
-        event.start.isAfter(now) &&
-        event.start.isBefore(now.add(_oneWeek)),
-  ),
-  compare: _byStartAsc,
-);
-
-/// Followed results from the last two days.
-SportsBoardSection? _recentResults(
-  List<SportsEvent> events,
-  SportsFollows follows,
-  DateTime now,
-) => _row(
-  id: 'recent',
-  title: 'Recent results',
-  section: events.where(
-    (event) =>
-        follows.followsEvent(event) &&
-        event.status == SportsEventStatus.finished &&
-        event.start.isAfter(now.subtract(_oneDay * 2)),
-  ),
-  compare: _byStartDesc,
-);
+/// Results from the last two days (the following view's closing row).
+SportsBoardSection? _recentResults(List<SportsEvent> events, DateTime now) =>
+    _row(
+      id: 'recent',
+      title: 'Recent results',
+      section: events.where(
+        (event) =>
+            event.status == SportsEventStatus.finished &&
+            event.start.isAfter(now.subtract(_oneDay * 2)),
+      ),
+      compare: _byStartDesc,
+    );
 
 /// A sorted row, or null when nothing qualifies.
 SportsBoardSection? _row({

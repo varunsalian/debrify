@@ -38,6 +38,7 @@ class SportsBoardState {
     this.events = const [],
     this.follows = const SportsFollows(),
     this.filter = SportsBoardFilter.week,
+    this.followingOnly = false,
     this.loading = false,
     this.error,
     this.updatedAt,
@@ -50,8 +51,11 @@ class SportsBoardState {
 
   final SportsFollows follows;
 
-  /// Active segmented-control choice.
+  /// Active When choice.
   final SportsBoardFilter filter;
+
+  /// The Following toggle: every row keeps only followed fixtures.
+  final bool followingOnly;
 
   final bool loading;
 
@@ -77,6 +81,7 @@ class SportsBoardState {
     List<SportsEvent>? events,
     SportsFollows? follows,
     SportsBoardFilter? filter,
+    bool? followingOnly,
     bool? loading,
     String? error,
     bool clearError = false,
@@ -87,6 +92,7 @@ class SportsBoardState {
     events: events ?? this.events,
     follows: follows ?? this.follows,
     filter: filter ?? this.filter,
+    followingOnly: followingOnly ?? this.followingOnly,
     loading: loading ?? this.loading,
     error: clearError ? null : error ?? this.error,
     updatedAt: updatedAt ?? this.updatedAt,
@@ -224,6 +230,13 @@ class SportsBoardController extends Notifier<SportsBoardState> {
   void setFilter(SportsBoardFilter filter) {
     if (!ref.mounted) return;
     state = state.copyWith(filter: filter);
+  }
+
+  /// Narrows the rows to followed fixtures; derived by the view, so nothing
+  /// reloads or persists.
+  void setFollowingOnly(bool followingOnly) {
+    if (!ref.mounted) return;
+    state = state.copyWith(followingOnly: followingOnly);
   }
 
   /// Follows or unfollows a league. The choice is visible immediately and the

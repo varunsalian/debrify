@@ -490,8 +490,33 @@ void main() {
       await h.controller.refresh();
       final fetched = h.fetch.callCount;
       final queried = h.guide.queries.length;
-      h.controller.setFilter(SportsBoardFilter.following);
-      expect(h.state.filter, SportsBoardFilter.following);
+      h.controller.setFilter(SportsBoardFilter.today);
+      expect(h.state.filter, SportsBoardFilter.today);
+      expect(h.fetch.callCount, fetched);
+      expect(h.guide.queries.length, queried);
+      expect(h.prefs.writes, 0);
+    },
+  );
+
+  test(
+    'setFollowingOnly narrows the rows without loading or saving anything',
+    () async {
+      final h = BoardHarness(
+        bodies: {'ucl': fixture('espn_ucl_finished.json')},
+      );
+      addTearDown(h.dispose);
+      await h.controller.refresh();
+      final fetched = h.fetch.callCount;
+      final queried = h.guide.queries.length;
+      expect(h.state.followingOnly, isFalse);
+
+      h.controller.setFollowingOnly(true);
+      expect(h.state.followingOnly, isTrue);
+      // The When choice is independent of the Following toggle.
+      expect(h.state.filter, SportsBoardFilter.week);
+      h.controller.setFollowingOnly(false);
+      expect(h.state.followingOnly, isFalse);
+
       expect(h.fetch.callCount, fetched);
       expect(h.guide.queries.length, queried);
       expect(h.prefs.writes, 0);

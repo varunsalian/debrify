@@ -1,38 +1,23 @@
 // The mounted board: what it renders from a loaded state, how the remote
 // moves through it, and what it does while loading or failing.
 //
-// Everything runs offline. Fixtures are parsed by the real parser and then
-// stripped of their team logo urls, so every crest paints its abbreviation
-// plate; guide channels carry no logos either. A fake feed client answers the
-// controller's fetches, the guide is a fake source and the clock is fixed at
-// 2026-10-28 20:41 local, which is what makes the section rows deterministic.
-import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
-
+// Everything runs offline through [SportsBoardHarness]: fixtures parsed by
+// the real parser without logos, a fake feed and guide, and the clock fixed
+// at 2026-10-28 20:41 local, which makes the day sections deterministic.
 import 'package:debrify/features/sports/application/sports_board_controller.dart';
-import 'package:debrify/features/sports/application/sports_providers.dart';
-import 'package:debrify/features/sports/data/espn_scoreboard_parser.dart';
-import 'package:debrify/features/sports/data/sports_feed_client.dart';
 import 'package:debrify/features/sports/data/sports_follow_store.dart';
 import 'package:debrify/features/sports/models/sports_guide_contract.dart';
-import 'package:debrify/features/sports/models/sports_leagues.dart';
 import 'package:debrify/features/sports/models/sports_models.dart';
-import 'package:debrify/features/sports/presentation/sports_board_view.dart';
+import 'package:debrify/features/sports/presentation/sports_board_header.dart';
+import 'package:debrify/features/sports/presentation/sports_board_rows.dart';
+import 'package:debrify/features/sports/presentation/sports_event_card_bodies.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';
 import 'package:debrify/utils/platform_util.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-const _fixtureDir = 'test/features/sports/fixtures';
-
-/// Fixed board clock: 2026-10-28 20:41, local.
-final _clock = DateTime(2026, 10, 28, 20, 41);
-
-final _ucl = sportsLeagueById('ucl')!;
-final _epl = sportsLeagueById('epl')!;
+import 'sports_board_test_harness.dart';
 
 const _sky = SportsChannelRef(
   name: 'UK: Sky Sports Main Event FHD',
@@ -44,47 +29,11 @@ const _newsChannel = SportsChannelRef(
   url: 'http://test/news.m3u8',
 );
 
-ValueKey<String> _cardKey(SportsEvent event) =>
-    ValueKey('sports-card-${event.leagueId}-${event.id}');
-
 const _detailsPanelKey = ValueKey('sports-details-panel');
 const _heroPreviewKey = ValueKey('sports-hero-preview');
 
-/// Fixture events with every team logo removed, so no crest reaches the
-/// network during a widget test.
-List<SportsEvent> _fixture(String name, String leagueId) => parseEspnScoreboard(
-  jsonDecode(File('$_fixtureDir/$name').readAsStringSync()),
-  leagueId: leagueId,
-).map(_withoutLogos).toList();
-
-SportsEvent _withoutLogos(SportsEvent event) => SportsEvent(
-  id: event.id,
-  leagueId: event.leagueId,
-  start: event.start,
-  status: event.status,
-  home: _team(event.home),
-  away: _team(event.away),
-  homeScore: event.homeScore,
-  awayScore: event.awayScore,
-  title: event.title,
-  subtitle: event.subtitle,
-  clock: event.clock,
-  statusLabel: event.statusLabel,
-  broadcasts: event.broadcasts,
-);
-
-SportsTeam? _team(SportsTeam? team) => team == null
-    ? null
-    : SportsTeam(
-        id: team.id,
-        name: team.name,
-        shortName: team.shortName,
-        abbreviation: team.abbreviation,
-        color: team.color,
-      );
-
-final _uclLive = _fixture('espn_ucl_live.json', 'ucl');
-final _eplScheduled = _fixture('espn_epl_scheduled.json', 'epl');
+final _uclLive = sportsFixture('espn_ucl_live.json', 'ucl');
+final _eplScheduled = sportsFixture('espn_epl_scheduled.json', 'epl');
 
 final _liveEvent = _uclLive.firstWhere(
   (event) => event.status == SportsEventStatus.live,
@@ -103,119 +52,16 @@ final _skyListing = SportsGuideListing(
 final _newsListing = SportsGuideListing(
   channel: _newsChannel,
   title: 'Sports Desk Live',
-  start: _clock.subtract(const Duration(hours: 1)).toUtc(),
-  stop: _clock.add(const Duration(hours: 1)).toUtc(),
+  start: boardClock.subtract(const Duration(hours: 1)).toUtc(),
+  stop: boardClock.add(const Duration(hours: 1)).toUtc(),
 );
 
-/// Serves pre-parsed fixtures; the real client would hit the network.
-class _FakeFeedClient extends SportsFeedClient {
-  _FakeFeedClient() : super(fetch: _noNetwork);
-
-  static Future<String> _noNetwork(Uri uri) =>
-      throw StateError('the board never reaches the network in tests');
-
-  /// Parsed events per league id; a league absent here loads as empty.
-  final Map<String, List<SportsEvent>> events = {};
-
-  /// League ids whose feed fails for this call.
-  final Set<String> failing = {};
-
-  /// Held by a test to keep the first refresh in flight.
-  final Completer<void> gate = Completer<void>();
-
-  /// One entry per call, so a test can prove a retry was a forced refresh.
-  final List<({String leagueId, bool force})> calls = [];
-
-  /// While false (default) a gated client still answers immediately.
-  bool gated = false;
-
-  @override
-  Future<List<SportsEvent>> fetchLeague(
-    SportsLeague league, {
-    required DateTime fromUtc,
-    required DateTime toUtc,
-    bool force = false,
-  }) async {
-    calls.add((leagueId: league.id, force: force));
-    if (gated) await gate.future;
-    if (failing.contains(league.id)) {
-      throw SportsFeedException(Uri.parse('fake://${league.id}'), 'feed down');
-    }
-    return events[league.id] ?? const [];
-  }
-}
-
-class _FakeGuideSource implements SportsGuideSource {
-  SportsGuideSnapshot snapshot = SportsGuideSnapshot.empty;
-
-  @override
-  Future<SportsGuideSnapshot> load(SportsGuideQuery query) async => snapshot;
-}
-
-class _FakePrefs implements SportsPrefs {
-  final Map<String, List<String>> lists = {};
-  final Map<String, bool> flags = {};
-
-  @override
-  List<String>? getStringList(String key) => lists[key];
-
-  @override
-  Future<bool> setStringList(String key, List<String> value) async {
-    lists[key] = value;
-    return true;
-  }
-
-  @override
-  bool? getBool(String key) => flags[key];
-
-  @override
-  Future<bool> setBool(String key, bool value) async {
-    flags[key] = value;
-    return true;
-  }
-}
-
-class _Harness {
-  _Harness({
-    Map<String, List<SportsEvent>> eventsByLeague = const {},
-    Set<String> failing = const {},
-    SportsGuideSnapshot guide = SportsGuideSnapshot.empty,
-    Set<String> followedLeagues = const {},
-  }) {
-    feed.events.addAll(eventsByLeague);
-    feed.failing.addAll(failing);
-    guideSource.snapshot = guide;
-    if (followedLeagues.isNotEmpty) {
-      prefs.lists[SportsFollowStore.leaguesKey] = [...followedLeagues];
-    }
-  }
-
-  final _FakeFeedClient feed = _FakeFeedClient();
-  final _FakeGuideSource guideSource = _FakeGuideSource();
-  final _FakePrefs prefs = _FakePrefs();
-  final List<SportsChannelRef> played = [];
-  final List<SportsLeague> leagues = [_ucl, _epl];
-
-  Future<void> mount(WidgetTester tester) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          sportsFeedClientProvider.overrideWithValue(feed),
-          sportsFollowStoreProvider.overrideWithValue(
-            SportsFollowStore(() async => prefs),
-          ),
-          sportsGuideSourceProvider.overrideWithValue(guideSource),
-          sportsClockProvider.overrideWithValue(() => _clock),
-          sportsLeaguesProvider.overrideWithValue(leagues),
-        ],
-        child: MaterialApp(
-          home: Scaffold(body: SportsBoardView(onPlay: played.add)),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-  }
-}
+/// Any day section (`day-1` … `day-6`); which one depends on the local zone.
+final _daySection = find.byWidgetPredicate(
+  (widget) =>
+      widget is SportsBoardSectionSliver &&
+      widget.section.id.startsWith('day-'),
+);
 
 void main() {
   setUp(() => PlatformUtil.debugSetAndroidTvCached(true));
@@ -224,14 +70,14 @@ void main() {
     ProfileSessionMemory.clearAll();
   });
 
-  Future<void> mountBoard(WidgetTester tester, _Harness h) async {
+  Future<void> mountBoard(WidgetTester tester, SportsBoardHarness h) async {
     await tester.binding.setSurfaceSize(const Size(1280, 1200));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await h.mount(tester);
   }
 
-  testWidgets('renders hero and sections from fixtures', (tester) async {
-    final h = _Harness(
+  testWidgets('renders hero and day sections from fixtures', (tester) async {
+    final h = SportsBoardHarness(
       eventsByLeague: {'ucl': _uclLive, 'epl': _eplScheduled},
       guide: SportsGuideSnapshot(listings: [_skyListing]),
     );
@@ -254,17 +100,43 @@ void main() {
     );
     expect(played.widthFactor, closeTo(41 / 90, 0.001));
 
-    // Sections: the live row and the week row, each holding its own cards.
+    // Sections: the live one first, then the Saturday fixtures' day.
     expect(find.text('LIVE NOW'), findsOneWidget);
-    expect(find.text('THIS WEEK'), findsOneWidget);
-    expect(find.byKey(_cardKey(_liveEvent)), findsOneWidget);
-    expect(find.byKey(_cardKey(_eplScheduled.first)), findsOneWidget);
+    expect(_daySection, findsOneWidget);
+    expect(find.byKey(sportsCardKey(_liveEvent)), findsOneWidget);
+    expect(find.byKey(sportsCardKey(_eplScheduled.first)), findsOneWidget);
+    // The live card's footer names the matched channel.
+    expect(
+      find.descendant(
+        of: find.byKey(sportsCardKey(_liveEvent)),
+        matching: find.text('Sky Sports Main Event'),
+      ),
+      findsOneWidget,
+    );
   });
 
-  testWidgets('filter segments switch the sections the board renders', (
+  testWidgets('a day fills a grid: four EPL fixtures share one row', (
     tester,
   ) async {
-    final h = _Harness(
+    final h = SportsBoardHarness(eventsByLeague: {'epl': _eplScheduled});
+    await mountBoard(tester, h);
+
+    final tops = {
+      for (final event in _eplScheduled)
+        tester.getTopLeft(find.byKey(sportsCardKey(event))).dy,
+    };
+    expect(tops, hasLength(1), reason: 'one grid row at 1280 px');
+    final widths = {
+      for (final event in _eplScheduled)
+        tester.getSize(find.byKey(sportsCardKey(event))).width,
+    };
+    expect(widths, hasLength(1), reason: 'equal columns');
+  });
+
+  testWidgets('When segments switch the sections the board renders', (
+    tester,
+  ) async {
+    final h = SportsBoardHarness(
       eventsByLeague: {'ucl': _uclLive, 'epl': _eplScheduled},
       guide: SportsGuideSnapshot(listings: [_skyListing]),
     );
@@ -273,39 +145,48 @@ void main() {
     // Default is the week view, which carries the scheduled EPL fixtures.
     expect(find.text('Chelsea'), findsOneWidget);
 
-    await tester.tap(find.text('Live 1'));
+    await tester.tap(find.byKey(const ValueKey('sports-filter-live')));
     await tester.pumpAndSettle();
-    expect(find.text('THIS WEEK'), findsNothing);
+    expect(_daySection, findsNothing);
     expect(find.text('Chelsea'), findsNothing);
     expect(find.text('LIVE NOW'), findsOneWidget);
-    expect(find.byKey(_cardKey(_liveEvent)), findsOneWidget);
+    expect(find.byKey(sportsCardKey(_liveEvent)), findsOneWidget);
 
-    // Nothing is followed, so the Following view is honestly empty.
-    await tester.tap(find.text('Following'));
+    // Nothing is followed, so Following honestly empties the view.
+    await tester.tap(find.byKey(const ValueKey('sports-toggle-following')));
     await tester.pumpAndSettle();
     expect(find.text('No fixtures in this view.'), findsOneWidget);
     expect(find.text('LIVE NOW'), findsNothing);
   });
 
-  testWidgets('following a league populates the Following row', (tester) async {
-    final h = _Harness(
+  testWidgets('following a league keeps only its fixtures', (tester) async {
+    final h = SportsBoardHarness(
       eventsByLeague: {'ucl': _uclLive, 'epl': _eplScheduled},
       followedLeagues: {'epl'},
     );
     await mountBoard(tester, h);
 
-    await tester.tap(find.text('Following'));
+    await tester.tap(find.byKey(const ValueKey('sports-toggle-following')));
     await tester.pumpAndSettle();
-    expect(find.text('UPCOMING'), findsOneWidget);
+    expect(_daySection, findsOneWidget);
+    expect(find.text('YOUR TEAMS'), findsNothing);
     // The live UCL fixture is not followed, so the live row stays away.
     expect(find.text('LIVE NOW'), findsNothing);
-    expect(find.byKey(_cardKey(_eplScheduled.first)), findsOneWidget);
+    expect(find.byKey(sportsCardKey(_eplScheduled.first)), findsOneWidget);
+    expect(
+      tester
+          .widget<SportsToolButton>(
+            find.byKey(const ValueKey('sports-toggle-following')),
+          )
+          .toggled,
+      isTrue,
+    );
   });
 
   testWidgets('a whole-board failure shows the message and Try again reloads', (
     tester,
   ) async {
-    final h = _Harness(
+    final h = SportsBoardHarness(
       eventsByLeague: {'ucl': _uclLive, 'epl': _eplScheduled},
       failing: {'ucl', 'epl'},
     );
@@ -331,7 +212,7 @@ void main() {
   testWidgets('a first load with no events paints three skeleton rows', (
     tester,
   ) async {
-    final h = _Harness(eventsByLeague: {'ucl': _uclLive});
+    final h = SportsBoardHarness(eventsByLeague: {'ucl': _uclLive});
     h.feed.gated = true;
     await mountBoard(tester, h);
 
@@ -346,7 +227,7 @@ void main() {
   });
 
   testWidgets('a loaded board with nothing to row says so', (tester) async {
-    final h = _Harness();
+    final h = SportsBoardHarness();
     await mountBoard(tester, h);
 
     expect(find.text('No fixtures in this view.'), findsOneWidget);
@@ -356,7 +237,7 @@ void main() {
   testWidgets('arrows move focus between cards and enter opens the details', (
     tester,
   ) async {
-    final h = _Harness(
+    final h = SportsBoardHarness(
       eventsByLeague: {'ucl': _uclLive, 'epl': _eplScheduled},
       guide: SportsGuideSnapshot(listings: [_skyListing]),
     );
@@ -378,7 +259,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(_detailsPanelKey), findsNothing);
 
-    // Down into the week row, right to its second fixture, Select opens it.
+    // Down into the day grid, right to its second fixture, Select opens it.
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pumpAndSettle();
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
@@ -407,7 +288,7 @@ void main() {
   testWidgets('the hero plays the first guide option and opens the details', (
     tester,
   ) async {
-    final h = _Harness(
+    final h = SportsBoardHarness(
       eventsByLeague: {'ucl': _uclLive},
       guide: SportsGuideSnapshot(listings: [_skyListing]),
     );
@@ -425,7 +306,7 @@ void main() {
   testWidgets(
     'the wide hero adds the channel preview, the narrow one does not',
     (tester) async {
-      final h = _Harness(
+      final h = SportsBoardHarness(
         eventsByLeague: {'ucl': _uclLive},
         guide: SportsGuideSnapshot(listings: [_skyListing]),
       );
@@ -451,25 +332,30 @@ void main() {
   testWidgets('the scores toggle hides scores and persists the choice', (
     tester,
   ) async {
-    final h = _Harness(eventsByLeague: {'ucl': _uclLive});
+    final h = SportsBoardHarness(eventsByLeague: {'ucl': _uclLive});
     await mountBoard(tester, h);
+    final scores = find.byKey(const ValueKey('sports-toggle-scores'));
 
     expect(find.text('···'), findsNothing);
-    expect(find.text('Scores shown'), findsOneWidget);
+    expect(find.byType(SportsHiddenScore), findsNothing);
+    expect(tester.widget<SportsToolButton>(scores).toggled, isTrue);
+    expect(tester.widget<SportsToolButton>(scores).label, 'Scores shown');
 
-    await tester.tap(find.text('Scores shown'));
+    await tester.tap(scores);
     await tester.pumpAndSettle();
 
-    expect(find.text('Scores hidden'), findsOneWidget);
-    // Hero and card rows all fall back to the hidden-score glyph.
+    expect(tester.widget<SportsToolButton>(scores).toggled, isFalse);
+    expect(tester.widget<SportsToolButton>(scores).label, 'Scores hidden');
+    // The hero falls back to its glyph, the cards to their bars.
     expect(find.text('···'), findsWidgets);
+    expect(find.byType(SportsHiddenScore), findsWidgets);
     expect(h.prefs.flags[SportsFollowStore.hideScoresKey], isTrue);
   });
 
   testWidgets('the live-channels row lists what is airing and plays the pick', (
     tester,
   ) async {
-    final h = _Harness(
+    final h = SportsBoardHarness(
       eventsByLeague: {'ucl': _uclLive},
       guide: SportsGuideSnapshot(liveSportsListings: [_newsListing]),
     );
@@ -498,11 +384,11 @@ void main() {
   });
 
   testWidgets('the refresh button forces a reload', (tester) async {
-    final h = _Harness(eventsByLeague: {'ucl': _uclLive});
+    final h = SportsBoardHarness(eventsByLeague: {'ucl': _uclLive});
     await mountBoard(tester, h);
     h.feed.calls.clear();
 
-    await tester.tap(find.text('Refresh'));
+    await tester.tap(find.byKey(const ValueKey('sports-refresh')));
     await tester.pumpAndSettle();
 
     expect(h.feed.calls, isNotEmpty);

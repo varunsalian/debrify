@@ -3,6 +3,7 @@
 // paints its abbreviation plate and the test never touches the network.
 import 'package:debrify/features/sports/models/sports_models.dart';
 import 'package:debrify/features/sports/presentation/sports_event_card.dart';
+import 'package:debrify/features/sports/presentation/sports_event_card_bodies.dart';
 import 'package:debrify/widgets/iptv/styles/iptv_style.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -34,8 +35,8 @@ const _tnt = SportsChannelRef(
   url: 'http://test/tnt.m3u8',
 );
 
-/// The board's live colour, as the spotlight theme names it.
-final _live = IptvStyleTokens.spotlight.live;
+/// The board's live red (the spotlight theme's `rec` token).
+final _live = IptvStyleTokens.spotlight.rec;
 
 final _kickoff = DateTime.utc(2026, 10, 29, 19, 45);
 
@@ -136,8 +137,9 @@ void main() {
       ),
     );
 
-    expect(find.text('UCL'), findsOneWidget);
-    expect(find.text("LIVE 41'"), findsOneWidget);
+    // The header names the league in full and the live clock beside its dot.
+    expect(find.text('Champions League'), findsOneWidget);
+    expect(find.text("41'"), findsOneWidget);
     expect(find.text('Arsenal'), findsOneWidget);
     expect(find.text('Chelsea'), findsOneWidget);
     expect(find.text('2'), findsOneWidget);
@@ -255,7 +257,7 @@ void main() {
     );
   });
 
-  testWidgets('hidden scores keep the fixture and replace digits with dots', (
+  testWidgets('hidden scores keep the fixture and replace digits with bars', (
     tester,
   ) async {
     await _mount(tester, _card(hideScores: true, watch: _guideTwo));
@@ -264,13 +266,13 @@ void main() {
     expect(find.text('Chelsea'), findsOneWidget);
     expect(find.text('2'), findsNothing);
     expect(find.text('1'), findsNothing);
-    expect(find.text(hiddenScoresGlyph), findsNWidgets(2));
+    expect(find.byType(SportsHiddenScore), findsNWidgets(2));
   });
 
   testWidgets('a scheduled fixture has no score slot to hide', (tester) async {
     await _mount(tester, _card(event: _scheduled(), hideScores: true));
 
-    expect(find.text(hiddenScoresGlyph), findsNothing);
+    expect(find.byType(SportsHiddenScore), findsNothing);
     expect(find.text('Arsenal'), findsOneWidget);
   });
 
@@ -292,7 +294,7 @@ void main() {
 
     expect(find.text('Grand Prix of Japan'), findsOneWidget);
     expect(find.text('Suzuka Circuit'), findsOneWidget);
-    expect(find.text('F1'), findsOneWidget);
+    expect(find.text('Formula 1'), findsOneWidget);
     expect(find.text('Arsenal'), findsNothing);
   });
 
@@ -325,12 +327,12 @@ void main() {
     expect(find.text('Sky Sports Main Event'), findsNothing);
   });
 
-  testWidgets('a fixture with nothing found says no listing yet', (
+  testWidgets('a fixture with nothing found says it is not on your channels', (
     tester,
   ) async {
     await _mount(tester, _card());
 
-    expect(find.text('No listing yet'), findsOneWidget);
+    expect(find.text('Not on your channels yet'), findsOneWidget);
   });
 
   testWidgets('a followed event marks its league row with a star', (

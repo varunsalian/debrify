@@ -85,6 +85,36 @@ class SportsTeamCrest extends StatelessWidget {
   }
 }
 
+/// A player's flag on a small rounded plate (tennis athletes carry their
+/// flag as the logo), or the abbreviation while the flag is unavailable.
+class SportsFlagPlate extends StatelessWidget {
+  const SportsFlagPlate({super.key, required this.team});
+
+  final SportsTeam team;
+
+  @override
+  Widget build(BuildContext context) => _ImagePlate(
+    side: 26,
+    height: 18,
+    radius: 4,
+    padding: 0,
+    color: _tokens.hairline2,
+    fallback: FittedBox(
+      fit: BoxFit.scaleDown,
+      child: sportsLabelText(
+        team.abbreviation.trim().isEmpty ? team.name : team.abbreviation,
+        _tokens.fgMid,
+        size: 9,
+        weight: FontWeight.w700,
+        height: 1,
+      ),
+    ),
+    imageUrl: team.logoUrl,
+    fit: BoxFit.cover,
+    memCacheHeight: (18 * MediaQuery.devicePixelRatioOf(context)).round(),
+  );
+}
+
 /// A channel's logo on a rounded plate, or the channel's initials when the
 /// playlist carries no logo.
 class SportsChannelLogo extends StatelessWidget {
@@ -123,7 +153,7 @@ class SportsChannelLogo extends StatelessWidget {
   );
 }
 
-/// The plate both logos sit on: circular or rounded, [fallback] underneath,
+/// The plate every logo sits on: circular or rounded, [fallback] underneath,
 /// the cached image once it arrives.
 class _ImagePlate extends StatelessWidget {
   const _ImagePlate({
@@ -135,9 +165,15 @@ class _ImagePlate extends StatelessWidget {
     required this.imageUrl,
     required this.memCacheHeight,
     this.circle = false,
+    this.height,
+    this.fit = BoxFit.contain,
   });
 
   final double side;
+
+  /// Defaults to [side]: a square plate.
+  final double? height;
+  final BoxFit fit;
   final double radius;
   final double padding;
   final Color color;
@@ -153,7 +189,7 @@ class _ImagePlate extends StatelessWidget {
       excludeSemantics: true,
       child: Container(
         width: side,
-        height: side,
+        height: height ?? side,
         alignment: Alignment.center,
         padding: EdgeInsets.all(padding),
         decoration: BoxDecoration(
@@ -166,7 +202,7 @@ class _ImagePlate extends StatelessWidget {
             ? fallback
             : CachedNetworkImage(
                 imageUrl: logo,
-                fit: BoxFit.contain,
+                fit: fit,
                 memCacheHeight: memCacheHeight,
                 placeholder: (_, _) => fallback,
                 errorWidget: (_, _, _) => fallback,
@@ -194,6 +230,8 @@ class SportsFocusPillStyle {
     this.scale = 1,
     this.outlined = false,
     this.invertInkOnFocus = true,
+    this.restBorderColor,
+    this.tintSelected = true,
   });
 
   /// Guide and follow rows: hairline at rest, solid light fill when focused.
@@ -230,6 +268,14 @@ class SportsFocusPillStyle {
 
   /// Rows invert their ink on the light fill; dark surfaces keep it.
   final bool invertInkOnFocus;
+
+  /// Border while neither focused nor selected; wins over [outlined].
+  final Color? restBorderColor;
+
+  /// Selected paints the accent tint and hairline. Controls that draw their
+  /// own selection (the When switch's indicator) turn it off and keep only
+  /// the selected semantics.
+  final bool tintSelected;
 }
 
 /// The Spotlight focus pill: one focusable, D-pad-activatable surface that
@@ -250,6 +296,7 @@ class SportsFocusPill extends StatefulWidget {
     this.focusNode,
     this.autofocus = false,
     this.selected = false,
+    this.toggled,
     this.height,
     this.padding = const EdgeInsets.symmetric(horizontal: 11),
   });
@@ -266,6 +313,7 @@ class SportsFocusPill extends StatefulWidget {
     this.focusNode,
     this.autofocus = false,
     this.selected = false,
+    this.toggled,
     this.height = _minControlHeight,
     this.padding = const EdgeInsets.symmetric(horizontal: 11),
     bool outlined = true,
@@ -282,6 +330,9 @@ class SportsFocusPill extends StatefulWidget {
   final FocusNode? focusNode;
   final bool autofocus;
   final bool selected;
+
+  /// Set for an on/off control, so a reader announces it as a switch state.
+  final bool? toggled;
   final double? height;
   final EdgeInsetsGeometry padding;
 
@@ -291,10 +342,14 @@ class SportsFocusPill extends StatefulWidget {
 
 class _SportsFocusPillState extends State<SportsFocusPill> {
   FocusNode? _ownNode;
-  bool _focused = false;
   bool _hovered = false;
 
   FocusNode get _node => widget.focusNode ?? (_ownNode ??= FocusNode());
+
+  /// Read live from the node: Flutter does not always deliver the falling
+  /// edge of a focus change across a route pop, and a cached flag would leave
+  /// a second lit control behind a closed sheet.
+  bool get _focused => _node.hasFocus;
 
   @override
   void dispose() {
@@ -310,7 +365,7 @@ class _SportsFocusPillState extends State<SportsFocusPill> {
   }
 
   void _onFocusChange(bool focused) {
-    if (mounted) setState(() => _focused = focused);
+    if (mounted) setState(() {});
     if (!focused) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -331,7 +386,7 @@ class _SportsFocusPillState extends State<SportsFocusPill> {
           ? fill
           : _hovered
           ? Color.alphaBlend(style.hoverColor ?? _tokens.focusTint, base)
-          : widget.selected
+          : widget.selected && style.tintSelected
           ? Color.alphaBlend(_tokens.selectedTint, base)
           : base,
       borderRadius: BorderRadius.circular(style.radius),
@@ -348,11 +403,10 @@ class _SportsFocusPillState extends State<SportsFocusPill> {
         width: _focused ? style.focusedBorderWidth : 1,
         color: _focused
             ? (style.focusedBorderColor ?? fill)
-            : widget.selected
+            : widget.selected && style.tintSelected
             ? _tokens.accent.withValues(alpha: 0.5)
-            : style.outlined
-            ? _tokens.hairline2
-            : Colors.transparent,
+            : style.restBorderColor ??
+                  (style.outlined ? _tokens.hairline2 : Colors.transparent),
       ),
     );
   }
@@ -363,8 +417,9 @@ class _SportsFocusPillState extends State<SportsFocusPill> {
     final inverted = _focused && style.invertInkOnFocus;
     final ink = inverted ? _tokens.focusInk! : _tokens.fg;
     return Semantics(
-      button: true,
+      button: widget.toggled == null,
       selected: widget.selected,
+      toggled: widget.toggled,
       excludeSemantics: true,
       label: widget.label,
       onTap: widget.onPressed,

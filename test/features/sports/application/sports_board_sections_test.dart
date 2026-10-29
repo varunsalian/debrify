@@ -207,7 +207,7 @@ void main() {
         filter: SportsBoardFilter.week,
       );
       expect(eventsOf(week, 'your-teams'), ['live-nba', 'tonight', 'tomorrow']);
-      expect(eventsOf(week, 'this-week'), ['tomorrow']);
+      expect(eventsOf(week, 'day-1'), ['tomorrow']);
     });
 
     test('later today takes only scheduled fixtures after now on this day', () {
@@ -256,12 +256,13 @@ void main() {
   });
 
   group('week filter', () {
-    test('inserts this week between later today and earlier today', () {
+    test('one row per local day between later today and earlier today', () {
       final sections = buildSportsBoardSections(
         events: [
           live(id: 'live-ucl', start: at(10, 28, 20, 10)),
           ev(id: 'tonight', leagueId: 'epl', start: at(10, 28, 22)),
           ev(id: 'tomorrow-early', leagueId: 'epl', start: at(10, 29, 0, 30)),
+          ev(id: 'tomorrow-late', leagueId: 'nba', start: at(10, 29, 23)),
           ev(id: 'day-six', leagueId: 'epl', start: at(11, 3, 15)),
           ev(id: 'day-seven', leagueId: 'epl', start: at(11, 4, 15)),
           finished(id: 'earlier', leagueId: 'nba', start: at(10, 28, 17)),
@@ -279,19 +280,28 @@ void main() {
       expect(ids(sections), [
         'live',
         'later-today',
-        'this-week',
+        'day-1',
+        'day-6',
         'earlier-today',
       ]);
-      expect(titles(sections).contains('This week'), isTrue);
+      expect(titles(sections), [
+        'Live now',
+        'Later today',
+        'Tomorrow',
+        'Tuesday 3 Nov',
+        'Earlier today',
+      ]);
       expect(eventsOf(sections, 'later-today'), ['tonight']);
-      expect(eventsOf(sections, 'this-week'), ['tomorrow-early', 'day-six']);
+      expect(eventsOf(sections, 'day-1'), ['tomorrow-early', 'tomorrow-late']);
+      expect(eventsOf(sections, 'day-6'), ['day-six']);
     });
 
-    test('this week covers local days one through six only', () {
+    test('day rows cover local days one through six only', () {
       final sections = buildSportsBoardSections(
         events: [
           ev(id: 'today', start: at(10, 28, 22)),
           ev(id: 'day-one', start: at(10, 29, 0, 30)),
+          ev(id: 'day-three', start: at(10, 31, 12)),
           ev(id: 'day-six', start: at(11, 3, 23, 59)),
           ev(id: 'day-seven', start: at(11, 4, 0, 30)),
         ],
@@ -300,11 +310,15 @@ void main() {
         filter: SportsBoardFilter.week,
       );
 
-      expect(eventsOf(sections, 'this-week'), ['day-one', 'day-six']);
+      expect(ids(sections), ['later-today', 'day-1', 'day-3', 'day-6']);
+      expect(eventsOf(sections, 'day-1'), ['day-one']);
+      expect(eventsOf(sections, 'day-3'), ['day-three']);
+      expect(eventsOf(sections, 'day-6'), ['day-six']);
       expect(eventsOf(sections, 'later-today'), ['today']);
+      expect(containsEvent(sections, 'day-seven'), isFalse);
     });
 
-    test('your teams reaches the seven-day horizon, this week does not', () {
+    test('your teams reaches the seven-day horizon, the day rows do not', () {
       final sections = buildSportsBoardSections(
         events: [
           ev(id: 'stale-scheduled', start: at(10, 27, 18)),
@@ -324,8 +338,8 @@ void main() {
     });
   });
 
-  group('following filter', () {
-    test('shows followed live, upcoming and recent rows', () {
+  group('following only', () {
+    test('the week shows followed live, day and recent rows', () {
       final sections = buildSportsBoardSections(
         events: [
           live(id: 'live-followed', start: at(10, 28, 20, 10)),
@@ -339,28 +353,27 @@ void main() {
         ],
         follows: const SportsFollows(leagueIds: {'ucl'}),
         now: now,
-        filter: SportsBoardFilter.following,
+        filter: SportsBoardFilter.week,
+        followingOnly: true,
       );
 
-      expect(ids(sections), ['live', 'upcoming', 'recent']);
-      expect(titles(sections), ['Live now', 'Upcoming', 'Recent results']);
+      // "Your teams" would repeat every row, so it is dropped here.
+      expect(ids(sections), ['live', 'day-1', 'recent']);
+      expect(titles(sections), ['Live now', 'Tomorrow', 'Recent results']);
       expect(eventsOf(sections, 'live'), ['live-followed']);
-      expect(eventsOf(sections, 'upcoming'), ['soon']);
+      expect(eventsOf(sections, 'day-1'), ['soon']);
       expect(eventsOf(sections, 'recent'), [
         'recent-tonight',
         'recent-two-days',
       ]);
     });
 
-    test('upcoming and recent windows exclude their exact boundaries', () {
+    test('day and recent windows exclude their exact boundaries', () {
       final sections = buildSportsBoardSections(
         events: [
           ev(id: 'at-now', start: now),
           ev(id: 'week-boundary', start: now.add(const Duration(days: 7))),
-          ev(
-            id: 'inside-window',
-            start: now.add(const Duration(days: 6, hours: 20)),
-          ),
+          ev(id: 'inside-window', start: now.add(const Duration(days: 6))),
           finished(
             id: 'two-days-ago',
             start: now.subtract(const Duration(days: 2)),
@@ -369,10 +382,12 @@ void main() {
         ],
         follows: const SportsFollows(leagueIds: {'ucl'}),
         now: now,
-        filter: SportsBoardFilter.following,
+        filter: SportsBoardFilter.week,
+        followingOnly: true,
       );
 
-      expect(eventsOf(sections, 'upcoming'), ['inside-window']);
+      expect(ids(sections), ['day-6', 'recent']);
+      expect(eventsOf(sections, 'day-6'), ['inside-window']);
       expect(eventsOf(sections, 'recent'), ['inside-recent']);
     });
 
@@ -396,11 +411,46 @@ void main() {
         ],
         follows: const SportsFollows(teamKeys: {'nba:lal'}),
         now: now,
-        filter: SportsBoardFilter.following,
+        filter: SportsBoardFilter.week,
+        followingOnly: true,
       );
 
-      expect(ids(sections), ['upcoming']);
-      expect(eventsOf(sections, 'upcoming'), ['lakers']);
+      expect(ids(sections), ['day-1']);
+      expect(eventsOf(sections, 'day-1'), ['lakers']);
+    });
+
+    test('today and live narrow to followed fixtures too', () {
+      final events = [
+        live(id: 'live-followed', start: at(10, 28, 20, 10)),
+        live(id: 'live-other', leagueId: 'nba', start: at(10, 28, 20, 20)),
+        ev(id: 'tonight', start: at(10, 28, 22)),
+        ev(id: 'tonight-other', leagueId: 'nba', start: at(10, 28, 22)),
+        finished(id: 'earlier', start: at(10, 28, 17)),
+        finished(id: 'yesterday', start: at(10, 27, 21)),
+      ];
+      const follows = SportsFollows(leagueIds: {'ucl'});
+
+      final today = buildSportsBoardSections(
+        events: events,
+        follows: follows,
+        now: now,
+        filter: SportsBoardFilter.today,
+        followingOnly: true,
+      );
+      expect(ids(today), ['live', 'later-today', 'earlier-today']);
+      expect(eventsOf(today, 'live'), ['live-followed']);
+      expect(eventsOf(today, 'later-today'), ['tonight']);
+      expect(eventsOf(today, 'earlier-today'), ['earlier']);
+
+      final liveOnly = buildSportsBoardSections(
+        events: events,
+        follows: follows,
+        now: now,
+        filter: SportsBoardFilter.live,
+        followingOnly: true,
+      );
+      expect(ids(liveOnly), ['live']);
+      expect(eventsOf(liveOnly, 'live'), ['live-followed']);
     });
 
     test(
@@ -412,25 +462,68 @@ void main() {
           finished(id: 'earlier-other', leagueId: 'nba', start: at(10, 28, 17)),
         ];
 
-        expect(
-          buildSportsBoardSections(
-            events: events,
-            follows: noFollows,
-            now: now,
-            filter: SportsBoardFilter.following,
-          ),
-          isEmpty,
-        );
+        for (final filter in SportsBoardFilter.values) {
+          expect(
+            buildSportsBoardSections(
+              events: events,
+              follows: noFollows,
+              now: now,
+              filter: filter,
+              followingOnly: true,
+            ),
+            isEmpty,
+            reason: filter.name,
+          );
+        }
 
-        final onlyUpcoming = buildSportsBoardSections(
+        final onlyTomorrow = buildSportsBoardSections(
           events: [ev(id: 'soon', start: at(10, 29, 20))],
           follows: const SportsFollows(leagueIds: {'ucl'}),
           now: now,
-          filter: SportsBoardFilter.following,
+          filter: SportsBoardFilter.week,
+          followingOnly: true,
         );
-        expect(ids(onlyUpcoming), ['upcoming']);
+        expect(ids(onlyTomorrow), ['day-1']);
       },
     );
+  });
+
+  group('counts', () {
+    final events = [
+      live(id: 'live-ucl', start: at(10, 28, 20, 10)),
+      ev(id: 'tonight', leagueId: 'epl', start: at(10, 28, 22)),
+      ev(id: 'tomorrow', leagueId: 'nba', start: at(10, 29, 19)),
+      finished(id: 'earlier', leagueId: 'nba', start: at(10, 28, 17)),
+    ];
+
+    test('each When segment counts the distinct fixtures it shows', () {
+      // The followed UCL fixture appears in Live and in Your teams but
+      // counts once.
+      final counts = sportsBoardFilterCounts(
+        events: events,
+        follows: const SportsFollows(leagueIds: {'ucl'}),
+        now: now,
+      );
+      expect(counts, {
+        SportsBoardFilter.live: 1,
+        SportsBoardFilter.today: 3,
+        SportsBoardFilter.week: 4,
+      });
+    });
+
+    test('following only counts followed fixtures', () {
+      final counts = sportsBoardFilterCounts(
+        events: events,
+        follows: const SportsFollows(leagueIds: {'nba'}),
+        now: now,
+        followingOnly: true,
+      );
+      expect(counts, {
+        SportsBoardFilter.live: 0,
+        SportsBoardFilter.today: 1,
+        SportsBoardFilter.week: 2,
+      });
+    });
   });
 
   group('section building', () {
