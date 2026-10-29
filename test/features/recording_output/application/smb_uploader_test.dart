@@ -221,6 +221,21 @@ void main() {
     expect(share.closes, 1);
   });
 
+  test(
+    'a rename whose reply was lost still counts when the file landed',
+    () async {
+      share.renameFails.add('TV/Live/a.ts.part');
+      share.renameLandsThenFails = true;
+      final outcome = await uploader().upload(
+        target: _target,
+        password: null,
+        recording: _rec('content://1', 'a.ts', 2500),
+      );
+      expect((outcome as SmbUploaded).remotePath, 'TV/Live/a.ts');
+      expect(share.files['TV/Live/a.ts']!.length, 2500);
+    },
+  );
+
   test('cancel stops before the next write and cleans up', () async {
     local['content://big'] = bytesOf(SmbUploader.chunkBytes * 3);
     final token = SmbCancelToken();

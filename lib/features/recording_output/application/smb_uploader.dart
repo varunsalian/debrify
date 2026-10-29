@@ -153,7 +153,16 @@ final class SmbUploader {
               'size mismatch: remote $remoteSize, sent $bytes',
             );
           }
-          await connection.rename(part, remote);
+          try {
+            await connection.rename(part, remote);
+          } catch (_) {
+            // dart_smb2 replays a rename after a dropped connection; when the
+            // first one landed, the replay fails although the file is there.
+            if (await _landed(connection, remote, bytes)) {
+              return SmbUploaded(remote);
+            }
+            rethrow;
+          }
           return SmbUploaded(remote);
       }
     } catch (error) {
@@ -161,6 +170,19 @@ final class SmbUploader {
         await _cleanup(connection, writer, part);
       }
       return _failureFrom(error);
+    }
+  }
+
+  static Future<bool> _landed(
+    SmbConnection connection,
+    String remote,
+    int bytes,
+  ) async {
+    try {
+      return await connection.exists(remote) &&
+          await connection.sizeOf(remote) == bytes;
+    } catch (_) {
+      return false;
     }
   }
 

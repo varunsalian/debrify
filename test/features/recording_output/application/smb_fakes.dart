@@ -24,6 +24,9 @@ final class FakeShare implements SmbConnector {
   /// Paths whose rename fails.
   final Set<String> renameFails = {};
 
+  /// With [renameFails]: the rename happens, then its reply is lost.
+  bool renameLandsThenFails = false;
+
   /// Called before each write; lets a test cancel mid-upload.
   void Function(String path, int writes)? beforeWrite;
 
@@ -80,6 +83,10 @@ final class _FakeConnection implements SmbConnection {
   Future<void> rename(String from, String to) async {
     share.log.add('rename $from -> $to');
     if (share.renameFails.contains(from)) {
+      if (share.renameLandsThenFails) {
+        share.files[to] = share.files.remove(from)!;
+        throw const SmbException(SmbFailureKind.notFound, 'reply lost');
+      }
       throw const SmbException(SmbFailureKind.accessDenied, 'rename refused');
     }
     share.files[to] = share.files.remove(from)!;

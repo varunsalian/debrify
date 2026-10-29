@@ -32,7 +32,9 @@ final class SmbUploadCoordinator {
     required int Function() nowMs,
     required String Function() scopeId,
     required void Function(SmbUploadStatus) onStatus,
-  }) : _settings = settings,
+    Duration minStableGap = const Duration(seconds: 60),
+  }) : _minStableGapMs = minStableGap.inMilliseconds,
+       _settings = settings,
        _uploader = uploader,
        _listRecordings = listRecordings,
        _activeUris = activeUris,
@@ -50,11 +52,24 @@ final class SmbUploadCoordinator {
   final String Function() _scopeId;
   final void Function(SmbUploadStatus) _onStatus;
 
+  /// Two scans closer together than this cannot show a file is finished: a
+  /// stream written in bursts keeps one size for seconds at a time.
+  final int _minStableGapMs;
+
   SmbUploadStatus _status = const SmbUploadStatus();
 
   /// Sizes seen in the previous scan; a file must appear unchanged in two
   /// consecutive scans before it is considered finished.
   Map<String, int> _seen = const {};
+  int? _seenAtMs;
+
+  /// Share-wide failures belong to the share, not to a file. Login, share and
+  /// permission failures wait for new settings (retrying rejected credentials
+  /// risks a NAS lockout); network and full-share failures back off.
+  SmbUploadFailed? _shareFailure;
+  bool _needsSettings = false;
+  int _shareFailures = 0;
+  int _shareRetryAtMs = 0;
 
   /// Steady beat and the next first-delay/one-off pass timer; both are set
   /// by [start] and cleared by [stop].
@@ -122,10 +137,19 @@ final class SmbUploadCoordinator {
     _cancel?.cancel();
   }
 
-  /// Settings were saved: drop failed/gave-up records (the ledger write is
-  /// awaited before the pass starts, so the fresh pass re-reads them), then
-  /// run one pass.
+  /// Settings were saved: the pass using the old ones is cancelled and
+  /// awaited, share-wide failures and per-file failed/gave-up records are
+  /// cleared, then a fresh pass runs with the new settings.
   Future<void> targetChanged() async {
+    final running = _inflight;
+    if (running != null) {
+      _cancel?.cancel();
+      await running;
+    }
+    _shareFailure = null;
+    _needsSettings = false;
+    _shareFailures = 0;
+    _shareRetryAtMs = 0;
     try {
       final ledger = await _settings.readLedger();
       await _settings.writeLedger(ledger.withoutFailures());
@@ -149,18 +173,32 @@ final class SmbUploadCoordinator {
     }
 
     final scope = _scopeId();
+    // No committed profile yet (start-up, profile gate): the library query
+    // would include every profile's recordings.
+    if (scope.isEmpty) return;
+    if (_needsSettings ||
+        (_shareFailure != null && _nowMs() < _shareRetryAtMs)) {
+      _publishIdle(
+        failure: _shareFailure?.kind ?? _status.lastFailure,
+        message: _shareFailure?.message ?? _status.lastMessage,
+      );
+      return;
+    }
     final List<SmbLocalRecording> list;
     final Set<String> active;
     final SmbUploadLedger ledger;
     final List<SmbLocalRecording> ready;
     final Map<String, int> previous = _seen;
+    final scannedAtMs = _nowMs();
+    final seenAt = _seenAtMs;
+    final tooSoon = seenAt != null && scannedAtMs - seenAt < _minStableGapMs;
     try {
       list = await _listRecordings();
       active = await _activeUris();
       ledger = await _settings.readLedger();
       ready = smbReadyForUpload(
         current: list,
-        previousBytes: previous,
+        previousBytes: tooSoon ? const {} : previous,
         activeUris: active,
         ledger: ledger,
         nowMs: _nowMs(),
@@ -178,19 +216,17 @@ final class SmbUploadCoordinator {
       );
       return;
     }
-    _seen = {for (final recording in list) recording.uri: recording.bytes};
+    // A scan too soon after the last one keeps the older snapshot, so the
+    // next comparison spans at least the minimum gap.
+    if (!tooSoon) {
+      _seen = {for (final recording in list) recording.uri: recording.bytes};
+      _seenAtMs = scannedAtMs;
+    }
+    final present = {for (final recording in list) recording.uri};
 
     if (ready.isEmpty) {
       // Nothing to do: keep whatever the last run reported.
-      _publish(
-        SmbUploadStatus(
-          phase: SmbUploadPhase.idle,
-          lastUploadedName: _status.lastUploadedName,
-          lastFailure: _status.lastFailure,
-          lastMessage: _status.lastMessage,
-          lastRunAtMs: _nowMs(),
-        ),
-      );
+      _publishIdle(failure: _status.lastFailure, message: _status.lastMessage);
       return;
     }
 
@@ -251,6 +287,14 @@ final class SmbUploadCoordinator {
         },
       );
       if (outcome case SmbUploaded(:final remotePath)) {
+        _shareFailure = null;
+        _shareFailures = 0;
+        // Profile switched mid-upload: the history (and any local delete)
+        // belongs to the old profile, so write nothing into the new one's.
+        // That profile re-copies the file under a "(2)" name next time.
+        if (_scopeId() != scope) break;
+        // Re-read: a settings save may have reset the ledger meanwhile.
+        ledgerNow = await _settings.readLedger();
         final previousRecord = ledgerNow[recording.uri];
         ledgerNow = ledgerNow.withRecord(
           SmbUploadRecord(
@@ -261,6 +305,7 @@ final class SmbUploadCoordinator {
             remotePath: remotePath,
             updatedAtMs: _nowMs(),
           ),
+          present: present,
         );
         await _settings.writeLedger(ledgerNow);
         if (target.deleteLocalAfterUpload && _scopeId() == scope) {
@@ -283,6 +328,25 @@ final class SmbUploadCoordinator {
         // Cancellation writes nothing: the next scan retries from scratch.
         break;
       }
+      failure = failure_.kind;
+      message = failure_.message;
+      if (stopsSmbRun(failure_.kind)) {
+        // The share failed, not this file: nothing is recorded against it.
+        _shareFailure = failure_;
+        if (isPermanentSmbFailure(failure_.kind)) {
+          _needsSettings = true;
+        } else {
+          _shareFailures++;
+          _shareRetryAtMs =
+              _nowMs() + smbRetryDelay(_shareFailures).inMilliseconds;
+        }
+        // Every following file would fail the same way; a run-stopper also
+        // drops the inherited name so the banner stays about the failure.
+        uploadedName = null;
+        break;
+      }
+      if (_scopeId() != scope) break;
+      ledgerNow = await _settings.readLedger();
       ledgerNow = ledgerNow.withRecord(
         smbFailedRecord(
           previous: ledgerNow[recording.uri],
@@ -291,16 +355,9 @@ final class SmbUploadCoordinator {
           message: failure_.message,
           nowMs: _nowMs(),
         ),
+        present: present,
       );
       await _settings.writeLedger(ledgerNow);
-      failure = failure_.kind;
-      message = failure_.message;
-      if (stopsSmbRun(failure_.kind)) {
-        // Every following file would fail the same way; a run-stopper also
-        // drops the inherited name so the banner stays about the failure.
-        uploadedName = null;
-        break;
-      }
     }
     _cancel = null;
     if (_stopped) return;
@@ -314,6 +371,16 @@ final class SmbUploadCoordinator {
       ),
     );
   }
+
+  void _publishIdle({SmbFailureKind? failure, String? message}) => _publish(
+    SmbUploadStatus(
+      phase: SmbUploadPhase.idle,
+      lastUploadedName: _status.lastUploadedName,
+      lastFailure: failure,
+      lastMessage: message,
+      lastRunAtMs: _nowMs(),
+    ),
+  );
 
   void _publish(SmbUploadStatus status) {
     if (_stopped) return;

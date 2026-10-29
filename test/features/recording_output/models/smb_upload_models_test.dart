@@ -93,6 +93,20 @@ void main() {
       expect(l['u1'], isNotNull);
     });
 
+    test('over the cap, records of files that are gone go first', () {
+      var l = const SmbUploadLedger();
+      for (var i = 0; i < SmbUploadLedger.maxRecords; i++) {
+        l = l.withRecord(_rec('u$i', 100 + i));
+      }
+      final present = {
+        for (var i = 0; i < SmbUploadLedger.maxRecords; i++) 'u$i',
+      }..remove('u7');
+      l = l.withRecord(_rec('new', 1000), present: present);
+      expect(l['u7'], isNull);
+      expect(l['u0'], isNotNull);
+      expect(l['new'], isNotNull);
+    });
+
     test('withRecord does not mutate the original', () {
       const empty = SmbUploadLedger();
       empty.withRecord(_rec('a', 1));

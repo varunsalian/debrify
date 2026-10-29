@@ -36,13 +36,15 @@ Future<List<SmbLocalRecording>> listLocalRecordings() async {
 /// Files still being written; they are never uploaded.
 Future<Set<String>> activeRecordingUris() async {
   if (Platform.isAndroid) {
-    final live = await LiveRecordingService.query();
+    // failClosed: an unreadable engine state skips the pass instead of
+    // treating every file as finished.
+    final live = await LiveRecordingService.query(failClosed: true);
     return {
       for (final r in live)
         if (r.isRecording && (r.uri ?? '').isNotEmpty) r.uri!,
     };
   }
-  return {for (final c in DesktopRecordingService.instance.captures) c.path};
+  return DesktopRecordingService.instance.activePaths;
 }
 
 Future<bool> deleteLocalRecording(String uri) => Platform.isAndroid
@@ -52,7 +54,23 @@ Future<bool> deleteLocalRecording(String uri) => Platform.isAndroid
 /// Streams a library entry's bytes.
 Stream<Uint8List> readLocalRecording(String uri) async* {
   if (uri.startsWith('content://')) {
-    yield* await SafStream().readFileStream(uri, bufferSize: 1024 * 1024);
+    // Pull one chunk per request: readFileStream pushes the whole file over
+    // an EventChannel with no backpressure, and a multi-GB recording read
+    // faster than the share accepts it would pile up in memory.
+    final saf = SafStream();
+    final session = await saf.startReadCustomFileStream(
+      uri,
+      bufferSize: 1024 * 1024,
+    );
+    try {
+      while (true) {
+        final chunk = await saf.readCustomFileStreamChunk(session);
+        if (chunk == null || chunk.isEmpty) break;
+        yield chunk;
+      }
+    } finally {
+      await saf.endReadCustomFileStream(session);
+    }
     return;
   }
   final file = uri.startsWith('file://')

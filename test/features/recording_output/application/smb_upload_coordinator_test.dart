@@ -82,6 +82,7 @@ void main() {
     nowMs: () => now,
     scopeId: () => scope,
     onStatus: published.add,
+    minStableGap: Duration.zero,
   );
 
   test('disabled or incomplete target does nothing', () async {
@@ -172,16 +173,14 @@ void main() {
     expect(share.files.keys, containsAll(['a.ts', 'b.ts']));
   });
 
-  test('a network failure stops the run and retries after the delay', () async {
+  test('a network failure pauses the share, not the file', () async {
     final c = make();
     await c.runOnce();
     share.connectError = const SmbException(SmbFailureKind.network, 'down');
     await c.runOnce();
     expect(share.connects, 1);
-    final rec = settings.ledger['a']!;
-    expect(rec.state, SmbUploadState.failed);
-    expect(rec.attempts, 1);
-    expect(rec.nextAttemptAtMs, 1000 + 60000);
+    // Nothing is held against the file; the share backs off instead.
+    expect(settings.ledger['a'], isNull);
     expect(settings.ledger['b'], isNull);
     expect(c.status.lastFailure, SmbFailureKind.network);
     expect(c.status.lastMessage, 'down');
@@ -189,16 +188,32 @@ void main() {
     share.connectError = null;
     now = 1000 + 59999;
     await c.runOnce();
-    // 'a' waits for its retry time; 'b' (never tried) goes now.
-    expect(share.files.keys, ['b.ts']);
+    expect(share.connects, 1);
+    expect(c.status.lastFailure, SmbFailureKind.network);
     now = 1000 + 60000;
     await c.runOnce();
     expect(share.files.keys, containsAll(['a.ts', 'b.ts']));
     expect(settings.ledger['a']!.state, SmbUploadState.uploaded);
-    expect(settings.ledger['a']!.attempts, 1);
+    expect(settings.ledger['a']!.attempts, 0);
     expect(c.status.lastFailure, isNull);
     expect(c.status.lastMessage, isNull);
-    expect(c.status.lastUploadedName, 'a.ts');
+    expect(c.status.lastUploadedName, 'b.ts');
+  });
+
+  test('repeated network failures back off further', () async {
+    final c = make();
+    await c.runOnce();
+    share.connectError = const SmbException(SmbFailureKind.network, 'down');
+    await c.runOnce(); // 1st failure at 1000: retry after 1 min
+    now = 1000 + 60000;
+    await c.runOnce(); // 2nd failure: retry after 5 min
+    expect(share.connects, 2);
+    now += 4 * 60000;
+    await c.runOnce();
+    expect(share.connects, 2);
+    now += 60000;
+    await c.runOnce();
+    expect(share.connects, 3);
   });
 
   test('a per-file failure does not stop the run', () async {
@@ -214,6 +229,7 @@ void main() {
       nowMs: () => now,
       scopeId: () => scope,
       onStatus: published.add,
+      minStableGap: Duration.zero,
     );
     await c.runOnce();
     await c.runOnce();
@@ -221,23 +237,80 @@ void main() {
     expect(settings.ledger['b']!.state, SmbUploadState.uploaded);
   });
 
-  test('auth failure gives up until the target changes', () async {
+  test('a rejected login stops logging on until the settings change', () async {
     final c = make();
     await c.runOnce();
     share.connectError = const SmbException(SmbFailureKind.auth, 'bad login');
     await c.runOnce();
-    expect(settings.ledger['a']!.state, SmbUploadState.gaveUp);
+    expect(share.connects, 1);
+    expect(settings.ledger.records, isEmpty);
     now += 10 * 3600 * 1000;
-    final connects = share.connects;
     await c.runOnce();
-    // 'b' was never tried, so it is attempted (and fails) once.
-    expect(share.connects, connects + 1);
-    expect(settings.ledger['b']!.state, SmbUploadState.gaveUp);
+    await c.runOnce();
+    // Retrying rejected credentials risks locking the NAS account.
+    expect(share.connects, 1);
+    expect(c.status.lastFailure, SmbFailureKind.auth);
 
     share.connectError = null;
     await c.targetChanged();
     expect(share.files.keys, containsAll(['a.ts', 'b.ts']));
   });
+
+  test('no pass runs before a profile is committed', () async {
+    scope = '';
+    final c = make();
+    await c.runOnce();
+    await c.runOnce();
+    expect(listCalls, 0);
+    expect(share.connects, 0);
+  });
+
+  test(
+    'scans closer than the minimum gap cannot prove a file finished',
+    () async {
+      final c = SmbUploadCoordinator(
+        settings: settings,
+        uploader: SmbUploader(connector: share, source: memorySource(local)),
+        listRecordings: () async => library,
+        activeUris: () async => const {},
+        deleteLocal: (uri) async => true,
+        nowMs: () => now,
+        scopeId: () => scope,
+        onStatus: published.add,
+      );
+      await c.runOnce();
+      now += 10000;
+      await c.runOnce();
+      expect(share.connects, 0);
+      // The early scan kept the first snapshot: 60 s after it, both go.
+      now = 1000 + 60000;
+      await c.runOnce();
+      expect(share.files.keys, containsAll(['a.ts', 'b.ts']));
+    },
+  );
+
+  test(
+    'saving settings mid-upload cancels the stale pass and reruns',
+    () async {
+      final size = SmbUploader.chunkBytes * 3;
+      local = {'big': bytesOf(size)};
+      library = [rec('big', size, 1)];
+      final c = make();
+      await c.runOnce();
+      Future<void>? saved;
+      share.beforeWrite = (path, writes) {
+        if (writes == 0 && saved == null) {
+          settings.target = settings.target.copyWith(folder: 'New');
+          saved = c.targetChanged();
+        }
+      };
+      final first = c.runOnce();
+      await first;
+      await saved;
+      expect(share.files.keys, ['New/big.ts']);
+      expect(settings.ledger['big']!.remotePath, 'New/big.ts');
+    },
+  );
 
   test('targetChanged keeps uploaded records', () async {
     final c = make();
@@ -284,7 +357,8 @@ void main() {
     share.beforeWrite = (path, writes) => scope = 'p2';
     await c.runOnce();
     expect(share.files.keys, ['a.ts']);
-    expect(settings.ledger['a']!.state, SmbUploadState.uploaded);
+    // The history is profile-owned: nothing is written into the new profile's.
+    expect(settings.ledger.records, isEmpty);
     expect(deleted, isEmpty);
   });
 

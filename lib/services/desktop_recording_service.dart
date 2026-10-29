@@ -312,6 +312,10 @@ class DesktopRecordingService {
 
   int get activeCount => _allActive.length;
 
+  /// Files still being written by ANY profile's capture. Device-wide guards
+  /// (upload, delete) must use this: [captures] only lists the active profile's.
+  Set<String> get activePaths => {for (final c in _allActive) c.path};
+
   /// The running capture of [url], or null. Callers match a channel by its
   /// own URL and, for Xtream channels, the `.ts` twin they record under.
   DesktopRecordingCapture? captureForUrl(String url, {String? ownerProfileId}) {
@@ -483,7 +487,7 @@ class DesktopRecordingService {
     if (!instance.isSupported) return const [];
     final dir = await recordingsDir();
     if (!await dir.exists()) return const [];
-    final activePaths = {for (final c in instance.captures) c.path};
+    final activePaths = instance.activePaths;
     final out = <RecordingLibraryEntry>[];
     try {
       await for (final item in dir.list(followLinks: false)) {
@@ -519,7 +523,7 @@ class DesktopRecordingService {
 
   /// Delete a finished desktop recording. Refuses any active capture's file.
   static Future<bool> deleteRecordingFile(String path) async {
-    if (instance.captures.any((c) => c.path == path)) return false;
+    if (instance.activePaths.contains(path)) return false;
     try {
       final file = File(path);
       if (await file.exists()) await file.delete();

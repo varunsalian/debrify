@@ -172,12 +172,22 @@ final class SmbUploadLedger {
 
   /// New ledger with [record] stored under its uri. Past [maxRecords] the
   /// records with the smallest updatedAtMs are dropped, never the new one.
-  SmbUploadLedger withRecord(SmbUploadRecord record) {
+  ///
+  /// [present] are the uris still in the local library: over the cap, records
+  /// of files that are gone are evicted first, so a large kept library never
+  /// forgets (and re-uploads) a file it still holds while history is spare.
+  SmbUploadLedger withRecord(
+    SmbUploadRecord record, {
+    Set<String> present = const {},
+  }) {
     final next = Map<String, SmbUploadRecord>.from(records)
       ..[record.uri] = record;
     if (next.length > maxRecords) {
       final byAge = next.entries.toList()
         ..sort((a, b) {
+          final aKept = present.contains(a.key) ? 1 : 0;
+          final bKept = present.contains(b.key) ? 1 : 0;
+          if (aKept != bKept) return aKept - bKept;
           final byTime = a.value.updatedAtMs.compareTo(b.value.updatedAtMs);
           return byTime != 0 ? byTime : a.key.compareTo(b.key);
         });
