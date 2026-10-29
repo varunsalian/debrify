@@ -188,6 +188,11 @@ object RecordingTaskStore {
 							),
 						)
 					} else {
+						// A picked folder that is merely unreachable must not lose
+						// the capture: wait until it answers "absent" for sure.
+						if (uri != null && RecordingDestination.isDocument(context, uri) &&
+							destinationExists(context, uri) != false
+						) continue
 						uri?.let { deleteDestination(context, it) }
 						put(
 							context,
@@ -259,11 +264,19 @@ object RecordingTaskStore {
 			} catch (_: Exception) { null }
 		}
 		if (RecordingDestination.isDocument(context, uri)) {
-			// A picked folder (USB stick, network share) can be briefly
-			// unreachable; only a provider that answers "absent" prunes.
+			// A picked folder (USB stick, network share) can be unplugged,
+			// offline or have its grant revoked. DocumentFile.exists() maps all
+			// of that to "absent", which would prune the library entry, so ask
+			// the provider directly: a row = present, an answered empty query
+			// = gone, anything else (exception, null cursor) = unknown.
 			return try {
-				androidx.documentfile.provider.DocumentFile
-					.fromSingleUri(context, uri)?.exists()
+				context.contentResolver.query(
+					uri,
+					arrayOf(android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID),
+					null,
+					null,
+					null,
+				)?.use { it.count > 0 }
 			} catch (_: Exception) { null }
 		}
 		if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null

@@ -566,8 +566,15 @@ class LiveRecordingService : Service() {
 		var endedNote: String? = null
 		var storageFailed = false
 		try {
-			output = RecordingDestination.open(this, uri)
+			val opened = RecordingDestination.openWithFallback(this, uri, state.fileName, MIME_TYPE)
 				?: return Outcome.Failed("could not open destination")
+			if (opened.first != uri) {
+				// The picked folder refused writes: the capture continues in the
+				// default folder, and the entry must point at where bytes really go.
+				state.uri = opened.first
+				persist(state, status = "recording")
+			}
+			output = opened.second
 			out = BufferedOutputStream(output.stream)
 
 			val buffer = ByteArray(256 * 1024)

@@ -58,8 +58,13 @@ object RecordingDestination {
 	fun isDocument(context: Context, uri: Uri): Boolean =
 		uri.scheme == "content" && DocumentsContract.isDocumentUri(context, uri)
 
-	fun create(context: Context, fileName: String, mimeType: String): Created {
-		usableTree(context)?.let { tree ->
+	fun create(
+		context: Context,
+		fileName: String,
+		mimeType: String,
+		allowTree: Boolean = true,
+	): Created {
+		(if (allowTree) usableTree(context) else null)?.let { tree ->
 			try {
 				val parent = DocumentsContract.buildDocumentUriUsingTree(
 					tree,
@@ -118,8 +123,37 @@ object RecordingDestination {
 		Created.Failed(e.message ?: "could not create destination")
 	}
 
-	/** Opens [uri] for writing, or null when the provider refuses. */
-	fun open(context: Context, uri: Uri): Output? {
+	/** Opens [uri] for writing, or null when the provider refuses. Never throws. */
+	fun open(context: Context, uri: Uri): Output? = try {
+		openOrThrow(context, uri)
+	} catch (_: Exception) {
+		null
+	}
+
+	/**
+	 * Opens [uri]; when it is a picked-folder document the provider refuses
+	 * (network/USB/read-only providers often accept createDocument but not
+	 * writes), deletes that empty document and falls back to a fresh default
+	 * destination. Returns the uri actually opened with its output, or null.
+	 */
+	fun openWithFallback(
+		context: Context,
+		uri: Uri,
+		fileName: String,
+		mimeType: String,
+	): Pair<Uri, Output>? {
+		open(context, uri)?.let { return uri to it }
+		if (!isDocument(context, uri)) return null
+		try {
+			DocumentsContract.deleteDocument(context.contentResolver, uri)
+		} catch (_: Exception) {
+		}
+		val fallback = create(context, fileName, mimeType, allowTree = false)
+		if (fallback !is Created.Ok) return null
+		return open(context, fallback.uri)?.let { fallback.uri to it }
+	}
+
+	private fun openOrThrow(context: Context, uri: Uri): Output? {
 		if (uri.scheme == "file") {
 			val fos = FileOutputStream(java.io.File(uri.path!!))
 			return Output(fos, fos.fd, null)
