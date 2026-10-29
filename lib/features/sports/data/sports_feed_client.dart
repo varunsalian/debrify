@@ -12,10 +12,16 @@
 // on a TV box. Day entries are cached individually, so "Today" and "This
 // week" share them, and at most [SportsFeedClient.maxConcurrentFetches]
 // requests are in flight at once.
+//
+// Tennis is tournament-wide: its scoreboard answers with the whole draw, so
+// a `sets` league only fetches the window's first day plus today and trims
+// the merged result back to the requested window.
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
+import 'dart:isolate';
 
+import 'package:debrify/features/sports/models/sports_leagues.dart';
 import 'package:debrify/features/sports/models/sports_models.dart';
 import 'package:flutter/foundation.dart';
 
@@ -44,6 +50,32 @@ class _CacheEntry {
   final DateTime fetchedAt;
 }
 
+/// The league whose feed is the Jolpica season rather than an ESPN board.
+const String _f1LeagueId = 'f1';
+
+/// Whether [league] plays matches that run longer than one day (cricket,
+/// golf, racing). Those no longer keep a cached day "hot" once they are well
+/// past their start.
+bool _isMultiDayLeague(SportsLeague league) {
+  final shape = sportsEventShapeOf(league);
+  return shape == SportsEventShape.innings || shape == SportsEventShape.event;
+}
+
+/// Parses a decoded feed body into events; runs in a worker isolate for the
+/// big payloads, so it must stay a top-level function. [nowUtc] is the
+/// client's injected clock (F1 race status reads it), so it travels into the
+/// isolate with the payload.
+List<SportsEvent> _parseDecoded(
+  Object? json,
+  String leagueId,
+  DateTime nowUtc,
+) {
+  final events = leagueId == _f1LeagueId
+      ? parseJolpicaSeason(json, now: nowUtc)
+      : parseEspnScoreboard(json, leagueId: leagueId);
+  return List<SportsEvent>.of(events)..sort(_byStartThenId);
+}
+
 /// Loads [SportsEvent]s for the supported leagues behind one cache.
 class SportsFeedClient {
   SportsFeedClient({
@@ -62,8 +94,6 @@ class SportsFeedClient {
     'https://api.jolpi.ca/ergast/f1/current.json',
   );
 
-  static const String _f1LeagueId = 'f1';
-
   /// How far before `fromUtc` an F1 race may still appear on the board.
   static const Duration _f1Lead = Duration(hours: 3);
 
@@ -73,6 +103,15 @@ class SportsFeedClient {
   /// Cap on simultaneous feed requests across all leagues and days.
   static const int maxConcurrentFetches = 8;
 
+  /// Bodies longer than this are parsed in [Isolate.run]; smaller ones
+  /// inline (tennis and Ranji payloads are 300 KB+ and jank a TV box).
+  static const int isolateParseThreshold = 64 * 1024;
+
+  /// A live event older than this no longer keeps a day "hot": multi-day
+  /// cricket and golf matches stay "in" for days and must not refetch every
+  /// [liveTtl] once they are well past their start.
+  static const Duration _freshLiveWindow = Duration(hours: 12);
+
   final SportsFetch _fetch;
   final DateTime Function() _clock;
   int _activeFetches = 0;
@@ -81,7 +120,7 @@ class SportsFeedClient {
   /// TTL for a cached list that contains no live event.
   final Duration scheduleTtl;
 
-  /// TTL for a cached list that contains at least one live event.
+  /// TTL for a cached list that contains at least one recent live event.
   final Duration liveTtl;
 
   final Map<Uri, _CacheEntry> _cache = {};
@@ -111,6 +150,30 @@ class SportsFeedClient {
     ];
   }
 
+  /// ESPN scoreboard URIs [fetchLeague] asks for: [espnScoreboardUris],
+  /// except that `sets` (tournament-wide) leagues only fetch the window's
+  /// first day plus today, since one response carries the whole tournament.
+  static List<Uri> espnFetchUris(
+    SportsLeague league,
+    DateTime fromUtc,
+    DateTime toUtc, {
+    required DateTime nowUtc,
+  }) {
+    final all = espnScoreboardUris(league, fromUtc, toUtc);
+    if (all.isEmpty || sportsEventShapeOf(league) != SportsEventShape.sets) {
+      return all;
+    }
+    // Tennis payloads are tournament-wide: one response carries the whole
+    // draw, so only the window's first day and today are fetched (spec).
+    final first = all.first;
+    // `nowUtc` may be local: _utcDay compares UTC calendar days.
+    final today = espnScoreboardUri(league, _utcDay(nowUtc));
+    if (today == first) return [first];
+    // A window that ends before today still fetches today: that is where a
+    // tournament-wide payload carries the matches being played right now.
+    return [first, today];
+  }
+
   /// ESPN scoreboard URI for [league] on the UTC calendar day of [dayUtc].
   /// Throws [ArgumentError] for leagues without an ESPN feed.
   static Uri espnScoreboardUri(SportsLeague league, DateTime dayUtc) {
@@ -134,7 +197,10 @@ class SportsFeedClient {
   /// cache entry unless [force] is set, shares one in-flight fetch, and falls
   /// back to the stale entry when the fetch or the JSON body fails. Days that
   /// fail with nothing cached are left out; [SportsFeedException] is thrown
-  /// only when every day failed. Returned lists are sorted by start, then id.
+  /// only when every day failed. Tournament-wide (`sets`) payloads are
+  /// de-duplicated by id and trimmed to the window plus every live event,
+  /// even one that began before it. Returned lists are sorted by start, then
+  /// id.
   Future<List<SportsEvent>> fetchLeague(
     SportsLeague league, {
     required DateTime fromUtc,
@@ -146,9 +212,9 @@ class SportsFeedClient {
       return _window(season, league, fromUtc, toUtc);
     }
     if (league.espnPath == null) return const [];
-    final days = espnScoreboardUris(league, fromUtc, toUtc);
+    final uris = espnFetchUris(league, fromUtc, toUtc, nowUtc: _clock());
     final results = await Future.wait([
-      for (final uri in days)
+      for (final uri in uris)
         _entry(
           league,
           uri,
@@ -162,6 +228,8 @@ class SportsFeedClient {
       if (result is List<SportsEvent>) {
         succeeded++;
         for (final event in result) {
+          // Tournament-wide payloads repeat the same match across days:
+          // de-duplicate by id.
           byId[event.id] = event;
         }
       } else {
@@ -175,9 +243,29 @@ class SportsFeedClient {
     }
     if (succeeded == 0 && failure != null) {
       if (failure is SportsFeedException) throw failure;
-      throw SportsFeedException(days.first, '$failure');
+      throw SportsFeedException(uris.first, '$failure');
     }
-    return byId.values.toList()..sort(_byStartThenId);
+    final trimmed = _trimToWindow(league, byId, fromUtc, toUtc);
+    return trimmed..sort(_byStartThenId);
+  }
+
+  /// `sets` payloads are tournament-wide, so they carry matches outside the
+  /// requested window; drop those (live matches always stay).
+  static List<SportsEvent> _trimToWindow(
+    SportsLeague league,
+    Map<String, SportsEvent> byId,
+    DateTime fromUtc,
+    DateTime toUtc,
+  ) {
+    if (sportsEventShapeOf(league) != SportsEventShape.sets) {
+      return List<SportsEvent>.of(byId.values);
+    }
+    byId.removeWhere(
+      (id, event) =>
+          !_isLive(event) &&
+          (event.start.isBefore(fromUtc) || event.start.isAfter(toUtc)),
+    );
+    return List<SportsEvent>.of(byId.values);
   }
 
   /// One URI's events: fresh cache, the shared in-flight fetch, or a new one.
@@ -227,7 +315,7 @@ class SportsFeedClient {
     List<SportsEvent>? events;
     Object? failure;
     try {
-      events = _parseBody(await _limitedFetch(uri), uri, league);
+      events = await _parseBody(await _limitedFetch(uri), uri, league);
     } catch (error) {
       failure = error;
     }
@@ -241,21 +329,33 @@ class SportsFeedClient {
     throw SportsFeedException(uri, '$failure');
   }
 
-  List<SportsEvent> _parseBody(String body, Uri uri, SportsLeague league) {
-    final Object? json;
+  /// Decode + parse; bodies over [isolateParseThreshold] parse in
+  /// [Isolate.run] so a 300 KB tennis/Ranji payload never janks the UI
+  /// isolate. A FormatException becomes a [SportsFeedException] either way.
+  Future<List<SportsEvent>> _parseBody(
+    String body,
+    Uri uri,
+    SportsLeague league,
+  ) async {
     try {
-      json = jsonDecode(body);
+      if (body.length > isolateParseThreshold) {
+        final leagueId = league.id;
+        final now = _clock().toUtc();
+        return await Isolate.run(
+          () => _parseDecoded(jsonDecode(body), leagueId, now),
+        );
+      }
+      return _parseBodyInline(body, league);
     } on FormatException catch (error) {
       throw SportsFeedException(
         uri,
         'response body was not JSON: ${error.message}',
       );
     }
-    final events = league.id == _f1LeagueId
-        ? parseJolpicaSeason(json, now: _clock())
-        : parseEspnScoreboard(json, leagueId: league.id);
-    return List<SportsEvent>.of(events)..sort(_byStartThenId);
   }
+
+  List<SportsEvent> _parseBodyInline(String body, SportsLeague league) =>
+      _parseDecoded(jsonDecode(body), league.id, _clock().toUtc());
 
   /// The F1 cache holds the whole season; every call re-applies its window.
   List<SportsEvent> _window(
@@ -278,10 +378,27 @@ class SportsFeedClient {
     final now = _clock();
     // Live scores, and fixtures whose kick-off has arrived but are still
     // listed as scheduled, use the short lifetime so they turn live promptly.
-    final hot = entry.events.any(
-      (event) => _isLive(event) || _isDue(event, now),
-    );
+    // Multi-day matches (cricket, golf) that started over 12 hours ago are
+    // still "in" but no longer hot: they keep the schedule TTL.
+    final hot = entry.events.any((event) => _isHot(event, now));
     return now.difference(entry.fetchedAt) < (hot ? liveTtl : scheduleTtl);
+  }
+
+  bool _isHot(SportsEvent event, DateTime now) {
+    if (_isLive(event)) {
+      // Only the multi-day shapes get the 12-hour cut-off: a football match
+      // or tennis match that is live is always worth the short window.
+      if (_isMultiDayShape(event)) {
+        return now.toUtc().difference(event.start) < _freshLiveWindow;
+      }
+      return true;
+    }
+    return _isDue(event, now);
+  }
+
+  static bool _isMultiDayShape(SportsEvent event) {
+    final league = sportsLeagueById(event.leagueId);
+    return league != null && _isMultiDayLeague(league);
   }
 
   static bool _isDue(SportsEvent event, DateTime now) =>
