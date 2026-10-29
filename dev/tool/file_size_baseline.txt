@@ -37,7 +37,8 @@
 4700 lib/services/webdav_sync/webdav_sync_engine.dart
 4685 lib/services/download_service.dart
 # 2026-10-29 SMB recording upload: the app-lifetime upload host wraps the root scope's child (+4).
-4186 lib/main.dart
+# 2026-10-29 Sports & leagues filter: root scope installs sportsAppOverrides() (+2).
+4188 lib/main.dart
 4086 lib/services/iptv_catalog_db.dart
 3874 lib/services/stremio_service.dart
 3776 android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt

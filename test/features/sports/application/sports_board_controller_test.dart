@@ -129,6 +129,19 @@ class FakeGuideSource implements SportsGuideSource {
   }
 }
 
+/// The league list a test can change while a board is mounted.
+class _LeaguesNotifier extends Notifier<List<SportsLeague>> {
+  _LeaguesNotifier(this._initial);
+  final List<SportsLeague> _initial;
+  @override
+  List<SportsLeague> build() => _initial;
+  void set(List<SportsLeague> leagues) => state = leagues;
+}
+
+final _harnessLeagues = NotifierProvider<_LeaguesNotifier, List<SportsLeague>>(
+  () => throw UnimplementedError('overridden per harness'),
+);
+
 /// One mounted board with all five dependencies overridden by fakes.
 class BoardHarness {
   BoardHarness({
@@ -154,7 +167,8 @@ class BoardHarness {
         ),
         sportsGuideSourceProvider.overrideWithValue(guide),
         sportsClockProvider.overrideWithValue(() => clock),
-        sportsLeaguesProvider.overrideWithValue(this.leagues),
+        _harnessLeagues.overrideWith(() => _LeaguesNotifier(this.leagues)),
+        sportsLeaguesProvider.overrideWith((ref) => ref.watch(_harnessLeagues)),
       ],
     );
     subscription = container.listen(sportsBoardProvider(session), (_, _) {});
@@ -182,6 +196,10 @@ class BoardHarness {
 
   void advance(Duration delta) => clock = clock.add(delta);
 
+  /// Changes the board's leagues, as the Sports & leagues filter does.
+  void setLeagues(List<SportsLeague> next) =>
+      container.read(_harnessLeagues.notifier).set(next);
+
   void dispose() {
     subscription.close();
     container.dispose();
@@ -190,6 +208,28 @@ class BoardHarness {
 
 void main() {
   tearDown(ProfileSessionMemory.clearAll);
+
+  test('a changed league filter refetches instead of freezing', () async {
+    final h = BoardHarness(
+      bodies: {
+        'ucl': fixture('espn_ucl_finished.json'),
+        'epl': fixture('espn_epl_scheduled.json'),
+      },
+    );
+    addTearDown(h.dispose);
+    await h.controller.refresh();
+    expect(h.state.loading, isFalse);
+    expect(h.state.events.map((e) => e.leagueId).toSet(), contains('epl'));
+
+    h.setLeagues([sportsLeagueById('ucl')!]);
+    // The board keeps what is on screen while the refetch runs.
+    expect(h.state.events, isNotEmpty);
+    await pumpEventQueue();
+    expect(h.state.loading, isFalse);
+    // Served from the per-day cache: the board was rebuilt from the new
+    // league list, not left loading.
+    expect(h.state.events.map((e) => e.leagueId).toSet(), {'ucl'});
+  });
 
   test('a mounted board is loading and fetches nothing until asked', () {
     final h = BoardHarness(bodies: {'ucl': fixture('espn_ucl_finished.json')});

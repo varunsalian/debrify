@@ -7,6 +7,7 @@ import 'package:debrify/features/sports/application/sports_providers.dart';
 import 'package:debrify/features/sports/data/iptv_sports_guide_playlists.dart';
 import 'package:debrify/features/sports/data/shared_prefs_sports_prefs.dart';
 import 'package:debrify/features/sports/data/sports_follow_store.dart';
+import 'package:debrify/features/sports/data/sports_league_filter_store.dart';
 import 'package:debrify/features/sports/data/sqlite_sports_guide_source.dart';
 import 'package:debrify/features/sports/models/sports_models.dart';
 import 'package:debrify/features/sports/presentation/sports_board_view.dart';
@@ -14,12 +15,31 @@ import 'package:debrify/features/sports/presentation/sports_league_sheet.dart';
 import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/services/iptv_catalog_db.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
+import 'package:debrify/services/profiles/profile_runtime.dart';
+import 'package:debrify/services/profiles/profile_session_memory.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 
 final _followStore = SportsFollowStore(
   () async => SharedPrefsSportsPrefs(await ProfilePreferences.instance()),
 );
+
+final _leagueFilterStore = SportsLeagueFilterStore(
+  () async => SharedPrefsSportsPrefs(await ProfilePreferences.instance()),
+);
+
+/// App-wide overrides for the Sports & leagues filter, installed in the root
+/// ProviderScope so the Sports board and IPTV settings share one notifier.
+/// The store resolves the active profile per operation; the owner and the
+/// profile signal let the notifier drop a switched profile's choices.
+List<Override> sportsAppOverrides() => [
+  sportsLeagueFilterStoreProvider.overrideWithValue(_leagueFilterStore),
+  sportsProfileOwnerProvider.overrideWithValue(
+    ProfileSessionMemory.captureOwner,
+  ),
+  sportsProfileChangesProvider.overrideWithValue(ProfileRuntime.scope),
+];
 
 final _guideSource = SqliteSportsGuideSource(
   dbPath: () => IptvCatalogDb.path,

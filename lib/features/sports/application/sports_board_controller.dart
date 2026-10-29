@@ -124,7 +124,6 @@ class SportsBoardController extends Notifier<SportsBoardState> {
   late SportsFollowStore _store;
   late SportsGuideSource _guideSource;
   late DateTime Function() _clock;
-  late List<SportsLeague> _leagues;
 
   int _generation = 0;
   Timer? _timer;
@@ -149,7 +148,13 @@ class SportsBoardController extends Notifier<SportsBoardState> {
     _store = ref.watch(sportsFollowStoreProvider);
     _guideSource = ref.watch(sportsGuideSourceProvider);
     _clock = ref.watch(sportsClockProvider);
-    _leagues = ref.watch(sportsLeaguesProvider);
+    // Listened, not watched: watching would rebuild this controller to a
+    // bare loading state that nothing refreshes. A changed league filter
+    // refetches the board instead, keeping what is on screen meanwhile.
+    ref.listen<List<SportsLeague>>(sportsLeaguesProvider, (previous, next) {
+      if (previous == null || listEquals(previous, next)) return;
+      unawaited(refresh());
+    });
     ref.onDispose(() {
       _generation++;
       _timer?.cancel();
@@ -189,8 +194,9 @@ class SportsBoardController extends Notifier<SportsBoardState> {
       // are still worth loading, and the next refresh reads them again.
     }
 
+    final leagues = ref.read(sportsLeaguesProvider);
     final batches = await Future.wait([
-      for (final league in _leagues) _fetch(league, fromUtc, toUtc, force),
+      for (final league in leagues) _fetch(league, fromUtc, toUtc, force),
     ]);
     if (!current()) return;
 
@@ -207,7 +213,7 @@ class SportsBoardController extends Notifier<SportsBoardState> {
     }
     final events = merged.values.toList()..sort(_byStartThenId);
 
-    if (events.isEmpty && failures > 0 && failures == _leagues.length) {
+    if (events.isEmpty && failures > 0 && failures == leagues.length) {
       state = state.copyWith(loading: false, error: kSportsBoardLoadFailed);
       _schedule(state.events);
       return;

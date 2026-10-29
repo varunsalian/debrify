@@ -133,6 +133,7 @@ import 'widgets/remote/remote_role_picker_screen.dart';
 import 'widgets/support_donation_chooser_dialog.dart';
 import 'utils/platform_util.dart';
 import 'utils/tvos_device.dart';
+import 'widgets/iptv/sports/iptv_sports_board.dart';
 import 'features/recording_output/presentation/smb_upload_host.dart';
 import 'services/desktop_recording_service.dart';
 import 'services/desktop_schedule_service.dart';
@@ -1136,6 +1137,7 @@ class _DebrifyAppState extends State<DebrifyApp> {
         // and dialogs inherit the same feature dependencies and state.
         Widget content = ProviderScope(
           retry: (count, error) => null,
+          overrides: sportsAppOverrides(),
           child: AppThemeScope(
             theme: AppThemeController.instance.theme,
             // The theme's whole-page texture — film grain, Blueprint's rule.
