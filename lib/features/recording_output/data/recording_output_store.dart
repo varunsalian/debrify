@@ -1,15 +1,10 @@
 // Device-wide persistence for [RecordingOutputSettings].
 //
-// SharedPreferences is used directly on purpose: the architecture check bars
-// lib/features/recordings/ outside its legacy bridge from importing
-// lib/services/, so this mirrors the sports data adapter instead of reaching
-// for DevicePreferences. The key stays registered in
-// DevicePreferences.allowedKeys and both profile device-key lists, so audit
-// and isolation tooling keep treating it as a deliberate device-wide
-// preference. Native Kotlin reads the same value as
-// `flutter.recording_output_v1`.
+// Goes through DevicePreferences, the reviewed unscoped store: the key is
+// registered in DevicePreferences.allowedKeys and both profile device-key
+// lists. Native Kotlin reads the same value as `flutter.recording_output_v1`.
 
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:debrify/services/profiles/profile_preferences.dart';
 
 import '../models/recording_output_settings.dart';
 
@@ -26,7 +21,7 @@ final class RecordingOutputStore {
   static RecordingOutputSettings cached = const RecordingOutputSettings();
 
   static Future<RecordingOutputSettings> read() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await DevicePreferences.instance();
     final settings = RecordingOutputSettings.decode(prefs.getString(key));
     cached = settings;
     return settings;
@@ -34,7 +29,7 @@ final class RecordingOutputStore {
 
   static Future<void> write(RecordingOutputSettings settings) async {
     cached = settings;
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await DevicePreferences.instance();
     await prefs.setString(key, settings.encode());
   }
 }
