@@ -4,20 +4,26 @@ import 'package:debrify/models/indexer_manager_config.dart';
 import 'package:debrify/models/torrent.dart';
 import 'package:debrify/services/media_server_service.dart';
 import 'package:debrify/services/series_source_fetcher.dart';
+import 'package:debrify/services/source_search_preferences.dart';
 import 'package:debrify/services/torrent_service.dart';
 
 final class SourceEngineFetchers {
   const SourceEngineFetchers._();
 
-  static Future<List<SourceAddonRef>> mediaServerSourceRefs() async => [
-    for (final server in await MediaServerService.connections())
-      SourceAddonRef(
-        'mediaserver:${server.id}',
-        server.label,
-        addonKey: 'mediaserver:${server.id}',
-        resultSourceKey: 'mediaserver:${server.id}',
-      ),
-  ];
+  static Future<List<SourceAddonRef>> mediaServerSourceRefs() async {
+    if (!(await SourceSearchPreferences.readOrDefault()).mediaServers) {
+      return const [];
+    }
+    return [
+      for (final server in await MediaServerService.connections())
+        SourceAddonRef(
+          'mediaserver:${server.id}',
+          server.label,
+          addonKey: 'mediaserver:${server.id}',
+          resultSourceKey: 'mediaserver:${server.id}',
+        ),
+    ];
+  }
 
   static Future<List<Torrent>?> fetchMediaServerSources(
     String sourceKey,

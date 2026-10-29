@@ -19,6 +19,7 @@ import 'profiles/profile_async_authorization.dart';
 import 'profiles/profile_runtime.dart';
 import 'series_source_service.dart';
 import 'source_selection_diagnostics.dart';
+import 'source_search_preferences.dart';
 import 'xtream_codes_service.dart';
 
 export '../models/iptv_source_result.dart';
@@ -500,7 +501,10 @@ class IptvSourceSearch {
       final playlists = await IptvPlaylistStorage.getIptvPlaylists(
         forSettings: false,
       );
-      final eligibleCount = playlists.where(_eligiblePlaylist).length;
+      final choices = await SourceSearchPreferences.readOrDefault();
+      final eligibleCount = playlists
+          .where((p) => _eligiblePlaylist(p) && choices.includesPlaylist(p.id))
+          .length;
       logIptvSourceEvent(
         'discovery_started',
         catalogType: selection.isSeries ? 'series' : 'vod',
@@ -533,7 +537,12 @@ class IptvSourceSearch {
           );
           return const [];
         }
-        final batch = playlists.skip(start).take(3).where(_eligiblePlaylist);
+        final batch = playlists
+            .skip(start)
+            .take(3)
+            .where(
+              (p) => _eligiblePlaylist(p) && choices.includesPlaylist(p.id),
+            );
         await Future.wait(
           batch.map((playlist) async {
             final result = await _playlist(
