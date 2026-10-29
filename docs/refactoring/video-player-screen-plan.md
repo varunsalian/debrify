@@ -1,5 +1,12 @@
 # Flutter video player screen refactor — plan
 
+> **2026-10-29: refactor freeze checks retired.** The series is complete, so the
+> pure-move proofs (move manifests, saved originals, history replays, seam and
+> end-state proofs, analyzer pins, source contracts and their readers) were removed
+> from CI and the repo (commits 4654aca57, a9d40ef71, 93b0380b2). Exact sizes became
+> shrink-only ceilings. Safety source guards now read current `lib/` code
+> (`test/support/lib_source.dart`). References to the deleted tools below are history.
+
 Written 2026-10-11 on `refactor/codebase` at `ed728b078` (the Android TV
 player series merge). Follow [AGENTS.md](../../AGENTS.md).
 
