@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:debrify/models/android_video_renderer_mode.dart';
 import 'package:debrify/models/iptv_playlist.dart';
+import 'package:debrify/screens/video_player/services/player_now_playing.dart';
 import 'package:debrify/utils/platform_util.dart';
 import 'package:flutter/widgets.dart';
 import 'package:media_kit/media_kit.dart' as mk;
@@ -76,6 +77,16 @@ class VpPlayerInstance {
     );
     _host.installTvosDecodeRemedy(player);
     _host.bindPlayerInstanceSubscriptions(instanceGeneration, player);
+    // Lock screen / Control Centre / AirPods controls (iPhone and iPad only);
+    // a live channel's name follows zapping (IPTV movies and episodes are
+    // not live: they keep their length and scrubbing).
+    PlayerNowPlaying.attach(
+      player,
+      liveTitle: () {
+        final channel = _host.currentIptvChannel;
+        return channel != null && channel.isLive ? channel.name : null;
+      },
+    );
     unawaited(_host.installDecoderObservers(instanceGeneration, player));
     unawaited(_host.applyAspectVideoZoom());
   }

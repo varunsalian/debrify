@@ -16,6 +16,8 @@ typedef AddonHubMenusDeps = ({
   Future<void> Function() importJson,
   Future<void> Function() updateAll,
   Future<void> Function() deleteAll,
+  Future<bool> Function() autoUpdateEnabled,
+  Future<void> Function(bool enabled) setAutoUpdate,
 });
 
 class AddonHubMenus {
@@ -160,6 +162,9 @@ class AddonHubMenus {
       ),
       Offset.zero & overlay.size,
     );
+    // The menu must open even when the setting cannot be read.
+    final autoUpdate = await _deps.autoUpdateEnabled().catchError((_) => true);
+    if (!_deps.context().mounted) return;
     final choice = await showMenu<String>(
       context: _deps.context(),
       position: pos,
@@ -172,6 +177,11 @@ class AddonHubMenus {
       items: [
         menuItem('import', Icons.file_upload_outlined, 'Import from JSON'),
         menuItem('update', Icons.sync_rounded, 'Update all'),
+        menuItem(
+          'auto',
+          autoUpdate ? Icons.toggle_on_rounded : Icons.toggle_off_rounded,
+          autoUpdate ? 'Auto-update: on' : 'Auto-update: off',
+        ),
         menuItem(
           'delete',
           Icons.delete_outline_rounded,
@@ -186,6 +196,23 @@ class AddonHubMenus {
         break;
       case 'update':
         _deps.updateAll();
+        break;
+      case 'auto':
+        final saved = await _deps
+            .setAutoUpdate(!autoUpdate)
+            .then((_) => true, onError: (_) => false);
+        final context = _deps.context();
+        if (saved && context.mounted) {
+          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+            SnackBar(
+              content: Text(
+                autoUpdate
+                    ? 'Addons will only update when you ask'
+                    : 'Addons will update once a day',
+              ),
+            ),
+          );
+        }
         break;
       case 'delete':
         _deps.deleteAll();

@@ -1,6 +1,6 @@
 // Swipe-to-seek can be turned off, and pans that start in the system
 // back-gesture zones (24 px at either side edge) never seek or change volume.
-import 'package:debrify/features/video_player/data/player_gesture_settings.dart';
+import 'package:debrify/services/player_gesture_settings.dart';
 import 'package:debrify/screens/video_player/models/hud_state.dart';
 import 'package:debrify/screens/video_player/widgets/seek_hud.dart';
 import 'package:debrify/screens/video_player/widgets/vertical_hud.dart';

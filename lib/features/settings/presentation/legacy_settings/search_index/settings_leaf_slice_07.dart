@@ -184,6 +184,14 @@ extension SettingsLeafSlice07 on SettingsLeafBuilder {
           ],
           onTap: () => deps.openPlaybackSection(PlaybackSettingsSection.player),
         ),
+      if (deps.isPhone())
+        leaf(
+          'Playback',
+          'Swipe left or right to seek',
+          'Turn off if swiping gets in the way of going back',
+          const ['swipe', 'seek', 'gesture', 'back gesture', 'scrub'],
+          onTap: () => deps.openPlaybackSection(PlaybackSettingsSection.player),
+        ),
       if (deps.preferredExternalPlayerSupported())
         leaf(
           'Playback',

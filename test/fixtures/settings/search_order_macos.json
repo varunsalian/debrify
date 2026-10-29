@@ -393,6 +393,10 @@
       "Indexer managers"
     ],
     [
+      "Engines",
+      "Search sources"
+    ],
+    [
       "Filters",
       "Quality filter"
     ],
@@ -993,6 +997,10 @@
     [
       "Engines",
       "Indexer managers"
+    ],
+    [
+      "Engines",
+      "Search sources"
     ],
     [
       "Filters",

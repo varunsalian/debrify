@@ -134,7 +134,9 @@ class EpisodesPanelEpisodeOptions {
               Icons.done_all_rounded,
               'Mark earlier episodes watched',
               () => _deps.parts.watchedActions.markEarlierWatched(episode),
-              subtitle: '${earlier.length} episodes before this one',
+              subtitle: earlier.length == 1
+                  ? '1 episode before this one'
+                  : '${earlier.length} episodes before this one',
             ),
           if (watched && !_a.isDirectSource)
             tile(

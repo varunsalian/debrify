@@ -143,6 +143,7 @@ private final class ProfilePrivacyController {
   private let profilePrivacy = ProfilePrivacyController()
   private var deviceSecretChannel: FlutterMethodChannel?
   private var profilePrivacyChannel: FlutterMethodChannel?
+  private var nowPlaying: NowPlayingBridge?
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
@@ -197,6 +198,7 @@ private final class ProfilePrivacyController {
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "DebrifyDeviceSecret") {
       deviceSecretChannel = deviceSecretCipher.install(on: registrar.messenger())
       profilePrivacyChannel = profilePrivacy.install(on: registrar.messenger())
+      nowPlaying = NowPlayingBridge(messenger: registrar.messenger())
     }
   }
 

@@ -26,13 +26,16 @@ class IptvMultiViewPage extends ConsumerStatefulWidget {
   const IptvMultiViewPage({
     super.key,
     required this.engineFactory,
-    required this.onWatchFullScreen,
+    this.released,
   });
 
   final MultiViewEngineFactory engineFactory;
 
-  /// Called after the page popped itself and every engine finished disposing.
-  final void Function(IptvChannel channel) onWatchFullScreen;
+  /// Completed once the page is gone and every engine finished disposing,
+  /// so the caller can start the full player (the page pops with the
+  /// chosen channel) or bring a preview back without competing for a
+  /// decoder.
+  final Completer<void>? released;
 
   @override
   ConsumerState<IptvMultiViewPage> createState() => _IptvMultiViewPageState();
@@ -49,6 +52,9 @@ class _TileEntry {
   /// True once this slot left the grid; late results must not resurrect it.
   bool retired = false;
   bool failed = false;
+
+  /// True while the factory is still building this slot's engine.
+  bool starting = false;
 }
 
 class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
@@ -87,6 +93,16 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
       entry.engine = null;
       engine.detach();
       _disposeFutures.add(engine.dispose());
+    }
+    final released = widget.released;
+    if (released != null) {
+      unawaited(
+        Future.wait(
+          _disposeFutures,
+        ).then<void>((_) {}, onError: (_) {}).whenComplete(() {
+          if (!released.isCompleted) released.complete();
+        }),
+      );
     }
     super.dispose();
   }
@@ -128,10 +144,21 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
     final tileCount = visible.length;
     for (final channel in visible) {
       final existing = _entries[channel.url];
-      if (existing != null && existing.engine != null) continue;
+      if (existing != null && (existing.engine != null || existing.starting)) {
+        continue;
+      }
       final entry = existing ?? _TileEntry(channel.name);
       _entries[channel.url] = entry;
+      entry.starting = true;
       unawaited(_startEngine(channel, entry, tileCount));
+    }
+    // A removal can move the sound to another tile: keep volumes in step.
+    for (var i = 0; i < visible.length; i++) {
+      final engine = _entries[visible[i].url]?.engine;
+      unawaited(
+        engine?.setVolume(i == selection.audioIndex ? 100 : 0) ??
+            Future<void>.value(),
+      );
     }
   }
 
@@ -179,10 +206,12 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
     try {
       engine = await widget.engineFactory(channel, tileCount: tileCount);
     } catch (error, stack) {
+      entry.starting = false;
       _report('multi-view engine factory failed', error, stack);
       if (_stillShows(entry, url)) setState(() => entry.failed = true);
       return;
     }
+    entry.starting = false;
     // The channel left the selection (or the page went away) while the
     // factory was running: hand the engine straight back, never open it.
     if (!_stillShows(entry, url)) {
@@ -250,36 +279,13 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
     setState(() {});
   }
 
-  Future<void> _watchFullScreen(int index) async {
+  /// Pops with the channel: the caller starts the full player once every
+  /// engine here has released its decoder (see [IptvMultiViewPage.released]).
+  void _watchFullScreen(int index) {
     final selection = ref.read(multiViewSelectionProvider);
-    if (index < 0 || index >= selection.channels.length) return;
-    final channel = selection.channels[index];
-    if (!mounted) return;
+    if (index < 0 || index >= selection.channels.length || !mounted) return;
     final navigator = Navigator.of(context);
-    if (!navigator.canPop()) return;
-    // Pop first, then release every decoder: the full player must never
-    // compete with a tile for one.
-    navigator.pop();
-    await _disposeAllEngines();
-    widget.onWatchFullScreen(channel);
-  }
-
-  Future<void> _disposeAllEngines() async {
-    for (final entry in _entries.values) {
-      final engine = entry.engine;
-      if (engine == null) continue;
-      entry.retired = true;
-      entry.engine = null;
-      engine.detach();
-      _disposeFutures.add(engine.dispose());
-    }
-    final pending = [..._disposeFutures];
-    _disposeFutures.clear();
-    try {
-      await Future.wait(pending);
-    } catch (error, stack) {
-      _report('multi-view engine dispose failed', error, stack);
-    }
+    if (navigator.canPop()) navigator.pop(selection.channels[index]);
   }
 
   void _openTileActions(int index) {
@@ -380,7 +386,11 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
           failed: entry?.failed ?? false,
           hasAudio: index == selection.audioIndex,
           autofocus: index == 0,
-          onSelected: () => _applyAudio(index),
+          // Select moves the sound; on the tile that already has it, Select
+          // opens its actions, so remotes without a Menu key reach them.
+          onSelected: () => index == selection.audioIndex
+              ? _openTileActions(index)
+              : _applyAudio(index),
           onLongPressed: () => _openTileActions(index),
         ),
       ),

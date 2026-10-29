@@ -141,7 +141,7 @@ class SeasonWatchedService {
               await (watched
                   ? (mdblistService ?? MdblistService.instance).markWatched
                   : (mdblistService ?? MdblistService.instance).markUnwatched)(
-                MdblistMediaIds(imdb: imdbId),
+                MdblistMediaIds.forContent(imdbId),
                 'episode',
                 season: season,
                 episode: episode,

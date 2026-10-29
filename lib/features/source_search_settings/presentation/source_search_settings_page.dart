@@ -47,7 +47,6 @@ class _SourceSearchSettingsPageState extends State<SourceSearchSettingsPage> {
 
   /// Captured when the user leaves the page: entries that were already
   /// queued must not be persisted afterwards.
-  Object? _leftPageOwner;
 
   bool _loading = true;
   bool _loadFailed = false;
@@ -66,8 +65,7 @@ class _SourceSearchSettingsPageState extends State<SourceSearchSettingsPage> {
 
   @override
   void dispose() {
-    // Anything still queued belonged to this page's visit.
-    _leftPageOwner = const Object();
+    // Queued writes still run: leaving the page must not lose a toggle.
     _firstToggle.dispose();
     super.dispose();
   }
@@ -112,7 +110,6 @@ class _SourceSearchSettingsPageState extends State<SourceSearchSettingsPage> {
     SourceSearchChoices next,
     Object? capturedOwner,
   ) async {
-    if (_leftPageOwner != null) return;
     // `==` is the documented comparison for the owner identity.
     if (widget.owner() != capturedOwner) return;
     try {

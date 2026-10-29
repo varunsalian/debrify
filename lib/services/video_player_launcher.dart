@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:android_intent_plus/android_intent.dart';
+import 'package:debrify/screens/video_player/services/player_now_playing.dart';
 import 'package:debrify/features/player_launch/data/launch_tracking_policy.dart';
 import 'package:debrify/features/player_launch/data/movie_resume_state.dart';
 import 'package:debrify/features/player_launch/data/native_playback_debug.dart';
@@ -145,16 +146,23 @@ class VideoPlayerLauncher {
     VoidCallback Function()? retainSourceSession,
     ProfileSessionOwner? sourceOwner,
     bool Function()? canContinue,
-  }) => LaunchRouter.push(
-    context,
-    originalArgs,
-    onQuickPlayNextEpisode: onQuickPlayNextEpisode,
-    isTrailer: isTrailer,
-    onPlayerHandoff: onPlayerHandoff,
-    retainSourceSession: retainSourceSession,
-    sourceOwner: sourceOwner,
-    canContinue: canContinue,
-  );
+  }) {
+    // What the lock screen shows for the in-app player this launch opens.
+    PlayerNowPlaying.prepare(
+      title: originalArgs.title,
+      subtitle: originalArgs.subtitle,
+    );
+    return LaunchRouter.push(
+      context,
+      originalArgs,
+      onQuickPlayNextEpisode: onQuickPlayNextEpisode,
+      isTrailer: isTrailer,
+      onPlayerHandoff: onPlayerHandoff,
+      retainSourceSession: retainSourceSession,
+      sourceOwner: sourceOwner,
+      canContinue: canContinue,
+    );
+  }
 
   /// Whether playback should leave the app entirely, per the user's default
   /// player setting. Screens that build their own player route ask this before

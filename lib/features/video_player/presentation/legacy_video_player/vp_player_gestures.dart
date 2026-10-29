@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:debrify/features/video_player/data/player_gesture_settings.dart';
 import 'package:debrify/screens/video_player/constants/timing_constants.dart';
 import 'package:debrify/screens/video_player/models/gesture_state.dart';
 import 'package:debrify/screens/video_player/models/hud_state.dart';
 import 'package:debrify/services/player_display_controls.dart';
+import 'package:debrify/services/player_gesture_settings.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart' as mk;
 

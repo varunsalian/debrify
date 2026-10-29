@@ -18,6 +18,12 @@ extension SettingsLeafSlice03 on SettingsLeafBuilder {
         const ['jackett', 'prowlarr', 'torznab', 'indexer', 'indexers'],
       ),
       leaf(
+        'Engines',
+        'Search sources',
+        'Leave IPTV playlists or media servers out of source search',
+        const ['iptv', 'media server', 'jellyfin', 'emby', 'plex', 'exclude'],
+      ),
+      leaf(
         'Filters',
         'Quality filter',
         'Default resolution filter for results',

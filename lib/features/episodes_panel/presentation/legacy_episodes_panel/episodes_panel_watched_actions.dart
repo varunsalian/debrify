@@ -31,6 +31,9 @@ class EpisodesPanelWatchedActions {
   /// its own re-entrancy guard; this one covers the whole multi-provider run).
   bool earlierActionBusy = false;
 
+  static String _count(int n, String noun) =>
+      n == 1 ? '1 $noun' : '$n ${noun}s';
+
   /// "Mark earlier episodes watched": batch-mark every aired episode before
   /// this one on this device plus every tracker a single watched-write would
   /// touch. The ticks are re-read (not painted) afterwards, so failed trackers
@@ -54,7 +57,7 @@ class EpisodesPanelWatchedActions {
       builder: (ctx) => AlertDialog(
         title: const Text('Mark earlier episodes watched?'),
         content: Text(
-          'Marks ${refs.length} earlier episodes of ${show.name} as watched.',
+          'Marks ${_count(refs.length, 'earlier episode')} of ${show.name} as watched.',
         ),
         actions: [
           TextButton(
@@ -74,7 +77,9 @@ class EpisodesPanelWatchedActions {
     // Capture the originating profile: a switch mid-batch must stop writes.
     final scope = ProfileRuntime.scope.value;
     messenger.showSnackBar(
-      SnackBar(content: Text('Marking ${refs.length} episodes watched…')),
+      SnackBar(
+        content: Text('Marking ${_count(refs.length, 'episode')} watched…'),
+      ),
     );
     try {
       final providers = await WatchedActionCoordinator.episodeWriteProviders(
@@ -95,7 +100,11 @@ class EpisodesPanelWatchedActions {
               seriesTitle: seriesTitle,
             ),
       );
-      if (!mounted || result.cancelled) return;
+      if (!mounted) return;
+      if (result.cancelled) {
+        messenger.hideCurrentSnackBar();
+        return;
+      }
       MdblistContinueWatchingService.instance.invalidate();
       // Re-read the real ticks instead of painting them: a tracker whose
       // write failed must not keep a fake tick.
@@ -106,9 +115,9 @@ class EpisodesPanelWatchedActions {
         SnackBar(
           content: Text(
             result.hasFailures
-                ? 'Marked ${refs.length} episodes; some trackers failed. '
-                      'Try again to retry them.'
-                : 'Marked ${refs.length} episodes watched',
+                ? 'Marked ${_count(refs.length, 'episode')}; some trackers '
+                      'failed. Try again to retry them.'
+                : 'Marked ${_count(refs.length, 'episode')} watched',
           ),
         ),
       );

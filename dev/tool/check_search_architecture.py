@@ -237,6 +237,10 @@ EPISODES_PANEL_MODEL_IMPORTS = {
     "lib/features/episodes_panel/models/episodes_panel_view.dart": {
         "lib/services/trakt/trakt_episode_model.dart",
     },
+    # The earlier-episodes policy reads the same season/episode model.
+    "lib/features/episodes_panel/application/earlier_episodes.dart": {
+        "lib/services/trakt/trakt_episode_model.dart",
+    },
 }
 # Set to the measured completed facade at step 7 (at most 450).
 EPISODES_PANEL_FACADE_LIMIT = 281

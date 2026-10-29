@@ -74,6 +74,8 @@ void main() {
   late ProviderContainer container;
   late List<_FakeEngine> engines;
   Completer<void>? holdFactory;
+  late Completer<void> released;
+  IptvChannel? chosen;
 
   MultiViewSelectionNotifier notifier() =>
       container.read(multiViewSelectionProvider.notifier);
@@ -84,6 +86,8 @@ void main() {
     owner = 'profile-a';
     engines = [];
     holdFactory = null;
+    released = Completer<void>();
+    chosen = null;
     container = ProviderContainer(
       overrides: [
         multiViewOwnerProvider.overrideWithValue(() => owner),
@@ -111,16 +115,33 @@ void main() {
       UncontrolledProviderScope(
         container: container,
         child: MaterialApp(
-          home: IptvMultiViewPage(
-            engineFactory: factory,
-            onWatchFullScreen: (_) {},
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () async {
+                chosen = await Navigator.of(context).push<IptvChannel>(
+                  MaterialPageRoute(
+                    builder: (_) => IptvMultiViewPage(
+                      engineFactory: factory,
+                      released: released,
+                    ),
+                  ),
+                );
+              },
+              child: const Text('open'),
+            ),
           ),
         ),
       ),
     );
+    await tester.tap(find.text('open'));
     // A tile still waiting on its engine spins forever, so settling would
     // never finish; such tests pump frames themselves.
-    settle ? await tester.pumpAndSettle() : await tester.pump();
+    if (settle) {
+      await tester.pumpAndSettle();
+    } else {
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+    }
   }
 
   testWidgets('one tile per channel; only the first has sound', (tester) async {
@@ -210,14 +231,56 @@ void main() {
     expect(engines.single.disposals, 1);
   });
 
-  testWidgets('closing the page disposes every engine', (tester) async {
+  testWidgets('closing the page disposes every engine, then reports it', (
+    tester,
+  ) async {
     notifier()
       ..add(_ch('1'))
       ..add(_ch('2'));
     await mount(tester);
 
-    await tester.pumpWidget(const SizedBox());
+    // System Back (the page has no app bar).
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
 
+    expect(engines.every((e) => e.disposals == 1), isTrue);
+    expect(released.isCompleted, isTrue);
+    expect(chosen, isNull);
+  });
+
+  testWidgets('removing the sound tile gives the sound to the first tile', (
+    tester,
+  ) async {
+    notifier()
+      ..add(_ch('1'))
+      ..add(_ch('2'))
+      ..add(_ch('3'));
+    notifier().setAudio(1);
+    await mount(tester);
+    expect(engineOf('2').volume, 100);
+
+    notifier().remove(1);
+    await tester.pumpAndSettle();
+
+    expect(engineOf('1').volume, 100);
+    expect(engineOf('3').volume, 0);
+  });
+
+  testWidgets('Select on the sound tile offers full screen, which pops with '
+      'the channel after the engines are released', (tester) async {
+    notifier()
+      ..add(_ch('1'))
+      ..add(_ch('2'));
+    await mount(tester);
+
+    await tester.tap(find.byKey(const ValueKey('video-https://tv.test/1.ts')));
+    await tester.pumpAndSettle();
+    expect(find.text('Watch full screen'), findsOneWidget);
+    await tester.tap(find.text('Watch full screen'));
+    await tester.pumpAndSettle();
+
+    expect(chosen?.url, 'https://tv.test/1.ts');
+    expect(released.isCompleted, isTrue);
     expect(engines.every((e) => e.disposals == 1), isTrue);
   });
 

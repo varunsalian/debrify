@@ -1,7 +1,7 @@
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_values_state.dart';
-import 'package:debrify/features/video_player/data/player_gesture_settings.dart';
 import 'package:debrify/models/android_video_renderer_mode.dart';
 import 'package:debrify/models/content_display_match_mode.dart';
+import 'package:debrify/services/player_gesture_settings.dart';
 import 'package:debrify/services/storage/local_completion_storage.dart';
 import 'package:debrify/services/storage/player_network_storage.dart';
 import 'package:debrify/services/storage/player_settings_storage.dart';

@@ -8,7 +8,7 @@ import 'package:debrify/features/now_playing/application/now_playing_publisher.d
 import 'package:debrify/features/now_playing/models/now_playing_models.dart';
 import 'package:flutter/services.dart';
 
-/// The name shared with the iOS/tvOS and Android handlers.
+/// The name shared with the iOS handler (ios/Runner/NowPlayingBridge.swift).
 const nowPlayingChannelName = 'com.debrify.app/now_playing';
 
 /// Talks to the platform now-playing surface over a [MethodChannel].

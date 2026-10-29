@@ -38,7 +38,8 @@
 4685 lib/services/download_service.dart
 # 2026-10-29 SMB recording upload: the app-lifetime upload host wraps the root scope's child (+4).
 # 2026-10-29 Sports & leagues filter: root scope installs sportsAppOverrides() (+2).
-4188 lib/main.dart
+# 2026-10-30 overnight features: root scope adds multiViewAppOverrides(); the addon auto-update scheduler starts with the catalog refresh (+3).
+4191 lib/main.dart
 4086 lib/services/iptv_catalog_db.dart
 3874 lib/services/stremio_service.dart
 3776 android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt
@@ -102,7 +103,8 @@
 1225 lib/services/remote_control/remote_session.dart
 1212 lib/widgets/onboarding/onboarding_flow.dart
 1196 lib/services/profiles/portable_profile_package.dart
-1175 lib/services/iptv_source_search.dart
+# 2026-10-30 search sources: title search skips IPTV playlists the profile left out (+9).
+1184 lib/services/iptv_source_search.dart
 1171 lib/screens/webdav/webdav_files_screen.dart
 1167 lib/services/profiles/local_backup/local_backup_archive.dart
 1167 lib/widgets/see_all/discover_detail_rail.dart
@@ -166,7 +168,8 @@
 836 lib/services/profiles/profile_database_snapshot.dart
 836 lib/widgets/file_selection_dialog.dart
 833 lib/screens/settings/theme_tokens_page.dart
-830 lib/services/media_server_service.dart
+# 2026-10-30 search sources: media-server search honours the profile's opt-out (+3).
+833 lib/services/media_server_service.dart
 829 lib/screens/settings/widgets/manual_order_list.dart
 829 lib/services/main_page_bridge.dart
 828 lib/services/webdav_sync/webdav_sync_circle_merge.dart

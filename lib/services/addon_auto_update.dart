@@ -155,6 +155,9 @@ final class AddonAutoUpdate {
         continue;
       }
       if (fetched.version == addon.version) continue;
+      // The fetch can take seconds: a profile switch meanwhile must not let
+      // the save land in the next profile.
+      if (!deps.stillCurrent()) return AddonAutoUpdateOutcome.cancelled;
       final refreshed = await deps.refreshAddon(url);
       if (refreshed == null) {
         failures++;

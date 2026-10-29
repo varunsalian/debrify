@@ -243,7 +243,7 @@ void main() {
               find.byType(PopupMenuItem<String>),
             )
             .map((w) => w.value),
-        ['import', 'update', 'delete'],
+        ['import', 'update', 'auto', 'delete'],
       );
       await f.tap(t, 'Update all');
       await f.until(t, () => find.byType(SnackBar).evaluate().isNotEmpty);

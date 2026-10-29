@@ -1,3 +1,5 @@
+import 'package:debrify/services/addon_auto_update_scheduler.dart';
+import 'package:debrify/widgets/iptv/multi_view_launcher.dart';
 import 'package:debrify/services/storage/alldebrid_storage.dart';
 import 'package:debrify/services/storage/completion_migration_storage.dart';
 import 'package:debrify/services/storage/debrify_tv_storage.dart';
@@ -814,6 +816,7 @@ Future<void> _continueApplicationStartup() async {
   WidgetsBinding.instance.addPostFrameCallback((_) {
     unawaited(_prewarmIptvCatalogDb());
     IptvCatalogRefreshService.instance.start();
+    AddonAutoUpdateScheduler.instance.start();
   });
 
   if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
@@ -1137,7 +1140,7 @@ class _DebrifyAppState extends State<DebrifyApp> {
         // and dialogs inherit the same feature dependencies and state.
         Widget content = ProviderScope(
           retry: (count, error) => null,
-          overrides: sportsAppOverrides(),
+          overrides: [...sportsAppOverrides(), ...multiViewAppOverrides()],
           child: AppThemeScope(
             theme: AppThemeController.instance.theme,
             // The theme's whole-page texture — film grain, Blueprint's rule.

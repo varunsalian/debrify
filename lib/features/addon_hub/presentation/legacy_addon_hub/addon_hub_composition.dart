@@ -17,6 +17,7 @@ import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_h
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_navigation.dart';
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_navigation_state.dart';
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_sections.dart';
+import 'package:debrify/services/addon_auto_update.dart';
 import 'package:flutter/material.dart';
 
 typedef AddonHubCompositionDeps = ({
@@ -89,6 +90,8 @@ AddonHubSections createAddonHubSections(
     importJson: sections.installActions.importJson,
     updateAll: sections.management.updateAll,
     deleteAll: sections.management.deleteAll,
+    autoUpdateEnabled: AddonAutoUpdate.isEnabled,
+    setAutoUpdate: AddonAutoUpdate.setEnabled,
   ));
   sections.filterBarSlot = AddonHubFilterBar((
     navigationState: owners.navigationState,

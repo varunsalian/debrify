@@ -192,6 +192,8 @@ class IptvSpotlightComposition {
         _external.favorites().openListPicker(channel),
     openSchedulePane: (IptvChannel channel) =>
         _external.scheduleActions().openSchedulePane(channel),
+    playChannel: (IptvChannel channel) =>
+        _external.playback().playChannel(channel),
     spotlightRecordAction: (IptvChannel channel) =>
         spotlightHero.spotlightRecordAction(channel),
     toggleFavorite: (IptvChannel channel, bool isFavorited) =>

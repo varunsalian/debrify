@@ -6,6 +6,7 @@ import 'package:debrify/services/iptv_epg_service.dart';
 import 'package:debrify/services/iptv_media_store.dart' show IptvListMeta;
 import 'package:debrify/utils/tv_keys.dart'
     show TvHeldKeyGuard, isActivateOrSpaceKey;
+import 'package:debrify/widgets/iptv/multi_view_launcher.dart';
 import 'package:debrify/widgets/iptv/styles/iptv_style.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -17,6 +18,7 @@ typedef IptvSpotlightActionsDeps = ({
   bool Function() mounted,
   Future<void> Function(IptvChannel channel) openListPicker,
   void Function(IptvChannel channel) openSchedulePane,
+  Future<void> Function(IptvChannel channel) playChannel,
   ({String label, IconData icon, VoidCallback action})? Function(
     IptvChannel channel,
   )
@@ -46,6 +48,11 @@ class IptvSpotlightActions {
         : null;
     final canSave = channel.contentType != 'series';
     final isFavorited = _membershipState.favoriteUrls.contains(channel.url);
+    final hostContext = _deps.context();
+    final multiView = MultiViewLauncher.eligible(channel);
+    final inMultiView =
+        multiView && MultiViewLauncher.contains(hostContext, channel);
+    final multiViewCount = multiView ? MultiViewLauncher.count(hostContext) : 0;
     await showDialog<void>(
       context: _deps.context(),
       barrierColor: Colors.black.withValues(alpha: 0.68),
@@ -143,6 +150,33 @@ class IptvSpotlightActions {
                   icon: Icons.calendar_month_rounded,
                   label: 'Full guide',
                   onPressed: () => _deps.openSchedulePane(channel),
+                ),
+              if (multiView)
+                nextTile(
+                  icon: inMultiView
+                      ? Icons.grid_off_rounded
+                      : Icons.grid_view_rounded,
+                  label: inMultiView
+                      ? 'Remove from multi-view'
+                      : 'Add to multi-view',
+                  onPressed: () => inMultiView
+                      ? MultiViewLauncher.remove(_deps.context(), channel)
+                      : MultiViewLauncher.add(
+                          _deps.context(),
+                          channel,
+                          play: _deps.playChannel,
+                        ),
+                ),
+              if (multiViewCount > 0)
+                nextTile(
+                  icon: Icons.window_rounded,
+                  label: 'Open multi-view ($multiViewCount)',
+                  onPressed: () => unawaited(
+                    MultiViewLauncher.open(
+                      _deps.context(),
+                      play: _deps.playChannel,
+                    ),
+                  ),
                 ),
             ],
           ),

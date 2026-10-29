@@ -8,12 +8,12 @@ import 'package:debrify/features/playback_settings/presentation/legacy_playback_
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_values_state.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_vr_state.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_windows_state.dart';
-import 'package:debrify/features/video_player/data/player_gesture_settings.dart';
 import 'package:debrify/screens/settings/playback_settings_section.dart';
 import 'package:debrify/screens/video_player/services/network_tuning.dart';
 import 'package:debrify/screens/video_player/services/subtitle_settings_service.dart';
 import 'package:debrify/services/android_native_downloader.dart';
 import 'package:debrify/services/external_player_service.dart';
+import 'package:debrify/services/player_gesture_settings.dart';
 import 'package:debrify/services/skip_segment_service.dart';
 import 'package:debrify/services/storage/external_player_storage.dart';
 import 'package:debrify/services/storage/local_completion_storage.dart';
