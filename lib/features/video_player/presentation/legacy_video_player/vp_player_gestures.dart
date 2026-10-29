@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:debrify/features/video_player/data/player_gesture_settings.dart';
 import 'package:debrify/screens/video_player/constants/timing_constants.dart';
 import 'package:debrify/screens/video_player/models/gesture_state.dart';
 import 'package:debrify/screens/video_player/models/hud_state.dart';
@@ -26,7 +27,11 @@ abstract interface class VpPlayerGesturesHost {
 }
 
 class VpPlayerGestures {
-  VpPlayerGestures(this._host);
+  /// Starts refreshing the swipe-to-seek cache so this player picks up the
+  /// active profile's value (the gestures read the cache synchronously).
+  VpPlayerGestures(this._host) {
+    unawaited(PlayerGestureSettings.load());
+  }
   final VpPlayerGesturesHost _host;
 
   bool panIgnore = false;
@@ -79,6 +84,17 @@ class VpPlayerGestures {
   void onPanStart(DragStartDetails details) async {
     // If controls are visible, ignore pans that begin within top/bottom bars so buttons and slider work unaffected
     panIgnore = false;
+    // System back-gesture zones: pans that begin within 24 px of either
+    // side edge (same guard as handleDoubleTap) never drive the HUD.
+    final edgeBox = _host.context.findRenderObject() as RenderBox?;
+    if (edgeBox != null) {
+      const edgeGuard = 24.0;
+      final edgeDx = details.localPosition.dx;
+      if (edgeDx < edgeGuard || edgeDx > edgeBox.size.width - edgeGuard) {
+        panIgnore = true;
+        return;
+      }
+    }
     if (_host.controlsVisible.value) {
       final box = _host.context.findRenderObject() as RenderBox?;
       if (box != null) {
@@ -113,6 +129,11 @@ class VpPlayerGestures {
     // Decide mode on first significant movement
     if (mode == GestureMode.none) {
       if (absDx > 12 && absDx > absDy) {
+        if (!PlayerGestureSettings.swipeSeekCached) {
+          // Swipe-to-seek is off: ignore the whole drag, no seek HUD, no seek.
+          panIgnore = true;
+          return;
+        }
         mode = GestureMode.seek;
       } else if (absDy > 12) {
         final isLeftHalf = gestureStartPosition.dx < size.width / 2;
