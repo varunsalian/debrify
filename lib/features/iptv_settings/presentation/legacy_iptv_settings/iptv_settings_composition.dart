@@ -1,5 +1,7 @@
 import 'package:debrify/features/iptv_settings/models/iptv_settings_phone_section.dart';
 import 'package:debrify/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_sections.dart';
+import 'package:debrify/widgets/iptv/sports/iptv_sports_board.dart'
+    show showIptvSportsLeagues;
 
 import 'iptv_settings_catalog_actions.dart';
 import 'iptv_settings_category_views.dart';
@@ -203,6 +205,7 @@ IptvSettingsSections createIptvSettingsSections(
     openIptvStylePicker: sections.preferencesActions.openIptvStylePicker,
     openPlayerGuidePicker: sections.preferencesActions.openPlayerGuidePicker,
     recordingOwner: owners.recordingOwner,
+    openSportsLeagues: () => showIptvSportsLeagues(scope.context()),
   ));
   sections.preferencesViewsSlot = IptvSettingsPreferencesViews((
     preferencesOwner: owners.preferencesOwner,

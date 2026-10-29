@@ -26,6 +26,7 @@ void main() {
                 'Player guide',
                 if (recording) 'Recording',
                 'Auto-refresh',
+                'Sports & leagues',
               ];
               final keys = [
                 for (var i = 0; i < count; i++) 'source:$i',
@@ -38,6 +39,7 @@ void main() {
                 'player_guide',
                 if (recording) 'recording',
                 'auto-refresh',
+                'sports',
               ];
               expect(
                 f.rails(t).map((e) => e.title),
@@ -136,12 +138,12 @@ void main() {
         f.recording = false;
         await f.mount(t);
         final old = f.rails(t).map((e) => e.focusNode as FocusNode).toList();
-        expect(old.length, 10);
+        expect(old.length, 11);
         f.playlists = [twoPaneSource('a')];
         await f.refresh(t);
-        expect(f.rails(t).length, 8);
-        expect(old[8].context?.mounted ?? false, isFalse);
+        expect(f.rails(t).length, 9);
         expect(old[9].context?.mounted ?? false, isFalse);
+        expect(old[10].context?.mounted ?? false, isFalse);
         f.playlists = [
           twoPaneSource('a'),
           twoPaneSource('b'),
@@ -149,7 +151,7 @@ void main() {
         ];
         await f.refresh(t);
         final grown = f.rails(t);
-        for (final index in [8, 9]) {
+        for (final index in [9, 10]) {
           expect(
             identical(grown[index].focusNode, old[index]),
             isTrue,

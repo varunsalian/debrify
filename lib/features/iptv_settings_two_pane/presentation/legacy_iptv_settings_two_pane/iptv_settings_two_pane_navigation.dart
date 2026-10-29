@@ -23,10 +23,11 @@ class IptvSettingsTwoPaneNavigation {
 
   /// Rail entries: every source, then Add, Lists, Startup, Channel preview,
   /// Continue watching, the optional Appearance (TV/desktop only), the
-  /// always-present Player guide, and the optional Recording entry.
+  /// always-present Player guide, the optional Recording entry, Auto-refresh
+  /// and Sports & leagues.
   int get _railCount =>
       widget.playlists.length +
-      7 +
+      8 +
       (widget.showAppearanceSection ? 1 : 0) +
       (widget.showRecordingSection ? 1 : 0);
 
@@ -47,7 +48,10 @@ class IptvSettingsTwoPaneNavigation {
   /// Meaningful only while showRecordingSection is true.
   int get recordingIndex => playerGuideIndex + 1;
 
-  int get autoRefreshIndex => _railCount - 1;
+  int get autoRefreshIndex => _railCount - 2;
+
+  /// The last rail entry: Sports & leagues.
+  int get sportsIndex => _railCount - 1;
 
   /// Grow-only, deliberately. Shrinking would dispose a node while the
   /// *previous* tree still holds a [Focus] referencing it — didUpdateWidget
@@ -124,10 +128,12 @@ class IptvSettingsTwoPaneNavigation {
       IptvTwoPanePlayerGuideDest() => playerGuideIndex,
       IptvTwoPaneRecordingDest() => recordingIndex,
       IptvTwoPaneAutoRefreshDest() => autoRefreshIndex,
+      IptvTwoPaneSportsDest() => sportsIndex,
     };
   }
 
   IptvTwoPaneDest destForRail(int index) {
+    if (index == sportsIndex) return const IptvTwoPaneSportsDest();
     if (index == autoRefreshIndex) return const IptvTwoPaneAutoRefreshDest();
     if (index < widget.playlists.length) {
       return IptvTwoPaneSourceDest(widget.playlists[index].id);

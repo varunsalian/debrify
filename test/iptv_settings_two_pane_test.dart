@@ -419,15 +419,16 @@ void main() {
 
     key.currentState!.focusRail();
     await tester.pump();
-    // Walk past every destination, including the final Auto-refresh entry.
-    for (var i = 0; i < 9; i++) {
+    // Walk past every destination, including the final Sports & leagues
+    // entry.
+    for (var i = 0; i < 10; i++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.pump();
     }
 
-    // Still on Auto-refresh rather than flung sideways into its pane.
-    expect(find.text('All sources in this profile'), findsOneWidget);
-    expect(FocusManager.instance.primaryFocus?.debugLabel, 'iptv-2p-rail-7');
+    // Still on Sports & leagues rather than flung sideways into its pane.
+    expect(find.text('Choose sports and leagues'), findsOneWidget);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'iptv-2p-rail-8');
     expect(cwToggles, isEmpty);
     expect(startupToggles, isEmpty);
   });

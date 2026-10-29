@@ -36,6 +36,7 @@ class IptvSettingsTwoPanePanes {
         _sections.preferencePanes.buildPlayerGuidePane(),
       IptvTwoPaneRecordingDest() =>
         _sections.preferencePanes.buildRecordingPane(),
+      IptvTwoPaneSportsDest() => _sections.preferencePanes.buildSportsPane(),
       IptvTwoPaneAutoRefreshDest() => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -75,6 +76,7 @@ class IptvSettingsTwoPanePanes {
         IptvTwoPanePlayerGuideDest() => 'player_guide',
         IptvTwoPaneRecordingDest() => 'recording',
         IptvTwoPaneAutoRefreshDest() => 'auto-refresh',
+        IptvTwoPaneSportsDest() => 'sports',
       }),
       padding: const EdgeInsets.fromLTRB(28, 22, 28, 32),
       children: [child],

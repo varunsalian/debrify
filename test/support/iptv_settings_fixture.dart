@@ -248,19 +248,20 @@ final class IptvSettingsFixture {
     Size size = const Size(1200, 800),
     bool add = false,
     bool wait = true,
+    // Wraps the app, e.g. in the root ProviderScope the real app provides.
+    Widget Function(Widget app)? wrap,
   }) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = size;
-    await tester.pumpWidget(
-      RepaintBoundary(
-        key: const ValueKey('iptv-settings-canvas'),
-        child: MaterialApp(
-          navigatorKey: navigatorKey,
-          theme: ThemeData.dark(),
-          home: IptvSettingsPage(key: key, openAddSource: add),
-        ),
+    final app = RepaintBoundary(
+      key: const ValueKey('iptv-settings-canvas'),
+      child: MaterialApp(
+        navigatorKey: navigatorKey,
+        theme: ThemeData.dark(),
+        home: IptvSettingsPage(key: key, openAddSource: add),
       ),
     );
+    await tester.pumpWidget(wrap == null ? app : wrap(app));
     if (wait) await until(tester, () => member('loading') == false);
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump();

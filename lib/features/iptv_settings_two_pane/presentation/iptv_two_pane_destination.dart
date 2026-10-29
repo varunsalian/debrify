@@ -44,3 +44,8 @@ class IptvTwoPanePlayerGuideDest extends IptvTwoPaneDest {
 class IptvTwoPaneRecordingDest extends IptvTwoPaneDest {
   const IptvTwoPaneRecordingDest();
 }
+
+/// Sports & leagues: which leagues the IPTV Sports board shows.
+class IptvTwoPaneSportsDest extends IptvTwoPaneDest {
+  const IptvTwoPaneSportsDest();
+}

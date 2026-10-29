@@ -29,6 +29,7 @@ typedef IptvSettingsPhoneHubDeps = ({
   Future<void> Function() openIptvStylePicker,
   Future<void> Function() openPlayerGuidePicker,
   IptvSettingsRecordingOwner recordingOwner,
+  Future<void> Function() openSportsLeagues,
 });
 
 class IptvSettingsPhoneHub {
@@ -179,6 +180,13 @@ class IptvSettingsPhoneHub {
                 onTap: () async =>
                     _deps.enterPhoneSection(IptvSettingsPhoneSection.recording),
               ),
+            // The same Sports & leagues sheet the Sports board opens.
+            SettingsTile(
+              icon: Icons.emoji_events_rounded,
+              title: 'Sports & leagues',
+              subtitle: 'What the Sports board shows',
+              onTap: _deps.openSportsLeagues,
+            ),
           ],
         ),
         const SizedBox(height: 24),

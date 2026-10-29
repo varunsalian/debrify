@@ -4,6 +4,8 @@ import 'package:debrify/features/iptv_settings_two_pane/presentation/legacy_iptv
 import 'package:debrify/features/iptv_settings_two_pane/presentation/legacy_iptv_settings_two_pane/iptv_settings_two_pane_widget.dart';
 import 'package:debrify/screens/settings/iptv_style_page.dart'
     show kIptvStyleChoices;
+import 'package:debrify/widgets/iptv/sports/iptv_sports_board.dart'
+    show showIptvSportsLeagues;
 import 'package:flutter/material.dart';
 
 class IptvSettingsTwoPanePreferencePanes {
@@ -298,6 +300,39 @@ class IptvSettingsTwoPanePreferencePanes {
                 onLeft: _sections.navigation.returnToRail,
                 isLast: true,
               ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// One row: it opens the same Sports & leagues sheet the board's filter
+  /// button opens, which writes the choices itself.
+  Widget buildSportsPane() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const IptvTwoPanePaneHeader(
+          icon: Icons.emoji_events_rounded,
+          title: 'Sports & leagues',
+          meta:
+              'Which sports and leagues the IPTV Sports board shows. '
+              'Niche leagues start off.',
+          badges: [],
+        ),
+        const SizedBox(height: 20),
+        IptvTwoPaneRowGroup(
+          children: [
+            IptvTwoPaneRow(
+              focusNode: _sections.navigation.paneNode(0),
+              icon: Icons.tune_rounded,
+              title: 'Choose sports and leagues',
+              subtitle: 'Turn whole sports or single leagues on and off',
+              trailing: _sections.panes.chevron,
+              onTap: () => showIptvSportsLeagues(_deps.context()),
+              onLeft: _sections.navigation.returnToRail,
+              isLast: true,
+            ),
           ],
         ),
       ],

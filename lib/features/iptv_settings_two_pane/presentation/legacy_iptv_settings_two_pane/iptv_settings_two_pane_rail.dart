@@ -270,6 +270,24 @@ class IptvSettingsTwoPaneRail {
                       ? _sections.navigation.recordingIndex
                       : _sections.navigation.playerGuideIndex,
                 ),
+                onDown: () => _sections.navigation.focusRailAt(
+                  _sections.navigation.sportsIndex,
+                ),
+                onRight: _sections.navigation.enterPane,
+              ),
+              IptvTwoPaneRailEntry(
+                focusNode: _owners.railNodes[_sections.navigation.sportsIndex],
+                icon: Icons.emoji_events_rounded,
+                title: 'Sports & leagues',
+                subtitle: 'What the Sports board shows',
+                selected: selected == _sections.navigation.sportsIndex,
+                chevron: true,
+                onFocused: () =>
+                    _owners.dest.value = const IptvTwoPaneSportsDest(),
+                onSelect: _sections.navigation.enterPane,
+                onUp: () => _sections.navigation.focusRailAt(
+                  _sections.navigation.autoRefreshIndex,
+                ),
                 onDown: null,
                 onRight: _sections.navigation.enterPane,
               ),
