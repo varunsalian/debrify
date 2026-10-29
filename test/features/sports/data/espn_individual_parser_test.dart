@@ -24,8 +24,9 @@ void main() {
       shape: SportsEventShape.sets,
     );
 
-    test('every singles match of both tournaments, no doubles', () {
-      expect(events, hasLength(86));
+    test('every real singles match of both tournaments, no doubles', () {
+      // 86 men's singles in the feed; 14 are unplayed placeholders.
+      expect(events, hasLength(72));
       expect(events.map((e) => e.group).toSet(), {
         'Erste Bank Open',
         'Swiss Indoors Basel',
@@ -73,7 +74,46 @@ void main() {
     test('sorted by start, then id; first and last match', () {
       expect(events.first.id, '187149');
       expect(events.first.start, DateTime.utc(2026, 10, 24, 9));
-      expect(events.last.id, '185205');
+      expect(events.last.id, '185196');
+    });
+
+    test('unplayed placeholders (TBD players, no valid time) are dropped', () {
+      final ids = events.map((e) => e.id).toSet();
+      expect(ids, isNot(contains('185199'))); // TBD v TBD
+      expect(ids, isNot(contains('185156'))); // Borges v TBD
+      expect(
+        events.any((e) => e.home!.name == 'TBD' || e.away!.name == 'TBD'),
+        isFalse,
+      );
+    });
+
+    test('the league picks its own draw (men for ATP, women for WTA)', () {
+      final json = _copy('espn_atp.json');
+      // Rename the men's draw so it looks like a women's one.
+      for (final e in (json['events'] as List).cast<Map<String, dynamic>>()) {
+        for (final g in (e['groupings'] as List).cast<Map<String, dynamic>>()) {
+          final grouping = g['grouping'] as Map<String, dynamic>;
+          if (grouping['slug'] == 'mens-singles') {
+            grouping['slug'] = 'womens-singles';
+          }
+        }
+      }
+      expect(
+        parseEspnIndividual(
+          json,
+          leagueId: 'atp',
+          shape: SportsEventShape.sets,
+        ),
+        isEmpty,
+      );
+      expect(
+        parseEspnIndividual(
+          json,
+          leagueId: 'wta',
+          shape: SportsEventShape.sets,
+        ),
+        hasLength(72),
+      );
     });
   });
 
@@ -144,7 +184,7 @@ void main() {
     test('tennis, UFC, golf and racing leagues use the individual parser', () {
       expect(
         parseEspnScoreboard(_fixture('espn_atp.json'), leagueId: 'atp'),
-        hasLength(86),
+        hasLength(72),
       );
       expect(
         parseEspnScoreboard(
@@ -208,7 +248,7 @@ void main() {
         leagueId: 'atp',
         shape: SportsEventShape.sets,
       );
-      expect(events, hasLength(85));
+      expect(events, hasLength(71));
     });
   });
 }
