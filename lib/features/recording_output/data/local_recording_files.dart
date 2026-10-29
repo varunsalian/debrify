@@ -13,7 +13,8 @@ import 'package:saf_stream/saf_stream.dart';
 import '../models/smb_upload_models.dart';
 
 /// Recording exists on Android and on desktops with the capture engine;
-/// never on iOS/tvOS, where dart_smb2's library is not bundled.
+/// never on iOS (libsmb2 is bundled there but never loaded) or tvOS (not
+/// bundled at all).
 bool get smbUploadSupported =>
     Platform.isAndroid || DesktopRecordingService.instance.isSupported;
 

@@ -59,7 +59,7 @@ dependencies:
   file_picker: ^10.2.3
   saf_stream: ^0.12.0
   # SMB2/3 client for copying recordings to a NAS: BSD-3 Dart wrapper over the
-  # LGPL-2.1 libsmb2 (dynamically linked; source: github.com/ales-drnz/libsmb2-scripts).
+  # LGPL-2.1 libsmb2 (dynamically linked; notice in THIRD_PARTY_NOTICES.md).
   # Used on Android/desktop only (smbUploadSupported). iOS bundles the library
   # unused; it declares no tvOS platform, so tvOS builds omit it.
   dart_smb2: ^0.1.3
