@@ -256,6 +256,16 @@ https://example.com/live/two.ts
     expect(tester.widget<SpotlightShell>(shell).sourcesExpanded, isTrue);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowLeft);
     final sourceNode = FocusManager.instance.primaryFocus!;
+    // The rail is a lazy list; at this TV height "Manage sources" sits below
+    // the fold (Sports added a Quick Access row), as D-pad would scroll it.
+    await tester.scrollUntilVisible(
+      find.text('Manage sources'),
+      60,
+      scrollable: find.descendant(
+        of: find.byKey(const ValueKey<String>('spotlight-rail')),
+        matching: find.byType(Scrollable),
+      ),
+    );
     Focus.of(tester.element(find.text('Manage sources'))).requestFocus();
     await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.tab);
