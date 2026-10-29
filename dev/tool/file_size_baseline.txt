@@ -37,7 +37,8 @@
 5475 lib/services/remote_control/remote_command_router.dart
 4700 lib/services/webdav_sync/webdav_sync_engine.dart
 4685 lib/services/download_service.dart
-4182 lib/main.dart
+# 2026-10-29 SMB recording upload: the app-lifetime upload host wraps the root scope's child (+4).
+4186 lib/main.dart
 4086 lib/services/iptv_catalog_db.dart
 3874 lib/services/stremio_service.dart
 3776 android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt
@@ -128,14 +129,14 @@
 1021 lib/screens/settings/settings_spotlight_shell.dart
 1021 lib/services/webdav_sync/webdav_sync_tombstones.dart
 1016 lib/widgets/see_all/stremio_dropdown.dart
-1016 lib/services/profiles/profile_preferences.dart
+1015 lib/services/profiles/profile_preferences.dart
 1004 lib/widgets/remote/remote_pairing_dialog.dart
 1003 lib/screens/debrify_tv/layouts/spotlight_layout.dart
 999 lib/widgets/iptv/iptv_stage_panel.dart
 993 lib/services/webdav_sync/webdav_sync_binding_store.dart
 991 lib/screens/settings/real_debrid_settings_page.dart
 991 lib/screens/stremio_tv/widgets/stremio_tv_repo_browser_dialog.dart
-995 lib/services/profiles/profile_migration_service.dart
+994 lib/services/profiles/profile_migration_service.dart
 976 lib/widgets/remote/remote_control_screen.dart
 973 lib/screens/video_player/widgets/styled_dock.dart
 958 lib/widgets/playlist_grid_card.dart
@@ -160,7 +161,7 @@
 873 lib/screens/settings/premiumize_settings_page.dart
 871 lib/screens/video_player/widgets/tv_controls.dart
 846 lib/services/profiles/local_backup/local_backup_zip.dart
-841 lib/services/profiles/profile_bootstrap.dart
+840 lib/services/profiles/profile_bootstrap.dart
 836 lib/services/profiles/profile_database_snapshot.dart
 836 lib/widgets/file_selection_dialog.dart
 833 lib/screens/settings/theme_tokens_page.dart

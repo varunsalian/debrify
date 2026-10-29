@@ -925,7 +925,6 @@ class DevicePreferences {
     'dismissed_donation_campaign_ids_v1',
     'recording_max_concurrent',
     'recording_output_v1',
-    // 2026-10-29 SMB recording upload: three device keys registered in the profile key lists (+3 each).
     'recording_smb_target_v1',
     'recording_smb_password_v1',
     'recording_smb_uploads_v1',

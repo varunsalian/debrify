@@ -133,6 +133,7 @@ import 'widgets/remote/remote_role_picker_screen.dart';
 import 'widgets/support_donation_chooser_dialog.dart';
 import 'utils/platform_util.dart';
 import 'utils/tvos_device.dart';
+import 'features/recording_output/presentation/smb_upload_host.dart';
 import 'services/desktop_recording_service.dart';
 import 'services/desktop_schedule_service.dart';
 import 'services/update_service.dart';
@@ -1143,7 +1144,10 @@ class _DebrifyAppState extends State<DebrifyApp> {
             // launch ident (see app_texture.dart). It short-circuits to `child`
             // for legacy and for the seventeen themes that declare neither, so
             // the common path costs one build and no layer.
-            child: WebDavSaveStatus(child: AppTexture(child: child!)),
+            // Copies finished recordings to an SMB share while the app runs.
+            child: SmbUploadHost(
+              child: WebDavSaveStatus(child: AppTexture(child: child!)),
+            ),
           ),
         );
         // Pointer input counts as presence too — an Apple TV remote's
