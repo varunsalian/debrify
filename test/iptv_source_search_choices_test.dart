@@ -46,7 +46,7 @@ void main() {
     IptvCatalogDb.debugDirectoryOverride = dir.path;
     await IptvCatalogDb.open();
     for (final p in [a, b]) {
-      await IptvCatalogDb.ingest(
+      IptvCatalogDb.ingest(
         dbPath: IptvCatalogDb.path,
         catalogKey: IptvCatalogKey.forPlaylist(p, 'vod')!,
         channels: [
