@@ -177,6 +177,7 @@ final class SmbUploader {
     final chunk = Uint8List(chunkBytes);
     var filled = 0;
     final pieces = StreamIterator<Uint8List>(_source(recording.uri));
+    var drained = false;
     try {
       while (true) {
         final bool hasNext;
@@ -185,7 +186,10 @@ final class SmbUploader {
         } catch (_) {
           return _readFailed;
         }
-        if (!hasNext) break;
+        if (!hasNext) {
+          drained = true;
+          break;
+        }
         final piece = pieces.current;
         var offset = 0;
         while (offset < piece.length) {
@@ -213,7 +217,9 @@ final class SmbUploader {
       }
       return _TransferOk(sent);
     } finally {
-      await pieces.cancel();
+      // Only an early exit holds a live subscription. A drained iterator's
+      // cancel() returns a root-zone future, which fake clocks never complete.
+      if (!drained) await pieces.cancel();
     }
   }
 
