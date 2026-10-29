@@ -641,6 +641,18 @@ void main() {
       );
     });
 
+    test('fighter needles skip suffixes, short names and vs-less titles', () {
+      expect(
+        sportsTitleNeedles(titled('ufc', 'UFC 320: Ankalaev vs. Pereira Jr.')),
+        ['ankalaev', 'pereira'],
+      );
+      expect(
+        sportsTitleNeedles(titled('ufc', 'UFC Fight Night: Lee vs. Ko')),
+        isEmpty,
+      );
+      expect(sportsTitleNeedles(titled('ufc', 'UFC 310')), isEmpty);
+    });
+
     test('a golf tournament matches without its sponsor name', () {
       final golf = titled('pga', 'VidantaWorld Mexico Open');
       expect(sportsTitleNeedles(golf), ['mexico open']);

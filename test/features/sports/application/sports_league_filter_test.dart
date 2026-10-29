@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:debrify/features/sports/application/sports_providers.dart';
 import 'package:debrify/features/sports/data/sports_follow_store.dart';
 import 'package:debrify/features/sports/data/sports_league_filter_store.dart';
@@ -26,6 +28,17 @@ final class _MemoryPrefs implements SportsPrefs {
   Future<bool> setBool(String key, bool value) async {
     values[key] = value;
     return true;
+  }
+}
+
+/// Prefs whose writes wait for [gate]: a slow first write.
+final class _GatedPrefs extends _MemoryPrefs {
+  _GatedPrefs(this.gate);
+  final Future<void> gate;
+  @override
+  Future<bool> setStringList(String key, List<String> value) async {
+    await gate;
+    return super.setStringList(key, value);
   }
 }
 
@@ -266,6 +279,35 @@ void main() {
         await notifier.setLeague(_l('epl'), false);
         expect(prefs.writes, 0);
         expect(a.writes, 0);
+      },
+    );
+
+    test(
+      'a toggle queued before a switch never lands in the new profile',
+      () async {
+        final gate = Completer<void>();
+        final a = _GatedPrefs(gate.future);
+        prefs = a;
+        await container.read(sportsLeagueFilterProvider.future);
+        final notifier = container.read(sportsLeagueFilterProvider.notifier);
+        final first = notifier.setLeague(_l('epl'), false); // held at the gate
+        final second = notifier.setLeague(_l('ucl'), false); // queued behind it
+        // Switch to profile B and let the notifier rebuild for it.
+        final b = _MemoryPrefs();
+        prefs = b;
+        owner = 'profile-b';
+        profileChanges.notifyListeners();
+        // The rebuild's read queues behind the held write (reads never race
+        // writes), so release the write before awaiting the reload.
+        final reloaded = container.read(sportsLeagueFilterProvider.future);
+        gate.complete();
+        await Future.wait([first, second]);
+        await reloaded;
+        expect(b.writes, 0, reason: "profile B's storage is untouched");
+        expect(
+          container.read(sportsLeagueFilterProvider).value,
+          const SportsLeagueFilter(),
+        );
       },
     );
 

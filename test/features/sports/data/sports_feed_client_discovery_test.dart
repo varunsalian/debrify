@@ -151,4 +151,26 @@ void main() {
       },
     );
   });
+
+  test('a manual refresh refetches the cricket series boards', () async {
+    final intl = sportsLeagueById('intl-cricket')!;
+    serve = (uri) => uri.path.endsWith('/scoreboard/header')
+        ? _body('espn_header_cricket.json')
+        : jsonEncode({'events': <Object>[]});
+    Future<void> fetch({bool force = false}) => client.fetchLeague(
+      intl,
+      fromUtc: DateTime.utc(2026, 10, 29),
+      toUtc: DateTime.utc(2026, 10, 29, 23),
+      force: force,
+    );
+    await fetch();
+    final boards = requested.where((u) => !u.path.endsWith('/header')).length;
+    await fetch();
+    expect(requested.where((u) => !u.path.endsWith('/header')).length, boards);
+    await fetch(force: true);
+    expect(
+      requested.where((u) => !u.path.endsWith('/header')).length,
+      boards * 2,
+    );
+  });
 }

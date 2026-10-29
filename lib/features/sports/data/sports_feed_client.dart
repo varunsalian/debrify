@@ -150,6 +150,25 @@ class SportsFeedClient {
   final Duration liveTtl;
 
   final Map<Uri, _CacheEntry> _cache = {};
+
+  /// Entries older than this are dropped: no window reaches back that far, so
+  /// keeping them would only grow memory on a TV left running for weeks.
+  static const Duration _cacheLifetime = Duration(hours: 36);
+  DateTime? _prunedAt;
+
+  /// Drops expired entries, at most once an hour.
+  void _pruneCache() {
+    final now = _clock();
+    final last = _prunedAt;
+    if (last != null && now.difference(last) < const Duration(hours: 1)) {
+      return;
+    }
+    _prunedAt = now;
+    _cache.removeWhere(
+      (_, entry) => now.difference(entry.fetchedAt) > _cacheLifetime,
+    );
+  }
+
   final Map<Uri, Future<List<SportsEvent>>> _inFlight = {};
 
   /// Header discovery state per ESPN sport: the cached series list (its own
@@ -256,6 +275,7 @@ class SportsFeedClient {
     required DateTime toUtc,
     bool force = false,
   }) async {
+    _pruneCache();
     if (league.id == _f1LeagueId) {
       final season = await _entry(league, jolpicaSeasonUri, force);
       return _window(season, league, fromUtc, toUtc);
@@ -366,6 +386,7 @@ class SportsFeedClient {
             league,
             series,
             day,
+            force,
           ).then<Object?>((events) => events, onError: (Object error) => error),
     ]);
     final byId = <String, SportsEvent>{};
@@ -437,10 +458,11 @@ class SportsFeedClient {
     SportsLeague league,
     String seriesId,
     DateTime dayUtc,
+    bool force,
   ) async {
     final uri = _cricketSeriesUri(seriesId, dayUtc);
     final cached = _cache[uri];
-    if (cached != null && _isFresh(cached)) {
+    if (!force && cached != null && _isFresh(cached)) {
       return List<SportsEvent>.of(cached.events);
     }
     return List<SportsEvent>.of(await _pendingOrStart(league, uri));

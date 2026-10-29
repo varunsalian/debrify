@@ -153,4 +153,21 @@ void main() {
       '20261030',
     ]);
   });
+
+  test('entries older than 36 hours are dropped from the cache', () async {
+    final epl = sportsLeagueById('epl')!;
+    Future<List<Object>> fetchDay() => client.fetchLeague(
+      epl,
+      fromUtc: DateTime.utc(2026, 10, 29),
+      toUtc: DateTime.utc(2026, 10, 29, 12),
+    );
+    await fetchDay();
+    // A day later the feed is down: the stale entry still answers.
+    now = now.add(const Duration(hours: 24));
+    serve = (_) => throw StateError('offline');
+    expect(await fetchDay(), isEmpty);
+    // Past the cache lifetime the entry is gone, so the outage shows.
+    now = now.add(const Duration(hours: 13));
+    await expectLater(fetchDay(), throwsA(isA<SportsFeedException>()));
+  });
 }

@@ -104,16 +104,9 @@ class _SportsBoardViewState extends ConsumerState<SportsBoardView>
     );
   }
 
-  /// The picker writes the league choices itself; a changed choice reloads
-  /// the board once it closes, so newly enabled leagues are fetched.
-  Future<void> _openLeagues() async {
-    final before = ref.read(sportsLeagueFilterProvider).value;
-    await showSportsLeagueSheet(context);
-    if (!mounted) return;
-    if (ref.read(sportsLeagueFilterProvider).value != before) {
-      unawaited(_controller.refresh());
-    }
-  }
+  /// The picker writes the league choices itself; the board controller
+  /// refetches when its league list changes, so nothing is reloaded here.
+  Future<void> _openLeagues() => showSportsLeagueSheet(context);
 
   @override
   Widget build(BuildContext context) {

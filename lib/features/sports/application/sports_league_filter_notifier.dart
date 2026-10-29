@@ -65,6 +65,9 @@ final class SportsLeagueFilterNotifier
     }
     ref.onDispose(_removeProfileListener);
 
+    // A rebuild serves a (possibly different) profile: start from nothing,
+    // never from the previous profile's choices.
+    _current = const SportsLeagueFilter();
     final read = _pending.then((_) => _readCurrent(store));
     _pending = read.then((_) {}, onError: (_) {});
     return read;
@@ -103,7 +106,14 @@ final class SportsLeagueFilterNotifier
   Future<void> mutate(
     SportsLeagueFilter Function(SportsLeagueFilter filter) update,
   ) {
-    final write = _pending.then((_) => _writeLatest(update));
+    // The profile the toggle was made in: a write that runs after a switch
+    // must not land in the next profile, even once this notifier has rebuilt
+    // for it (Riverpod reuses the notifier object across rebuilds).
+    final origin = _ownerOf?.call();
+    final builtFor = _owner;
+    final write = _pending.then(
+      (_) => _writeLatest(update, origin: origin, builtFor: builtFor),
+    );
     // Keep the chain alive when one write fails: broken storage must not
     // stall later toggles, whose own errors the caller sees.
     _pending = write.then((_) {}, onError: (_) {});
@@ -111,17 +121,21 @@ final class SportsLeagueFilterNotifier
   }
 
   Future<void> _writeLatest(
-    SportsLeagueFilter Function(SportsLeagueFilter filter) update,
-  ) async {
+    SportsLeagueFilter Function(SportsLeagueFilter filter) update, {
+    required Object? origin,
+    required Object? builtFor,
+  }) async {
     if (!ref.mounted) return;
     final store = _store;
     final ownerOf = _ownerOf;
     if (store == null || ownerOf == null) return;
     // The profile may have changed while the earlier writes were in flight.
-    if (ownerOf() != _owner) {
-      // Stale action: touch no storage and let the next read serve the new
-      // profile instead.
-      ref.invalidateSelf();
+    if (ownerOf() != origin || origin != builtFor || _owner != builtFor) {
+      // Stale action: touch no storage. If this notifier has not yet rebuilt
+      // for the new profile (its change signal is still on the way), ask for
+      // that rebuild; if it already has, a second one would only strand the
+      // reload in flight.
+      if (_owner == builtFor) ref.invalidateSelf();
       return;
     }
     final next = update(_current);

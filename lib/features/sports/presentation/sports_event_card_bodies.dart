@@ -234,7 +234,9 @@ class SportsEventCardBody extends StatelessWidget {
           const SizedBox(height: 4),
           _sub(venue, maxLines: leader.isEmpty ? 2 : 1),
         ],
-        if (leader.isNotEmpty) ...[
+        // The leader of a finished tournament is its winner: with scores
+        // hidden the whole row goes, not just the score.
+        if (leader.isNotEmpty && !hideScores) ...[
           const SizedBox(height: 8),
           Row(
             children: [

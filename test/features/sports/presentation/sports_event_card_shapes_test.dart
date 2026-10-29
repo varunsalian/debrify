@@ -212,14 +212,14 @@ void main() {
       expect(find.text('-6'), findsOneWidget);
     });
 
-    testWidgets('hidden scores keep the leader but not the score', (
-      tester,
-    ) async {
+    testWidgets('hidden scores hide the whole leader row', (tester) async {
+      // A finished tournament's leader is its winner, so naming them would
+      // spoil the result.
       await _mount(tester, _golf, hideScores: true);
 
-      expect(find.text('Leader · Patton Kizzire'), findsOneWidget);
+      expect(find.textContaining('Patton Kizzire'), findsNothing);
       expect(find.text('-6'), findsNothing);
-      expect(find.byType(SportsHiddenScore), findsOneWidget);
+      expect(find.text('VidantaWorld Mexico Open'), findsOneWidget);
     });
 
     testWidgets('a race shows its title and venue', (tester) async {

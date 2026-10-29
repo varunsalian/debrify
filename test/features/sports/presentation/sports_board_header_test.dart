@@ -213,8 +213,9 @@ void main() {
 
     expect(h.leaguePrefs.lists[SportsLeagueFilterStore.offKey], isEmpty);
     expect(find.byKey(sportsCardKey(_nba)), findsOneWidget);
-    // Closing the sheet after a change reloads (from the cache) once.
-    expect(h.feed.calls.length, greaterThan(callsBefore));
+    // The refetch belongs to the board controller (it listens to its league
+    // list; see sports_board_controller_test). Closing the sheet adds no
+    // forced reload of its own.
     expect(h.feed.calls.skip(callsBefore).every((call) => !call.force), isTrue);
   });
 }

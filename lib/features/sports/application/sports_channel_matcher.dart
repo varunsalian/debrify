@@ -43,6 +43,22 @@ const Map<SportKind, List<String>> _contextPhrases = {
 /// Before the tournament proper: `'Xfinity 500 at Martinsville'` names the
 /// venue after `at`; `'UFC Fight Night: Moicano vs. Nolan'` names the fighters
 /// after the colon.
+/// Suffixes that follow a surname and identify nobody on their own.
+const Set<String> _nameSuffixes = {'jr', 'sr', 'ii', 'iii', 'iv'};
+
+/// The last real name word of a fighter, 4+ letters (short or numeric words
+/// match too many unrelated listings).
+String? _surname(String side) {
+  final words = normalizeSportsText(side)
+      .split(' ')
+      .where((w) => w.isNotEmpty && !_nameSuffixes.contains(w))
+      .toList();
+  if (words.isEmpty) return null;
+  final last = words.last;
+  if (last.length < 4 || RegExp(r'^[0-9]+$').hasMatch(last)) return null;
+  return last;
+}
+
 final RegExp _atVenue = RegExp(r'\bat\s+(.+)$');
 final RegExp _versus = RegExp(r'\s+(?:vs?\.?)\s+');
 
@@ -70,13 +86,15 @@ List<String> sportsTitleNeedles(SportsEvent event) {
   switch (sportsLeagueById(event.leagueId)?.sport) {
     case SportKind.combat:
       // Fighter surnames: listings say "Moicano v Nolan" or "Moicano vs Nolan".
+      // A title without "vs" names no fighters ("UFC 310"): no needles, so
+      // only the broadcaster fallback applies rather than a guess.
       final colon = raw.indexOf(':');
       final bout = colon >= 0 ? raw.substring(colon + 1) : raw;
+      final sides = bout.split(_versus);
+      if (sides.length < 2) return const [];
       return [
-        for (final side in bout.split(_versus))
-          if (normalizeSportsText(side).split(' ').last case final name
-              when name.length > 2)
-            name,
+        for (final side in sides)
+          if (_surname(side) case final name?) name,
       ];
     case SportKind.golf:
       // Sponsors come and go in listings ("Mexico Open" vs "VidantaWorld
