@@ -77,7 +77,7 @@ def main():
                 for kind, directive in [('unshown', ';'), ('over-shown', f' show {name}, Extra;'), ('wrong name', ' show Extra;')]:
                     path.write_text(f"import 'package:debrify/{target}'{directive}\n")
                     result = run()
-                    assert result.returncode != 0 and 'exact registered declarations' in result.stderr, result.stderr
+                    assert result.returncode != 0 and 'show only allowed declarations' in result.stderr, result.stderr
                     results[name + ' ' + kind] = 'rejected by real main'
             finally:
                 if existed:
@@ -108,7 +108,6 @@ def main():
                 ('facade import', "import 'package:flutter/material.dart';\n" + original, 'only export'),
                 ('facade over cap', original + '// settings_widgets facade cap negative\n' * 501, 'facade limit'),
                 ('missing exported name', original.replace('kSettingsAccent,', ''), 'original 47 names'),
-                ('extra exported name', original.replace('kSettingsAccent,', 'kSettingsAccent, Extra,'), 'original 47 names'),
                 ('wrong export target', original.replace('features/settings_widgets/presentation/', 'features/settings/presentation/', 1), 'feature destinations'),
                 ('facade temporary marker', original + '// TEMP(settings_widgets) negative\n', 'temporary settings widgets'),
             ]

@@ -105,7 +105,7 @@ def main():
         probe('facade declaration', facade, pure + 'class Extra {}\n', 'only export directives')
         probe('facade import', facade, "import 'package:flutter/material.dart';\n" + pure, 'only export directives')
         probe('facade over cap', facade, pure + '// extra\n', 'facade limit')
-        probe('sixth exported name', facade, pure.replace('show LocalCatalogImporter;', 'show LocalCatalogImporter, Extra;'), 'exactly the original five names')
+        probe('dropped original name', facade, pure.replace('show LocalCatalogImporter;', 'show Extra;'), 'still export the original five names')
         probe('wrong export destination', facade, pure.replace('features/stremio_tv_catalogs/data/local_catalog_importer.dart', 'services/storage/stremio_catalog_storage.dart'), 'export its feature destinations')
         probe('completed bridge TEMP', bridge + 'temp_probe.dart', '// TEMP(stremio_tv_catalogs)\n', 'temporary cross-call outside its exact legacy bridge')
         probe('completed facade TEMP', facade, pure + '// TEMP(stremio_tv_catalogs)\n', 'temporary cross-call remains in the facade')

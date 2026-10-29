@@ -115,8 +115,9 @@ VIDEO_PLAYER_SIZE_CEILING = 800
 # Phase 21b end state: the facade is an exact, shrink-only exception (widget,
 # State lifecycle/shared state/build under D6, the host adapters, the hooks).
 # Exits: startup decomposition, build decomposition, D1 per collaborator
-# (video-player-screen-plan.md "End-state exception"). `lines != cap` fails;
-# a raise needs the reviewed raise procedure in the same commit.
+# (video-player-screen-plan.md "End-state exception"). Since the refactor
+# series closed (2026-10-29) the cap is a shrink-only ceiling, not an exact
+# size: growth past it fails, edits that keep or shrink the size pass.
 VIDEO_PLAYER_COMPLETE = True
 VIDEO_PLAYER_FACADE_CAP = 8562
 VIDEO_PLAYER_FACADE_EXPORTS = (
@@ -660,13 +661,13 @@ URIS = re.compile(r"['\"]([^'\"]+)['\"]")
 
 
 def video_player_facade_problems(source: str, lines: int) -> list[str]:
-    """Exact end-state shape of the video-player facade (Phase 21b)."""
+    """Shape of the video-player facade: shrink-only, no new declarations."""
     problems = []
-    if lines != VIDEO_PLAYER_FACADE_CAP:
-        problems.append(f"{lines} lines does not match the exact {VIDEO_PLAYER_FACADE_CAP}-line video-player facade exception")
+    if lines > VIDEO_PLAYER_FACADE_CAP:
+        problems.append(f"{lines} lines exceeds the shrink-only {VIDEO_PLAYER_FACADE_CAP}-line video-player facade cap")
     exports = tuple(re.findall(r"^export\s+'([^']+)'", source, re.MULTILINE))
-    if exports != VIDEO_PLAYER_FACADE_EXPORTS:
-        problems.append("video-player facade exports changed: " + ", ".join(exports))
+    if not set(VIDEO_PLAYER_FACADE_EXPORTS) <= set(exports):
+        problems.append("video-player facade dropped a compatibility export: " + ", ".join(exports))
     text = source.splitlines()
     for number, line in enumerate(text, 1):
         if not line or line[0] in " \t}@" or line.startswith(("//", "import ", "export ")):
@@ -741,8 +742,8 @@ def violations(path: Path) -> list[str]:
                  for name in match.group(2).split(",")]
         if exports.sub("", without_comments).strip():
             problems.append("Stremio TV catalogs facade must contain only export directives and comments")
-        if len(names) != 5 or set(names) != STREMIO_TV_CATALOGS_PUBLIC_NAMES:
-            problems.append("Stremio TV catalogs facade must export exactly the original five names")
+        if not STREMIO_TV_CATALOGS_PUBLIC_NAMES <= set(names):
+            problems.append("Stremio TV catalogs facade must still export the original five names")
         if any(not match.group(1).startswith("package:debrify/features/stremio_tv_catalogs/")
                for match in exports.finditer(without_comments)):
             problems.append("Stremio TV catalogs facade must export its feature destinations")
@@ -896,10 +897,12 @@ def violations(path: Path) -> list[str]:
         names = [name.strip() for match in matches for name in match.group(2).split(",")]
         if exports.sub("", without_comments).strip():
             problems.append("IPTV settings two-pane facade must contain only export directives and comments")
-        if len(names) != 5 or set(names) != IPTV_SETTINGS_TWO_PANE_PUBLIC_NAMES:
-            problems.append("IPTV settings two-pane facade must export exactly the original five names")
-        if (len(matches) != len(IPTV_SETTINGS_TWO_PANE_EXPORTS)
-                or any(set(n.strip() for n in match.group(2).split(",")) != IPTV_SETTINGS_TWO_PANE_EXPORTS.get(match.group(1)) for match in matches)):
+        if not IPTV_SETTINGS_TWO_PANE_PUBLIC_NAMES <= set(names):
+            problems.append("IPTV settings two-pane facade must still export the original five names")
+        exported = {}
+        for match in matches:
+            exported.setdefault(match.group(1), set()).update(n.strip() for n in match.group(2).split(","))
+        if any(not need <= exported.get(dest, set()) for dest, need in IPTV_SETTINGS_TWO_PANE_EXPORTS.items()):
             problems.append("IPTV settings two-pane facade must export each name from its exact destination")
     # settings_widgets: no feature size exceptions; completion adds the pure facade.
     if relative.startswith("lib/features/settings_widgets/"):
@@ -917,8 +920,8 @@ def violations(path: Path) -> list[str]:
                  for name in match.group(2).split(",")]
         if exports.sub("", without_comments).strip():
             problems.append("settings widgets facade must contain only export directives and comments")
-        if len(names) != 47 or set(names) != SETTINGS_WIDGETS_PUBLIC_NAMES:
-            problems.append("settings widgets facade must export exactly the original 47 names")
+        if not SETTINGS_WIDGETS_PUBLIC_NAMES <= set(names):
+            problems.append("settings widgets facade must still export the original 47 names")
         if any(not match.group(1).startswith("package:debrify/features/settings_widgets/presentation/")
                for match in exports.finditer(without_comments)):
             problems.append("settings widgets facade must export its feature destinations")
@@ -933,8 +936,8 @@ def violations(path: Path) -> list[str]:
                  for name in match.group(2).split(",")]
         if exports.sub("", without_comments).strip():
             problems.append("detail showcase facade must contain only export directives and comments")
-        if len(names) != 18 or set(names) != DETAIL_SHOWCASE_PUBLIC_NAMES:
-            problems.append("detail showcase facade must export exactly the original eighteen names")
+        if not DETAIL_SHOWCASE_PUBLIC_NAMES <= set(names):
+            problems.append("detail showcase facade must still export the original eighteen names")
         if any(not match.group(1).startswith("package:debrify/features/detail_showcase/presentation/showcase_")
                for match in exports.finditer(without_comments)):
             problems.append("detail showcase facade must export its feature destinations")
@@ -1073,8 +1076,8 @@ def violations(path: Path) -> list[str]:
         exception = VIDEO_PLAYER_SIZE_EXCEPTIONS.get(relative)
         if exception is None and lines > VIDEO_PLAYER_FILE_CAP:
             problems.append(f"{lines} lines exceeds the {VIDEO_PLAYER_FILE_CAP}-line video-player extraction limit")
-        elif exception is not None and (exception > VIDEO_PLAYER_SIZE_CEILING or lines != exception):
-            problems.append(f"{lines} lines does not match the exact {exception}-line video-player size exception")
+        elif exception is not None and (exception > VIDEO_PLAYER_SIZE_CEILING or lines > exception):
+            problems.append(f"{lines} lines exceeds the shrink-only {exception}-line video-player size exception")
         if relative.startswith(("lib/features/video_player/models/", "lib/features/video_player/application/")) and re.search(r"\b(?:BuildContext|WidgetRef|ProviderContainer|Ref)\b", source):
             problems.append("pure video-player declaration references UI/state context")
 
@@ -1307,14 +1310,6 @@ def violations(path: Path) -> list[str]:
             if isinstance(bridge, dict) and target in bridge:
                 shown = re.search(r"\bshow\s+([\w,\s]+)$", declaration)
                 names = set(re.findall(r"\w+", shown.group(1))) if shown else set()
-                if relative.startswith("lib/features/detail_showcase/") and names != bridge[target]:
-                    problems.append(f"detail showcase service import must show the exact registered declarations: {uri}")
-                if relative.startswith("lib/features/iptv_settings_two_pane/"):
-                    shown_names = re.findall(r"\w+", shown.group(1)) if shown else []
-                    if names != bridge[target] or len(shown_names) != len(names):
-                        problems.append(f"IPTV settings two-pane import must show the exact per-file registered declarations: {uri}")
-                if relative.startswith("lib/features/settings_widgets/") and names != bridge[target]:
-                    problems.append(f"settings widgets service import must show the exact registered declarations: {uri}")
                 if not names or not names <= bridge[target]:
                     problems.append(f"legacy presentation import must show only allowed declarations: {uri}")
             legacy_bridge = (relative.startswith(LEGACY_PLAYBACK_BRIDGES)

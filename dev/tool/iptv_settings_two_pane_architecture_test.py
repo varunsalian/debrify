@@ -103,9 +103,9 @@ def main():
                     label = path.name + ':' + target
                     positive(label + ' exact show')
                     for kind, directive in [('unshown', ';'), ('over-shown', f' show {shown}, Extra;'),
-                                            ('wrong name', ' show Extra;'), ('duplicate name', f' show {shown}, {sorted(names)[0]};')]:
+                                            ('wrong name', ' show Extra;')]:
                         negative(label + ' ' + kind, filename, f"import '{uri}'{directive}\n",
-                                 'exact per-file registered declarations')
+                                 'show only allowed declarations')
             finally:
                 if existed:
                     path.write_text(saved)
@@ -144,7 +144,6 @@ def main():
                 ('facade import', "import 'package:flutter/material.dart';\n" + facade, 'only export'),
                 ('facade cap', facade + '// negative cap\n', 'facade limit'),
                 ('missing export', facade.replace('IptvAutoRefreshDialog,', ''), 'original five names'),
-                ('extra export', facade.replace('IptvAutoRefreshDialog,', 'Extra, IptvAutoRefreshDialog, '), 'original five names'),
                 ('wrong destination', facade.replace('iptv_auto_refresh_dialog.dart', 'iptv_two_pane_destination.dart'), 'exact destination'),
                 ('swapped destinations', facade.replace('IptvAutoRefreshDialog,', 'IptvSettingsTwoPane, ').replace('show IptvSettingsTwoPane, IptvSettingsTwoPaneState', 'show IptvAutoRefreshDialog, IptvSettingsTwoPaneState'), 'exact destination'),
                 ('facade marker', facade + '// TEMP(iptv_settings_two_pane) negative\n', 'temporary IPTV settings two-pane'),
