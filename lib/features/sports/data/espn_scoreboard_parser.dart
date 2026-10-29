@@ -4,6 +4,7 @@
 // Data layer: pure Dart, no UI and no network access. The feed is untrusted,
 // so every accessor is defensive and this library never throws; a malformed
 // event is dropped while its siblings survive.
+import 'package:debrify/features/sports/models/sports_leagues.dart';
 import 'package:debrify/features/sports/models/sports_models.dart';
 
 /// ESPN status names that mean "will not be played as scheduled".
@@ -25,9 +26,15 @@ List<SportsEvent> parseEspnScoreboard(
 }) {
   final events = _list(_map(json)?['events']);
   if (events == null) return const [];
+  // Cricket cards carry text scores and a match situation instead of numbers;
+  // unknown league ids keep the team (numeric score) behaviour.
+  final league = sportsLeagueById(leagueId);
+  final innings =
+      league != null && sportsEventShapeOf(league) == SportsEventShape.innings;
+  final series = innings ? _seriesName(json) : null;
   final parsed = <SportsEvent>[];
   for (final raw in events) {
-    final event = _parseEvent(raw, leagueId);
+    final event = _parseEvent(raw, leagueId, innings: innings, series: series);
     if (event != null) parsed.add(event);
   }
   parsed.sort(_compareByStartThenId);
@@ -40,7 +47,12 @@ int _compareByStartThenId(SportsEvent a, SportsEvent b) {
   return a.id.compareTo(b.id);
 }
 
-SportsEvent? _parseEvent(Object? raw, String leagueId) {
+SportsEvent? _parseEvent(
+  Object? raw,
+  String leagueId, {
+  bool innings = false,
+  String? series,
+}) {
   final event = _map(raw);
   if (event == null) return null;
   final id = _id(event['id']);
@@ -71,6 +83,23 @@ SportsEvent? _parseEvent(Object? raw, String leagueId) {
       eventStatus == SportsEventStatus.live ||
       eventStatus == SportsEventStatus.finished;
 
+  var subtitle = _nonEmpty(_dig(competition, const ['venue', 'fullName']));
+  String? format;
+  String? note;
+  bool? homeWon;
+  if (innings) {
+    // Cricket shows the match name ("3rd Test") where football shows a venue.
+    final description = _trimmed(competition['description']);
+    if (description != null) subtitle = description;
+    format = _upper(_dig(competition, const ['class', 'generalClassCard']));
+    note = _trimmed(_dig(competition, const ['status', 'summary']));
+    homeWon = _inningsWinner(
+      finished: eventStatus == SportsEventStatus.finished,
+      home: home,
+      away: away,
+    );
+  }
+
   return SportsEvent(
     id: id,
     leagueId: leagueId,
@@ -78,16 +107,54 @@ SportsEvent? _parseEvent(Object? raw, String leagueId) {
     status: eventStatus,
     home: homeTeam,
     away: awayTeam,
-    homeScore: scoring ? _score(home['score']) : null,
-    awayScore: scoring ? _score(away['score']) : null,
-    subtitle: _nonEmpty(_dig(competition, const ['venue', 'fullName'])),
+    homeScore: innings || !scoring ? null : _score(home['score']),
+    awayScore: innings || !scoring ? null : _score(away['score']),
+    subtitle: subtitle,
     clock: eventStatus == SportsEventStatus.live
         ? _liveClock(status: status, type: type)
         : null,
     statusLabel: _text(type['shortDetail']) ?? _text(type['detail']) ?? '',
     broadcasts: _broadcasts(competition),
+    homeScoreText: innings ? _trimmed(home['score']) : null,
+    awayScoreText: innings ? _trimmed(away['score']) : null,
+    homeWon: homeWon,
+    format: format,
+    note: note,
+    group: series,
   );
 }
+
+/// The payload's `leagues[0].name`: the series or tournament hosting the day.
+String? _seriesName(Object? json) {
+  final leagues = _list(_map(json)?['leagues']);
+  if (leagues == null || leagues.isEmpty) return null;
+  return _trimmed(_map(leagues.first)?['name']);
+}
+
+/// Cricket has no winner unless the match finished: a drawn match, and a
+/// match whose `winner` flags are missing or both false, stays undecided.
+bool? _inningsWinner({
+  required bool finished,
+  required Map<String, dynamic>? home,
+  required Map<String, dynamic>? away,
+}) {
+  if (!finished) return null;
+  if (_isWinner(home?['winner'])) return true;
+  if (_isWinner(away?['winner'])) return false;
+  return null;
+}
+
+/// ESPN sends `winner` as a bool or as the strings `"true"`/`"false"`.
+bool _isWinner(Object? raw) =>
+    raw == true || (raw is String && raw.trim().toLowerCase() == 'true');
+
+/// Text that survives trimming; whitespace-only or empty becomes null.
+String? _trimmed(Object? raw) {
+  final text = _text(raw)?.trim();
+  return (text == null || text.isEmpty) ? null : text;
+}
+
+String? _upper(Object? raw) => _trimmed(raw)?.toUpperCase();
 
 /// The two `competitions[0].competitors` entries located by `homeAway`.
 typedef _CompetitorPair = ({
