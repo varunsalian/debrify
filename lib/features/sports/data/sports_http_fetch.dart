@@ -6,12 +6,17 @@ import 'package:http/http.dart' as http;
 
 import 'sports_feed_client.dart';
 
+/// One client for every feed request, so per-day fetches reuse kept-alive
+/// connections instead of paying a TLS handshake each (app lifetime; never
+/// closed).
+final http.Client _client = http.Client();
+
 /// GETs [uri] expecting a JSON body.
 ///
 /// Non-200 responses become [SportsFeedException]; transport errors (timeouts,
 /// socket failures) propagate so the feed client can apply its stale fallback.
 Future<String> httpSportsFetch(Uri uri) async {
-  final response = await http
+  final response = await _client
       .get(uri, headers: const {'Accept': 'application/json'})
       .timeout(const Duration(seconds: 15));
   if (response.statusCode != 200) {

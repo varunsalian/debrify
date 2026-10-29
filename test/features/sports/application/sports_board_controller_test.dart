@@ -237,10 +237,12 @@ void main() {
         '401879249',
         '401879251',
       ]);
-      expect(
-        h.fetch.uris.where((u) => u.path.contains('uefa.champions')),
-        hasLength(1),
-      );
+      // One request per UTC day of the window, none repeated.
+      final ucl = h.fetch.uris
+          .where((u) => u.path.contains('uefa.champions'))
+          .toList();
+      expect(ucl, isNotEmpty);
+      expect(ucl.toSet(), hasLength(ucl.length));
     },
   );
 
@@ -258,12 +260,15 @@ void main() {
       h.clock.day,
     ).subtract(const Duration(days: 1));
     expect([from.hour, from.minute, from.second], [0, 0, 0]);
-    final dates = h.fetch.uris.single.queryParameters['dates'];
-    expect(
-      dates,
-      '${_compactUtc(from)}-${_compactUtc(h.clock.add(const Duration(days: 7)))}',
-    );
-    expect(h.fetch.uris.single.queryParameters['dates'], endsWith('20261104'));
+    // ESPN takes single days only: one request per UTC day of the window.
+    final days = [
+      for (final uri in h.fetch.uris) uri.queryParameters['dates']!,
+    ];
+    expect(days.first, _compactUtc(from));
+    expect(days.last, _compactUtc(h.clock.add(const Duration(days: 7))));
+    expect(days.last, '20261104');
+    expect(days.toSet(), hasLength(days.length));
+    expect(days.every((d) => d.length == 8), isTrue);
   });
 
   test('every league failing reports the error and keeps the board', () async {
@@ -272,9 +277,9 @@ void main() {
     await h.controller.refresh();
     expect(h.state.events, isNotEmpty);
     final before = h.state.events;
-    // A new day asks for new feed windows, so nothing cached can cover a
-    // failing league and every request genuinely fails.
-    h.advance(const Duration(days: 1));
+    // A month later no cached day overlaps the window, so every request
+    // genuinely fails (overlapping cached days would still be served).
+    h.advance(const Duration(days: 30));
     h.fetch.failing.addAll(['ucl', 'epl', 'nfl']);
     await h.controller.refresh(force: true);
     expect(h.state.error, loadFailed);

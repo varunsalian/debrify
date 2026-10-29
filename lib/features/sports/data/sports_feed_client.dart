@@ -5,9 +5,19 @@
 // on fake time. One client is shared by the board controller; the cache is
 // keyed per request URI, expires on a live/schedule TTL, keeps serving stale
 // entries when a refresh fails, and shares one in-flight fetch per URI.
+//
+// ESPN is requested one UTC day at a time: its scoreboard rejects
+// `dates=YYYYMMDD-YYYYMMDD` ranges with HTTP 400 (observed 2026-10-29), and
+// a whole-month request is ~3 MB of JSON per US league, too heavy to parse
+// on a TV box. Day entries are cached individually, so "Today" and "This
+// week" share them, and at most [SportsFeedClient.maxConcurrentFetches]
+// requests are in flight at once.
+import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 
 import 'package:debrify/features/sports/models/sports_models.dart';
+import 'package:flutter/foundation.dart';
 
 import 'espn_scoreboard_parser.dart';
 import 'jolpica_f1_parser.dart';
@@ -57,8 +67,16 @@ class SportsFeedClient {
   /// How far before `fromUtc` an F1 race may still appear on the board.
   static const Duration _f1Lead = Duration(hours: 3);
 
+  /// Longest window [fetchLeague] expands into per-day ESPN requests.
+  static const int maxWindowDays = 16;
+
+  /// Cap on simultaneous feed requests across all leagues and days.
+  static const int maxConcurrentFetches = 8;
+
   final SportsFetch _fetch;
   final DateTime Function() _clock;
+  int _activeFetches = 0;
+  final Queue<Completer<void>> _fetchWaiters = Queue<Completer<void>>();
 
   /// TTL for a cached list that contains no live event.
   final Duration scheduleTtl;
@@ -69,16 +87,33 @@ class SportsFeedClient {
   final Map<Uri, _CacheEntry> _cache = {};
   final Map<Uri, Future<List<SportsEvent>>> _inFlight = {};
 
-  /// ESPN scoreboard URI for [league] covering `[fromUtc, toUtc]` (UTC).
-  ///
-  /// `dates` is a single `YYYYMMDD` day when both bounds fall on the same UTC
-  /// date, otherwise a `YYYYMMDD-YYYYMMDD` range. Throws [ArgumentError] for
-  /// leagues without an ESPN feed.
-  static Uri espnScoreboardUri(
+  /// ESPN scoreboard URIs for [league] covering `[fromUtc, toUtc]`: one per
+  /// UTC calendar day, in order, at most [maxWindowDays]. Throws
+  /// [ArgumentError] for leagues without an ESPN feed or a window that ends
+  /// before it starts.
+  static List<Uri> espnScoreboardUris(
     SportsLeague league,
     DateTime fromUtc,
     DateTime toUtc,
   ) {
+    final first = _utcDay(fromUtc);
+    final last = _utcDay(toUtc);
+    if (last.isBefore(first)) {
+      throw ArgumentError.value(toUtc, 'toUtc', 'is before fromUtc');
+    }
+    return [
+      for (
+        var day = first, n = 0;
+        !day.isAfter(last) && n < maxWindowDays;
+        day = day.add(const Duration(days: 1)), n++
+      )
+        espnScoreboardUri(league, day),
+    ];
+  }
+
+  /// ESPN scoreboard URI for [league] on the UTC calendar day of [dayUtc].
+  /// Throws [ArgumentError] for leagues without an ESPN feed.
+  static Uri espnScoreboardUri(SportsLeague league, DateTime dayUtc) {
     final path = league.espnPath;
     if (path == null) {
       throw ArgumentError.value(
@@ -89,38 +124,93 @@ class SportsFeedClient {
     }
     return Uri.parse(
       '$_espnBase/$path/scoreboard'
-      '?dates=${_datesParameter(fromUtc, toUtc)}&limit=200',
+      '?dates=${_compactUtcDate(dayUtc)}&limit=200',
     );
   }
 
   /// Events for [league] whose feed covers `[fromUtc, toUtc]`.
   ///
-  /// Serves a fresh cache entry unless [force] is set, shares one in-flight
-  /// fetch per URI, and falls back to the stale entry when the fetch or the
-  /// JSON body fails. Throws [SportsFeedException] when nothing is cached.
-  /// Returned lists are sorted by start, then id.
+  /// Per request URI (the F1 season, or one ESPN UTC day): serves a fresh
+  /// cache entry unless [force] is set, shares one in-flight fetch, and falls
+  /// back to the stale entry when the fetch or the JSON body fails. Days that
+  /// fail with nothing cached are left out; [SportsFeedException] is thrown
+  /// only when every day failed. Returned lists are sorted by start, then id.
   Future<List<SportsEvent>> fetchLeague(
     SportsLeague league, {
     required DateTime fromUtc,
     required DateTime toUtc,
     bool force = false,
   }) async {
-    final uri = _requestUri(league, fromUtc, toUtc);
-    if (uri == null) return const [];
+    if (league.id == _f1LeagueId) {
+      final season = await _entry(league, jolpicaSeasonUri, force);
+      return _window(season, league, fromUtc, toUtc);
+    }
+    if (league.espnPath == null) return const [];
+    final days = espnScoreboardUris(league, fromUtc, toUtc);
+    final results = await Future.wait([
+      for (final uri in days)
+        _entry(
+          league,
+          uri,
+          force,
+        ).then<Object>((events) => events, onError: (Object e) => e),
+    ]);
+    final byId = <String, SportsEvent>{};
+    Object? failure;
+    var succeeded = 0;
+    for (final result in results) {
+      if (result is List<SportsEvent>) {
+        succeeded++;
+        for (final event in result) {
+          byId[event.id] = event;
+        }
+      } else {
+        failure ??= result;
+      }
+    }
+    if (failure != null) {
+      // A partly failed window still shows the days that loaded; keep a trace
+      // of why the rest are missing.
+      debugPrint('Sports: ${league.id} feed day failed: $failure');
+    }
+    if (succeeded == 0 && failure != null) {
+      if (failure is SportsFeedException) throw failure;
+      throw SportsFeedException(days.first, '$failure');
+    }
+    return byId.values.toList()..sort(_byStartThenId);
+  }
+
+  /// One URI's events: fresh cache, the shared in-flight fetch, or a new one.
+  Future<List<SportsEvent>> _entry(
+    SportsLeague league,
+    Uri uri,
+    bool force,
+  ) async {
     if (!force) {
       final cached = _cache[uri];
       if (cached != null && _isFresh(cached)) {
-        return _window(cached.events, league, fromUtc, toUtc);
+        return List<SportsEvent>.of(cached.events);
       }
     }
-    return _window(await _pendingOrStart(league, uri), league, fromUtc, toUtc);
+    return List<SportsEvent>.of(await _pendingOrStart(league, uri));
   }
 
-  /// The feed URI for one request, or null when the league has no feed.
-  Uri? _requestUri(SportsLeague league, DateTime fromUtc, DateTime toUtc) {
-    if (league.id == _f1LeagueId) return jolpicaSeasonUri;
-    if (league.espnPath == null) return null;
-    return espnScoreboardUri(league, fromUtc, toUtc);
+  /// [_fetch] behind the [maxConcurrentFetches] cap. Waiters are woken in
+  /// arrival order, though a new caller can take a freed slot first; the cap
+  /// itself always holds.
+  Future<String> _limitedFetch(Uri uri) async {
+    while (_activeFetches >= maxConcurrentFetches) {
+      final turn = Completer<void>();
+      _fetchWaiters.add(turn);
+      await turn.future;
+    }
+    _activeFetches++;
+    try {
+      return await _fetch(uri);
+    } finally {
+      _activeFetches--;
+      if (_fetchWaiters.isNotEmpty) _fetchWaiters.removeFirst().complete();
+    }
   }
 
   Future<List<SportsEvent>> _pendingOrStart(SportsLeague league, Uri uri) {
@@ -137,7 +227,7 @@ class SportsFeedClient {
     List<SportsEvent>? events;
     Object? failure;
     try {
-      events = _parseBody(await _fetch(uri), uri, league);
+      events = _parseBody(await _limitedFetch(uri), uri, league);
     } catch (error) {
       failure = error;
     }
@@ -202,18 +292,9 @@ class SportsFeedClient {
   static bool _isLive(SportsEvent event) =>
       event.status == SportsEventStatus.live;
 
-  static String _datesParameter(DateTime fromUtc, DateTime toUtc) {
-    final from = _compactUtcDate(fromUtc);
-    if (_isSameUtcDay(fromUtc, toUtc)) return from;
-    return '$from-${_compactUtcDate(toUtc)}';
-  }
-
-  static bool _isSameUtcDay(DateTime a, DateTime b) {
-    final first = a.toUtc();
-    final second = b.toUtc();
-    return first.year == second.year &&
-        first.month == second.month &&
-        first.day == second.day;
+  static DateTime _utcDay(DateTime instant) {
+    final utc = instant.toUtc();
+    return DateTime.utc(utc.year, utc.month, utc.day);
   }
 
   static String _compactUtcDate(DateTime instant) {

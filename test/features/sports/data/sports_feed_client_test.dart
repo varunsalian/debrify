@@ -110,12 +110,11 @@ void main() {
   Future<List<SportsEvent>> fetchEpl({bool force = false}) =>
       _fetchEpl(h.client, force: force);
 
-  group('espnScoreboardUri', () {
-    test('one UTC date becomes a single dates value', () {
+  group('ESPN scoreboard URIs', () {
+    test('one UTC day is a single dates value', () {
       final uri = SportsFeedClient.espnScoreboardUri(
         _epl,
-        DateTime.utc(2026, 10, 31, 0, 0),
-        DateTime.utc(2026, 10, 31, 23, 59),
+        DateTime.utc(2026, 10, 31, 18, 45),
       );
       expect(
         uri.toString(),
@@ -124,53 +123,189 @@ void main() {
       );
     });
 
-    test('spanning UTC days becomes a from-to range', () {
-      final uri = SportsFeedClient.espnScoreboardUri(
+    test('a window spanning UTC days becomes one URI per day, in order', () {
+      // ESPN answers YYYYMMDD-YYYYMMDD ranges with HTTP 400.
+      final uris = SportsFeedClient.espnScoreboardUris(
         _ucl,
         DateTime.utc(2026, 10, 28, 23),
         DateTime.utc(2026, 11, 4, 1),
       );
+      expect(uris.map((u) => u.queryParameters['dates']), [
+        '20261028',
+        '20261029',
+        '20261030',
+        '20261031',
+        '20261101',
+        '20261102',
+        '20261103',
+        '20261104',
+      ]);
       expect(
-        uri.toString(),
-        'https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions'
-        '/scoreboard?dates=20261028-20261104&limit=200',
+        uris.every((u) => !u.queryParameters['dates']!.contains('-')),
+        isTrue,
+      );
+      expect(
+        uris.first.path,
+        '/apis/site/v2/sports/soccer/uefa.champions/scoreboard',
       );
     });
 
-    test('window bounds are converted to UTC before formatting', () {
-      // Same instant pair as the range test, expressed in local time zones.
+    test('window bounds are converted to UTC before choosing days', () {
       final from = DateTime.utc(2026, 10, 28, 23).toLocal();
-      final to = DateTime.utc(2026, 11, 4, 1).toLocal();
-      final uri = SportsFeedClient.espnScoreboardUri(_epl, from, to);
-      expect(uri.queryParameters['dates'], '20261028-20261104');
-      // Local instants on one UTC day keep the single-date form.
-      final sameDay = SportsFeedClient.espnScoreboardUri(
+      final to = DateTime.utc(2026, 10, 29, 1).toLocal();
+      final uris = SportsFeedClient.espnScoreboardUris(_epl, from, to);
+      expect(uris.map((u) => u.queryParameters['dates']), [
+        '20261028',
+        '20261029',
+      ]);
+      final sameDay = SportsFeedClient.espnScoreboardUris(
         _epl,
         DateTime.utc(2026, 10, 31, 0, 30).toLocal(),
         DateTime.utc(2026, 10, 31, 23, 30).toLocal(),
       );
-      expect(sameDay.queryParameters['dates'], '20261031');
+      expect(sameDay.map((u) => u.queryParameters['dates']), ['20261031']);
     });
 
     test('month and day are zero padded', () {
       final uri = SportsFeedClient.espnScoreboardUri(
         sportsLeagueById('mlb')!,
-        DateTime.utc(2027, 1, 5),
         DateTime.utc(2027, 1, 5, 12),
       );
       expect(uri.queryParameters['dates'], '20270105');
       expect(uri.path, '/apis/site/v2/sports/baseball/mlb/scoreboard');
     });
 
-    test('leagues without an ESPN path throw ArgumentError', () {
+    test('a long window is capped at maxWindowDays requests', () {
+      final uris = SportsFeedClient.espnScoreboardUris(
+        _epl,
+        DateTime.utc(2026, 10, 1),
+        DateTime.utc(2026, 12, 31),
+      );
+      expect(uris, hasLength(SportsFeedClient.maxWindowDays));
+    });
+
+    test('leagues without an ESPN path and inverted windows throw', () {
       expect(
-        () => SportsFeedClient.espnScoreboardUri(
+        () => SportsFeedClient.espnScoreboardUris(
           _f1,
           DateTime.utc(2026, 10, 28),
           DateTime.utc(2026, 11, 4),
         ),
         throwsArgumentError,
       );
+      expect(
+        () =>
+            SportsFeedClient.espnScoreboardUri(_f1, DateTime.utc(2026, 10, 28)),
+        throwsArgumentError,
+      );
+      expect(
+        () => SportsFeedClient.espnScoreboardUris(
+          _epl,
+          DateTime.utc(2026, 11, 4),
+          DateTime.utc(2026, 10, 28),
+        ),
+        throwsArgumentError,
+      );
+    });
+  });
+
+  group('multi-day ESPN windows', () {
+    String dayOf(Uri uri) => uri.queryParameters['dates']!;
+
+    // A real fixture event, re-dated and re-identified per test.
+    Map<String, dynamic> event(String id, String date) {
+      final fixture =
+          jsonDecode(fixtureBody('espn_epl_scheduled.json'))
+              as Map<String, dynamic>;
+      final base =
+          jsonDecode(jsonEncode((fixture['events'] as List).first))
+              as Map<String, dynamic>;
+      base['id'] = id;
+      base['date'] = date;
+      (base['competitions'] as List).first['date'] = date;
+      return base;
+    }
+
+    test('each day is fetched once and the results are merged', () async {
+      h.fetch.bodyBuilder = (uri) => jsonEncode({
+        'events': [
+          if (dayOf(uri) == '20261028') event('a', '2026-10-28T19:00Z'),
+          if (dayOf(uri) == '20261029') event('b', '2026-10-29T18:00Z'),
+          if (dayOf(uri) == '20261029') event('c', '2026-10-29T17:00Z'),
+        ],
+      });
+      final events = await h.client.fetchLeague(
+        _epl,
+        fromUtc: DateTime.utc(2026, 10, 28, 12),
+        toUtc: DateTime.utc(2026, 10, 29, 23),
+      );
+      expect(h.fetch.uris.map(dayOf).toSet(), {'20261028', '20261029'});
+      expect(h.fetch.callCount, 2);
+      expect(events.map((e) => e.id), ['a', 'c', 'b']);
+    });
+
+    test('a day shared by two windows is served from its cache', () async {
+      h.serve(jsonEncode({'events': <Object>[]}));
+      await h.client.fetchLeague(
+        _epl,
+        fromUtc: DateTime.utc(2026, 10, 28),
+        toUtc: DateTime.utc(2026, 10, 30, 23),
+      );
+      final before = h.fetch.callCount;
+      await h.client.fetchLeague(
+        _epl,
+        fromUtc: DateTime.utc(2026, 10, 29, 6),
+        toUtc: DateTime.utc(2026, 10, 29, 22),
+      );
+      expect(h.fetch.callCount, before);
+    });
+
+    test('failed days are left out while other days still show', () async {
+      h.fetch.bodyBuilder = (uri) {
+        if (dayOf(uri) == '20261029') throw StateError('HTTP 400');
+        return jsonEncode({
+          'events': [event('a', '2026-10-28T19:00Z')],
+        });
+      };
+      final events = await h.client.fetchLeague(
+        _epl,
+        fromUtc: DateTime.utc(2026, 10, 28),
+        toUtc: DateTime.utc(2026, 10, 29, 23),
+      );
+      expect(events.map((e) => e.id), ['a']);
+    });
+
+    test('every day failing throws a SportsFeedException', () async {
+      h.fetch.error = StateError('HTTP 400');
+      await expectLater(
+        h.client.fetchLeague(
+          _epl,
+          fromUtc: DateTime.utc(2026, 10, 28),
+          toUtc: DateTime.utc(2026, 10, 30),
+        ),
+        throwsA(isA<SportsFeedException>()),
+      );
+    });
+
+    test('no more than maxConcurrentFetches requests run at once', () async {
+      var active = 0;
+      var peak = 0;
+      final client = SportsFeedClient(
+        fetch: (uri) async {
+          active++;
+          peak = active > peak ? active : peak;
+          await Future<void>.delayed(const Duration(milliseconds: 5));
+          active--;
+          return jsonEncode({'events': <Object>[]});
+        },
+        clock: () => _t0,
+      );
+      await client.fetchLeague(
+        _epl,
+        fromUtc: DateTime.utc(2026, 10, 20),
+        toUtc: DateTime.utc(2026, 10, 31),
+      );
+      expect(peak, SportsFeedClient.maxConcurrentFetches);
     });
   });
 
@@ -183,11 +318,7 @@ void main() {
         toUtc: DateTime.utc(2026, 10, 31, 23, 59),
       );
       expect(h.fetch.uris, [
-        SportsFeedClient.espnScoreboardUri(
-          _epl,
-          DateTime.utc(2026, 10, 31),
-          DateTime.utc(2026, 10, 31, 23, 59),
-        ),
+        SportsFeedClient.espnScoreboardUri(_epl, DateTime.utc(2026, 10, 31)),
       ]);
       expect(events, hasLength(4));
       expect(events.first.start, DateTime.utc(2026, 10, 31, 12, 30));
@@ -379,7 +510,6 @@ void main() {
       final expectedUri = SportsFeedClient.espnScoreboardUri(
         _epl,
         DateTime.utc(2026, 10, 31),
-        DateTime.utc(2026, 10, 31, 23, 59),
       );
       await expectLater(
         fetchEpl(),
@@ -401,7 +531,6 @@ void main() {
         final uri = SportsFeedClient.espnScoreboardUri(
           _epl,
           DateTime.utc(2026, 10, 31),
-          DateTime.utc(2026, 10, 31, 23, 59),
         );
         final original = SportsFeedException(uri, 'HTTP 503');
         h.fetch.error = original;
