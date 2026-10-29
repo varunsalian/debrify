@@ -1,7 +1,5 @@
 // Now Playing: what reaches the system (and when), how remote commands map
 // onto the player, and the method channel adapter.
-import 'dart:async';
-
 import 'package:debrify/features/now_playing/application/now_playing_commands.dart';
 import 'package:debrify/features/now_playing/application/now_playing_publisher.dart';
 import 'package:debrify/features/now_playing/data/now_playing_channel.dart';
