@@ -12,6 +12,7 @@ class SettingsIndexBuilder {
     Future<void> Function() checkForAppUpdates,
     Future<void> Function() clearDownloadData,
     Future<void> Function() clearPlaybackData,
+    Future<void> Function() openStorageUsage,
     BuildContext Function() context,
     Future<void> Function() createBackup,
     bool Function() downloadLocationSupported,

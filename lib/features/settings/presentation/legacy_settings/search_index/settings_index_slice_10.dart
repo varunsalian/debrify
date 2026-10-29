@@ -46,6 +46,23 @@ extension SettingsIndexSlice10 on SettingsIndexBuilder {
         ],
       ),
 
+      nav(
+        SettingsRows.storageUsage,
+        'Data & Backup',
+        deps.openStorageUsage,
+        keywords: const [
+          'storage',
+          'space',
+          'disk',
+          'size',
+          'data usage',
+          'full',
+          'cache',
+          'gb',
+          'database',
+        ],
+      ),
+
       // Backup & Restore
       nav(
         SettingsRows.createBackup,

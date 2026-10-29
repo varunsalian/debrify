@@ -321,6 +321,11 @@ abstract final class SettingsRows {
     title: 'Restore backup from WebDAV',
     subtitle: 'Choose an encrypted profile package on your server',
   );
+  static const storageUsage = SettingsRowContent(
+    icon: Icons.storage_rounded,
+    title: 'Storage Usage',
+    subtitle: 'See what Debrify keeps on this device',
+  );
   static const exportDiagnosticLogs = SettingsRowContent(
     icon: Icons.bug_report_outlined,
     title: 'Export Diagnostic Logs',

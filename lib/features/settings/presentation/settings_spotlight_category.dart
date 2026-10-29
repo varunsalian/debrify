@@ -322,6 +322,8 @@ Widget buildSpotlightCategory(
                 SettingsRows.clearPlayback,
                 onTap: layout.onClearPlayback,
               ),
+              if (layout.onOpenStorageUsage case final open?)
+                SettingsTile.spec(SettingsRows.storageUsage, onTap: open),
             ],
           ),
           const SizedBox(height: 18),

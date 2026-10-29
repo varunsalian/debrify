@@ -37,6 +37,10 @@ class CacheScratchCleanup {
     }
   }
 
+  /// Whether [name] is one of Debrify's scratch files at the top of the
+  /// temp folder. The storage report counts the same names.
+  static bool isScratchName(String name) => _scratchName.hasMatch(name);
+
   static final _scratchName = RegExp(
     r'^(?:xmltv_\d+\.tmp|torrent_payload_\d+\.json|'
     r'episode_(?:metadata|guide)_\d+\.json|'

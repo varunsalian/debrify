@@ -11,6 +11,7 @@ import '../../utils/platform_util.dart';
 import '../../theme/app_focus.dart';
 import '../../theme/widgets/parallax_focus.dart';
 import 'settings_spotlight_shell.dart';
+import 'settings_tv_data_pane.dart';
 import 'widgets/settings_widgets.dart';
 import '../../theme/app_theme_scope.dart';
 
@@ -65,6 +66,8 @@ class SettingsTvLayout extends StatefulWidget {
   final Future<void> Function() onOpenDebrifyTvSettings;
   final Future<void> Function() onClearDownloads;
   final Future<void> Function() onClearPlayback;
+  // Settings › Storage Usage; null hides the row.
+  final Future<void> Function()? onOpenStorageUsage;
   // Android-only custom download folder (SAF); null hides the row.
   final Future<void> Function()? onOpenDownloadLocation;
   final String downloadLocationSubtitle;
@@ -182,6 +185,7 @@ class SettingsTvLayout extends StatefulWidget {
     required this.onOpenDebrifyTvSettings,
     required this.onClearDownloads,
     required this.onClearPlayback,
+    this.onOpenStorageUsage,
     this.onOpenDownloadLocation,
     this.downloadLocationSubtitle = '',
     required this.onCreateBackup,
@@ -407,7 +411,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
   /// OTT-skin work, less Details Theme (App Theme covers it) and Theme Lab
   /// (a tool, not a setting); About has up to 6 with the conditional donation
   /// row;
-  /// Data & Backup up to 6). Connections and Trackers are sized from their
+  /// Data & Backup up to 7). Connections and Trackers are sized from their
   /// own lists; see the pool computation in [initState].
   ///
   /// MUST cover the largest category: the pane indexes [_paneNodes] directly,
@@ -1328,76 +1332,17 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
           ),
         ];
       case 14: // Data & Backup
-        {
-          // Focus nodes are claimed sequentially so the optional
-          // download-location row doesn't shift hardcoded indices.
-          int paneIdx = 0;
-          FocusNode nextNode() => _paneNodes[paneIdx++];
-          return [
-            if (widget.onOpenDownloadLocation != null) ...[
-              const SettingsSectionLabel('Downloads'),
-              SettingsSection(
-                title: '',
-                children: [
-                  SettingsTile.spec(
-                    SettingsRows.downloadLocation,
-                    subtitle: widget.downloadLocationSubtitle,
-                    onTap: widget.onOpenDownloadLocation!,
-                    focusNode: nextNode(),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 18),
-            ],
-            const SettingsSectionLabel('Maintenance'),
-            SettingsSection(
-              title: '',
-              children: [
-                SettingsTile.spec(
-                  SettingsRows.clearDownloads,
-                  onTap: widget.onClearDownloads,
-                  focusNode: nextNode(),
-                ),
-                SettingsTile.spec(
-                  SettingsRows.clearPlayback,
-                  onTap: widget.onClearPlayback,
-                  focusNode: nextNode(),
-                ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            const SettingsSectionLabel('Backup & Restore'),
-            SettingsSection(
-              title: '',
-              children: [
-                SettingsTile.spec(
-                  SettingsRows.createBackup,
-                  onTap: widget.onCreateBackup,
-                  focusNode: nextNode(),
-                ),
-                SettingsTile.spec(
-                  SettingsRows.restoreBackup,
-                  onTap: widget.onRestoreBackup,
-                  focusNode: nextNode(),
-                ),
-              ],
-            ),
-            if (widget.onExportDiagnosticLogs != null) ...[
-              const SizedBox(height: 18),
-              const SettingsSectionLabel('Diagnostics'),
-              SettingsSection(
-                title: '',
-                children: [
-                  SettingsTile.spec(
-                    SettingsRows.exportDiagnosticLogs,
-                    onTap: widget.onExportDiagnosticLogs!,
-                    focusNode: nextNode(),
-                  ),
-                ],
-              ),
-            ],
-          ];
-        }
+        return settingsTvDataBackupRows(
+          nodes: _paneNodes,
+          onOpenDownloadLocation: widget.onOpenDownloadLocation,
+          downloadLocationSubtitle: widget.downloadLocationSubtitle,
+          onClearDownloads: widget.onClearDownloads,
+          onClearPlayback: widget.onClearPlayback,
+          onOpenStorageUsage: widget.onOpenStorageUsage,
+          onCreateBackup: widget.onCreateBackup,
+          onRestoreBackup: widget.onRestoreBackup,
+          onExportDiagnosticLogs: widget.onExportDiagnosticLogs,
+        );
       case 15: // About (Updates + Support merged — matches the phone layout)
         {
           // The donation row is conditional, so index the pane nodes off a

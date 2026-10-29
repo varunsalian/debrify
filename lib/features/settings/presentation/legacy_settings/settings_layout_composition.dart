@@ -127,6 +127,7 @@ class SettingsLayoutComposition {
       onOpenDebrifyTvSettings: _connectionNavigation.openDebrifyTvSettings,
       onClearDownloads: _maintenance.clearDownloadData,
       onClearPlayback: _maintenance.clearPlaybackData,
+      onOpenStorageUsage: _pageNavigation.openStorageUsage,
       onOpenDownloadLocation: _downloadLocation.downloadLocationSupported
           ? _downloadLocation.openDownloadLocationSettings
           : null,
@@ -258,6 +259,7 @@ class SettingsLayoutComposition {
       isAndroidTv: _summaries.isAndroidTv,
       onClearDownloads: _maintenance.clearDownloadData,
       onClearPlayback: _maintenance.clearPlaybackData,
+      onOpenStorageUsage: _pageNavigation.openStorageUsage,
       onOpenDownloadLocation: _downloadLocation.downloadLocationSupported
           ? _downloadLocation.openDownloadLocationSettings
           : null,

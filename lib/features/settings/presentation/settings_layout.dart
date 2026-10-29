@@ -31,6 +31,8 @@ class SettingsLayout extends StatelessWidget {
   final bool isAndroidTv;
   final Future<void> Function() onClearDownloads;
   final Future<void> Function() onClearPlayback;
+  // Settings › Storage Usage; null hides the row.
+  final Future<void> Function()? onOpenStorageUsage;
   // Android-only custom download folder (SAF); null hides the row.
   final Future<void> Function()? onOpenDownloadLocation;
   final String downloadLocationSubtitle;
@@ -131,6 +133,7 @@ class SettingsLayout extends StatelessWidget {
     required this.isAndroidTv,
     required this.onClearDownloads,
     required this.onClearPlayback,
+    this.onOpenStorageUsage,
     this.onOpenDownloadLocation,
     this.downloadLocationSubtitle = '',
     required this.onCreateBackup,

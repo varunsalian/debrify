@@ -56,6 +56,7 @@ class SettingsIndexComposition {
     checkForAppUpdates: _updates.checkForAppUpdates,
     clearDownloadData: _maintenance.clearDownloadData,
     clearPlaybackData: _maintenance.clearPlaybackData,
+    openStorageUsage: _pageNavigation.openStorageUsage,
     context: _deps.context,
     createBackup: _backup.createBackup,
     customPlayerCommandSupported: () =>

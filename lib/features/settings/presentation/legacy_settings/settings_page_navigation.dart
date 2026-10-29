@@ -10,6 +10,7 @@ import 'package:debrify/screens/settings/playback_settings_section.dart';
 import 'package:debrify/screens/settings/provider_settings_page.dart';
 import 'package:debrify/screens/settings/quick_play_settings_page.dart';
 import 'package:debrify/screens/settings/recordings_page.dart';
+import 'package:debrify/screens/settings/storage_usage_route.dart';
 import 'package:debrify/screens/settings/stream_badges_settings_page.dart';
 import 'package:debrify/screens/settings/widgets/settings_widgets.dart';
 import 'package:debrify/widgets/remote/remote_role_picker_screen.dart';
@@ -50,6 +51,11 @@ class SettingsPageNavigation {
     final context = _deps.context();
     if (!context.mounted) return;
     await pushSettingsPage(context, const RecordingsPage());
+  }
+
+  /// Data & Backup › Storage Usage: device-wide, open to every profile.
+  Future<void> openStorageUsage() async {
+    await openStorageUsagePage(_deps.context());
   }
 
   Future<void> openMetadataSettings() async {

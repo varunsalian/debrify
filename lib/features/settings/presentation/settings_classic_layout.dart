@@ -5,6 +5,7 @@ import 'package:debrify/theme/app_theme_scope.dart';
 import 'package:debrify/utils/platform_util.dart';
 import 'package:debrify/widgets/collections/tmdb_attribution.dart';
 import 'package:flutter/material.dart';
+import 'settings_classic_data_section.dart';
 import 'settings_layout.dart';
 import 'settings_search_bar.dart';
 import 'settings_spotlight_layout.dart';
@@ -311,38 +312,7 @@ Widget buildClassicSettingsLayout(SettingsLayout layout, BuildContext context) {
                 ],
               ),
               const SizedBox(height: 24),
-              SettingsSection(
-                title: 'Data & Backup',
-                children: [
-                  if (layout.onOpenDownloadLocation != null)
-                    SettingsTile.spec(
-                      SettingsRows.downloadLocation,
-                      subtitle: layout.downloadLocationSubtitle,
-                      onTap: layout.onOpenDownloadLocation!,
-                    ),
-                  SettingsTile.spec(
-                    SettingsRows.clearDownloads,
-                    onTap: layout.onClearDownloads,
-                  ),
-                  SettingsTile.spec(
-                    SettingsRows.clearPlayback,
-                    onTap: layout.onClearPlayback,
-                  ),
-                  SettingsTile.spec(
-                    SettingsRows.createBackup,
-                    onTap: layout.onCreateBackup,
-                  ),
-                  SettingsTile.spec(
-                    SettingsRows.restoreBackup,
-                    onTap: layout.onRestoreBackup,
-                  ),
-                  if (layout.onExportDiagnosticLogs != null)
-                    SettingsTile.spec(
-                      SettingsRows.exportDiagnosticLogs,
-                      onTap: layout.onExportDiagnosticLogs!,
-                    ),
-                ],
-              ),
+              SettingsClassicDataSection(layout: layout),
               const SizedBox(height: 24),
               // About section
               SettingsSection(
