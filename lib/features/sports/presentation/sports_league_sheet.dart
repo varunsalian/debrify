@@ -13,8 +13,7 @@
 import 'dart:async';
 
 import 'package:debrify/features/sports/application/sports_board_sports.dart';
-import 'package:debrify/features/sports/application/sports_league_filter_notifier.dart';
-import 'package:debrify/features/sports/models/sports_league_filter.dart';
+import 'package:debrify/features/sports/application/sports_providers.dart';
 import 'package:debrify/features/sports/models/sports_leagues.dart';
 import 'package:debrify/widgets/iptv/styles/iptv_style.dart';
 import 'package:flutter/material.dart';

@@ -6,7 +6,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:debrify/features/sports/application/sports_league_filter_notifier.dart';
 import 'package:debrify/features/sports/application/sports_providers.dart';
 import 'package:debrify/features/sports/data/espn_scoreboard_parser.dart';
 import 'package:debrify/features/sports/data/sports_feed_client.dart';
