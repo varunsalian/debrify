@@ -12,7 +12,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/p21_controls_driver.dart';
 import 'support/trakt_transport.dart';
-import 'support/video_player_environment.dart';
 
 const _at = Duration(seconds: 300);
 
