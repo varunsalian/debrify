@@ -41,6 +41,7 @@ typedef PlaybackPlayerSectionDependencies = ({
   Future<void> Function(String provider) setSkipSegmentProvider,
   Future<void> Function(bool enabled) setSkipSegmentsEnabled,
   Future<void> Function(bool enabled) setStartPortrait,
+  Future<void> Function(bool enabled) setSwipeSeek,
   PlaybackSubtitleRowsState subRows,
   PlaybackValuesState values,
 });
@@ -128,6 +129,18 @@ class PlaybackPlayerSection {
                   onChanged: _deps.setStartPortrait,
                   focusNode: _deps.rows.startPortraitFocusNode,
                   isFocused: _deps.rows.startPortraitFocused,
+                ),
+                const SizedBox(height: 4),
+                // Swipe-to-seek (phones only, like the portrait row).
+                // No dedicated FocusNode: this card never renders on TV
+                // layouts, so it must not add a DPAD stop or a node to
+                // dispose.
+                buildCheckboxTile(
+                  _deps.context(),
+                  title: 'Swipe left or right to seek',
+                  subtitle: 'Turn off if swiping gets in the way of going back',
+                  value: _deps.values.swipeSeek,
+                  onChanged: _deps.setSwipeSeek,
                 ),
               ],
             ],

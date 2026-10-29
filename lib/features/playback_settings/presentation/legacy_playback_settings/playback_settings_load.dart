@@ -8,6 +8,7 @@ import 'package:debrify/features/playback_settings/presentation/legacy_playback_
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_values_state.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_vr_state.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_windows_state.dart';
+import 'package:debrify/features/video_player/data/player_gesture_settings.dart';
 import 'package:debrify/screens/settings/playback_settings_section.dart';
 import 'package:debrify/screens/video_player/services/network_tuning.dart';
 import 'package:debrify/screens/video_player/services/subtitle_settings_service.dart';
@@ -179,6 +180,7 @@ class PlaybackSettingsLoad {
           await PlayerNetworkStorage.getContentDisplayMatchMode();
       final startPortrait =
           await PlayerSettingsStorage.getPlayerStartPortrait();
+      final swipeSeek = await PlayerGestureSettings.load();
       final subtitleForcedOnly =
           await SubtitleSettingsStorage.getSubtitleForcedOnly();
       final subtitleOnlyForeignAudio =
@@ -253,6 +255,7 @@ class PlaybackSettingsLoad {
         _deps.values.contentDisplayMatchMode = contentDisplayMatchMode;
         _deps.values.iptvDecoderMode = iptvDecoderMode;
         _deps.values.startPortrait = startPortrait;
+        _deps.values.swipeSeek = swipeSeek;
         _deps.sub.subtitleOnlyForeignAudio = subtitleOnlyForeignAudio;
         _deps.sub.subtitleForcedOnly = subtitleForcedOnly;
         _deps.sub.subtitleAutoSync = subtitleAutoSync;

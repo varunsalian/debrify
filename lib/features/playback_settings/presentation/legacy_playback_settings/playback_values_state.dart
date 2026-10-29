@@ -32,6 +32,8 @@ class PlaybackValuesState {
 
   bool startPortrait = false; // Phone only, opt-in
 
+  bool swipeSeek = true; // Phone only, on by default
+
   int movieCompletionThreshold =
       LocalCompletionStorage.defaultLocalCompletionThreshold;
 

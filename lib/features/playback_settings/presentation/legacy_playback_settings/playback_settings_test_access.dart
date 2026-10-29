@@ -52,6 +52,7 @@ Map<String, Object?> playbackTestAccess(PlaybackSections s) {
     'androidVideoRendererMode': s.values.androidVideoRendererMode,
     'contentDisplayMatchMode': s.values.contentDisplayMatchMode,
     'startPortrait': s.values.startPortrait,
+    'swipeSeek': s.values.swipeSeek,
     'subtitleOnlyForeignAudio': s.sub.subtitleOnlyForeignAudio,
     'subtitleForcedOnly': s.sub.subtitleForcedOnly,
     'subtitleAutoSync': s.sub.subtitleAutoSync,
@@ -174,6 +175,7 @@ Map<String, Object?> playbackTestAccess(PlaybackSections s) {
     'setContentDisplayMatchMode': s.playerSetters.setContentDisplayMatchMode,
     'setIptvDecoderMode': s.playerSetters.setIptvDecoderMode,
     'setStartPortrait': s.playerSetters.setStartPortrait,
+    'setSwipeSeek': s.playerSetters.setSwipeSeek,
     'setSubtitleOnlyForeignAudio':
         s.subtitleSetters.setSubtitleOnlyForeignAudio,
     'setSubtitleForcedOnly': s.subtitleSetters.setSubtitleForcedOnly,

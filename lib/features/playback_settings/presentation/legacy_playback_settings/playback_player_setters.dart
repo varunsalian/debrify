@@ -1,4 +1,5 @@
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_values_state.dart';
+import 'package:debrify/features/video_player/data/player_gesture_settings.dart';
 import 'package:debrify/models/android_video_renderer_mode.dart';
 import 'package:debrify/models/content_display_match_mode.dart';
 import 'package:debrify/services/storage/local_completion_storage.dart';
@@ -83,6 +84,13 @@ class PlaybackPlayerSetters {
   Future<void> setStartPortrait(bool enabled) async {
     _deps.setState(() => _deps.values.startPortrait = enabled);
     await PlayerSettingsStorage.setPlayerStartPortrait(enabled);
+  }
+
+  /// Also refreshes [PlayerGestureSettings]'s synchronous cache so an open
+  /// or next player picks the choice up without another settings load.
+  Future<void> setSwipeSeek(bool enabled) async {
+    _deps.setState(() => _deps.values.swipeSeek = enabled);
+    await PlayerGestureSettings.setSwipeSeek(enabled);
   }
 
   List<int> get completionThresholdOptions =>

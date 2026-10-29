@@ -335,6 +335,7 @@ PlaybackSections createPlaybackSections({
     setSkipSegmentProvider: playerSetters.setSkipSegmentProvider,
     setSkipSegmentsEnabled: playerSetters.setSkipSegmentsEnabled,
     setStartPortrait: playerSetters.setStartPortrait,
+    setSwipeSeek: playerSetters.setSwipeSeek,
     subRows: subRows,
     values: values,
   ));
