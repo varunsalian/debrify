@@ -313,9 +313,9 @@ void main() {
   testWidgets('a channel whose coverage starts later says when', (
     tester,
   ) async {
-    // Offered early: the matched listing begins 90 minutes from now, and the
+    // Offered early: the matched listing begins 30 minutes from now, and the
     // channel airs something else until then.
-    final now = _kickoff.subtract(const Duration(minutes: 90));
+    final now = _kickoff.subtract(const Duration(minutes: 30));
     final from = 'from ${DateFormat('HH:mm').format(_kickoff.toLocal())}';
     await _mount(
       tester,

@@ -156,10 +156,10 @@ class SportsEventCard extends StatelessWidget {
   /// something else.
   String? get _startsLater {
     final listing = watch.guide.firstOrNull?.listing;
-    if (listing == null || !listing.start.isAfter(now ?? DateTime.now())) {
-      return null;
-    }
-    return 'from ${DateFormat('HH:mm').format(listing.start.toLocal())}';
+    final clock = now ?? DateTime.now();
+    if (listing == null || !listing.start.isAfter(clock)) return null;
+    // Weekday-prefixed once it is not today, like the kick-off time.
+    return 'from ${_kickoffText(listing.start, clock)}';
   }
 
   /// The footer, as the plain sentence the card paints.
@@ -326,9 +326,10 @@ class SportsEventCard extends StatelessWidget {
             ),
           ),
           if (_startsLater case final later?) ...[
+            const SizedBox(width: 6),
             sportsLabelText(later, _tokens.fgDim, size: 11, tabular: true),
-            const SizedBox(width: 8),
           ],
+          if (_startsLater != null && extra > 0) const SizedBox(width: 8),
           if (extra > 0)
             sportsLabelText('+$extra', _tokens.fgDim, size: 11, tabular: true),
         ],
