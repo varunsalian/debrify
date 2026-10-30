@@ -25,6 +25,7 @@ import 'package:debrify/widgets/iptv/spotlight/spotlight_shell.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -118,10 +119,12 @@ https://example.com/live/two.ts
           }
         });
         await tester.pumpWidget(
-          MaterialApp(
-            theme: ThemeData.dark(),
-            home: const Scaffold(
-              body: IptvResultsView(searchQuery: '', isTelevision: true),
+          ProviderScope(
+            child: MaterialApp(
+              theme: ThemeData.dark(),
+              home: const Scaffold(
+                body: IptvResultsView(searchQuery: '', isTelevision: true),
+              ),
             ),
           ),
         );
@@ -187,22 +190,24 @@ https://example.com/live/two.ts
     addTearDown(() => MainPageBridge.focusTvSidebar = previousSidebarCallback);
     MainPageBridge.focusTvSidebar = sidebar.requestFocus;
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Row(
-            children: [
-              SizedBox(
-                width: 72,
-                child: TextButton(
-                  focusNode: sidebar,
-                  onPressed: () {},
-                  child: const Text('Home'),
+      ProviderScope(
+        child: MaterialApp(
+          home: Scaffold(
+            body: Row(
+              children: [
+                SizedBox(
+                  width: 72,
+                  child: TextButton(
+                    focusNode: sidebar,
+                    onPressed: () {},
+                    child: const Text('Home'),
+                  ),
                 ),
-              ),
-              const Expanded(
-                child: IptvResultsView(searchQuery: '', isTelevision: true),
-              ),
-            ],
+                const Expanded(
+                  child: IptvResultsView(searchQuery: '', isTelevision: true),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -343,19 +348,21 @@ https://example.com/live/two.ts
       addTearDown(tester.view.reset);
       var upExits = 0;
       await tester.pumpWidget(
-        MaterialApp(
-          theme: ThemeData.dark(),
-          builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(
-              context,
-            ).copyWith(textScaler: const TextScaler.linear(1.5)),
-            child: child!,
-          ),
-          home: Scaffold(
-            body: IptvResultsView(
-              searchQuery: '',
-              isTelevision: false,
-              onUpArrowFromFilters: () => upExits++,
+        ProviderScope(
+          child: MaterialApp(
+            theme: ThemeData.dark(),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: const TextScaler.linear(1.5)),
+              child: child!,
+            ),
+            home: Scaffold(
+              body: IptvResultsView(
+                searchQuery: '',
+                isTelevision: false,
+                onUpArrowFromFilters: () => upExits++,
+              ),
             ),
           ),
         ),
@@ -439,17 +446,19 @@ https://example.com/live/two.ts
       addTearDown(searchFocus.dispose);
       addTearDown(searchController.dispose);
       await tester.pumpWidget(
-        MaterialApp(
-          theme: ThemeData.dark(),
-          home: Scaffold(
-            body: IptvResultsView(
-              searchQuery: '',
-              isTelevision: true,
-              searchHeader: BrowseSearchHeader(
-                controller: searchController,
-                focusNode: searchFocus,
-                hintText: 'Search channels',
-                onClear: searchController.clear,
+        ProviderScope(
+          child: MaterialApp(
+            theme: ThemeData.dark(),
+            home: Scaffold(
+              body: IptvResultsView(
+                searchQuery: '',
+                isTelevision: true,
+                searchHeader: BrowseSearchHeader(
+                  controller: searchController,
+                  focusNode: searchFocus,
+                  hintText: 'Search channels',
+                  onClear: searchController.clear,
+                ),
               ),
             ),
           ),
@@ -557,14 +566,16 @@ https://example.com/live/two.ts
       addTearDown(tester.view.reset);
       final surface = GlobalKey();
       await tester.pumpWidget(
-        MaterialApp(
-          theme: ThemeData.dark(),
-          home: Scaffold(
-            body: RepaintBoundary(
-              key: surface,
-              child: const IptvResultsView(
-                searchQuery: '',
-                isTelevision: false,
+        ProviderScope(
+          child: MaterialApp(
+            theme: ThemeData.dark(),
+            home: Scaffold(
+              body: RepaintBoundary(
+                key: surface,
+                child: const IptvResultsView(
+                  searchQuery: '',
+                  isTelevision: false,
+                ),
               ),
             ),
           ),
@@ -617,17 +628,19 @@ https://example.com/live/two.ts
     addTearDown(searchFocus.dispose);
 
     await tester.pumpWidget(
-      MaterialApp(
-        theme: ThemeData.dark(),
-        home: Scaffold(
-          body: IptvResultsView(
-            searchQuery: '',
-            isTelevision: true,
-            searchHeader: BrowseSearchHeader(
-              controller: controller,
-              focusNode: searchFocus,
-              hintText: 'Search channels',
-              onClear: controller.clear,
+      ProviderScope(
+        child: MaterialApp(
+          theme: ThemeData.dark(),
+          home: Scaffold(
+            body: IptvResultsView(
+              searchQuery: '',
+              isTelevision: true,
+              searchHeader: BrowseSearchHeader(
+                controller: controller,
+                focusNode: searchFocus,
+                hintText: 'Search channels',
+                onClear: controller.clear,
+              ),
             ),
           ),
         ),
@@ -714,21 +727,23 @@ https://example.com/live/two.ts
         TvDisplayStorage.tvKeyboardEnabledCached = previousKeyboard;
       });
       await tester.pumpWidget(
-        MaterialApp(
-          home: AppThemeScope(
-            theme: AppThemes.legacy,
-            child: BrowseScreen(
-              tabIndex: 13,
-              hintText: 'Search channels',
-              submitOnly: false,
-              isTelevision: true,
-              embedSearchHeaderInView: true,
-              viewBuilder: (args) => IptvResultsView(
-                key: args.resultKey,
-                searchQuery: args.query,
-                isTelevision: args.isTelevision,
-                searchHeader: args.searchHeader,
-                onUpArrowFromFilters: args.onUpArrowToSearch,
+        ProviderScope(
+          child: MaterialApp(
+            home: AppThemeScope(
+              theme: AppThemes.legacy,
+              child: BrowseScreen(
+                tabIndex: 13,
+                hintText: 'Search channels',
+                submitOnly: false,
+                isTelevision: true,
+                embedSearchHeaderInView: true,
+                viewBuilder: (args) => IptvResultsView(
+                  key: args.resultKey,
+                  searchQuery: args.query,
+                  isTelevision: args.isTelevision,
+                  searchHeader: args.searchHeader,
+                  onUpArrowFromFilters: args.onUpArrowToSearch,
+                ),
               ),
             ),
           ),
@@ -825,12 +840,14 @@ https://example.com/live/two.ts
       final query = ValueNotifier<String>('');
       addTearDown(query.dispose);
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: ValueListenableBuilder<String>(
-              valueListenable: query,
-              builder: (context, value, _) =>
-                  IptvResultsView(searchQuery: value, isTelevision: true),
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: ValueListenableBuilder<String>(
+                valueListenable: query,
+                builder: (context, value, _) =>
+                    IptvResultsView(searchQuery: value, isTelevision: true),
+              ),
             ),
           ),
         ),
@@ -973,20 +990,22 @@ https://example.com/live/two.ts
     addTearDown(height.dispose);
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: ValueListenableBuilder<double>(
-              valueListenable: height,
-              builder: (context, value, _) => SizedBox(
-                width: 900,
-                height: value,
-                child: const IptvResultsView(
-                  searchQuery: '',
-                  isTelevision: true,
-                  searchHeader: SizedBox(
-                    key: ValueKey<String>('fixed-search'),
-                    height: 60,
+      ProviderScope(
+        child: MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: ValueListenableBuilder<double>(
+                valueListenable: height,
+                builder: (context, value, _) => SizedBox(
+                  width: 900,
+                  height: value,
+                  child: const IptvResultsView(
+                    searchQuery: '',
+                    isTelevision: true,
+                    searchHeader: SizedBox(
+                      key: ValueKey<String>('fixed-search'),
+                      height: 60,
+                    ),
                   ),
                 ),
               ),
@@ -1018,17 +1037,19 @@ https://example.com/live/two.ts
     addTearDown(height.dispose);
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: ValueListenableBuilder<double>(
-              valueListenable: height,
-              builder: (context, value, _) => SizedBox(
-                width: 900,
-                height: value,
-                child: const IptvResultsView(
-                  searchQuery: '',
-                  searchHeader: SizedBox(height: 60),
+      ProviderScope(
+        child: MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: ValueListenableBuilder<double>(
+                valueListenable: height,
+                builder: (context, value, _) => SizedBox(
+                  width: 900,
+                  height: value,
+                  child: const IptvResultsView(
+                    searchQuery: '',
+                    searchHeader: SizedBox(height: 60),
+                  ),
                 ),
               ),
             ),
@@ -1064,12 +1085,14 @@ https://example.com/live/two.ts
       addTearDown(tester.view.reset);
       final GlobalKey key = GlobalKey();
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: IptvResultsView(
-              key: key,
-              searchQuery: '',
-              isTelevision: true,
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: IptvResultsView(
+                key: key,
+                searchQuery: '',
+                isTelevision: true,
+              ),
             ),
           ),
         ),
@@ -1161,15 +1184,17 @@ https://example.com/live/two.ts
       final handedIndices = <int>[];
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: IptvResultsView(
-              searchQuery: '',
-              isTelevision: true,
-              debugOnSpotlightStartupFocus: (index) {
-                handedIndices.add(index);
-                MainPageBridge.cancelIptvStartupChannel();
-              },
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: IptvResultsView(
+                searchQuery: '',
+                isTelevision: true,
+                debugOnSpotlightStartupFocus: (index) {
+                  handedIndices.add(index);
+                  MainPageBridge.cancelIptvStartupChannel();
+                },
+              ),
             ),
           ),
         ),
