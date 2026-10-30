@@ -87,6 +87,7 @@ class IptvSpotlightFocus {
   }
 
   void focusSpotlightHero() {
+    if (_focusSportsBoard()) return;
     if (_focusState.spotlightPrimaryFocusNode.context != null) {
       _focusState.spotlightPrimaryFocusNode.requestFocus();
     } else {
@@ -110,11 +111,6 @@ class IptvSpotlightFocus {
         return KeyEventResult.handled;
       }
       if (key == LogicalKeyboardKey.arrowDown) {
-        // Sports draws its own board below the controls and has no channel
-        // list: let directional traversal move focus into the board.
-        if (_settingsState.selectedPlaylist?.isSports ?? false) {
-          return KeyEventResult.ignored;
-        }
         if (_selectionState.scheduleChannel == null &&
             !_focusState.spotlightTimelineController.restoreFocus()) {
           _deps.focusFirstChannel();
@@ -178,7 +174,19 @@ class IptvSpotlightFocus {
     WidgetsBinding.instance.scheduleFrame();
   }
 
+  /// The Sports shelf shows only its board (no hero, no category control):
+  /// enter it where focus last was, else on its first control. False on any
+  /// other shelf.
+  bool _focusSportsBoard() {
+    if (!(_settingsState.selectedPlaylist?.isSports ?? false)) return false;
+    final scope = _focusState.spotlightSportsScope;
+    (scope.focusedChild ?? scope.traversalDescendants.firstOrNull)
+        ?.requestFocus();
+    return true;
+  }
+
   void focusSpotlightContentEntry() {
+    if (_focusSportsBoard()) return;
     if (_catalogState.filteredChannels.isNotEmpty) {
       if (!_focusState.spotlightTimelineController.restoreFocus()) {
         _deps.focusFirstChannel();

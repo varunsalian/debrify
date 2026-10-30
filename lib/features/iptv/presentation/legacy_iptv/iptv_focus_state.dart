@@ -46,6 +46,14 @@ class IptvFocusState {
     traversalEdgeBehavior: TraversalEdgeBehavior.parentScope,
   );
 
+  /// The Sports board's pane, which Spotlight shows without the hero or the
+  /// category control: entering the content lands here.
+  final FocusScopeNode spotlightSportsScope = FocusScopeNode(
+    debugLabel: 'iptv-spotlight-sports',
+    traversalEdgeBehavior: TraversalEdgeBehavior.parentScope,
+    directionalTraversalEdgeBehavior: TraversalEdgeBehavior.parentScope,
+  );
+
   final IptvSpotlightTimelineController spotlightTimelineController =
       IptvSpotlightTimelineController();
 

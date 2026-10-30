@@ -30,7 +30,6 @@ const _newsChannel = SportsChannelRef(
 );
 
 const _detailsPanelKey = ValueKey('sports-details-panel');
-const _heroPreviewKey = ValueKey('sports-hero-preview');
 
 final _uclLive = sportsFixture('espn_ucl_live.json', 'ucl');
 final _eplScheduled = sportsFixture('espn_epl_scheduled.json', 'epl');
@@ -76,29 +75,12 @@ void main() {
     await h.mount(tester);
   }
 
-  testWidgets('renders hero and day sections from fixtures', (tester) async {
+  testWidgets('renders day sections from fixtures', (tester) async {
     final h = SportsBoardHarness(
       eventsByLeague: {'ucl': _uclLive, 'epl': _eplScheduled},
       guide: SportsGuideSnapshot(listings: [_skyListing]),
     );
     await mountBoard(tester, h);
-
-    // Hero: eyebrow, score and the two actions the loaded state supports.
-    expect(find.text("Champions League · LIVE 41'"), findsOneWidget);
-    expect(find.text('1 – 0'), findsOneWidget);
-    expect(find.text('Watch on Sky Sports Main Event'), findsOneWidget);
-    expect(find.text('Where to watch · 1'), findsOneWidget);
-
-    // Live soccer progress: 41 of 90 minutes.
-    final played = tester.widget<FractionallySizedBox>(
-      find
-          .descendant(
-            of: find.byKey(const ValueKey('sports-hero-progress')),
-            matching: find.byType(FractionallySizedBox),
-          )
-          .first,
-    );
-    expect(played.widthFactor, closeTo(41 / 90, 0.001));
 
     // Sections: the live one first, then the Saturday fixtures' day.
     expect(find.text('LIVE NOW'), findsOneWidget);
@@ -285,50 +267,6 @@ void main() {
     );
   });
 
-  testWidgets('the hero plays the first guide option and opens the details', (
-    tester,
-  ) async {
-    final h = SportsBoardHarness(
-      eventsByLeague: {'ucl': _uclLive},
-      guide: SportsGuideSnapshot(listings: [_skyListing]),
-    );
-    await mountBoard(tester, h);
-
-    await tester.tap(find.text('Watch on Sky Sports Main Event'));
-    await tester.pumpAndSettle();
-    expect(h.played, [_sky]);
-
-    await tester.tap(find.text('Where to watch · 1'));
-    await tester.pumpAndSettle();
-    expect(find.byKey(_detailsPanelKey), findsOneWidget);
-  });
-
-  testWidgets(
-    'the wide hero adds the channel preview, the narrow one does not',
-    (tester) async {
-      final h = SportsBoardHarness(
-        eventsByLeague: {'ucl': _uclLive},
-        guide: SportsGuideSnapshot(listings: [_skyListing]),
-      );
-      await tester.binding.setSurfaceSize(const Size(800, 1000));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-      await h.mount(tester);
-
-      expect(find.byKey(_heroPreviewKey), findsNothing);
-
-      await tester.binding.setSurfaceSize(const Size(1280, 1200));
-      await tester.pumpAndSettle();
-      expect(find.byKey(_heroPreviewKey), findsOneWidget);
-      expect(
-        find.descendant(
-          of: find.byKey(_heroPreviewKey),
-          matching: find.text('Sky Sports Main Event'),
-        ),
-        findsOneWidget,
-      );
-    },
-  );
-
   testWidgets('the scores toggle hides scores and persists the choice', (
     tester,
   ) async {
@@ -346,8 +284,7 @@ void main() {
 
     expect(tester.widget<SportsToolButton>(scores).toggled, isFalse);
     expect(tester.widget<SportsToolButton>(scores).label, 'Scores hidden');
-    // The hero falls back to its glyph, the cards to their bars.
-    expect(find.text('···'), findsWidgets);
+    // The cards fall back to their bars.
     expect(find.byType(SportsHiddenScore), findsWidgets);
     expect(h.prefs.flags[SportsFollowStore.hideScoresKey], isTrue);
   });

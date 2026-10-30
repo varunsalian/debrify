@@ -1,12 +1,12 @@
-// The sports board: hero, header, sport chips, day sections and live channels.
+// The sports board: header, sport chips, day sections and live channels.
 //
 // Presentation layer. [SportsBoardView] owns exactly one board session —
 // captured profile owner plus a private view identity — created once in
 // [initState], so two routes showing the same league never share board state.
 // It starts the first load after the first frame, watches
-// [sportsBoardProvider] for that session, and derives the hero, the When
-// counts, the sport chips and the day sections from the published state with
-// the pure application functions. The chosen sport chip is local view state.
+// [sportsBoardProvider] for that session, and derives the When counts, the
+// sport chips and the day sections from the published state with the pure
+// application functions. The chosen sport chip is local view state.
 // Every action (When, Following, Scores, refresh, follow from the details
 // panel) is handed to the controller; the league picker writes through its own
 // notifier; every play intent leaves through [onPlay].
@@ -24,7 +24,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'sports_board_header.dart';
-import 'sports_board_hero.dart';
 import 'sports_board_rows.dart';
 import 'sports_event_details.dart';
 import 'sports_league_sheet.dart';
@@ -32,9 +31,6 @@ import 'sports_sport_chips.dart';
 import 'sports_team_crest.dart';
 
 const _tokens = IptvStyleTokens.spotlight;
-
-/// At least this wide and the hero makes room for its preview panel.
-const _heroWideMinWidth = 900.0;
 
 /// The board's own copy of the empty-view sentence; the fixture rows are the
 /// only thing on screen, and there is nothing to row.
@@ -117,7 +113,6 @@ class _SportsBoardViewState extends ConsumerState<SportsBoardView>
         const SportsLeagueFilter();
     final events = _shownLeagues(state.events, leagues);
     final now = state.updatedAt ?? ref.watch(sportsClockProvider)();
-    final hero = pickSportsHero(events, state.follows, now);
     final sections = buildSportsBoardSections(
       events: events,
       follows: state.follows,
@@ -140,72 +135,56 @@ class _SportsBoardViewState extends ConsumerState<SportsBoardView>
 
     return ColoredBox(
       color: _tokens.bg,
-      child: LayoutBuilder(
-        builder: (context, constraints) => CustomScrollView(
-          slivers: [
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-              sliver: SliverMainAxisGroup(
-                slivers: [
-                  if (hero != null)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 22),
-                        child: SportsBoardHero(
-                          event: hero,
-                          watch: state.watchFor(hero),
-                          hideScores: state.follows.hideScores,
-                          wide: constraints.maxWidth >= _heroWideMinWidth,
-                          onPlay: widget.onPlay,
-                          onDetails: () => _openDetails(hero),
-                        ),
-                      ),
-                    ),
+      child: CustomScrollView(
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+            sliver: SliverMainAxisGroup(
+              slivers: [
+                SliverToBoxAdapter(
+                  child: SportsBoardHeader(
+                    updatedAt: state.updatedAt,
+                    filter: state.filter,
+                    counts: counts,
+                    followingOnly: state.followingOnly,
+                    hideScores: state.follows.hideScores,
+                    onSelectFilter: (filter) => _controller.setFilter(filter),
+                    onToggleFollowing: () =>
+                        _controller.setFollowingOnly(!state.followingOnly),
+                    onToggleScores: () =>
+                        _controller.setHideScores(!state.follows.hideScores),
+                    onOpenLeagues: () => unawaited(_openLeagues()),
+                    onRefresh: () => _controller.refresh(force: true),
+                  ),
+                ),
+                const SliverToBoxAdapter(child: SizedBox(height: 14)),
+                if (sections.isNotEmpty) ...[
                   SliverToBoxAdapter(
-                    child: SportsBoardHeader(
-                      updatedAt: state.updatedAt,
-                      filter: state.filter,
-                      counts: counts,
-                      followingOnly: state.followingOnly,
-                      hideScores: state.follows.hideScores,
-                      onSelectFilter: (filter) => _controller.setFilter(filter),
-                      onToggleFollowing: () =>
-                          _controller.setFollowingOnly(!state.followingOnly),
-                      onToggleScores: () =>
-                          _controller.setHideScores(!state.follows.hideScores),
-                      onOpenLeagues: () => unawaited(_openLeagues()),
-                      onRefresh: () => _controller.refresh(force: true),
+                    child: SportsSportChips(
+                      total: sportsBoardEventCount(sections),
+                      sports: sports,
+                      selected: sport,
+                      onSelect: (picked) => setState(() => _sport = picked),
                     ),
                   ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 14)),
-                  if (sections.isNotEmpty) ...[
-                    SliverToBoxAdapter(
-                      child: SportsSportChips(
-                        total: sportsBoardEventCount(sections),
-                        sports: sports,
-                        selected: sport,
-                        onSelect: (picked) => setState(() => _sport = picked),
-                      ),
-                    ),
-                    const SliverToBoxAdapter(child: SizedBox(height: 16)),
-                  ],
-                  ..._body(state, shown, now, focusOnMount),
-                  if (state.liveSportsListings.isNotEmpty)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: SportsBoardLiveChannelsRow(
-                          listings: state.liveSportsListings,
-                          now: now,
-                          onPlay: widget.onPlay,
-                        ),
-                      ),
-                    ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 16)),
                 ],
-              ),
+                ..._body(state, shown, now, focusOnMount),
+                if (state.liveSportsListings.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: SportsBoardLiveChannelsRow(
+                        listings: state.liveSportsListings,
+                        now: now,
+                        onPlay: widget.onPlay,
+                      ),
+                    ),
+                  ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

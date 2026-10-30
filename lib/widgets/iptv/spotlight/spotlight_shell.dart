@@ -24,6 +24,10 @@ class SpotlightShell extends StatelessWidget {
   final Widget heroSlot;
   final Widget contentSlot;
 
+  /// Content fills the pane: no hero and no source/category controls above
+  /// it. The Sports shelf draws its own header and has no channels to pick.
+  final bool contentOnly;
+
   /// Opens the compact source sheet. The sheet itself stays with the parent,
   /// which owns source selection and exact focus restoration.
   final VoidCallback onOpenSources;
@@ -51,6 +55,7 @@ class SpotlightShell extends StatelessWidget {
     this.contentTypeSlot,
     required this.heroSlot,
     required this.contentSlot,
+    this.contentOnly = false,
     required this.onOpenSources,
     this.compactSourceLabel = 'Sources',
     this.compactSourceCount,
@@ -98,20 +103,22 @@ class SpotlightShell extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(
-                  // The guide benefits more from vertical space than the
-                  // programme hero: this adds roughly one full channel row
-                  // on a 540p logical TV canvas while the hero's dense mode
-                  // keeps its preview, title and metadata legible.
-                  flex: 4,
-                  child: KeyedSubtree(
-                    key: const ValueKey<String>('spotlight-hero-slot'),
-                    child: heroSlot,
+                if (!contentOnly) ...[
+                  Expanded(
+                    // The guide benefits more from vertical space than the
+                    // programme hero: this adds roughly one full channel row
+                    // on a 540p logical TV canvas while the hero's dense mode
+                    // keeps its preview, title and metadata legible.
+                    flex: 4,
+                    child: KeyedSubtree(
+                      key: const ValueKey<String>('spotlight-hero-slot'),
+                      child: heroSlot,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                _topControls(),
-                const SizedBox(height: 8),
+                  const SizedBox(height: 8),
+                  _topControls(),
+                  const SizedBox(height: 8),
+                ],
                 Expanded(
                   flex: 6,
                   child: KeyedSubtree(
@@ -341,16 +348,18 @@ class SpotlightShell extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          Expanded(
-            flex: 4,
-            child: KeyedSubtree(
-              key: const ValueKey<String>('spotlight-hero-slot'),
-              child: heroSlot,
+          if (!contentOnly) ...[
+            Expanded(
+              flex: 4,
+              child: KeyedSubtree(
+                key: const ValueKey<String>('spotlight-hero-slot'),
+                child: heroSlot,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          _topControls(),
-          const SizedBox(height: 8),
+            const SizedBox(height: 8),
+            _topControls(),
+            const SizedBox(height: 8),
+          ],
           Expanded(
             flex: 6,
             child: KeyedSubtree(

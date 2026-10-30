@@ -50,7 +50,6 @@ class SportsBoardSection {
 const Duration _oneDay = Duration(days: 1);
 const int _weekDays = 6;
 const Duration _oneWeek = Duration(days: 7);
-const Duration _twentyFourHours = Duration(hours: 24);
 
 /// The rows for [filter], in display order, omitting empty ones.
 ///
@@ -117,22 +116,6 @@ Map<SportsBoardFilter, int> sportsBoardFilterCounts({
     ),
 };
 
-/// The event to feature above the rows, or null when nothing deserves it.
-///
-/// Followed live events win over any live event, which win over the next
-/// followed fixture starting within the next 24 hours (both bounds inclusive).
-SportsEvent? pickSportsHero(
-  List<SportsEvent> events,
-  SportsFollows follows,
-  DateTime now,
-) {
-  final hero =
-      _bestLive(events, follows, followedOnly: true) ??
-      _bestLive(events, follows) ??
-      _bestUpcoming(events, follows, now);
-  return hero;
-}
-
 /// Live events, optionally restricted to followed ones.
 List<SportsEvent> _liveEvents(
   List<SportsEvent> events,
@@ -145,33 +128,6 @@ List<SportsEvent> _liveEvents(
           (!followedOnly || follows.followsEvent(event)),
     )
     .toList();
-
-SportsEvent? _bestLive(
-  List<SportsEvent> events,
-  SportsFollows follows, {
-  bool followedOnly = false,
-}) => _best(
-  _liveEvents(events, follows, followedOnly: followedOnly),
-  (a, b) => _byLiveRow(a, b, follows),
-);
-
-SportsEvent? _bestUpcoming(
-  List<SportsEvent> events,
-  SportsFollows follows,
-  DateTime now,
-) {
-  final horizon = now.add(_twentyFourHours);
-  return _best(
-    events.where(
-      (event) =>
-          event.status == SportsEventStatus.scheduled &&
-          follows.followsEvent(event) &&
-          !event.start.isBefore(now) &&
-          !event.start.isAfter(horizon),
-    ),
-    _byStartAsc,
-  );
-}
 
 SportsBoardSection? _live(List<SportsEvent> events, SportsFollows follows) =>
     _row(
@@ -266,17 +222,6 @@ SportsBoardSection? _row({
   final events = section.toList()..sort(compare);
   if (events.isEmpty) return null;
   return SportsBoardSection(id: id, title: title, events: events);
-}
-
-SportsEvent? _best(
-  Iterable<SportsEvent> candidates,
-  int Function(SportsEvent a, SportsEvent b) compare,
-) {
-  SportsEvent? best;
-  for (final candidate in candidates) {
-    if (best == null || compare(candidate, best) < 0) best = candidate;
-  }
-  return best;
 }
 
 /// Followed first, then league importance descending, then start ascending.

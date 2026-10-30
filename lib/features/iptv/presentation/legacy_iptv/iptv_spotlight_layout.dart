@@ -96,6 +96,7 @@ class IptvSpotlightLayout {
     IptvSpotlightLayoutMode mode,
   ) {
     final selected = _settingsState.selectedPlaylist;
+    final sports = selected?.isSports ?? false;
     return SpotlightShell(
       mode: mode,
       searchSlot: buildSpotlightSearch(mode),
@@ -193,7 +194,13 @@ class IptvSpotlightLayout {
         },
         child: _deps.buildSpotlightHero(mode),
       ),
-      contentSlot: _deps.buildSpotlightContent(mode),
+      contentSlot: sports
+          ? FocusScope(
+              node: _focusState.spotlightSportsScope,
+              child: _deps.buildSpotlightContent(mode),
+            )
+          : _deps.buildSpotlightContent(mode),
+      contentOnly: sports,
       onOpenSources: showSpotlightSources,
       sourcesExpanded: _selectionState.spotlightSourcesExpanded,
       onToggleSources: () {

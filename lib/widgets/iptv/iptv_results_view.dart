@@ -215,6 +215,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     _owners.focusState.spotlightPrimaryFocusNode.dispose();
     _owners.focusState.spotlightRailScope.dispose();
     _owners.focusState.spotlightHeroScope.dispose();
+    _owners.focusState.spotlightSportsScope.dispose();
     _owners.previewState.previewShown.dispose();
     _owners.previewState.spotlightProgrammeShown.dispose();
     _owners.previewState.previewShowing.dispose();

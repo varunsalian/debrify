@@ -22,6 +22,7 @@ Future<void> _pumpShell(
   required VoidCallback onOpenSources,
   Widget? rail,
   Widget? hero,
+  bool contentOnly = false,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -60,6 +61,7 @@ Future<void> _pumpShell(
                 actionsSlot: const Text('Watch  Favorite  More info'),
               ),
           contentSlot: _labelSlot('Independent content'),
+          contentOnly: contentOnly,
           compactSourceLabel: 'My provider',
           compactSourceCount: 26,
           onOpenSources: onOpenSources,
@@ -71,6 +73,47 @@ Future<void> _pumpShell(
 }
 
 void main() {
+  for (final (mode, size) in [
+    (IptvSpotlightLayoutMode.wide, const Size(1280, 720)),
+    (IptvSpotlightLayoutMode.compact, const Size(896, 540)),
+  ]) {
+    testWidgets('content-only ${mode.name} shell drops the hero and controls '
+        '(the Sports shelf)', (tester) async {
+      await _pumpShell(
+        tester,
+        size: size,
+        mode: mode,
+        onOpenSources: () {},
+        contentOnly: true,
+      );
+
+      expect(
+        find.byKey(const ValueKey<String>('spotlight-hero-slot')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('native-preview-probe')),
+        findsNothing,
+      );
+      expect(find.text('All channels · 26'), findsNothing);
+      expect(find.byType(SpotlightContentTypeControl), findsNothing);
+      expect(find.text('Independent content'), findsOneWidget);
+      // The sources stay reachable: the rail on wide, the button on compact.
+      expect(
+        mode == IptvSpotlightLayoutMode.wide
+            ? find.byKey(const ValueKey('spotlight-sources-toggle'))
+            : find.byKey(const ValueKey<String>('spotlight-source-trigger')),
+        findsOneWidget,
+      );
+      // Content takes everything below the compact source bar.
+      final content = find.byKey(
+        const ValueKey<String>('spotlight-content-slot'),
+      );
+      expect(tester.getSize(content).height, greaterThan(size.height * 0.75));
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets(
     'wide shell mounts one search, persistent rail, hero and content',
     (tester) async {
