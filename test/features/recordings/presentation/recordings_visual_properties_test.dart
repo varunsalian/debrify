@@ -30,13 +30,13 @@ void main() {
         weight: FontWeight.w800,
         reason: 'EmptyDvr title Text properties',
       );
-      final texts = find.descendant(
-        of: recordingsType('_EmptyDvr'),
-        matching: find.byType(Text),
-      );
+      // Found by its words: the network share's status row can sit above it.
       recordingTextProperties(
         t,
-        texts.at(1),
+        find.descendant(
+          of: recordingsType('_EmptyDvr'),
+          matching: find.textContaining('Record what'),
+        ),
         color: Colors.white.withValues(alpha: 0.5),
         size: 13,
         height: 1.5,

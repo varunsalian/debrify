@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:debrify/features/recording_output/models/share_recording.dart';
 import 'package:debrify/features/recordings/presentation/legacy_recordings/recordings_hub_dependencies.dart';
 import 'package:debrify/features/recordings/presentation/legacy_recordings/recordings_hub_sections.dart';
 import 'package:debrify/features/recordings/presentation/recordings_hub_tokens.dart';
@@ -131,6 +132,80 @@ class RecordingsHubActions {
 
   /// Recording location & timing, then a reload so the footer shows the
   /// chosen folder.
+  Future<void> openShareSettings() async {
+    final share = _deps.share;
+    if (share == null) return;
+    await share.openSettings();
+    if (!_deps.mounted()) return;
+    await _sections.data.loadShare(force: true);
+  }
+
+  Future<void> playShare(ShareRecording recording) async {
+    final share = _deps.share;
+    if (share == null) return;
+    final Uri url;
+    try {
+      url = await share.streamUrl(recording);
+    } catch (_) {
+      if (!_deps.mounted()) return;
+      ScaffoldMessenger.of(_deps.context()).showSnackBar(
+        const SnackBar(content: Text("Couldn't open the network share")),
+      );
+      return;
+    }
+    if (!_deps.mounted()) return;
+    await VideoPlayerLauncher.push(
+      _deps.context(),
+      VideoPlayerLaunchArgs(
+        videoUrl: url.toString(),
+        title: recording.title,
+        showVideoTitle: true,
+        // The stream is served from inside Debrify for as long as it runs.
+        disableExternalPlayer: true,
+      ),
+    );
+  }
+
+  Future<void> deleteShare(ShareRecording recording) async {
+    final share = _deps.share;
+    final address = _deps.owners.share?.address;
+    if (share == null || address == null) return;
+    final confirmed = await showDialog<bool>(
+      context: _deps.context(),
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete recording?'),
+        content: Text(
+          '${recording.title} (${_sections.format.fmtBytes(recording.bytes)}) '
+          'will be removed from $address.',
+        ),
+        actions: [
+          TextButton(
+            autofocus: true,
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Keep'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: kRecordingsHubRec),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !_deps.mounted()) return;
+    try {
+      await share.delete(recording);
+    } catch (_) {
+      if (!_deps.mounted()) return;
+      ScaffoldMessenger.of(_deps.context()).showSnackBar(
+        const SnackBar(content: Text("Couldn't delete it from the share")),
+      );
+    }
+    if (_deps.mounted()) await _sections.data.loadShare(force: true);
+  }
+
   Future<void> openOutputSettings() async {
     final open = _deps.openOutputSettings;
     if (open == null) return;

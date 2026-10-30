@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:debrify/features/recording_output/models/share_recording.dart';
 import 'package:debrify/features/recordings/presentation/legacy_recordings/recordings_hub_dependencies.dart';
 import 'package:debrify/features/recordings/presentation/legacy_recordings/recordings_hub_owners.dart';
 import 'package:debrify/features/recordings/presentation/legacy_recordings/recordings_hub_schedule_row.dart';
@@ -9,6 +10,7 @@ import 'package:debrify/features/recordings/presentation/recordings_hub_chrome.d
 import 'package:debrify/features/recordings/presentation/recordings_hub_empty_states.dart';
 import 'package:debrify/features/recordings/presentation/recordings_hub_library_row.dart';
 import 'package:debrify/features/recordings/presentation/recordings_hub_live_card.dart';
+import 'package:debrify/features/recordings/presentation/recordings_hub_share.dart';
 import 'package:debrify/features/recordings/presentation/recordings_hub_tokens.dart';
 import 'package:debrify/services/live_recording_service.dart';
 import 'package:debrify/utils/platform_util.dart';
@@ -27,11 +29,21 @@ class RecordingsHubLayout {
     final desktopCaptures = _sections.data.desktopCaptures;
     final liveCount = _owners.live.length + desktopCaptures.length;
     final totalBytes = _owners.library.fold<int>(0, (sum, e) => sum + e.bytes);
+    final share = _owners.share;
+    // Shown once the share answered, so a set-up share never flashes "Set up".
+    final shareStatus = _deps.share != null && _owners.shareLoaded
+        ? RecordingsHubShareStatus(
+            address: share?.address,
+            recordsDirect: share?.recordsDirect ?? true,
+            onOpen: () => unawaited(_sections.actions.openShareSettings()),
+          )
+        : null;
     final empty =
         !_owners.loading &&
         liveCount == 0 &&
         _owners.schedules.isEmpty &&
-        _owners.library.isEmpty;
+        _owners.library.isEmpty &&
+        share == null;
 
     return Scaffold(
       backgroundColor: _kBg,
@@ -49,7 +61,8 @@ class RecordingsHubLayout {
               // library delete icon: no alarm banner, no live Stop, no
               // schedule rows, and no desktop folder button in between.
               onScheduleDown:
-                  (!_sections.data.desktop &&
+                  (shareStatus == null &&
+                      !_sections.data.desktop &&
                       !(_sections.data.isAndroid && !_owners.exactAlarms) &&
                       liveCount == 0 &&
                       _owners.schedules.isEmpty &&
@@ -69,6 +82,7 @@ class RecordingsHubLayout {
                       onSchedule: () => unawaited(
                         _sections.scheduling.createManualSchedule(),
                       ),
+                      top: shareStatus,
                       showAlarmBanner:
                           _sections.data.isAndroid && !_owners.exactAlarms,
                       onOpenAlarmSettings: () => unawaited(
@@ -87,6 +101,7 @@ class RecordingsHubLayout {
                           ),
                           const SizedBox(height: 14),
                         ],
+                        ?shareStatus,
                         if (_sections.data.showBatteryNudge) ...[
                           RecordingsHubBatteryBanner(
                             onFix: () => unawaited(
@@ -169,8 +184,9 @@ class RecordingsHubLayout {
                               ),
                             ),
                         const SizedBox(height: 18),
+                        if (share != null) ..._shareSection(share),
                         RecordingsHubSectionHeader(
-                          label: 'LIBRARY',
+                          label: share == null ? 'LIBRARY' : 'ON THIS DEVICE',
                           chip: _owners.library.isEmpty
                               ? null
                               : '${_owners.library.length} · ${_sections.format.fmtBytes(totalBytes)}',
@@ -240,7 +256,9 @@ class RecordingsHubLayout {
                             ),
                         const SizedBox(height: 20),
                         Text(
-                          _sections.data.desktop
+                          share != null && share.recordsDirect
+                              ? 'New recordings are saved to ${share.address}'
+                              : _sections.data.desktop
                               ? 'Recordings run while Debrify is open and '
                                     'the computer is awake · saved in '
                                     'Downloads/Debrify/Recordings'
@@ -259,5 +277,49 @@ class RecordingsHubLayout {
         ),
       ),
     );
+  }
+
+  /// ON YOUR SHARE: what the network share holds, playable and deletable.
+  List<Widget> _shareSection(ShareLibrary share) {
+    final format = _sections.format;
+    return [
+      RecordingsHubSectionHeader(
+        label: 'ON YOUR SHARE',
+        chip: share.recordings.isEmpty
+            ? null
+            : '${share.recordings.length} · ${format.fmtBytes(share.totalBytes)}',
+        chipColor: Colors.white38,
+        action: RecordingsHubHubIconButton(
+          icon: Icons.refresh_rounded,
+          tooltip: 'Refresh the share',
+          onPressed: () => unawaited(_sections.data.loadShare(force: true)),
+        ),
+      ),
+      if (share.error != null)
+        RecordingsHubEmptyHint(text: '${share.error} (${share.address}).')
+      else if (share.recordings.isEmpty)
+        RecordingsHubEmptyHint(
+          text: share.recordsDirect
+              ? 'Nothing on the share yet. New recordings are saved there '
+                    'as they record.'
+              : 'Nothing on the share yet. Finished recordings are copied '
+                    'there.',
+        )
+      else
+        for (final recording in share.recordings)
+          RecordingsHubLibraryRow(
+            title: recording.title,
+            subtitle: [
+              '${format.dayLabel(recording.modified.toLocal())} '
+                  '${format.clock(recording.modified.millisecondsSinceEpoch)}',
+              format.fmtBytes(recording.bytes),
+            ].join(' · '),
+            monogramName: recording.title,
+            autofocus: false,
+            onPlay: () => unawaited(_sections.actions.playShare(recording)),
+            onDelete: () => unawaited(_sections.actions.deleteShare(recording)),
+          ),
+      const SizedBox(height: 18),
+    ];
   }
 }

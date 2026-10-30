@@ -4,11 +4,11 @@
 // schedule firing while someone else is signed in) never uses them: it
 // records locally and its owner's upload copies it later.
 
-import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:flutter/foundation.dart';
 
 import '../application/smb_contracts.dart';
 import '../application/smb_direct_writer.dart';
+import 'active_recording_profile.dart';
 import 'dart_smb2_connector.dart';
 import 'smb_settings_store.dart';
 
@@ -21,10 +21,7 @@ Future<SmbDirectWriter?> openSmbDirectRecording({
   SmbConnector connector = const DartSmb2Connector(),
   SmbSettingsStore? store,
 }) async {
-  String active() => ProfileRuntime.isProfileCommitted
-      ? ProfileRuntime.capture().profileId
-      : 'legacy-admin-v1';
-  if (active() != ownerProfileId) return null;
+  if (activeRecordingProfileId() != ownerProfileId) return null;
   try {
     final settings = store ?? SmbSettingsStore();
     final target = await settings.readTarget();
@@ -32,7 +29,7 @@ Future<SmbDirectWriter?> openSmbDirectRecording({
     final password = await settings.readPassword();
     // The reads above follow the active profile: one that took over while
     // they ran must not lend this capture its share and login.
-    if (active() != ownerProfileId) return null;
+    if (activeRecordingProfileId() != ownerProfileId) return null;
     return await SmbDirectWriter.open(
       connector: connector,
       target: target,

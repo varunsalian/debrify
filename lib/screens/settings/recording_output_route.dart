@@ -1,11 +1,16 @@
-// Composition for "Recording location & timing": binds the platform folder
-// pickers to the recording-output settings page so neither the page nor the
-// recordings hub imports a native service.
+// Composition for "Recording location & timing" and the network share:
+// binds the platform folder pickers to the recording-output settings page and
+// the share library to the Recordings hub, so neither the pages nor the hub
+// import a native service or another feature's data layer.
 
 import 'dart:io';
 
+import 'package:debrify/features/recording_output/data/share_library_repository.dart';
+import 'package:debrify/features/recording_output/data/share_stream_server.dart';
 import 'package:debrify/features/recording_output/models/recording_output_settings.dart';
+import 'package:debrify/features/recording_output/presentation/network_share_settings_page.dart';
 import 'package:debrify/features/recording_output/presentation/recording_output_settings_page.dart';
+import 'package:debrify/features/recordings/presentation/legacy_recordings/recordings_hub_dependencies.dart';
 import 'package:debrify/services/android_native_downloader.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -39,6 +44,33 @@ Future<void> openRecordingOutputSettings(BuildContext context) {
     ),
   );
 }
+
+/// The network share as the Recordings page uses it: listed per load,
+/// streamed through the loopback server, settings on their own page. Null
+/// where nothing records.
+RecordingsHubShare? recordingsHubShare(BuildContext Function() context) {
+  final override = debugRecordingsHubShare;
+  if (override != null) return override(context);
+  if (!recordingOutputSettingsAvailable) return null;
+  final library = ShareLibraryRepository();
+  return RecordingsHubShare(
+    load: library.load,
+    streamUrl: ShareStreamServer.instance.urlFor,
+    delete: library.delete,
+    openSettings: () => openNetworkShareSettings(context()),
+  );
+}
+
+/// Replaces the share [recordingsHubShare] returns, for tests.
+@visibleForTesting
+RecordingsHubShare? Function(BuildContext Function() context)?
+debugRecordingsHubShare;
+
+/// Pushes "Network share": where recordings are written to or copied to.
+Future<void> openNetworkShareSettings(BuildContext context) =>
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const NetworkShareSettingsPage()),
+    );
 
 Future<({String? treeUri, String? displayName, String? path})?>
 _pickAndroidFolder() async {

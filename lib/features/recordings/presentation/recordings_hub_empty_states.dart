@@ -10,7 +10,11 @@ class _EmptyDvr extends StatelessWidget {
   final VoidCallback onSchedule;
   final bool showAlarmBanner;
   final VoidCallback onOpenAlarmSettings;
+
+  /// Shown first (the network share's status row).
+  final Widget? top;
   const _EmptyDvr({
+    this.top,
     required this.onSchedule,
     required this.showAlarmBanner,
     required this.onOpenAlarmSettings,
@@ -21,6 +25,7 @@ class _EmptyDvr extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 6, 20, 28),
       children: [
+        ?top,
         if (showAlarmBanner) ...[
           _AlarmBanner(onTap: onOpenAlarmSettings),
           const SizedBox(height: 14),

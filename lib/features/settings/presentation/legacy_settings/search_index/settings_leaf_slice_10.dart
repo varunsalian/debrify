@@ -81,6 +81,20 @@ extension SettingsLeafSlice10 on SettingsLeafBuilder {
             'delete recording',
           ],
         ),
+        leaf(
+          'Recordings',
+          'Network share (SMB)',
+          'Record to a NAS or another computer on your network',
+          const [
+            'smb',
+            'nas',
+            'network share',
+            'samba',
+            'shared folder',
+            'network drive',
+            'record to nas',
+          ],
+        ),
       ],
 
       if (ProfileRuntime.mode == ProfileRuntimeMode.profileCommitted) ...[

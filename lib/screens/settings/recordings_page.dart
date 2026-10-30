@@ -42,6 +42,7 @@ class _RecordingsPageState extends State<RecordingsPage>
       openOutputSettings: recordingOutputSettingsAvailable
           ? () => openRecordingOutputSettings(context)
           : null,
+      share: recordingsHubShare(() => context),
     ),
   );
 

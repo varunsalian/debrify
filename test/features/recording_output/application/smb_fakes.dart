@@ -30,9 +30,16 @@ final class FakeShare implements SmbConnector {
   /// Called before each write; lets a test cancel mid-upload.
   void Function(String path, int writes)? beforeWrite;
 
+  /// Modification times for [files]; unset ones read as 2026-01-01.
+  final Map<String, DateTime> modified = {};
+
+  /// Thrown by list when set.
+  SmbException? listError;
+
   int connects = 0;
   int closes = 0;
   int writes = 0;
+  int reads = 0;
   SmbTarget? lastTarget;
   String? lastPassword;
 
@@ -71,6 +78,39 @@ final class _FakeConnection implements SmbConnection {
   }
 
   @override
+  Future<List<SmbEntry>> list(String folder) async {
+    if (share.listError != null) throw share.listError!;
+    final prefix = folder.isEmpty ? '' : '$folder/';
+    final names = <String, bool>{};
+    for (final path in [...share.files.keys, ...share.dirs]) {
+      if (!path.startsWith(prefix) || path == folder) continue;
+      final rest = path.substring(prefix.length);
+      final slash = rest.indexOf('/');
+      final name = slash < 0 ? rest : rest.substring(0, slash);
+      final isFile = slash < 0 && share.files.containsKey(path);
+      names[name] = (names[name] ?? false) || isFile;
+    }
+    return [
+      for (final MapEntry(key: name, value: isFile) in names.entries)
+        SmbEntry(
+          name: name,
+          isFile: isFile,
+          bytes: isFile ? share.files['$prefix$name']!.length : 0,
+          modified: share.modified['$prefix$name'] ?? DateTime.utc(2026),
+        ),
+    ];
+  }
+
+  @override
+  Future<SmbReader> openRead(String path) async {
+    final data = share.files[path];
+    if (data == null) {
+      throw SmbException(SmbFailureKind.notFound, 'no $path');
+    }
+    return _FakeReader(share, data);
+  }
+
+  @override
   Future<int> sizeOf(String path) async {
     final f = share.files[path];
     if (f == null) {
@@ -103,6 +143,25 @@ final class _FakeConnection implements SmbConnection {
     share.closes++;
     share.log.add('close');
   }
+}
+
+final class _FakeReader implements SmbReader {
+  _FakeReader(this.share, this.data);
+  final FakeShare share;
+  final List<int> data;
+
+  @override
+  int get size => data.length;
+
+  @override
+  Future<Uint8List> read(int offset, int length) async {
+    share.reads++;
+    final end = (offset + length).clamp(0, data.length);
+    return Uint8List.fromList(data.sublist(offset.clamp(0, end), end));
+  }
+
+  @override
+  Future<void> close() async => share.log.add('closer');
 }
 
 final class _FakeWriter implements SmbWriter {
@@ -147,3 +206,21 @@ RecordingByteSource memorySource(
 }
 
 List<int> bytesOf(int n) => List<int>.generate(n, (i) => i % 251);
+
+/// Settings with a fixed target and password, for code that only reads them.
+final class FakeSettings implements SmbUploadSettings {
+  FakeSettings({required this.target, this.password});
+
+  SmbTarget target;
+  String? password;
+  SmbUploadLedger ledger = const SmbUploadLedger();
+
+  @override
+  Future<SmbTarget> readTarget() async => target;
+  @override
+  Future<String?> readPassword() async => password;
+  @override
+  Future<SmbUploadLedger> readLedger() async => ledger;
+  @override
+  Future<void> writeLedger(SmbUploadLedger value) async => ledger = value;
+}

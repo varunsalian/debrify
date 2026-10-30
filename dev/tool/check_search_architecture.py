@@ -25,8 +25,9 @@ RECORDINGS_COMPLETE = True
 RECORDINGS_FACADE = "lib/screens/settings/recordings_page.dart"
 RECORDINGS_BRIDGE = "lib/features/recordings/presentation/legacy_recordings/"
 # Measured on the completed facade (101); +5 on 2026-10-29 to wire the
-# recording location & timing route into the hub dependencies.
-RECORDINGS_FACADE_CAP = 106
+# recording location & timing route into the hub dependencies; +1 on
+# 2026-10-30 for the network share (composed in recording_output_route.dart).
+RECORDINGS_FACADE_CAP = 107
 RECORDINGS_SIZE_EXCEPTIONS = {}
 RECORDINGS_HANDOFF_FILES = {RECORDINGS_BRIDGE + "recordings_hub_actions.dart"}
 STREMIO_TV_CATALOGS_COMPLETE = True

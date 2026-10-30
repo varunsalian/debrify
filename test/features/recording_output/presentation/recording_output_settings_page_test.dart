@@ -238,10 +238,11 @@ void main() {
     );
   });
 
-  testWidgets('the SMB section sits under the timing rows', (tester) async {
+  testWidgets('the network share has its own page under the timing rows', (
+    tester,
+  ) async {
     // A tall surface so nothing sits below the fold: what this checks is the
-    // page's shape, not its pixels. Both timing rows, the divider and the new
-    // section are all built, and the timing dialog still opens on top.
+    // page's shape, not its pixels.
     tester.view.physicalSize = const Size(1200, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -249,15 +250,22 @@ void main() {
 
     expect(find.text('Start recording early'), findsOneWidget);
     expect(find.text('Keep recording after the end'), findsOneWidget);
+    expect(find.text('Network share (SMB)'), findsOneWidget);
+    expect(find.text('Copy recordings to a network share (SMB)'), findsNothing);
+
+    // The timing dialog still opens on top.
+    await tester.tap(find.text('Start recording early'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SimpleDialogOption), findsNWidgets(5));
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Network share (SMB)'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(AppBar, 'Network share'), findsOneWidget);
     expect(
       find.text('Copy recordings to a network share (SMB)'),
       findsOneWidget,
     );
-    // The divider that separates the new section is rendered.
-    expect(find.byType(Divider), findsWidgets);
-
-    await tester.tap(find.text('Start recording early'));
-    await tester.pumpAndSettle();
-    expect(find.byType(SimpleDialogOption), findsNWidgets(5));
   });
 }

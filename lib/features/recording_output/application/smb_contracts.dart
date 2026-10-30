@@ -22,11 +22,42 @@ abstract interface class SmbConnection {
 
   /// Creates or empties [path] for writing from offset 0.
   Future<SmbWriter> openWrite(String path);
+
+  /// The entries directly inside [folder] ('' is the share root).
+  Future<List<SmbEntry>> list(String folder);
+
+  /// Opens [path] for reading at any offset.
+  Future<SmbReader> openRead(String path);
   Future<int> sizeOf(String path);
   Future<void> rename(String from, String to);
   Future<void> delete(String path);
 
   /// Logs off. Safe to call more than once.
+  Future<void> close();
+}
+
+/// One entry of [SmbConnection.list].
+final class SmbEntry {
+  const SmbEntry({
+    required this.name,
+    required this.isFile,
+    required this.bytes,
+    required this.modified,
+  });
+
+  final String name;
+  final bool isFile;
+  final int bytes;
+  final DateTime modified;
+}
+
+/// Random-access reader returned by [SmbConnection.openRead].
+abstract interface class SmbReader {
+  /// The file's size when it was opened.
+  int get size;
+
+  /// Up to [length] bytes from [offset]; fewer only at the end of the file.
+  Future<Uint8List> read(int offset, int length);
   Future<void> close();
 }
 

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:debrify/features/recording_output/models/share_recording.dart';
 import 'package:debrify/features/recordings/presentation/legacy_recordings/recordings_hub_dependencies.dart';
 import 'package:debrify/features/recordings/presentation/legacy_recordings/recordings_hub_owners.dart';
 import 'package:debrify/features/recordings/presentation/legacy_recordings/recordings_hub_sections.dart';
@@ -51,7 +52,36 @@ class RecordingsHubData {
     );
   }
 
+  /// Lists the share in the background (it is slower than the local
+  /// library and must not hold it up). Refreshes ride along with [loadAll]
+  /// at most every 20 s unless [force]d by a user action.
+  Future<void> loadShare({bool force = false}) async {
+    final share = _deps.share;
+    if (share == null) return;
+    final last = _owners.shareLoadedAt;
+    if (!force &&
+        last != null &&
+        DateTime.now().difference(last) < const Duration(seconds: 20)) {
+      return;
+    }
+    final generation = ++_owners.shareGeneration;
+    _owners.shareLoadedAt = DateTime.now();
+    ShareLibrary? library;
+    try {
+      library = await share.load();
+    } catch (error) {
+      debugPrint('Recordings: share listing failed (${error.runtimeType})');
+      library = _owners.share;
+    }
+    if (!_deps.mounted() || generation != _owners.shareGeneration) return;
+    _deps.setState(() {
+      _owners.share = library;
+      _owners.shareLoaded = true;
+    });
+  }
+
   Future<void> loadAll() async {
+    unawaited(loadShare());
     final results = await Future.wait<Object>([
       isAndroid
           ? LiveRecordingService.query()

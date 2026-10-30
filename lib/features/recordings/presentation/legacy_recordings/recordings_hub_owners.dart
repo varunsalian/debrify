@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:debrify/features/recording_output/models/share_recording.dart';
 import 'package:debrify/services/live_recording_service.dart';
 import 'package:flutter/material.dart';
 
@@ -11,6 +12,18 @@ class RecordingsHubOwners {
   List<RecordingLibraryEntry> library = const [];
 
   bool loading = true;
+
+  /// The network share and its recordings; null when none is set up.
+  ShareLibrary? share;
+
+  /// False until the first share listing answered (it can take a while).
+  bool shareLoaded = false;
+
+  /// Bumped per listing so an older, slower answer cannot overwrite a newer.
+  int shareGeneration = 0;
+
+  /// When the share was last listed, for throttling refreshes.
+  DateTime? shareLoadedAt;
 
   bool exactAlarms = true;
 

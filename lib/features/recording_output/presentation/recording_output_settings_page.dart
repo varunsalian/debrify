@@ -10,7 +10,7 @@ import 'package:flutter/material.dart';
 
 import '../data/recording_output_store.dart';
 import '../models/recording_output_settings.dart';
-import 'smb_upload_section.dart';
+import 'network_share_settings_page.dart';
 
 /// The persistence the page needs. Tests pass a fake; production uses the
 /// private default that delegates to [RecordingOutputStore].
@@ -185,11 +185,23 @@ class _RecordingOutputSettingsPageState
                     ),
                   ],
                 ),
-                const Divider(),
                 // Both platforms this page exists for (Android and desktop)
-                // have recordings, so the section has no platform guard of
-                // its own; RecordingPlatform has no other value.
-                const SmbUploadSection(),
+                // have recordings, so the entry has no platform guard of its
+                // own; RecordingPlatform has no other value.
+                _card(
+                  children: [
+                    _settingsRow(
+                      title: 'Network share (SMB)',
+                      subtitle: 'Record to a NAS or another computer',
+                      showChevron: true,
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const NetworkShareSettingsPage(),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
     );

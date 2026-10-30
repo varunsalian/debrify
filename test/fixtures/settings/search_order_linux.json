@@ -837,6 +837,10 @@
       "Recordings library"
     ],
     [
+      "Recordings",
+      "Network share (SMB)"
+    ],
+    [
       "Tracking",
       "Scrobble"
     ],
@@ -1441,6 +1445,10 @@
     [
       "Recordings",
       "Recordings library"
+    ],
+    [
+      "Recordings",
+      "Network share (SMB)"
     ],
     [
       "Tracking",

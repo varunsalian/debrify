@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('recordings retains twelve bare radii and no shape tokens', () {
+  test('recordings retains thirteen bare radii and no shape tokens', () {
     final sources = [
       File('lib/screens/settings/recordings_page.dart'),
       if (Directory('lib/features/recordings').existsSync())
@@ -17,7 +17,8 @@ void main() {
       r'BorderRadius\.circular\(\s*[0-9]+(?:\.[0-9]+)?\s*\)'
       r'|BorderRadius\.all\(\s*Radius\.circular\(\s*[0-9]+(?:\.[0-9]+)?\s*\)\s*\)',
     );
-    expect(radius.allMatches(sources).length, 12);
+    // 12, +1 for the network share status row (2026-10-30).
+    expect(radius.allMatches(sources).length, 13);
     expect(RegExp(r'app\.shape\.').allMatches(sources), isEmpty);
   });
 }

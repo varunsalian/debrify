@@ -68,6 +68,26 @@ final class _Connection implements SmbConnection {
   }
 
   @override
+  Future<List<SmbEntry>> list(String folder) async {
+    final entries = await _guard(() => _pool.listDirectory(folder));
+    return [
+      for (final entry in entries)
+        SmbEntry(
+          name: entry.name,
+          isFile: entry.isFile,
+          bytes: entry.stat.size,
+          modified: entry.stat.modified,
+        ),
+    ];
+  }
+
+  @override
+  Future<SmbReader> openRead(String path) async {
+    final (handle, size) = await _guard(() => _pool.openFileWithSize(path));
+    return _Reader(_pool, handle, size);
+  }
+
+  @override
   Future<int> sizeOf(String path) => _guard(() => _pool.fileSize(path));
 
   @override
@@ -83,6 +103,24 @@ final class _Connection implements SmbConnection {
     _closed = true;
     await _pool.disconnect();
   }
+}
+
+final class _Reader implements SmbReader {
+  _Reader(this._pool, this._handle, this.size);
+
+  final Smb2Pool _pool;
+  final Smb2PoolHandle _handle;
+
+  @override
+  final int size;
+
+  @override
+  Future<Uint8List> read(int offset, int length) => _guard(
+    () => _pool.readFromHandle(_handle, offset: offset, length: length),
+  );
+
+  @override
+  Future<void> close() => _guard(() => _pool.closeHandle(_handle));
 }
 
 final class _Writer implements SmbWriter {
