@@ -221,11 +221,22 @@ SportsTeam? _team(Map<String, dynamic>? competitor) {
 }
 
 /// Live clock only: `status.type.shortDetail`, else `status.displayClock`.
+///
+/// Cricket sends the bare word `Live` as its short detail and keeps the real
+/// state (`Stumps`, `Lunch`, `Match delayed - Rain`) in `description`, with a
+/// meaningless `0'` clock; the card already says LIVE, so the clock is the
+/// description, or nothing.
 String? _liveClock({
   required Map<String, dynamic>? status,
   required Map<String, dynamic> type,
 }) {
   final shortDetail = _text(type['shortDetail']);
+  if (shortDetail != null && shortDetail.toLowerCase() == 'live') {
+    final description = _nonEmpty(type['description']);
+    if (description == null) return null;
+    const bare = {'live', 'in progress'};
+    return bare.contains(description.toLowerCase()) ? null : description;
+  }
   if (shortDetail != null && shortDetail.isNotEmpty) return shortDetail;
   return _nonEmpty(status?['displayClock']);
 }

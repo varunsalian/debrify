@@ -19,10 +19,17 @@ const List<String> kSportsNonLiveWords = [
   'reaction',
   'analysis',
   'goals show',
+  // Fox Sports' 20-minute highlights packages: "South Africa v Australia Mini".
+  'mini',
 ];
 
 /// A listing may start this far from kick-off and still be the live broadcast.
 const Duration _timingTolerance = Duration(hours: 2);
+
+/// Days after the first of a multi-day event, a listing found only by airing
+/// near now must be this long: live Test or golf coverage runs for hours,
+/// while the news and highlights slots naming both sides run 20-60 minutes.
+const Duration _minLaterDayCoverage = Duration(minutes: 90);
 
 /// Context words a non-team listing title must also mention, per sport, so a
 /// venue or tournament name alone (a news show, a travel programme) does not
@@ -241,6 +248,9 @@ bool _timingMatches(
   // Multi-day events (Test cricket, golf) started days ago: while they are
   // live, today's broadcast is the listing airing now or starting soon.
   if (now != null && event.status == SportsEventStatus.live) {
+    if (listing.stop.difference(listing.start) < _minLaterDayCoverage) {
+      return false;
+    }
     final airing = !listing.start.isAfter(now) && listing.stop.isAfter(now);
     return airing || listing.start.difference(now).abs() <= _timingTolerance;
   }

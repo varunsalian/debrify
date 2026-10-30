@@ -708,5 +708,51 @@ void main() {
       );
       expect(guideNames(scheduled, [today], now: _kickOff), isEmpty);
     });
+
+    test(
+      'at stumps, short news and highlights slots are not the broadcast',
+      () {
+        // Real Fox Sports News listings on day 3 of a Test (2026-10-30), when
+        // play had stopped for the day and the board offered the next "Mini".
+        final test = SportsEvent(
+          id: 'test-1',
+          leagueId: 'intl-cricket',
+          start: _kickOff.subtract(const Duration(days: 3)),
+          status: SportsEventStatus.live,
+          home: _team('sa', 'South Africa'),
+          away: _team('aus', 'Australia'),
+        );
+        final now = _kickOff;
+        final mini = _listing(
+          'Fox Sports News',
+          'South Africa v Australia Mini - 3rd Test Day 3',
+          start: now.add(const Duration(minutes: 25)),
+          stop: now.add(const Duration(minutes: 45)),
+        );
+        final hourShow = _listing(
+          'Fox Sports News',
+          'South Africa v Australia - 3rd Test Day 2',
+          start: now.subtract(const Duration(minutes: 30)),
+          stop: now.add(const Duration(minutes: 30)),
+        );
+        final live = _listing(
+          'SABC 3',
+          'Cricket South Africa Vs Australia',
+          start: now.add(const Duration(hours: 1)),
+          stop: now.add(const Duration(hours: 3, minutes: 30)),
+        );
+        expect(guideNames(test, [mini, hourShow], now: now), isEmpty);
+        expect(guideNames(test, [mini, hourShow, live], now: now), ['SABC 3']);
+      },
+    );
+
+    test('"mini" highlights never match, even at kick-off', () {
+      expect(
+        guideNames(_matchEvent(), [
+          _listing('Fox Sports News', 'Arsenal v Bayern Mini'),
+        ]),
+        isEmpty,
+      );
+    });
   });
 }

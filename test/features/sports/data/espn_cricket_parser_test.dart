@@ -40,6 +40,11 @@ void main() {
       expect(e.start, DateTime.utc(2026, 10, 27, 8, 30));
       expect(e.leagueId, 'intl-cricket');
     });
+
+    test('the clock is the match state, not the bare word "Live"', () {
+      // ESPN: shortDetail "Live", description "Stumps", displayClock "0'".
+      expect(_byId(events, '1525661').clock, 'Stumps');
+    });
   });
 
   group('Ranji Trophy', () {
@@ -63,6 +68,7 @@ void main() {
       expect(e.format, 'FIRST-CLASS');
       expect(e.note, 'Sikkim require 95 runs');
       expect(e.subtitle, 'Plate Group');
+      expect(e.clock, 'Match delayed - Rain');
     });
 
     test('sorted by start, then id', () {
