@@ -132,7 +132,8 @@
 1021 lib/screens/settings/settings_spotlight_shell.dart
 1021 lib/services/webdav_sync/webdav_sync_tombstones.dart
 1016 lib/widgets/see_all/stremio_dropdown.dart
-1012 lib/services/profiles/profile_preferences.dart
+# 2026-10-30 SMB direct recording: the share and its sealed password reach the native recorder through the profile projection (+3).
+1015 lib/services/profiles/profile_preferences.dart
 1004 lib/widgets/remote/remote_pairing_dialog.dart
 1003 lib/screens/debrify_tv/layouts/spotlight_layout.dart
 999 lib/widgets/iptv/iptv_stage_panel.dart

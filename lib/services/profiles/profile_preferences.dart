@@ -222,6 +222,9 @@ class ProfilePreferences implements SharedPreferences {
     'tv_ui_scale_percent',
     'tv_low_res_render',
     'recording_engine_enabled',
+    // Native recorder → SMB share; the password stays SecretVault-sealed.
+    'recording_smb_target_v1',
+    'recording_smb_password_v1',
     'iptv_player_guide_style',
     'tv_player_controls_style',
     'debrify_tv_player_style',

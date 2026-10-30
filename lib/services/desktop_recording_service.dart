@@ -3,7 +3,9 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
+import '../features/recording_output/application/smb_direct_writer.dart';
 import '../features/recording_output/data/recording_output_store.dart';
+import '../features/recording_output/data/smb_direct_recording.dart';
 import '../utils/app_storage.dart';
 import '../models/profiles/profile_policy.dart';
 import 'profiles/device_job_store.dart';
@@ -89,6 +91,21 @@ class DesktopRecordingCapture {
   int _bytes = 0;
   int get bytes => _bytes;
 
+  /// The share file this capture streamed to, when it recorded straight to
+  /// SMB; null for a local-only capture.
+  String? _shareLabel;
+
+  /// Whether any bytes had to go to [path] on this device instead.
+  bool _wroteLocally = false;
+
+  /// Where the recording ended up, for "saved" messages: the share file,
+  /// the local [path], or both when the share dropped mid-recording.
+  String get savedTo {
+    final share = _shareLabel;
+    if (share == null) return path;
+    return _wroteLocally ? '$share (continued in $path)' : share;
+  }
+
   final DateTime startedAt = DateTime.now();
 
   bool _stopRequested = false;
@@ -137,10 +154,53 @@ class DesktopRecordingCapture {
   Future<void> _run() async {
     IOSink? sink;
     var end = DesktopRecordingEnd.failed;
-    try {
+    // Straight to the share when the owner's SMB settings ask for it; the
+    // local file is only opened if the share is unavailable or drops.
+    SmbDirectWriter? share = await DesktopRecordingService.openShare(
+      fileName: path.split(Platform.pathSeparator).last,
+      ownerProfileId: ownerProfileId,
+    );
+    if (share != null) _shareLabel = share.label;
+    Future<IOSink> local() async {
+      final open = sink;
+      if (open != null) return open;
       final file = File(path);
       await file.parent.create(recursive: true);
-      sink = file.openWrite();
+      _wroteLocally = true;
+      return sink = file.openWrite();
+    }
+
+    /// Moves to the local file after the share failed, keeping the bytes it
+    /// never received.
+    Future<void> leaveShare(SmbDirectWriter failed, Object error) async {
+      debugPrint(
+        'DesktopRecording: share write failed, continuing locally '
+        '($error)',
+      );
+      final unsent = failed.takeUnsent();
+      await failed.abandon();
+      share = null;
+      if (unsent.isNotEmpty) (await local()).add(unsent);
+    }
+
+    Future<void> write(List<int> chunk) async {
+      final target = share;
+      if (target != null) {
+        try {
+          await target.add(
+            chunk is Uint8List ? chunk : Uint8List.fromList(chunk),
+          );
+        } catch (error) {
+          // [chunk] is among the unsent bytes leaveShare writes locally.
+          await leaveShare(target, error);
+        }
+        return;
+      }
+      (await local()).add(chunk);
+    }
+
+    try {
+      if (share == null) await local();
 
       var deadConnects = 0;
       var capReached = false;
@@ -183,7 +243,7 @@ class DesktopRecordingCapture {
               end = DesktopRecordingEnd.failed;
               break capture;
             }
-            sink.add(chunk);
+            await write(chunk);
             _bytes += chunk.length;
             gotBytesThisAttempt = true;
             if (DateTime.now().difference(startedAt) > _maxDuration) {
@@ -228,6 +288,17 @@ class DesktopRecordingCapture {
       debugPrint('DesktopRecording: capture crashed: $e');
       end = DesktopRecordingEnd.failed;
     } finally {
+      final open = share;
+      if (open != null) {
+        try {
+          await open.close();
+        } catch (error) {
+          // The last buffered piece never reached the share: keep it here.
+          try {
+            await leaveShare(open, error);
+          } catch (_) {}
+        }
+      }
       try {
         await sink?.flush();
       } catch (_) {}
@@ -292,6 +363,14 @@ class DesktopRecordingService {
 
   final List<DesktopRecordingCapture> _captures = [];
   int _jobSequence = 0;
+
+  /// Opens the owner's share for a capture, or null to record locally.
+  @visibleForTesting
+  static Future<SmbDirectWriter?> Function({
+    required String fileName,
+    required String ownerProfileId,
+  })
+  openShare = openSmbDirectRecording;
 
   /// The running captures (finished ones are pruned on read), oldest first.
   List<DesktopRecordingCapture> get captures {

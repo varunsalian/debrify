@@ -171,6 +171,16 @@ object RecordingTaskStore {
 					if (RecordingRegistry.live.containsKey(taskId)) continue
 					if (now - entry.updatedAt < DEAD_MIN_AGE_MS) continue
 					val uri = entry.uri?.let { Uri.parse(it) }
+					if (SmbRecordingOutput.isShare(uri)) {
+						// Whatever reached the share stays there; the entry only
+						// stops claiming to record (shares are not in the library).
+						put(context, entry.copy(
+							status = "done",
+							updatedAt = now,
+							errorMessage = "finalized after interruption",
+						))
+						continue
+					}
 					val size = uri?.let { fileSize(context, it) } ?: -1L
 					if (uri != null && size > 0L) {
 						val published = publishRow(context, uri)
@@ -232,7 +242,8 @@ object RecordingTaskStore {
 					// a revoked pre-Q grant makes exists() lie "false", and a
 					// down provider answers with null — neither may prune.
 					val uri = entry.uri?.let { Uri.parse(it) }
-					if (uri == null) {
+					// Share recordings are not indexed: only age them out.
+					if (uri == null || SmbRecordingOutput.isShare(uri)) {
 						if (now - entry.updatedAt > TERMINAL_TTL_MS) remove(context, taskId)
 					} else if (
 						checkFiles &&
@@ -258,6 +269,7 @@ object RecordingTaskStore {
 	 * index entry.
 	 */
 	fun destinationExists(context: Context, uri: Uri): Boolean? {
+		if (SmbRecordingOutput.isShare(uri)) return null
 		if (uri.scheme == "file") {
 			return try {
 				java.io.File(uri.path!!).exists()
@@ -308,6 +320,7 @@ object RecordingTaskStore {
 	}
 
 	fun fileSize(context: Context, uri: Uri): Long {
+		if (SmbRecordingOutput.isShare(uri)) return -1L
 		if (uri.scheme == "file") {
 			return try {
 				val file = java.io.File(uri.path!!)
@@ -328,8 +341,8 @@ object RecordingTaskStore {
 	 *  MediaStore row could NOT be published (callers persist that so the
 	 *  file stays recoverable instead of silently invisible). */
 	fun publishRow(context: Context, uri: Uri): Boolean {
-		// A file in a picked folder is visible as soon as it is written.
-		if (RecordingDestination.isDocument(context, uri)) return true
+		// A file in a picked folder (or on a share) is visible once written.
+		if (SmbRecordingOutput.isShare(uri) || RecordingDestination.isDocument(context, uri)) return true
 		if (uri.scheme == "file") {
 			runCatching {
 				android.media.MediaScannerConnection.scanFile(
@@ -350,6 +363,8 @@ object RecordingTaskStore {
 
 	/** Remove a recording destination, whichever kind it is. */
 	fun deleteDestination(context: Context, uri: Uri): Boolean {
+		// The capture removes an empty share file itself, while still logged on.
+		if (SmbRecordingOutput.isShare(uri)) return true
 		if (uri.scheme == "file") {
 			return runCatching {
 				val file = java.io.File(uri.path!!)

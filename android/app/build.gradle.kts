@@ -41,6 +41,11 @@ android {
         jniLibs {
             useLegacyPackaging = true
         }
+        resources {
+            // BouncyCastle (SMB recording) and jspecify both carry this OSGi
+            // manifest; Android uses neither.
+            excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+        }
     }
 
     compileOptions {
@@ -162,4 +167,10 @@ dependencies {
 
     // SAF tree handling for the custom download-folder feature
     implementation("androidx.documentfile:documentfile:1.0.1")
+
+    // SMB2/3 client: recordings written straight to the user's network share
+    // from the native recorder (scheduled starts run without Flutter).
+    // BouncyCastle supplies the MD4 that NTLM logons need and Android lacks.
+    implementation("com.hierynomus:smbj:0.15.0")
+    implementation("org.bouncycastle:bcprov-jdk18on:1.85.2")
 }

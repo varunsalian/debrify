@@ -1,3 +1,4 @@
+import 'package:debrify/services/recording_share.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:debrify/features/recording_output/models/recording_output_settings.dart';
@@ -57,7 +58,7 @@ class VpIptvRecording {
     // Desktop capture of the current channel: stop it.
     final desktopCapture = _host.desktopCaptureForCurrent();
     if (desktopCapture != null) {
-      final savedPath = desktopCapture.path;
+      final savedPath = desktopCapture.savedTo;
       final bytes = await desktopCapture.stop();
       if (!_host.mounted) return;
       // The revision listener has already repainted (the capture ended during
@@ -82,8 +83,9 @@ class VpIptvRecording {
       _host.setState(() => _host.engineTaskId = null);
       final ok = await LiveRecordingService.stop(engineTask);
       final output = await AndroidNativeDownloader.readRecordingOutput();
+      final share = await directRecordingShareLabel();
       if (!_host.mounted) return;
-      final savedIn = recordingLocationLabel(output);
+      final savedIn = share ?? recordingLocationLabel(output);
       ScaffoldMessenger.of(_host.context).showSnackBar(
         SnackBar(
           content: Text(

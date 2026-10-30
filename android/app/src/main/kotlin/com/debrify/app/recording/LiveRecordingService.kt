@@ -299,6 +299,8 @@ class LiveRecordingService : Service() {
 		val resourceAuthorizationRevision: Long?,
 	) {
 		var uri: Uri? = null
+		/** The share file, when the capture started on SMB (kept after a fallback). */
+		var shareLabel: String? = null
 		@Volatile var bytes: Long = 0L
 		@Volatile var stopRequested: Boolean = false
 		@Volatile var connection: HttpURLConnection? = null
@@ -532,18 +534,22 @@ class LiveRecordingService : Service() {
 	 * Never throws.
 	 */
 	private fun runCapture(state: RecordingState): Outcome {
+		val share = SmbRecordingOutput.targetFor(this, state.ownerProfileId)
+			?.let { SmbRecordingOutput.open(it, state.fileName) }
 		// Local free space says nothing about a picked folder (USB, network share).
-		if (RecordingDestination.usableTree(this) == null &&
+		if (share == null && RecordingDestination.usableTree(this) == null &&
 			freeSpaceBytes() in 0 until MIN_FREE_BYTES
 		) {
 			return Outcome.Failed("not enough free storage")
 		}
 
-		val uri = when (val created = RecordingDestination.create(this, state.fileName, MIME_TYPE)) {
-			is RecordingDestination.Created.Ok -> created.uri
-			is RecordingDestination.Created.Failed -> return Outcome.Failed(created.reason)
-		}
+		val uri = share?.uri
+			?: when (val created = RecordingDestination.create(this, state.fileName, MIME_TYPE)) {
+				is RecordingDestination.Created.Ok -> created.uri
+				is RecordingDestination.Created.Failed -> return Outcome.Failed(created.reason)
+			}
 		state.uri = uri
+		state.shareLabel = share?.label
 
 		// Registry BEFORE the persisted `recording` entry: reconcile treats
 		// store-without-registry as dead, so this order (plus the store's
@@ -565,8 +571,10 @@ class LiveRecordingService : Service() {
 		var out: BufferedOutputStream? = null
 		var endedNote: String? = null
 		var storageFailed = false
+		var onShare = share != null
 		try {
-			val opened = RecordingDestination.openWithFallback(this, uri, state.fileName, MIME_TYPE)
+			val opened = if (share != null) uri to share.output
+				else RecordingDestination.openWithFallback(this, uri, state.fileName, MIME_TYPE)
 				?: return Outcome.Failed("could not open destination")
 			if (opened.first != uri) {
 				// The picked folder refused writes: the capture continues in the
@@ -726,7 +734,25 @@ class LiveRecordingService : Service() {
 								break@capture
 							}
 							try {
-								out.write(buffer, 0, n)
+								try {
+									out!!.write(buffer, 0, n)
+								} catch (e: Exception) {
+									// smbj reports a dropped share as SMBRuntimeException.
+									if (!onShare) throw e
+									// The share dropped: carry on in a local file. What the
+									// share's buffers had not sent yet is lost (under ~1 MB).
+									onShare = false
+									output?.syncAndClose()
+									val local = (RecordingDestination.create(this, state.fileName, MIME_TYPE)
+										as? RecordingDestination.Created.Ok)?.uri
+										?.let { RecordingDestination.openWithFallback(this, it, state.fileName, MIME_TYPE) }
+										?: throw IOException("share dropped and no local destination", e)
+									state.uri = local.first
+									persist(state, status = "recording")
+									output = local.second
+									out = BufferedOutputStream(local.second.stream)
+									out!!.write(buffer, 0, n)
+								}
 							} catch (e: IOException) {
 								// The WRITE side failing (disk full, row revoked)
 								// is terminal — no reconnect can fix storage.
@@ -778,6 +804,7 @@ class LiveRecordingService : Service() {
 		} finally {
 			// Bytes must be durable before ANY terminal state is applied.
 			try { out?.flush() } catch (_: Exception) {}
+			if (onShare && state.bytes == 0L) share?.discard()
 			output?.syncAndClose()
 		}
 
@@ -808,10 +835,14 @@ class LiveRecordingService : Service() {
 				persist(state, status = "done", published = published)
 				val sizeText = fmtBytes(state.bytes)
 				val suffix = outcome.note?.let { " ($it)" } ?: ""
+				// A share that dropped mid-capture: the start is there, the rest here.
+				val where = RecordingDestination.label(this, uri).let { local ->
+					state.shareLabel?.takeIf { !SmbRecordingOutput.isShare(uri) }?.let { "$it, then $local" } ?: local
+				}
 				notifyTask(
 					state,
 					if (published) {
-						"Saved to ${RecordingDestination.label(this, uri)} · $sizeText$suffix"
+						"Saved to $where · $sizeText$suffix"
 					} else {
 						"Recording finished ($sizeText) but couldn't be added to " +
 							"Downloads yet — will retry"

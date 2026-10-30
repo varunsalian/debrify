@@ -16,6 +16,7 @@ final class SmbTarget {
     this.user = '',
     this.domain = '',
     this.deleteLocalAfterUpload = false,
+    this.recordDirect = true,
   });
 
   final bool enabled;
@@ -25,6 +26,14 @@ final class SmbTarget {
   final String user;
   final String domain;
   final bool deleteLocalAfterUpload;
+
+  /// New recordings stream straight to the share instead of to this device
+  /// first; a share that cannot be reached (or drops mid-recording) falls
+  /// back to a local file, which the upload then copies over.
+  final bool recordDirect;
+
+  /// Recordings should be written to the share as they are captured.
+  bool get writesDirect => enabled && recordDirect && isComplete;
 
   /// Host and share (trimmed) are non-empty and share contains no '/' or '\'.
   bool get isComplete =>
@@ -90,6 +99,7 @@ final class SmbTarget {
     String? user,
     String? domain,
     bool? deleteLocalAfterUpload,
+    bool? recordDirect,
   }) {
     return SmbTarget(
       enabled: enabled ?? this.enabled,
@@ -100,6 +110,7 @@ final class SmbTarget {
       domain: domain ?? this.domain,
       deleteLocalAfterUpload:
           deleteLocalAfterUpload ?? this.deleteLocalAfterUpload,
+      recordDirect: recordDirect ?? this.recordDirect,
     );
   }
 
@@ -111,6 +122,7 @@ final class SmbTarget {
     'user': user,
     'domain': domain,
     'deleteLocalAfterUpload': deleteLocalAfterUpload,
+    'recordDirect': recordDirect,
   };
 
   /// Tolerant: non-map input yields the default target; a wrong-typed field
@@ -118,7 +130,8 @@ final class SmbTarget {
   static SmbTarget fromJson(Object? json) {
     if (json is! Map) return const SmbTarget();
     String text(String key) => json[key] is String ? json[key] as String : '';
-    bool flag(String key) => json[key] is bool ? json[key] as bool : false;
+    bool flag(String key, {bool fallback = false}) =>
+        json[key] is bool ? json[key] as bool : fallback;
     return SmbTarget(
       enabled: flag('enabled'),
       host: text('host'),
@@ -127,6 +140,8 @@ final class SmbTarget {
       user: text('user'),
       domain: text('domain'),
       deleteLocalAfterUpload: flag('deleteLocalAfterUpload'),
+      // Absent in targets saved before the option existed: on, like a new one.
+      recordDirect: flag('recordDirect', fallback: true),
     );
   }
 
@@ -151,7 +166,8 @@ final class SmbTarget {
       other.folder == folder &&
       other.user == user &&
       other.domain == domain &&
-      other.deleteLocalAfterUpload == deleteLocalAfterUpload;
+      other.deleteLocalAfterUpload == deleteLocalAfterUpload &&
+      other.recordDirect == recordDirect;
 
   @override
   int get hashCode => Object.hash(
@@ -162,5 +178,6 @@ final class SmbTarget {
     user,
     domain,
     deleteLocalAfterUpload,
+    recordDirect,
   );
 }

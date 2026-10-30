@@ -168,6 +168,28 @@ void main() {
     expect(_fieldText(tester, 'smb-password'), 'hunter2');
     expect(_fieldText(tester, 'smb-domain'), 'WORKGROUP');
     expect(_switchValue(tester, 'smb-delete-local'), isTrue);
+    expect(_switchValue(tester, 'smb-record-direct'), isTrue);
+  });
+
+  testWidgets('recording straight to the share can be turned off', (
+    tester,
+  ) async {
+    await pumpSection(
+      tester,
+      target: const SmbTarget(enabled: true, host: 'nas', share: 'tv'),
+    );
+    expect(_switchValue(tester, 'smb-record-direct'), isTrue);
+
+    await tester.ensureVisible(find.byKey(Key('smb-record-direct')));
+    await tester.tap(find.byKey(Key('smb-record-direct')));
+    await tester.pump();
+    await tester.ensureVisible(find.byKey(Key('smb-save')));
+    await tester.tap(find.byKey(Key('smb-save')));
+    await tester.pumpAndSettle();
+
+    final saved = await savedState();
+    expect(saved.target.recordDirect, isFalse);
+    expect(saved.target.writesDirect, isFalse);
   });
 
   testWidgets('save persists the form and reruns the upload pass', (
@@ -187,6 +209,7 @@ void main() {
     expect(saved.target.user, 'tv');
     expect(saved.target.enabled, isTrue);
     expect(saved.target.deleteLocalAfterUpload, isFalse);
+    expect(saved.target.recordDirect, isTrue, reason: 'on by default');
     expect(saved.password, 'secret');
     expect(find.text('Saved'), findsOneWidget);
   });

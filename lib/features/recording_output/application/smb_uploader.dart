@@ -111,7 +111,11 @@ final class SmbUploader {
     SmbWriter? writer;
     try {
       await connection.ensureDirectory(target.folderSegments);
-      final remote = await _reserveRemoteName(connection, target, recording);
+      final remote = await reserveRemoteName(
+        connection,
+        target,
+        recording.name,
+      );
       if (remote == null) {
         return const SmbUploadFailed(SmbFailureKind.other, 'no free file name');
       }
@@ -245,13 +249,15 @@ final class SmbUploader {
     }
   }
 
-  /// Returns the full remote path (folder-qualified) for the recording.
-  Future<String?> _reserveRemoteName(
+  /// The full remote path (folder-qualified) for a new file called
+  /// [fileName]: SMB-illegal characters become `_`, and a taken name gets
+  /// ` (2)`, ` (3)`… before its extension. Null when every suffix is taken.
+  static Future<String?> reserveRemoteName(
     SmbConnection connection,
     SmbTarget target,
-    SmbLocalRecording recording,
+    String fileName,
   ) async {
-    var name = recording.name.replaceAll(_illegalName, '_');
+    var name = fileName.replaceAll(_illegalName, '_');
     if (name.isEmpty) name = 'recording.ts';
     if (!await connection.exists(target.remotePathFor(name))) {
       return target.remotePathFor(name);

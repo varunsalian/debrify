@@ -31,7 +31,7 @@ class IptvDesktopRecording {
   Future<void> stageStopDesktopRecording(
     DesktopRecordingCapture capture,
   ) async {
-    final savedPath = capture.path;
+    final savedPath = capture.savedTo;
     final messenger = ScaffoldMessenger.of(_deps.context());
     final bytes = await capture.stop();
     if (!_deps.mounted()) return;

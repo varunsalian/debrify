@@ -125,6 +125,7 @@ void main() {
         'user',
         'domain',
         'deleteLocalAfterUpload',
+        'recordDirect',
       });
       expect(jsonDecode(full.encode()), full.toJson());
     });
@@ -152,5 +153,29 @@ void main() {
     expect(a.copyWith(), a);
     expect(a.hashCode, const SmbTarget(host: 'nas', share: 'rec').hashCode);
     expect(a == b, isFalse);
+  });
+
+  group('recordDirect', () {
+    test('is on for a new target and for one saved before it existed', () {
+      expect(const SmbTarget().recordDirect, isTrue);
+      expect(
+        SmbTarget.fromJson({'host': 'nas', 'share': 'tv'}).recordDirect,
+        isTrue,
+      );
+    });
+
+    test('round-trips when turned off', () {
+      const off = SmbTarget(host: 'nas', share: 'tv', recordDirect: false);
+      expect(SmbTarget.decode(off.encode()), off);
+      expect(SmbTarget.decode(off.encode()).recordDirect, isFalse);
+    });
+
+    test('writesDirect needs enabled, the option and a complete address', () {
+      const ready = SmbTarget(enabled: true, host: 'nas', share: 'tv');
+      expect(ready.writesDirect, isTrue);
+      expect(ready.copyWith(enabled: false).writesDirect, isFalse);
+      expect(ready.copyWith(recordDirect: false).writesDirect, isFalse);
+      expect(ready.copyWith(share: '').writesDirect, isFalse);
+    });
   });
 }

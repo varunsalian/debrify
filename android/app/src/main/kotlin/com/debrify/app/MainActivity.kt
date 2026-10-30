@@ -560,7 +560,7 @@ class MainActivity : FlutterActivity() {
         for ((taskId, entry) in entries) {
             if (entry.ownerProfileId != ownerProfileId && !includeOtherOwners) continue
             if (entry.status != "done") continue
-            val raw = entry.uri ?: continue
+            val raw = entry.uri?.takeUnless { it.startsWith("smb:") } ?: continue // share: not playable here
             // Duration = finish (the final store write, which normal engine
             // finishes stamp and publish retries preserve) minus start. A
             // crash-finalized entry's updatedAt is reconcile time, not the

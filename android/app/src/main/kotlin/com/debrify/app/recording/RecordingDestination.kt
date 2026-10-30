@@ -170,6 +170,7 @@ object RecordingDestination {
 
 	/** Where a finished recording was saved, for the notification. */
 	fun label(context: Context, uri: Uri?): String {
+		if (uri != null && SmbRecordingOutput.isShare(uri)) return SmbRecordingOutput.label(uri)
 		if (uri != null && isDocument(context, uri)) {
 			val tree = RecordingOutputPrefs.read(context).treeUri?.let(Uri::parse)
 			val name = tree?.let {

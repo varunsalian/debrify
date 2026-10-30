@@ -205,3 +205,15 @@
 
 # Keep plugin registrant
 -keep class io.flutter.plugins.GeneratedPluginRegistrant { *; }
+
+# smbj (SMB recording output): looks up its packet and event classes by
+# reflection (mbassador handlers, ASN.1/SPNEGO), and logs through slf4j,
+# which has no binding on Android. Its BouncyCastle use is direct calls
+# (MD4Digest and friends), which R8 traces without keep rules.
+-keep class com.hierynomus.** { *; }
+-keep class net.engio.mbassy.** { *; }
+-dontwarn org.slf4j.**
+-dontwarn javax.el.**
+-dontwarn org.ietf.jgss.**
+-dontwarn com.hierynomus.**
+-dontwarn net.engio.mbassy.**

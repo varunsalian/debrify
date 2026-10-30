@@ -38,6 +38,7 @@ class _SmbUploadSectionState extends ConsumerState<SmbUploadSection> {
   /// Null until the stored target and password have been read.
   SmbTarget? _target;
   bool _deleteLocal = false;
+  bool _recordDirect = true;
   bool _busy = false;
 
   /// Result of the last "Test connection", or [_badAddress] after a save was
@@ -79,6 +80,7 @@ class _SmbUploadSectionState extends ConsumerState<SmbUploadSection> {
     setState(() {
       _target = target;
       _deleteLocal = target.deleteLocalAfterUpload;
+      _recordDirect = target.recordDirect;
       _address.text = target.displayAddress;
       _user.text = target.user;
       _domain.text = target.domain;
@@ -96,6 +98,7 @@ class _SmbUploadSectionState extends ConsumerState<SmbUploadSection> {
       user: _user.text.trim(),
       domain: _domain.text.trim(),
       deleteLocalAfterUpload: _deleteLocal,
+      recordDirect: _recordDirect,
     );
   }
 
@@ -278,6 +281,16 @@ class _SmbUploadSectionState extends ConsumerState<SmbUploadSection> {
         keyName: 'domain',
         label: 'Domain (optional)',
         controller: _domain,
+      ),
+      SwitchListTile(
+        key: const Key('smb-record-direct'),
+        title: const Text('Record straight to the share'),
+        subtitle: const Text(
+          'Nothing is stored on this device first. If the share cannot be '
+          'reached, the recording is kept here and uploaded later.',
+        ),
+        value: _recordDirect,
+        onChanged: (value) => setState(() => _recordDirect = value),
       ),
       SwitchListTile(
         key: const Key('smb-delete-local'),
