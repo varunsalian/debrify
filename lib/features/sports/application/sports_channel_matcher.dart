@@ -31,6 +31,11 @@ const Duration _timingTolerance = Duration(hours: 2);
 /// while the news and highlights slots naming both sides run 20-60 minutes.
 const Duration _minLaterDayCoverage = Duration(minutes: 90);
 
+/// Live this long after its scheduled start, an event is on a later day of a
+/// multi-day fixture; a single-day game running late (rain, a long order of
+/// play) stays below it and keeps matching hour-long guide slots.
+const Duration _laterDayAfter = Duration(hours: 12);
+
 /// Context words a non-team listing title must also mention, per sport, so a
 /// venue or tournament name alone (a news show, a travel programme) does not
 /// count as the broadcast.
@@ -248,7 +253,8 @@ bool _timingMatches(
   // Multi-day events (Test cricket, golf) started days ago: while they are
   // live, today's broadcast is the listing airing now or starting soon.
   if (now != null && event.status == SportsEventStatus.live) {
-    if (listing.stop.difference(listing.start) < _minLaterDayCoverage) {
+    if (now.difference(event.start) >= _laterDayAfter &&
+        listing.stop.difference(listing.start) < _minLaterDayCoverage) {
       return false;
     }
     final airing = !listing.start.isAfter(now) && listing.stop.isAfter(now);

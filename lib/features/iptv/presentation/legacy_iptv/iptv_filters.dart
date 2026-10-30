@@ -195,6 +195,14 @@ class IptvFiltersSection {
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_deps.mounted()) return;
+      // Spotlight shows Sports as its board alone: no category control to
+      // fall back to (a request on its unmounted node would fire later).
+      if ((_settingsState.selectedPlaylist?.isSports ?? false) &&
+          _selectionState.spotlightLayoutMode !=
+              IptvSpotlightLayoutMode.classic) {
+        _deps.focusSpotlightContentEntry();
+        return;
+      }
       if (_catalogState.filteredChannels.isNotEmpty) {
         if (_selectionState.spotlightLayoutMode !=
                 IptvSpotlightLayoutMode.classic &&

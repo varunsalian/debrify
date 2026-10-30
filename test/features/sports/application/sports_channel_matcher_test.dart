@@ -746,6 +746,26 @@ void main() {
       },
     );
 
+    test('a delayed single-day game still matches an hour-long slot', () {
+      final late = SportsEvent(
+        id: 't20-1',
+        leagueId: 'intl-cricket',
+        start: _kickOff,
+        status: SportsEventStatus.live,
+        home: _team('sa', 'South Africa'),
+        away: _team('aus', 'Australia'),
+      );
+      // Rain: play started three hours late, in the guide's hourly slots.
+      final now = _kickOff.add(const Duration(hours: 3, minutes: 10));
+      final slot = _listing(
+        'SuperSport Cricket',
+        'Live Cricket: South Africa v Australia, 1st T20',
+        start: _kickOff.add(const Duration(hours: 3)),
+        stop: _kickOff.add(const Duration(hours: 4)),
+      );
+      expect(guideNames(late, [slot], now: now), ['SuperSport Cricket']);
+    });
+
     test('"mini" highlights never match, even at kick-off', () {
       expect(
         guideNames(_matchEvent(), [

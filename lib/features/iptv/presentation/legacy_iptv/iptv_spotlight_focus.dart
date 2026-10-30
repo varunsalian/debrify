@@ -175,13 +175,21 @@ class IptvSpotlightFocus {
   }
 
   /// The Sports shelf shows only its board (no hero, no category control):
-  /// enter it where focus last was, else on its first control. False on any
-  /// other shelf.
-  bool _focusSportsBoard() {
+  /// enter it where focus last was, else on its first control. A board not
+  /// built yet (the shelf just switched) is retried once after the frame.
+  /// False on any other shelf.
+  bool _focusSportsBoard({bool retry = true}) {
     if (!(_settingsState.selectedPlaylist?.isSports ?? false)) return false;
     final scope = _focusState.spotlightSportsScope;
-    (scope.focusedChild ?? scope.traversalDescendants.firstOrNull)
-        ?.requestFocus();
+    final target = scope.focusedChild ?? scope.traversalDescendants.firstOrNull;
+    if (target != null) {
+      target.requestFocus();
+    } else if (retry) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_deps.mounted()) _focusSportsBoard(retry: false);
+      });
+      WidgetsBinding.instance.scheduleFrame();
+    }
     return true;
   }
 
