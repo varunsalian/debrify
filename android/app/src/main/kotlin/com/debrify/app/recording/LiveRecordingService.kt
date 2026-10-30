@@ -568,10 +568,25 @@ class LiveRecordingService : Service() {
 		persist(state, status = "recording")
 
 		var output: RecordingDestination.Output? = null
-		var out: BufferedOutputStream? = null
+		var out: java.io.OutputStream? = null
 		var endedNote: String? = null
 		var storageFailed = false
 		var onShare = share != null
+		// Share dropped: its unacknowledged bytes move to a local file (uploaded later).
+		fun leaveShare(cause: Exception) {
+			onShare = false
+			val unsent = share!!.stream.takeUnsent()
+			if (share.stream.confirmed == 0L) state.shareLabel = null
+			share.stream.abort() // a stalled server would hold a polite close
+			val local = (RecordingDestination.create(this, state.fileName, MIME_TYPE)
+				as? RecordingDestination.Created.Ok)?.uri
+				?.let { RecordingDestination.openWithFallback(this, it, state.fileName, MIME_TYPE) }
+				?: throw IOException("share dropped and no local destination", cause)
+			state.uri = local.first
+			persist(state, status = "recording")
+			output = local.second
+			out = BufferedOutputStream(local.second.stream).also { it.write(unsent) }
+		}
 		try {
 			val opened = if (share != null) uri to share.output
 				else RecordingDestination.openWithFallback(this, uri, state.fileName, MIME_TYPE)
@@ -583,7 +598,7 @@ class LiveRecordingService : Service() {
 				persist(state, status = "recording")
 			}
 			output = opened.second
-			out = BufferedOutputStream(output.stream)
+			out = share?.stream ?: BufferedOutputStream(opened.second.stream)
 
 			val buffer = ByteArray(256 * 1024)
 			var consecutiveDeadConnects = 0
@@ -738,26 +753,16 @@ class LiveRecordingService : Service() {
 									out!!.write(buffer, 0, n)
 								} catch (e: Exception) {
 									// smbj reports a dropped share as SMBRuntimeException.
+									// These bytes are among the unsent ones moved locally.
 									if (!onShare) throw e
-									// The share dropped: carry on in a local file. What the
-									// share's buffers had not sent yet is lost (under ~1 MB).
-									onShare = false
-									output?.syncAndClose()
-									val local = (RecordingDestination.create(this, state.fileName, MIME_TYPE)
-										as? RecordingDestination.Created.Ok)?.uri
-										?.let { RecordingDestination.openWithFallback(this, it, state.fileName, MIME_TYPE) }
-										?: throw IOException("share dropped and no local destination", e)
-									state.uri = local.first
-									persist(state, status = "recording")
-									output = local.second
-									out = BufferedOutputStream(local.second.stream)
-									out!!.write(buffer, 0, n)
+									leaveShare(e)
 								}
 							} catch (e: IOException) {
 								// The WRITE side failing (disk full, row revoked)
 								// is terminal — no reconnect can fix storage.
 								storageFailed = true
-								endedNote = "storage full"
+								endedNote = if (e.message?.startsWith("share dropped") != true) "storage full"
+									else "network share dropped and local storage failed"
 								break@capture
 							}
 							state.bytes += n
@@ -802,10 +807,14 @@ class LiveRecordingService : Service() {
 				}
 			}
 		} finally {
-			// Bytes must be durable before ANY terminal state is applied.
+			// Bytes must be durable before ANY terminal state is applied; a share
+			// failing this last write hands its bytes to a local file as well.
+			if (onShare) try { out?.flush() } catch (e: Exception) {
+				try { leaveShare(e) } catch (_: Exception) { endedNote = "network share dropped; the end was lost" }
+			}
 			try { out?.flush() } catch (_: Exception) {}
-			if (onShare && state.bytes == 0L) share?.discard()
-			output?.syncAndClose()
+			output?.syncAndClose() // a share file nothing reached is removed here
+
 		}
 
 		if (state.timeUp && endedNote == null && !state.stopRequested) {

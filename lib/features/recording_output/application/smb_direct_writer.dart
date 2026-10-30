@@ -3,6 +3,7 @@
 // it adds bytes as they arrive and, when a write fails, takes the bytes the
 // share never received and carries on in a local file.
 
+import 'dart:async';
 import 'dart:typed_data';
 
 import '../models/smb_target.dart';
@@ -108,14 +109,17 @@ final class SmbDirectWriter {
     }
   }
 
-  /// Gives up on the share after a failed write: closes what can be closed
-  /// without sending anything more.
+  /// Gives up on the share after a failed write, sending nothing more. The
+  /// teardown is started, not awaited: on a server that stopped answering
+  /// each step waits out its timeout, and the capture cannot pause that long.
   Future<void> abandon() async {
     if (_closed) return;
     _closed = true;
-    await _quietly(_writer.close);
-    if (_written == 0) await _quietly(() => _connection.delete(remotePath));
-    await _quietly(_connection.close);
+    unawaited(() async {
+      await _quietly(_writer.close);
+      if (_written == 0) await _quietly(() => _connection.delete(remotePath));
+      await _quietly(_connection.close);
+    }());
   }
 
   static Future<void> _quietly(Future<void> Function() body) async {

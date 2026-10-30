@@ -31,9 +31,10 @@ class IptvDesktopRecording {
   Future<void> stageStopDesktopRecording(
     DesktopRecordingCapture capture,
   ) async {
-    final savedPath = capture.savedTo;
     final messenger = ScaffoldMessenger.of(_deps.context());
     final bytes = await capture.stop();
+    // After the stop: a share that fails the last write moves it locally.
+    final savedPath = capture.savedTo;
     if (!_deps.mounted()) return;
     _deps.setState(() {}); // flip the stage button back to Record
     messenger.showSnackBar(

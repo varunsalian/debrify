@@ -21,18 +21,22 @@ Future<SmbDirectWriter?> openSmbDirectRecording({
   SmbConnector connector = const DartSmb2Connector(),
   SmbSettingsStore? store,
 }) async {
-  final active = ProfileRuntime.isProfileCommitted
+  String active() => ProfileRuntime.isProfileCommitted
       ? ProfileRuntime.capture().profileId
       : 'legacy-admin-v1';
-  if (active != ownerProfileId) return null;
+  if (active() != ownerProfileId) return null;
   try {
     final settings = store ?? SmbSettingsStore();
     final target = await settings.readTarget();
     if (!target.writesDirect) return null;
+    final password = await settings.readPassword();
+    // The reads above follow the active profile: one that took over while
+    // they ran must not lend this capture its share and login.
+    if (active() != ownerProfileId) return null;
     return await SmbDirectWriter.open(
       connector: connector,
       target: target,
-      password: await settings.readPassword(),
+      password: password,
       fileName: fileName,
     );
   } catch (error) {

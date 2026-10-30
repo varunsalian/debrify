@@ -15,7 +15,6 @@ import com.hierynomus.smbj.auth.AuthenticationContext
 import com.hierynomus.security.bc.BCSecurityProvider
 import com.hierynomus.smbj.share.DiskShare
 import org.json.JSONObject
-import java.io.FilterOutputStream
 import java.io.IOException
 import java.io.OutputStream
 import java.util.concurrent.TimeUnit
@@ -32,6 +31,7 @@ object SmbRecordingOutput {
 	private const val TARGET_KEY = "recording_smb_target_v1"
 	private const val PASSWORD_KEY = "recording_smb_password_v1"
 	private const val MAX_NAME_SUFFIX = 99
+	private const val LEGACY_OWNER = "legacy-admin-v1"
 
 	/** Characters SMB forbids plus control characters (the Dart uploader's set). */
 	private val ILLEGAL_NAME = Regex("[/\\\\:*?\"<>|\\x00-\\x1f]")
@@ -50,16 +50,65 @@ object SmbRecordingOutput {
 			get() = (listOf("\\\\$host", share) + folder).joinToString("\\")
 	}
 
-	/** An open file on the share. Closing [output] logs off as well. */
-	class Opened(
-		val output: RecordingDestination.Output,
-		val uri: Uri,
-		val label: String,
-		private val discard: () -> Unit,
-	) {
-		/** Removes the file again (a capture that saved nothing). */
-		fun discard() = discard.invoke()
+	/**
+	 * The recording's file on the share. Bytes gather in memory and go out in
+	 * [FLUSH_BYTES] writes at known offsets, so [confirmed] is exactly what
+	 * the server acknowledged and a failed write can hand its bytes back
+	 * ([takeUnsent]) to a local file. [close] logs off; [abort] drops the
+	 * connection without waiting on a server that stopped answering.
+	 */
+	class ShareStream internal constructor(
+		private val file: com.hierynomus.smbj.share.File,
+		private val path: String,
+		private val share: DiskShare,
+		private val connection: com.hierynomus.smbj.connection.Connection,
+		private val client: SMBClient,
+	) : OutputStream() {
+		private val pending = java.io.ByteArrayOutputStream()
+
+		@Volatile var confirmed = 0L
+			private set
+
+		override fun write(b: Int) = write(byteArrayOf(b.toByte()), 0, 1)
+
+		override fun write(b: ByteArray, off: Int, len: Int) {
+			pending.write(b, off, len)
+			if (pending.size() >= FLUSH_BYTES) flush()
+		}
+
+		/** Sends what is gathered; on failure it stays for [takeUnsent]. */
+		override fun flush() {
+			if (pending.size() == 0) return
+			val data = pending.toByteArray()
+			file.write(data, confirmed)
+			confirmed += data.size
+			pending.reset()
+		}
+
+		fun takeUnsent(): ByteArray = pending.toByteArray().also { pending.reset() }
+
+		/** Flushes, removes the file if nothing reached it, and logs off. */
+		override fun close() {
+			try { flush() } finally {
+				try { file.close() } catch (_: Exception) {}
+				if (confirmed == 0L) try { share.rm(path) } catch (_: Exception) {}
+				try { client.close() } catch (_: Exception) {}
+			}
+		}
+
+		fun abort() {
+			try { connection.close(true) } catch (_: Exception) {}
+			try { client.close() } catch (_: Exception) {}
+		}
 	}
+
+	/** An open file on the share; [stream] is also what [output] writes to. */
+	class Opened(val stream: ShareStream, val uri: Uri, val label: String) {
+		val output = RecordingDestination.Output(stream, null, null)
+	}
+
+	/** Bytes gathered per write: one round trip per network read would cap throughput. */
+	private const val FLUSH_BYTES = 1024 * 1024
 
 	/**
 	 * The share to record [ownerProfileId]'s capture to, or null when direct
@@ -67,10 +116,19 @@ object SmbRecordingOutput {
 	 * password cannot be read (never log on with a wrong one: NAS lockouts).
 	 */
 	fun targetFor(context: Context, ownerProfileId: String): Target? {
-		if (ProfilePreferenceProjection.activeJobContext(context).profileId != ownerProfileId) {
-			return null
+		// One snapshot for the owner check and both values: separate reads could
+		// pair this capture with a profile that took over in between.
+		val snapshot = ProfilePreferenceProjection.activeSnapshot(context)
+		val values: (String) -> String? = if (snapshot != null) {
+			if (snapshot.optString("profileId") != ownerProfileId) return null
+			val projected = snapshot.optJSONObject("values")
+			({ key -> projected?.opt(key) as? String })
+		} else {
+			// Single-profile (legacy) installs keep plain Flutter preferences.
+			if (ProfilePreferenceProjection.isCommitted(context) || ownerProfileId != LEGACY_OWNER) return null
+			({ key -> ProfilePreferenceProjection.getString(context, key, null) })
 		}
-		val raw = ProfilePreferenceProjection.getString(context, TARGET_KEY, null) ?: return null
+		val raw = values(TARGET_KEY) ?: return null
 		val json = try { JSONObject(raw) } catch (_: Exception) { return null }
 		if (!json.optBoolean("enabled", false) || !json.optBoolean("recordDirect", true)) {
 			return null
@@ -83,7 +141,7 @@ object SmbRecordingOutput {
 		val folder = json.optString("folder").replace('\\', '/').split('/')
 			.map { it.trim() }
 			.filter { it.isNotEmpty() && it != "." && it != ".." }
-		val sealed = ProfilePreferenceProjection.getString(context, PASSWORD_KEY, null)
+		val sealed = values(PASSWORD_KEY)
 		val password = if (sealed == null) null else {
 			SecretVaultReader.open(context, sealed) ?: return null
 		}
@@ -105,8 +163,10 @@ object SmbRecordingOutput {
 	fun open(target: Target, fileName: String): Opened? {
 		val client = SMBClient(
 			SmbConfig.builder()
+				// A stalled server fails a write after this; the capture then
+				// continues locally. No socket timeout: a silent channel must not
+				// end an idle session mid-recording.
 				.withTimeout(20, TimeUnit.SECONDS)
-				.withSoTimeout(60, TimeUnit.SECONDS)
 				// Android's JCE has no MD4, which NTLM needs.
 				.withSecurityProvider(BCSecurityProvider())
 				.build(),
@@ -149,29 +209,11 @@ object SmbRecordingOutput {
 				SMB2CreateDisposition.FILE_CREATE,
 				setOf(SMB2CreateOptions.FILE_NON_DIRECTORY_FILE),
 			)
-			val stream = object : FilterOutputStream(file.outputStream) {
-				override fun write(b: ByteArray, off: Int, len: Int) = out.write(b, off, len)
-
-				override fun close() {
-					// Each step separately: a dropped connection fails them all,
-					// and none may keep the next from releasing its part.
-					try { super.close() } catch (_: Exception) {}
-					try { file.close() } catch (_: Exception) {}
-					try { share.close() } catch (_: Exception) {}
-					try { session.close() } catch (_: Exception) {}
-					try { client.close() } catch (_: Exception) {}
-				}
-			}
 			val uriPath = (listOf(target.share) + target.folder + name).joinToString("/")
 			return Opened(
-				output = RecordingDestination.Output(stream as OutputStream, null, null),
+				stream = ShareStream(file, path, share, connection, client),
 				uri = Uri.Builder().scheme("smb").authority(target.host).path("/$uriPath").build(),
 				label = "${target.displayAddress}\\$name",
-				discard = {
-					// The server refuses to delete a file that is still open.
-					try { file.close() } catch (_: Exception) {}
-					try { share.rm(path) } catch (_: Exception) {}
-				},
 			)
 		} catch (e: Exception) {
 			android.util.Log.w("Recording", "share unavailable, recording locally: ${e.message}")

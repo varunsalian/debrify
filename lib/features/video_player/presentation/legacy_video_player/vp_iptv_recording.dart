@@ -58,8 +58,8 @@ class VpIptvRecording {
     // Desktop capture of the current channel: stop it.
     final desktopCapture = _host.desktopCaptureForCurrent();
     if (desktopCapture != null) {
-      final savedPath = desktopCapture.savedTo;
       final bytes = await desktopCapture.stop();
+      final savedPath = desktopCapture.savedTo; // known once the file closed
       if (!_host.mounted) return;
       // The revision listener has already repainted (the capture ended during
       // that await); this only guarantees it for the pathological case where
