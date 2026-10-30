@@ -15,6 +15,7 @@ import 'package:debrify/services/iptv_catalog_db.dart';
 import 'package:debrify/services/iptv_media_store.dart';
 import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
+import 'package:debrify/services/profiles/profile_session_memory.dart';
 import 'package:debrify/utils/app_storage.dart';
 import 'package:debrify/widgets/browse/browse_search_header.dart';
 import 'package:debrify/widgets/browse/browse_results_focus.dart';
@@ -44,6 +45,8 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     ProfileRuntime.debugReset();
     ProfileRuntime.initializeLegacy();
+    // A page torn down by an earlier case remembers its shelf for the session.
+    ProfileSessionMemory.clearAll();
     catalogDirectory = await Directory.systemTemp.createTemp(
       'spotlight-results-view-test',
     );
@@ -93,6 +96,87 @@ https://example.com/live/two.ts
     AppStorage.debugReset();
     ProfileRuntime.debugReset();
     await catalogDirectory.delete(recursive: true);
+  });
+
+  testWidgets('a reload or a rebuilt page keeps the shelf the user is on', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.runAsync(() async {
+      final stored = await IptvPlaylistStorage.getIptvPlaylists(
+        forSettings: false,
+      );
+      await IptvPlaylistStorage.setIptvPlaylists([
+        ...stored,
+        IptvPlaylist(
+          id: 'bedroom',
+          name: 'Bedroom TV',
+          url: '',
+          content: '''#EXTM3U
+#EXTINF:-1 group-title="News",Bedroom One
+https://example.com/bedroom/one.ts
+#EXTINF:-1 group-title="News",Bedroom Two
+https://example.com/bedroom/two.ts
+#EXTINF:-1 group-title="News",Bedroom Three
+https://example.com/bedroom/three.ts
+''',
+          addedAt: DateTime(2026, 2),
+        ),
+      ]);
+    });
+    Widget page() => const ProviderScope(
+      child: MaterialApp(
+        home: Scaffold(
+          body: IptvResultsView(searchQuery: '', isTelevision: false),
+        ),
+      ),
+    );
+    Future<void> settle() async {
+      for (var i = 0; i < 20; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+    }
+
+    // The bar above the guide names the open playlist.
+    const landing = 'Living room TV';
+    const bedroom = 'Bedroom TV';
+    await tester.pumpWidget(page());
+    await settle();
+    expect(find.text(landing), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const ValueKey('spotlight-rail-tile-playlist-bedroom')),
+    );
+    await settle();
+    expect(find.text(bedroom), findsOneWidget);
+
+    // An addon update or a return from Settings reloads the playlists; it
+    // used to put the landing shelf back.
+    final reload = tester
+        .state<IptvResultsViewState>(find.byType(IptvResultsView))
+        .refreshPlaylists();
+    await settle();
+    await reload;
+    expect(find.text(bedroom), findsOneWidget);
+
+    // The page is torn down and built again in the same profile session.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(page());
+    await settle();
+    expect(find.text(bedroom), findsOneWidget);
+
+    // A new profile session opens on the landing shelf again.
+    await tester.pumpWidget(const SizedBox.shrink());
+    ProfileSessionMemory.clearAll();
+    await tester.pumpWidget(page());
+    await settle();
+    expect(find.text(landing), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   for (final favorites in [true, false]) {

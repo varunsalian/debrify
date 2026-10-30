@@ -198,6 +198,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     StremioService.instance.removeAddonsChangedListener(
       _sections.catalog.settingsLoading.onStremioAddonsChanged,
     );
+    _sections.catalog.settingsLoading.rememberShelf();
     IptvChannelOrderSignal.revision.removeListener(
       _sections.browsing.filtersSection.onChannelOrderChanged,
     );

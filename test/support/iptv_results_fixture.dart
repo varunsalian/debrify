@@ -8,6 +8,7 @@ import 'package:debrify/services/iptv_catalog_refresh_service.dart';
 import 'package:debrify/services/iptv_media_store.dart';
 import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
+import 'package:debrify/services/profiles/profile_session_memory.dart';
 import 'package:debrify/services/storage/iptv_appearance_storage.dart';
 import 'package:debrify/services/storage/iptv_playlist_storage.dart';
 import 'package:debrify/services/storage/storage_profile_caches.dart';
@@ -44,6 +45,8 @@ class IptvResultsFixture {
     });
     ProfileRuntime.debugReset();
     ProfileRuntime.initializeLegacy();
+    // A page torn down by an earlier case remembers its shelf for the session.
+    ProfileSessionMemory.clearAll();
     resetStorageProfileCaches();
     sqfliteFfiInit();
     final directory = await Directory.systemTemp.createTemp(

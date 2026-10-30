@@ -9,6 +9,7 @@ import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/services/iptv_catalog_db.dart';
 import 'package:debrify/services/iptv_media_store.dart' show IptvListMeta;
 import 'package:debrify/services/iptv_source_stats.dart';
+import 'package:debrify/services/profiles/profile_session_memory.dart';
 import 'package:debrify/services/storage/iptv_appearance_storage.dart';
 import 'package:debrify/services/storage/iptv_favorites_storage.dart';
 import 'package:debrify/services/storage/iptv_history_storage.dart';
@@ -35,6 +36,13 @@ typedef IptvSettingsLoadingDeps = ({
 });
 
 class IptvSettingsLoading {
+  /// The shelf the page showed when it was last torn down, for this profile
+  /// session only: a rebuilt page reopens on it (Sports after playback, say)
+  /// instead of the landing shelf, while a fresh launch still lands normally.
+  static final ProfileSessionMemory<String> _lastShelf =
+      ProfileSessionMemory<String>();
+
+  final ProfileSessionOwner _owner = ProfileSessionMemory.captureOwner();
   final IptvSettingsLoadingDeps _deps;
   final IptvCatalogState _catalogState;
   final IptvMembershipState _membershipState;
@@ -48,6 +56,12 @@ class IptvSettingsLoading {
       _previewState = _deps.previewState,
       _recordingState = _deps.recordingState,
       _settingsState = _deps.settingsState;
+
+  /// Called as the page is disposed; see [_lastShelf].
+  void rememberShelf() {
+    final id = _settingsState.selectedPlaylist?.id;
+    if (id != null) _lastShelf.store(_owner, id);
+  }
 
   void onStremioAddonsChanged() {
     if (_deps.mounted()) loadSettings();
@@ -161,6 +175,19 @@ class IptvSettingsLoading {
       newSelectedPlaylist = IptvMembershipState.favoritesPlaylist;
     } else if (playlists.isNotEmpty) {
       newSelectedPlaylist = firstRealPlaylist ?? playlists.first;
+    }
+    // The landing rules above pick where the page OPENS. A reload (an addon
+    // update, a return from Settings) or a rebuilt page keeps the shelf the
+    // user is on while it still exists, adopting its freshly read record.
+    final keepId =
+        _settingsState.selectedPlaylist?.id ?? _lastShelf.take(_owner);
+    if (keepId != null) {
+      for (final p in playlists) {
+        if (p.id == keepId) {
+          newSelectedPlaylist = p;
+          break;
+        }
+      }
     }
 
     // Check if playlist changed
