@@ -37,6 +37,10 @@ class _SmbUploadSectionState extends ConsumerState<SmbUploadSection> {
 
   /// Null until the stored target and password have been read.
   SmbTarget? _target;
+
+  /// Whether the STORED target is on: [_target] turns on as a draft the
+  /// moment the switch flips, before anything is saved.
+  bool _savedEnabled = false;
   bool _deleteLocal = false;
   bool _recordDirect = true;
   bool _busy = false;
@@ -79,6 +83,7 @@ class _SmbUploadSectionState extends ConsumerState<SmbUploadSection> {
     if (!mounted) return;
     setState(() {
       _target = target;
+      _savedEnabled = target.enabled;
       _deleteLocal = target.deleteLocalAfterUpload;
       _recordDirect = target.recordDirect;
       _address.text = target.displayAddress;
@@ -99,6 +104,7 @@ class _SmbUploadSectionState extends ConsumerState<SmbUploadSection> {
       domain: _domain.text.trim(),
       deleteLocalAfterUpload: _deleteLocal,
       recordDirect: _recordDirect,
+      copySinceMs: _target?.copySinceMs,
     );
   }
 
@@ -113,8 +119,15 @@ class _SmbUploadSectionState extends ConsumerState<SmbUploadSection> {
     unawaited(_save(_draft(enabled: true)));
   }
 
-  Future<void> _save(SmbTarget target) async {
+  Future<void> _save(SmbTarget target, {String message = 'Saved'}) async {
     if (_busy) return;
+    // Turning a share on copies what is recorded from now on, not the
+    // library already on this device (see SmbTarget.copySinceMs).
+    if (target.enabled && !_savedEnabled) {
+      target = target.copyWith(
+        copySinceMs: DateTime.now().millisecondsSinceEpoch,
+      );
+    }
     setState(() {
       _busy = true;
       _notice = null;
@@ -144,6 +157,7 @@ class _SmbUploadSectionState extends ConsumerState<SmbUploadSection> {
     if (!mounted) return;
     setState(() {
       _target = target;
+      _savedEnabled = target.enabled;
       _busy = false;
     });
     // Fire-and-forget: the coordinator reruns its pass in the background, and
@@ -154,7 +168,20 @@ class _SmbUploadSectionState extends ConsumerState<SmbUploadSection> {
           .targetChanged()
           .catchError((Object _) {}),
     );
-    _showMessage('Saved');
+    _showMessage(message);
+  }
+
+  /// Lifts the cutoff so the next pass copies the recordings made before the
+  /// share was set up as well.
+  void _copyEarlier() {
+    final target = _target;
+    if (target == null || _busy) return;
+    unawaited(
+      _save(
+        target.copyWith(clearCopySince: true),
+        message: 'Earlier recordings will be copied to the share',
+      ),
+    );
   }
 
   Future<String?> _readPassword(SmbUploadSettings store) async {
@@ -292,6 +319,16 @@ class _SmbUploadSectionState extends ConsumerState<SmbUploadSection> {
         value: _recordDirect,
         onChanged: (value) => setState(() => _recordDirect = value),
       ),
+      if ((_target?.enabled ?? false) && _target?.copySinceMs != null)
+        ListTile(
+          key: const Key('smb-copy-earlier'),
+          title: const Text('Copy earlier recordings to the share'),
+          subtitle: const Text(
+            'Only recordings made since the share was set up are copied',
+          ),
+          trailing: const Icon(Icons.drive_folder_upload_outlined),
+          onTap: _copyEarlier,
+        ),
       SwitchListTile(
         key: const Key('smb-delete-local'),
         title: const Text('Delete the copy on this device after upload'),

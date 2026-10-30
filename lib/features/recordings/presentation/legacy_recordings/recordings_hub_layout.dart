@@ -310,8 +310,8 @@ class RecordingsHubLayout {
           RecordingsHubLibraryRow(
             title: recording.title,
             subtitle: [
-              '${format.dayLabel(recording.modified.toLocal())} '
-                  '${format.clock(recording.modified.millisecondsSinceEpoch)}',
+              '${format.dayLabel(recording.recordedAt.toLocal())} '
+                  '${format.clock(recording.recordedAt.millisecondsSinceEpoch)}',
               format.fmtBytes(recording.bytes),
             ].join(' · '),
             monogramName: recording.title,

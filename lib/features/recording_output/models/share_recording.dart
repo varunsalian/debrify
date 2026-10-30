@@ -22,6 +22,22 @@ final class ShareRecording {
   final int bytes;
   final DateTime modified;
 
+  /// When it was recorded: the `_YYYYMMDD_HHMMSS` stamp recordings carry in
+  /// their names (local time), else the file's modification time. The share
+  /// stamps a copied file with the moment of the copy, not the recording.
+  DateTime get recordedAt {
+    final match = _stamp.firstMatch(title);
+    if (match == null) return modified;
+    int part(int group) => int.parse(match.group(group)!);
+    final at = DateTime(part(1), part(2), part(3), part(4), part(5), part(6));
+    // Reject what is not a real date (month 13 rolls over silently).
+    return at.month == part(2) && at.day == part(3) ? at : modified;
+  }
+
+  static final _stamp = RegExp(
+    r'_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})$',
+  );
+
   /// The name without its extension.
   String get title {
     final dot = name.lastIndexOf('.');

@@ -17,6 +17,7 @@ final class SmbTarget {
     this.domain = '',
     this.deleteLocalAfterUpload = false,
     this.recordDirect = true,
+    this.copySinceMs,
   });
 
   final bool enabled;
@@ -31,6 +32,12 @@ final class SmbTarget {
   /// first; a share that cannot be reached (or drops mid-recording) falls
   /// back to a local file, which the upload then copies over.
   final bool recordDirect;
+
+  /// Only recordings made at or after this time are copied to the share:
+  /// setting a share up must not sweep a whole existing library onto it.
+  /// Null copies every recording (targets saved before the option, and the
+  /// user's explicit "copy earlier recordings").
+  final int? copySinceMs;
 
   /// Recordings should be written to the share as they are captured.
   bool get writesDirect => enabled && recordDirect && isComplete;
@@ -100,6 +107,8 @@ final class SmbTarget {
     String? domain,
     bool? deleteLocalAfterUpload,
     bool? recordDirect,
+    int? copySinceMs,
+    bool clearCopySince = false,
   }) {
     return SmbTarget(
       enabled: enabled ?? this.enabled,
@@ -111,6 +120,7 @@ final class SmbTarget {
       deleteLocalAfterUpload:
           deleteLocalAfterUpload ?? this.deleteLocalAfterUpload,
       recordDirect: recordDirect ?? this.recordDirect,
+      copySinceMs: clearCopySince ? null : (copySinceMs ?? this.copySinceMs),
     );
   }
 
@@ -123,6 +133,7 @@ final class SmbTarget {
     'domain': domain,
     'deleteLocalAfterUpload': deleteLocalAfterUpload,
     'recordDirect': recordDirect,
+    'copySinceMs': copySinceMs,
   };
 
   /// Tolerant: non-map input yields the default target; a wrong-typed field
@@ -142,6 +153,9 @@ final class SmbTarget {
       deleteLocalAfterUpload: flag('deleteLocalAfterUpload'),
       // Absent in targets saved before the option existed: on, like a new one.
       recordDirect: flag('recordDirect', fallback: true),
+      copySinceMs: json['copySinceMs'] is int
+          ? json['copySinceMs'] as int
+          : null,
     );
   }
 
@@ -167,7 +181,8 @@ final class SmbTarget {
       other.user == user &&
       other.domain == domain &&
       other.deleteLocalAfterUpload == deleteLocalAfterUpload &&
-      other.recordDirect == recordDirect;
+      other.recordDirect == recordDirect &&
+      other.copySinceMs == copySinceMs;
 
   @override
   int get hashCode => Object.hash(
@@ -179,5 +194,6 @@ final class SmbTarget {
     domain,
     deleteLocalAfterUpload,
     recordDirect,
+    copySinceMs,
   );
 }

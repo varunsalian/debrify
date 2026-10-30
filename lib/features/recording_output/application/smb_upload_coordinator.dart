@@ -202,6 +202,7 @@ final class SmbUploadCoordinator {
         activeUris: active,
         ledger: ledger,
         nowMs: _nowMs(),
+        copySinceMs: target.copySinceMs,
       );
     } catch (error) {
       // Listing failures are shown, never thrown; the next scan tries again.

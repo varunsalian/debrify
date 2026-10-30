@@ -19,12 +19,14 @@ List<String> _ready({
   Set<String> active = const {},
   SmbUploadLedger ledger = const SmbUploadLedger(),
   int nowMs = 1000,
+  int? copySinceMs,
 }) => smbReadyForUpload(
   current: current,
   previousBytes: previous ?? {for (final r in current) r.uri: r.bytes},
   activeUris: active,
   ledger: ledger,
   nowMs: nowMs,
+  copySinceMs: copySinceMs,
 ).map((r) => r.uri).toList();
 
 void main() {
@@ -208,5 +210,19 @@ void main() {
       expect(r.attempts, 1);
       expect(r.state, SmbUploadState.failed);
     });
+  });
+
+  test('recordings older than the share setup are left on the device', () {
+    final current = [
+      _r('august', at: 100),
+      _r('setup', at: 500),
+      _r('today', at: 900),
+    ];
+    expect(_ready(current: current, copySinceMs: 500), ['setup', 'today']);
+    expect(_ready(current: current), [
+      'august',
+      'setup',
+      'today',
+    ], reason: 'no cutoff copies everything');
   });
 }

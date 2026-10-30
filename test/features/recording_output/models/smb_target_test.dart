@@ -126,6 +126,7 @@ void main() {
         'domain',
         'deleteLocalAfterUpload',
         'recordDirect',
+        'copySinceMs',
       });
       expect(jsonDecode(full.encode()), full.toJson());
     });
@@ -176,6 +177,21 @@ void main() {
       expect(ready.copyWith(enabled: false).writesDirect, isFalse);
       expect(ready.copyWith(recordDirect: false).writesDirect, isFalse);
       expect(ready.copyWith(share: '').writesDirect, isFalse);
+    });
+  });
+
+  group('copySinceMs', () {
+    test('round-trips, and is absent on targets saved before it', () {
+      const set = SmbTarget(host: 'nas', share: 'tv', copySinceMs: 1234);
+      expect(SmbTarget.decode(set.encode()).copySinceMs, 1234);
+      expect(SmbTarget.fromJson({'host': 'nas'}).copySinceMs, isNull);
+      expect(SmbTarget.fromJson({'copySinceMs': 'soon'}).copySinceMs, isNull);
+    });
+
+    test('copyWith keeps it unless cleared', () {
+      const set = SmbTarget(copySinceMs: 7);
+      expect(set.copyWith(user: 'tv').copySinceMs, 7);
+      expect(set.copyWith(clearCopySince: true).copySinceMs, isNull);
     });
   });
 }

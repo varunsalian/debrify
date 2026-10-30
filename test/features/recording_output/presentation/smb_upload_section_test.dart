@@ -192,6 +192,50 @@ void main() {
     expect(saved.target.writesDirect, isFalse);
   });
 
+  testWidgets('setting a share up copies only what is recorded from then on', (
+    tester,
+  ) async {
+    await pumpSection(tester, target: const SmbTarget(enabled: true));
+    // An existing share saved before the cutoff existed keeps copying all.
+    await tester.enterText(find.byKey(Key('smb-address')), r'\\nas\videos');
+    await tester.tap(find.byKey(Key('smb-save')));
+    await tester.pumpAndSettle();
+    expect((await savedState()).target.copySinceMs, isNull);
+    expect(find.byKey(Key('smb-copy-earlier')), findsNothing);
+  });
+
+  testWidgets('turning a share on stamps the cutoff; copy earlier lifts it', (
+    tester,
+  ) async {
+    final before = DateTime.now().millisecondsSinceEpoch;
+    await pumpSection(tester);
+    await tester.tap(find.byKey(Key('smb-enabled')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(Key('smb-address')), r'\\nas\videos');
+    await tester.ensureVisible(find.byKey(Key('smb-save')));
+    await tester.tap(find.byKey(Key('smb-save')));
+    await tester.pumpAndSettle();
+
+    final since = (await savedState()).target.copySinceMs;
+    expect(since, isNotNull);
+    expect(since, greaterThanOrEqualTo(before));
+
+    // Saving the same share again keeps the original cutoff.
+    await tester.ensureVisible(find.byKey(Key('smb-save')));
+    await tester.tap(find.byKey(Key('smb-save')));
+    await tester.pumpAndSettle();
+    expect((await savedState()).target.copySinceMs, since);
+
+    await tester.ensureVisible(find.byKey(Key('smb-copy-earlier')));
+    await tester.tap(find.byKey(Key('smb-copy-earlier')));
+    await tester.pumpAndSettle();
+    expect((await savedState()).target.copySinceMs, isNull);
+    expect(
+      find.text('Earlier recordings will be copied to the share'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('save persists the form and reruns the upload pass', (
     tester,
   ) async {

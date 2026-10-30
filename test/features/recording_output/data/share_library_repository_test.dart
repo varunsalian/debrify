@@ -105,4 +105,28 @@ void main() {
       throwsA(isA<SmbException>()),
     );
   });
+
+  test('recordings show and sort by the time in their names, not the copy', () {
+    final copied = DateTime.utc(2026, 10, 30, 7, 6);
+    ShareRecording at(String name) =>
+        ShareRecording(name: name, path: name, bytes: 1, modified: copied);
+    expect(
+      at('US_WWE_HD_20260804_135442.ts').recordedAt,
+      DateTime(2026, 8, 4, 13, 54, 42),
+    );
+    expect(at('News.ts').recordedAt, copied, reason: 'no stamp');
+    expect(at('X_20261399_250000.ts').recordedAt, copied, reason: 'no date');
+  });
+
+  test('the list is ordered by recording time', () async {
+    share.files['TV/Rec/A_20260802_115252.ts'] = [1];
+    share.files['TV/Rec/B_20260804_135953.ts'] = [1];
+    share.files['TV/Rec/C_20260803_090000.ts'] = [1];
+    final names = (await repository.load())!.recordings.map((r) => r.name);
+    expect(names, [
+      'B_20260804_135953.ts',
+      'C_20260803_090000.ts',
+      'A_20260802_115252.ts',
+    ]);
+  });
 }

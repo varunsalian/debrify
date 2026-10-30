@@ -50,17 +50,20 @@ bool stopsSmbRun(SmbFailureKind kind) => switch (kind) {
 ///  - the ledger has no record for it, OR the recorded size differs (a
 ///    changed file starts over), OR the record is `failed` and its
 ///    nextAttemptAtMs (0 when absent) has passed. `uploaded` and `gaveUp`
-///    records with the same size are never ready.
+///    records with the same size are never ready;
+///  - it was recorded at or after [copySinceMs], when that is set.
 List<SmbLocalRecording> smbReadyForUpload({
   required List<SmbLocalRecording> current,
   required Map<String, int> previousBytes,
   required Set<String> activeUris,
   required SmbUploadLedger ledger,
   required int nowMs,
+  int? copySinceMs,
 }) {
   final ready = <SmbLocalRecording>[];
   for (final recording in current) {
     if (recording.bytes <= 0) continue;
+    if (copySinceMs != null && recording.recordedAtMs < copySinceMs) continue;
     if (activeUris.contains(recording.uri)) continue;
     if (previousBytes[recording.uri] != recording.bytes) continue;
     final record = ledger[recording.uri];

@@ -102,7 +102,7 @@ final class ShareLibraryRepository {
             bytes: entry.bytes,
             modified: entry.modified,
           ),
-    ]..sort((a, b) => b.modified.compareTo(a.modified));
+    ]..sort((a, b) => b.recordedAt.compareTo(a.recordedAt));
     return recordings;
   }
 
