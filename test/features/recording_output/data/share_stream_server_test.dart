@@ -119,11 +119,27 @@ void main() {
   test('another profile gets another URL, and cannot use the first', () async {
     final mine = await server.urlFor(recording);
     profile = 'profile-b';
+    // Not even before profile B plays anything.
+    final (before, _, empty) = await get(mine);
+    expect(before, 403);
+    expect(empty, isEmpty);
     expect(await server.urlFor(recording), isNot(mine));
-    final (status, _, body) = await get(mine);
-    expect(status, 403);
-    expect(body, isEmpty);
+    // B's first play forgot A's files altogether.
+    expect((await get(mine)).$1, 404);
   });
+
+  test(
+    "a new profile's first play closes the last profile's sessions",
+    () async {
+      final mine = await server.urlFor(recording);
+      await get(mine, range: 'bytes=0-9');
+      expect(share.closes, 0, reason: 'kept open for the next range');
+
+      profile = 'profile-b';
+      await server.urlFor(recording);
+      expect(share.closes, 1);
+    },
+  );
 
   test('unknown paths and tokens are refused', () async {
     final url = await server.urlFor(recording);

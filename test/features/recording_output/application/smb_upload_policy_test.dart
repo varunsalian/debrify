@@ -225,4 +225,15 @@ void main() {
       'today',
     ], reason: 'no cutoff copies everything');
   });
+
+  test('a recording still running when the share was set up is copied', () {
+    const running = SmbLocalRecording(
+      uri: 'running',
+      name: 'running.ts',
+      bytes: 100,
+      recordedAtMs: 100, // started before the setup (Android times starts)
+      finishedAtMs: 700, // ended after it
+    );
+    expect(_ready(current: [running], copySinceMs: 500), ['running']);
+  });
 }

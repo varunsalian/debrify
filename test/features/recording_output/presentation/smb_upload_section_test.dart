@@ -195,7 +195,10 @@ void main() {
   testWidgets('setting a share up copies only what is recorded from then on', (
     tester,
   ) async {
-    await pumpSection(tester, target: const SmbTarget(enabled: true));
+    await pumpSection(
+      tester,
+      target: const SmbTarget(enabled: true, host: 'nas', share: 'old'),
+    );
     // An existing share saved before the cutoff existed keeps copying all.
     await tester.enterText(find.byKey(Key('smb-address')), r'\\nas\videos');
     await tester.tap(find.byKey(Key('smb-save')));
@@ -221,6 +224,24 @@ void main() {
     expect(since, greaterThanOrEqualTo(before));
 
     // Saving the same share again keeps the original cutoff.
+    await tester.ensureVisible(find.byKey(Key('smb-save')));
+    await tester.tap(find.byKey(Key('smb-save')));
+    await tester.pumpAndSettle();
+    expect((await savedState()).target.copySinceMs, since);
+
+    // Switching it off and on again keeps the cutoff: a re-stamp would
+    // strand recordings still waiting to be copied.
+    await tester.ensureVisible(find.byKey(Key('smb-enabled')));
+    await tester.tap(find.byKey(Key('smb-enabled')));
+    await tester.pumpAndSettle();
+    expect((await savedState()).target.enabled, isFalse);
+    await tester.tap(find.byKey(Key('smb-enabled')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(Key('smb-copy-earlier')),
+      findsNothing,
+      reason: 'not offered on an unsaved draft',
+    );
     await tester.ensureVisible(find.byKey(Key('smb-save')));
     await tester.tap(find.byKey(Key('smb-save')));
     await tester.pumpAndSettle();

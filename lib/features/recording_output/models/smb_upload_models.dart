@@ -25,6 +25,7 @@ final class SmbLocalRecording {
     required this.name,
     required this.bytes,
     required this.recordedAtMs,
+    this.finishedAtMs,
   });
 
   final String uri;
@@ -32,16 +33,24 @@ final class SmbLocalRecording {
   final int bytes;
   final int recordedAtMs;
 
+  /// When the recording ended, where known (Android times a recording by its
+  /// start, desktop by its file's last write).
+  final int? finishedAtMs;
+
+  /// The latest moment the recording was still being made.
+  int get endedAtMs => finishedAtMs ?? recordedAtMs;
+
   @override
   bool operator ==(Object other) =>
       other is SmbLocalRecording &&
       other.uri == uri &&
       other.name == name &&
       other.bytes == bytes &&
-      other.recordedAtMs == recordedAtMs;
+      other.recordedAtMs == recordedAtMs &&
+      other.finishedAtMs == finishedAtMs;
 
   @override
-  int get hashCode => Object.hash(uri, name, bytes, recordedAtMs);
+  int get hashCode => Object.hash(uri, name, bytes, recordedAtMs, finishedAtMs);
 }
 
 /// Outcome tracked for one recording in the ledger.

@@ -114,6 +114,21 @@ void main() {
       at('US_WWE_HD_20260804_135442.ts').recordedAt,
       DateTime(2026, 8, 4, 13, 54, 42),
     );
+    expect(
+      at('Sky News_20260805_2130.ts').recordedAt,
+      DateTime(2026, 8, 5, 21, 30),
+      reason: 'scheduled recordings name to the minute',
+    );
+    expect(
+      at('News_20260804_135442 (2).ts').recordedAt,
+      DateTime(2026, 8, 4, 13, 54, 42),
+      reason: "the uploader's name-clash suffix",
+    );
+    expect(
+      at('News_20260804_135442_2.ts').recordedAt,
+      DateTime(2026, 8, 4, 13, 54, 42),
+      reason: "the desktop recorder's name-clash suffix",
+    );
     expect(at('News.ts').recordedAt, copied, reason: 'no stamp');
     expect(at('X_20261399_250000.ts').recordedAt, copied, reason: 'no date');
   });

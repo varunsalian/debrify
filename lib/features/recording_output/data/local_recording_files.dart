@@ -30,6 +30,9 @@ Future<List<SmbLocalRecording>> listLocalRecordings() async {
         name: e.name,
         bytes: e.bytes,
         recordedAtMs: e.recordedAtMs,
+        finishedAtMs: e.durationMs == null
+            ? null
+            : e.recordedAtMs + e.durationMs!,
       ),
   ];
 }

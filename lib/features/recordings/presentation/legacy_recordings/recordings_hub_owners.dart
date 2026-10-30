@@ -22,9 +22,6 @@ class RecordingsHubOwners {
   /// Bumped per listing so an older, slower answer cannot overwrite a newer.
   int shareGeneration = 0;
 
-  /// When the share was last listed, for throttling refreshes.
-  DateTime? shareLoadedAt;
-
   bool exactAlarms = true;
 
   /// Wall clock for elapsed/countdown text. Only ticks while something needs

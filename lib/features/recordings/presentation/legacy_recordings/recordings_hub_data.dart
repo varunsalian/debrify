@@ -53,19 +53,14 @@ class RecordingsHubData {
   }
 
   /// Lists the share in the background (it is slower than the local
-  /// library and must not hold it up). Refreshes ride along with [loadAll]
-  /// at most every 20 s unless [force]d by a user action.
-  Future<void> loadShare({bool force = false}) async {
+  /// library and must not hold it up). It runs with every [loadAll] — page
+  /// open, resume, a recording starting or ending, a settings return — which
+  /// is rare enough to need no throttle; the generation keeps an older,
+  /// slower answer from overwriting a newer one.
+  Future<void> loadShare() async {
     final share = _deps.share;
     if (share == null) return;
-    final last = _owners.shareLoadedAt;
-    if (!force &&
-        last != null &&
-        DateTime.now().difference(last) < const Duration(seconds: 20)) {
-      return;
-    }
     final generation = ++_owners.shareGeneration;
-    _owners.shareLoadedAt = DateTime.now();
     ShareLibrary? library;
     try {
       library = await share.load();

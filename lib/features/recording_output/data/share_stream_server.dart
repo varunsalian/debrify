@@ -64,7 +64,22 @@ final class ShareStreamServer {
       throw StateError('no share is set up');
     }
     final password = await _store.readPassword();
-    final server = await (_server ??= _start());
+    final starting = _server ??= _start();
+    final HttpServer server;
+    try {
+      server = await starting;
+    } catch (_) {
+      // Let the next play try to start again instead of failing for good.
+      if (identical(_server, starting)) _server = null;
+      rethrow;
+    }
+    // Another profile's sessions have no business staying open.
+    for (final stale in [
+      for (final entry in _sources.entries)
+        if (entry.value.owner != owner) entry.key,
+    ]) {
+      await _sources.remove(stale)?.close();
+    }
     final token = _tokenFor(owner, target.displayAddress, recording.path);
     _sources.remove(token)?.close();
     _sources[token] = _Source(owner, target, password, recording);
@@ -128,7 +143,17 @@ final class ShareStreamServer {
     } catch (error) {
       debugPrint('Share stream: settings not saved (${error.runtimeType})');
     }
-    server.listen((request) => unawaited(_handle(request)));
+    final started = Future.value(server);
+    server.listen(
+      (request) => unawaited(_handle(request)),
+      onError: (Object error) =>
+          debugPrint('Share stream: server error (${error.runtimeType})'),
+      // The OS can close a listening socket under the app; start afresh.
+      onDone: () {
+        if (identical(_server, started)) _server = null;
+      },
+    );
+    _server = started;
     return server;
   }
 
@@ -267,14 +292,16 @@ final class _Source {
 
   Future<SmbReader> acquire(SmbConnector connector) async {
     _idle?.cancel();
+    // Counted before waiting: a request finishing meanwhile must not arm the
+    // idle close under this one.
+    _users++;
     final opening = _open ??= _connect(connector);
     try {
       final (_, reader) = await opening;
-      _users++;
       return reader;
     } catch (_) {
       if (identical(_open, opening)) _open = null; // let the next try reconnect
-      _scheduleIdle();
+      release();
       rethrow;
     }
   }

@@ -38,9 +38,9 @@ class _SmbUploadSectionState extends ConsumerState<SmbUploadSection> {
   /// Null until the stored target and password have been read.
   SmbTarget? _target;
 
-  /// Whether the STORED target is on: [_target] turns on as a draft the
-  /// moment the switch flips, before anything is saved.
-  bool _savedEnabled = false;
+  /// The STORED target: [_target] turns on as a draft the moment the switch
+  /// flips, before anything is saved.
+  SmbTarget _saved = const SmbTarget();
   bool _deleteLocal = false;
   bool _recordDirect = true;
   bool _busy = false;
@@ -83,7 +83,7 @@ class _SmbUploadSectionState extends ConsumerState<SmbUploadSection> {
     if (!mounted) return;
     setState(() {
       _target = target;
-      _savedEnabled = target.enabled;
+      _saved = target;
       _deleteLocal = target.deleteLocalAfterUpload;
       _recordDirect = target.recordDirect;
       _address.text = target.displayAddress;
@@ -121,9 +121,12 @@ class _SmbUploadSectionState extends ConsumerState<SmbUploadSection> {
 
   Future<void> _save(SmbTarget target, {String message = 'Saved'}) async {
     if (_busy) return;
-    // Turning a share on copies what is recorded from now on, not the
-    // library already on this device (see SmbTarget.copySinceMs).
-    if (target.enabled && !_savedEnabled) {
+    // Setting a share up copies what is recorded from now on, not the
+    // library already on this device (see SmbTarget.copySinceMs). Only the
+    // first setup stamps it: switching a share off and on again must not
+    // strand recordings still waiting to be copied (a dropped direct
+    // recording's local tail among them).
+    if (target.enabled && !_saved.isComplete && target.copySinceMs == null) {
       target = target.copyWith(
         copySinceMs: DateTime.now().millisecondsSinceEpoch,
       );
@@ -157,7 +160,7 @@ class _SmbUploadSectionState extends ConsumerState<SmbUploadSection> {
     if (!mounted) return;
     setState(() {
       _target = target;
-      _savedEnabled = target.enabled;
+      _saved = target;
       _busy = false;
     });
     // Fire-and-forget: the coordinator reruns its pass in the background, and
@@ -174,11 +177,10 @@ class _SmbUploadSectionState extends ConsumerState<SmbUploadSection> {
   /// Lifts the cutoff so the next pass copies the recordings made before the
   /// share was set up as well.
   void _copyEarlier() {
-    final target = _target;
-    if (target == null || _busy) return;
+    if (_busy) return;
     unawaited(
       _save(
-        target.copyWith(clearCopySince: true),
+        _saved.copyWith(clearCopySince: true),
         message: 'Earlier recordings will be copied to the share',
       ),
     );
@@ -319,7 +321,7 @@ class _SmbUploadSectionState extends ConsumerState<SmbUploadSection> {
         value: _recordDirect,
         onChanged: (value) => setState(() => _recordDirect = value),
       ),
-      if ((_target?.enabled ?? false) && _target?.copySinceMs != null)
+      if (_saved.enabled && _saved.copySinceMs != null)
         ListTile(
           key: const Key('smb-copy-earlier'),
           title: const Text('Copy earlier recordings to the share'),

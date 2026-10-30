@@ -137,7 +137,7 @@ class RecordingsHubActions {
     if (share == null) return;
     await share.openSettings();
     if (!_deps.mounted()) return;
-    await _sections.data.loadShare(force: true);
+    await _sections.data.loadShare();
   }
 
   Future<void> playShare(ShareRecording recording) async {
@@ -203,7 +203,7 @@ class RecordingsHubActions {
         const SnackBar(content: Text("Couldn't delete it from the share")),
       );
     }
-    if (_deps.mounted()) await _sections.data.loadShare(force: true);
+    if (_deps.mounted()) await _sections.data.loadShare();
   }
 
   Future<void> openOutputSettings() async {

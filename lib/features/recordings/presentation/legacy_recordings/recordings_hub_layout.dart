@@ -282,22 +282,37 @@ class RecordingsHubLayout {
   /// ON YOUR SHARE: what the network share holds, playable and deletable.
   List<Widget> _shareSection(ShareLibrary share) {
     final format = _sections.format;
+    // A capture writing straight to the share shows under RECORDING NOW; as
+    // a finished, deletable row it could be deleted mid-recording.
+    final recording = [
+      for (final capture in _sections.data.desktopCaptures) capture.savedTo,
+      for (final live in _owners.live) Uri.decodeFull(live.uri ?? ''),
+    ];
+    final recordings = [
+      for (final r in share.recordings)
+        if (!recording.any(
+          (target) =>
+              target.endsWith('\\${r.name}') || target.endsWith('/${r.name}'),
+        ))
+          r,
+    ];
+    final totalBytes = recordings.fold<int>(0, (sum, r) => sum + r.bytes);
     return [
       RecordingsHubSectionHeader(
         label: 'ON YOUR SHARE',
-        chip: share.recordings.isEmpty
+        chip: recordings.isEmpty
             ? null
-            : '${share.recordings.length} · ${format.fmtBytes(share.totalBytes)}',
+            : '${recordings.length} · ${format.fmtBytes(totalBytes)}',
         chipColor: Colors.white38,
         action: RecordingsHubHubIconButton(
           icon: Icons.refresh_rounded,
           tooltip: 'Refresh the share',
-          onPressed: () => unawaited(_sections.data.loadShare(force: true)),
+          onPressed: () => unawaited(_sections.data.loadShare()),
         ),
       ),
       if (share.error != null)
         RecordingsHubEmptyHint(text: '${share.error} (${share.address}).')
-      else if (share.recordings.isEmpty)
+      else if (recordings.isEmpty)
         RecordingsHubEmptyHint(
           text: share.recordsDirect
               ? 'Nothing on the share yet. New recordings are saved there '
@@ -306,7 +321,7 @@ class RecordingsHubLayout {
                     'there.',
         )
       else
-        for (final recording in share.recordings)
+        for (final recording in recordings)
           RecordingsHubLibraryRow(
             title: recording.title,
             subtitle: [
