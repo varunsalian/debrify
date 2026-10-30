@@ -151,13 +151,25 @@ class SportsEventCard extends StatelessWidget {
     return format;
   }
 
+  /// `from 13:30` while the first guide option's listing has not begun: a
+  /// channel is offered up to two hours early, and until then it airs
+  /// something else.
+  String? get _startsLater {
+    final listing = watch.guide.firstOrNull?.listing;
+    if (listing == null || !listing.start.isAfter(now ?? DateTime.now())) {
+      return null;
+    }
+    return 'from ${DateFormat('HH:mm').format(listing.start.toLocal())}';
+  }
+
   /// The footer, as the plain sentence the card paints.
   String get _watchText {
     final guide = watch.guide;
     if (guide.isNotEmpty) {
       final name = sportsChannelDisplayName(guide.first.channel.name);
+      final later = _startsLater;
       final extra = guide.length - 1;
-      return extra > 0 ? '$name +$extra' : name;
+      return [name, ?later, if (extra > 0) '+$extra'].join(' ');
     }
     if (watch.possible.isNotEmpty) return '${watch.possible.length} possible';
     return 'Not on your channels yet';
@@ -313,6 +325,10 @@ class SportsEventCard extends StatelessWidget {
               ellipsize: true,
             ),
           ),
+          if (_startsLater case final later?) ...[
+            sportsLabelText(later, _tokens.fgDim, size: 11, tabular: true),
+            const SizedBox(width: 8),
+          ],
           if (extra > 0)
             sportsLabelText('+$extra', _tokens.fgDim, size: 11, tabular: true),
         ],

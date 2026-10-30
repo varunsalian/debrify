@@ -116,8 +116,10 @@ SportsEventCard _card({
   bool followed = false,
   VoidCallback? onPressed,
   bool autofocus = false,
+  DateTime? now,
 }) => SportsEventCard(
   event: event ?? _event(),
+  now: now,
   hideScores: hideScores,
   followed: followed,
   watch: watch,
@@ -306,6 +308,32 @@ void main() {
 
     expect(find.text('Sky Sports Main Event'), findsOneWidget);
     expect(find.textContaining(RegExp(r'^\+')), findsNothing);
+  });
+
+  testWidgets('a channel whose coverage starts later says when', (
+    tester,
+  ) async {
+    // Offered early: the matched listing begins 90 minutes from now, and the
+    // channel airs something else until then.
+    final now = _kickoff.subtract(const Duration(minutes: 90));
+    final from = 'from ${DateFormat('HH:mm').format(_kickoff.toLocal())}';
+    await _mount(
+      tester,
+      _card(
+        watch: SportsWatchOptions(guide: [_guide(_sky)]),
+        now: now,
+      ),
+    );
+    expect(find.text(from), findsOneWidget);
+
+    await _mount(
+      tester,
+      _card(
+        watch: SportsWatchOptions(guide: [_guide(_sky)]),
+        now: _kickoff,
+      ),
+    );
+    expect(find.text(from), findsNothing);
   });
 
   testWidgets('unconfirmed options count themselves as possible', (
