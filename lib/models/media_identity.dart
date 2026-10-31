@@ -44,6 +44,10 @@ class MediaIdentity {
   static String? preferred(dynamic ids) => aliases(ids).firstOrNull;
   static bool matches(dynamic ids, String id) =>
       aliases(ids).contains(providerId(id));
+
+  /// Whether [apiIds] can name [id] to a tracker.
+  static bool isApiId(String id) => isImdb(id) || isNative(id);
+
   static Map<String, dynamic> apiIds(String id) {
     if (isImdb(id)) return {'imdb': id};
     if (isNative(id)) {

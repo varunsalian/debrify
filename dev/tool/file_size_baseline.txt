@@ -73,7 +73,8 @@
 1844 lib/screens/video_player/widgets/player_menu_panel.dart
 1826 lib/utils/series_parser.dart
 1804 lib/services/xtream_codes_service.dart
-1799 lib/services/simkl/simkl_service.dart
+# 2026-11-01: a custom show never reaches the Simkl watched-episodes lookup, which threw and stopped playback (+2).
+1801 lib/services/simkl/simkl_service.dart
 1778 lib/services/webdav_sync/webdav_sync_hot_merge.dart
 # 2026-10-29 Storage Usage: the Data & Backup pane moved to settings_tv_data_pane.dart (1829 -> 1774).
 1774 lib/screens/settings/settings_tv_layout.dart

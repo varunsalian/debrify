@@ -20,8 +20,13 @@ final class TrackerProgressSeeding {
 
   /// Refresh the replaceable Simkl snapshot. Like Trakt, it remains remote
   /// truth and is merged at display/resume time rather than copied locally.
+  /// A tracker failure never holds the player handoff.
   static Future<void> seedSimklEpisodeProgress(String imdbId) async {
-    await EpisodeTrackerSnapshotService.refreshSimkl(imdbId);
+    try {
+      await EpisodeTrackerSnapshotService.refreshSimkl(imdbId);
+    } catch (e) {
+      debugPrint('VideoPlayerLauncher: Simkl snapshot refresh failed: $e');
+    }
   }
 
   static Future<void> seedMdblistEpisodeProgress(String imdbId) async {

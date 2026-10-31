@@ -1780,6 +1780,8 @@ class SimklService {
   Future<Map<String, dynamic>?> _fetchWatchedShowEpisodeItem(
     String showImdbId,
   ) async {
+    // A catalog's own show (custom identity) has no Simkl ID to look up.
+    if (!MediaIdentity.isApiId(showImdbId)) return null;
     final token = await SimklStorage.getSimklAccessToken();
     if (token == null || token.isEmpty) return null;
     final result = await _postOrNull(
