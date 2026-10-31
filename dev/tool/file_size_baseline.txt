@@ -189,6 +189,7 @@
 829 lib/screens/settings/widgets/manual_order_list.dart
 829 lib/services/main_page_bridge.dart
 828 lib/services/webdav_sync/webdav_sync_circle_merge.dart
-823 lib/screens/media_server_library_panel.dart
+# 2026-11-01: TV focus returns to the grid after a folder, page or episode screen (+46); exit: split the item screen out of this file.
+869 lib/screens/media_server_library_panel.dart
 823 lib/screens/see_all/trakt_see_all_screen.dart
 804 lib/services/webdav_sync/webdav_sync_models.dart

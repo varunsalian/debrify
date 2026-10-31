@@ -83,6 +83,37 @@ class Library implements MediaServerLibraryAccess {
       });
 }
 
+/// The show folder sits second, so its card owns its own focus node.
+class LibraryWithIntro extends Library {
+  @override
+  Future<MediaServerLibraryPage> browse({
+    String? parentId,
+    bool views = false,
+    int offset = 0,
+    String search = '',
+    String sort = 'SortName',
+    String mode = 'browse',
+    bool episodeOrder = false,
+  }) async {
+    if (!views && parentId == 'Library') {
+      calls.add('$parentId:$offset:$search');
+      return MediaServerLibraryPage([
+        itemRow('Intro', 'Video'),
+        itemRow('Series', 'Series'),
+      ], null);
+    }
+    return super.browse(
+      parentId: parentId,
+      views: views,
+      offset: offset,
+      search: search,
+      sort: sort,
+      mode: mode,
+      episodeOrder: episodeOrder,
+    );
+  }
+}
+
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -242,5 +273,63 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pumpAndSettle();
     expect(library.calls.last, 'Series:0:');
+  });
+  testWidgets('TV keeps focus in the grid as folders open and close', (
+    tester,
+  ) async {
+    // A user on Android TV could open a show's folder but never reach its
+    // episodes: the spinner disposed the focused card and nothing took over.
+    final library = LibraryWithIntro();
+    await pump(tester, library, tv: true);
+    // The remote reached the show's card without passing the first card.
+    Focus.of(tester.element(find.text('Series').first)).requestFocus();
+    await tester.pump();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(library.calls.last, 'Series:0:');
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'media-library-grid',
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(library.calls.last, 'Season:0:');
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'media-library-grid',
+    );
+
+    await tester.tap(find.byTooltip('Back to parent'));
+    await tester.pumpAndSettle();
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'media-library-grid',
+    );
+  });
+  testWidgets('TV returns focus to the opened episode after its screen', (
+    tester,
+  ) async {
+    final library = LibraryWithIntro();
+    await pump(tester, library, tv: true);
+    Focus.of(tester.element(find.text('Series').first)).requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(library.calls.last, 'Season:0:');
+
+    // Open the episode, then come back from its screen.
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'media-library-restore',
+    );
   });
 }

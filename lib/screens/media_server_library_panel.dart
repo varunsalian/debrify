@@ -40,6 +40,17 @@ class _MediaServerLibraryPanelState extends State<MediaServerLibraryPanel> {
   final _search = TextEditingController();
   final _scroll = ScrollController();
   final _gridFocus = FocusNode(debugLabel: 'media-library-grid');
+
+  /// Opening a folder (or going back up) swaps the grid for a spinner, which
+  /// disposes the focused card. On TV nothing was left focused afterwards and
+  /// the remote could not reach the folder's episodes; the next page takes
+  /// focus at its first card instead.
+  bool _focusGridOnLoad = false;
+
+  /// Back from an episode, focus returns to the card that was opened rather
+  /// than the first one, so the remote stays where it was in the season.
+  String? _restoreId;
+  final _restoreFocus = FocusNode(debugLabel: 'media-library-restore');
   List<ConnectionResource> _servers = [];
   List<MediaServerLibraryItem> _libraries = [];
   final _trail = <MediaServerLibraryItem>[];
@@ -69,6 +80,7 @@ class _MediaServerLibraryPanelState extends State<MediaServerLibraryPanel> {
     _search.dispose();
     _scroll.dispose();
     _gridFocus.dispose();
+    _restoreFocus.dispose();
     super.dispose();
   }
 
@@ -189,6 +201,9 @@ class _MediaServerLibraryPanelState extends State<MediaServerLibraryPanel> {
     final session = _session;
     if (session == null || _libraryId == null) return;
     final generation = ++_generation;
+    // Owned by THIS load: one overtaken by a newer load never takes focus.
+    final focusAfter = _focusGridOnLoad;
+    _focusGridOnLoad = false;
     setState(() {
       if (reset) {
         _offsets
@@ -215,6 +230,16 @@ class _MediaServerLibraryPanelState extends State<MediaServerLibraryPanel> {
         _loading = false;
       });
       if (_scroll.hasClients) _scroll.jumpTo(0);
+      if (focusAfter) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          if (_restoreFocus.context != null) {
+            _restoreFocus.requestFocus();
+          } else if (_gridFocus.context != null) {
+            _gridFocus.requestFocus();
+          }
+        });
+      }
     } catch (error) {
       if (mounted && generation == _generation) {
         setState(() {
@@ -227,6 +252,8 @@ class _MediaServerLibraryPanelState extends State<MediaServerLibraryPanel> {
 
   void _back() {
     if (_trail.isEmpty) return;
+    _focusGridOnLoad = widget.isTelevision;
+    _restoreId = null;
     setState(() {
       _trail.removeLast();
       _query = '';
@@ -237,6 +264,8 @@ class _MediaServerLibraryPanelState extends State<MediaServerLibraryPanel> {
 
   void _open(MediaServerLibraryItem item) async {
     if (item.isFolder) {
+      _focusGridOnLoad = widget.isTelevision;
+      _restoreId = null;
       setState(() {
         _trail.add(item);
         _mode = 'browse';
@@ -252,7 +281,10 @@ class _MediaServerLibraryPanelState extends State<MediaServerLibraryPanel> {
               _MediaServerItemScreen(session: session, initial: item),
         ),
       );
-      if (mounted) _loadPage(reset: false);
+      if (!mounted) return;
+      _focusGridOnLoad = widget.isTelevision;
+      _restoreId = item.id;
+      _loadPage(reset: false);
     }
   }
 
@@ -452,7 +484,9 @@ class _MediaServerLibraryPanelState extends State<MediaServerLibraryPanel> {
                           ),
                           item: items[index],
                           session: _session!,
-                          focusNode: index == 0 ? _gridFocus : null,
+                          focusNode: items[index].id == _restoreId
+                              ? _restoreFocus
+                              : (index == 0 ? _gridFocus : null),
                           onOpen: () => _open(items[index]),
                         ),
                       ),
@@ -471,6 +505,8 @@ class _MediaServerLibraryPanelState extends State<MediaServerLibraryPanel> {
                       onPressed: _offsets.length > 1
                           ? () {
                               _offsets.removeLast();
+                              _focusGridOnLoad = widget.isTelevision;
+                              _restoreId = null;
                               _loadPage(reset: false);
                             }
                           : null,
@@ -484,6 +520,8 @@ class _MediaServerLibraryPanelState extends State<MediaServerLibraryPanel> {
                       onPressed: _page!.nextOffset != null
                           ? () {
                               _offsets.add(_page!.nextOffset!);
+                              _focusGridOnLoad = widget.isTelevision;
+                              _restoreId = null;
                               _loadPage(reset: false);
                             }
                           : null,
@@ -511,7 +549,12 @@ class _MediaServerLibraryPanelState extends State<MediaServerLibraryPanel> {
                 style: TextStyle(color: AppThemeScope.of(context).core.tx),
               ),
               if (retry != null)
-                TextButton(onPressed: retry, child: const Text('Retry')),
+                TextButton(
+                  // After a failed load nothing else is left to focus on TV.
+                  autofocus: widget.isTelevision,
+                  onPressed: retry,
+                  child: const Text('Retry'),
+                ),
               if (settings)
                 TextButton(
                   onPressed: _settings,
@@ -790,6 +833,7 @@ class _MediaServerItemScreenState extends State<_MediaServerItemScreen> {
                 if (_error != null) ...[
                   Text(_error!, style: TextStyle(color: app.core.tx)),
                   TextButton(
+                    autofocus: _sources == null,
                     onPressed: _busy ? null : _load,
                     child: const Text('Retry'),
                   ),
@@ -804,6 +848,8 @@ class _MediaServerItemScreenState extends State<_MediaServerItemScreen> {
                     Padding(
                       padding: const EdgeInsets.only(bottom: 12),
                       child: FilledButton.icon(
+                        // The remote lands on the first way to play.
+                        autofocus: i == 0,
                         onPressed: _busy ? null : () => _play(i),
                         icon: const Icon(Icons.play_arrow),
                         label: Padding(
