@@ -297,6 +297,49 @@ void main() {
     expect(selected, 4);
   });
 
+  testWidgets('the lifted episode card stays clear of the season pill',
+      (tester) async {
+    // A user's phone showed the Up Next card's top edge over the "Season 4"
+    // pill: the settled card is always lifted, and it scales about its centre
+    // (the Spotlight look's parallax focus).
+    _surface(tester, _phone);
+    await tester.pumpWidget(
+      _host(
+        _model(),
+        dpad: false,
+        size: _phone,
+        theme: AppThemes.byId('spotlight'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(DetailShowcase), const Offset(0, -500));
+    await tester.pumpAndSettle();
+
+    final pillBottom = tester.getRect(find.byType(ShowcaseSeasons)).bottom;
+    final still = find.descendant(
+      of: find.byType(ShowcaseEpisodeCardCompact).first,
+      matching: find.byType(ClipRRect),
+    );
+    expect(tester.getRect(still.first).top, greaterThanOrEqualTo(pillBottom));
+  });
+
+  testWidgets('a look without the lift keeps the rail tight to the pill',
+      (tester) async {
+    // The headroom is for the parallax lift only; other looks keep 6px.
+    _surface(tester, _phone);
+    await tester.pumpWidget(_host(_model(), dpad: false, size: _phone));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(DetailShowcase), const Offset(0, -500));
+    await tester.pumpAndSettle();
+
+    final pillBottom = tester.getRect(find.byType(ShowcaseSeasons)).bottom;
+    final still = find.descendant(
+      of: find.byType(ShowcaseEpisodeCardCompact).first,
+      matching: find.byType(ClipRRect),
+    );
+    expect(tester.getRect(still.first).top - pillBottom, closeTo(6, 0.01));
+  });
+
   testWidgets('the popup dismisses on an outside tap, selecting nothing',
       (tester) async {
     _surface(tester, _phone);

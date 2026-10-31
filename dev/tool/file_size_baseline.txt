@@ -88,7 +88,8 @@
 1582 lib/screens/settings/home_sections_filter_page.dart
 1571 lib/widgets/remote/remote_transfer_all.dart
 1536 lib/widgets/tv_text_field.dart
-1522 lib/widgets/detail/detail_layout_showcase.dart
+# 2026-11-01: the phone episode rail leaves room for the lifted Up Next card below the season pill (+19).
+1541 lib/widgets/detail/detail_layout_showcase.dart
 1504 lib/screens/stremio_tv/stremio_tv_filter_page.dart
 1479 lib/screens/see_all/mdblist_see_all_screen.dart
 # 2026-10-31: +3 for persist: false on its three action SnackBars (Flutter 3.44 keeps them on screen).

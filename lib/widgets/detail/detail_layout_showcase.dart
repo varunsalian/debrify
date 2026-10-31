@@ -15,6 +15,7 @@ import 'package:flutter/services.dart';
 import '../../models/stremio_addon.dart';
 import '../../services/debrify_image_cache.dart';
 import '../../services/imdb_enrichment_service.dart';
+import '../../theme/app_focus.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../theme/widgets/parallax_focus.dart';
 import '../../utils/artwork_url.dart';
@@ -769,7 +770,8 @@ class _DetailShowcaseState extends State<DetailShowcase> {
               // Scaling the whole 50 over-reserved by 16·(k−1) on wide touch,
               // showing a sliver more episode row than the 0.18 peek pins.
               (m.compact
-                  ? _seasonPillBandHeight
+                  // The rail's lift headroom moves the art down with it.
+                  ? _seasonPillBandHeight + _railHeadroom(view, m)
                   : _seasonsRowHeight * m.k + _seasonsBandAir)
         : episodePeek;
   }
@@ -1450,11 +1452,28 @@ class _DetailShowcaseState extends State<DetailShowcase> {
     return n;
   }
 
+  /// On a phone the settled card is always lifted under the parallax focus:
+  /// it scales about its centre and rises, so its top edge climbs into the
+  /// season pill above unless the rail leaves room. A fifth extra covers the
+  /// spring overshoot. Nothing lifts under other looks, and a single-season
+  /// show has no pill to clear.
+  double _railHeadroom(EpisodesPanelView? view, ShowcaseMetrics m) {
+    if (!m.compact ||
+        view == null ||
+        view.seasons.length <= 1 ||
+        AppThemeScope.of(context).focus.expression !=
+            FocusExpression.parallax) {
+      return 0;
+    }
+    final growth = ParallaxShape.episodeStill.scale - 1;
+    return growth * ((m.stillH + m.epPlate) / 2 + 70) * 1.2;
+  }
+
   Widget _episodes(EpisodesPanelView view) {
     final m = _m ?? ShowcaseMetrics.of(context);
     return Padding(
       key: _episodesKey,
-      padding: const EdgeInsets.only(top: 6),
+      padding: EdgeInsets.only(top: 6 + _railHeadroom(view, m)),
       child: SizedBox(
         // The still, plus the caption block below it, plus headroom for the
         // lift. Derived from the still's own measured height so it tracks the
