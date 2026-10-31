@@ -747,7 +747,14 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
     if (!PlatformUtil.isTelevision) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _compactPane != _CompactPane.schedule) return;
-      _scheduleScope.traversalDescendants.firstOrNull?.requestFocus();
+      // The airing row (the one the list marks autofocus) when it is
+      // built, else the first row there is. Matched on the widget: a
+      // debugLabel is empty in release builds.
+      final rows = _scheduleScope.traversalDescendants;
+      final entry = rows
+          .where((node) => (node.context?.widget as Focus?)?.autofocus == true)
+          .firstOrNull;
+      (entry ?? rows.firstOrNull)?.requestFocus();
     });
   }
 
@@ -2343,6 +2350,7 @@ class _GuideSelectDialog extends StatelessWidget {
                     // The button doesn't know the active entry, same as the
                     // popup it replaces — rows render unselected.
                     selected: false,
+                    autofocus: index == 0,
                     onTap: () => Navigator.of(context).pop(option.value),
                     tokens: t,
                   );
@@ -2664,6 +2672,9 @@ class _CategoryPickerDialogState extends State<_CategoryPickerDialog> {
                           label: category ?? 'All',
                           selected: isSelected,
                           focusNode: index == 0 ? _firstMatchFocusNode : null,
+                          // The first row, not the field, takes focus: OK
+                          // picks at once and Up still reaches the search.
+                          autofocus: index == 0,
                           onTap: () => Navigator.of(
                             context,
                           ).pop(_CategoryChoice(category)),
@@ -2683,6 +2694,7 @@ class _CategoryPickerRow extends StatelessWidget {
   final String label;
   final bool selected;
   final FocusNode? focusNode;
+  final bool autofocus;
   final VoidCallback onTap;
   final IptvStyleTokens? tokens;
 
@@ -2690,6 +2702,7 @@ class _CategoryPickerRow extends StatelessWidget {
     required this.label,
     required this.selected,
     this.focusNode,
+    this.autofocus = false,
     required this.onTap,
     this.tokens,
   });
@@ -2701,6 +2714,7 @@ class _CategoryPickerRow extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         focusNode: focusNode,
+        autofocus: autofocus,
         onTap: onTap,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),

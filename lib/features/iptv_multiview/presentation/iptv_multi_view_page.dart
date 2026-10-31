@@ -113,6 +113,15 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
   /// handoff awaits them; page teardown keeps them too.
   final List<Future<void>> _disposeFutures = [];
 
+  /// One focus node per tile url, so a removal can hand focus to the tile
+  /// that takes the slot (a remote has nothing focused otherwise).
+  final Map<String, FocusNode> _tileFocus = {};
+
+  FocusNode _focusFor(String url) => _tileFocus.putIfAbsent(
+    url,
+    () => FocusNode(debugLabel: 'multi-view tile $url'),
+  );
+
   MultiViewSelection? _synced;
 
   @override
@@ -142,6 +151,9 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
       entry.engine = null;
       engine.detach();
       _disposeFutures.add(engine.dispose());
+    }
+    for (final node in _tileFocus.values) {
+      node.dispose();
     }
     final released = widget.released;
     if (released != null) {
@@ -186,6 +198,12 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
       // came back gets a fresh engine; an in-flight factory for the old slot
       // sees it no longer owns the url and disposes what it gets.
       _retire(_entries.remove(url)!, disposeNow: false);
+      // Its focus node goes once the tile unmounted (never inline: the
+      // tile's own dispose still detaches from it this frame).
+      final node = _tileFocus.remove(url);
+      if (node != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => node.dispose());
+      }
     }
     final removals = _disposeFutures.sublist(disposedBefore);
     if (removals.isNotEmpty) unawaited(_retryFourK(visible, removals));
@@ -499,6 +517,8 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
           children: [
             ListTile(
               key: const ValueKey('watch-full-screen'),
+              // A remote needs a live row the moment the sheet opens.
+              autofocus: true,
               title: const Text(
                 'Watch full screen',
                 style: TextStyle(color: Colors.white),
@@ -516,13 +536,27 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
               ),
               onTap: () {
                 Navigator.of(sheetContext).pop();
-                ref.read(multiViewSelectionProvider.notifier).remove(index);
+                _removeTile(index);
               },
             ),
           ],
         ),
       ),
     );
+  }
+
+  /// Removes the tile and focuses the one that takes its place (the last
+  /// tile when it was last), so the remote keeps a target.
+  void _removeTile(int index) {
+    final notifier = ref.read(multiViewSelectionProvider.notifier);
+    notifier.remove(index);
+    final channels = _visibleChannels(ref.read(multiViewSelectionProvider));
+    if (channels.isEmpty) return;
+    final next =
+        channels[index < channels.length ? index : channels.length - 1];
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focusFor(next.url).requestFocus();
+    });
   }
 
   // --- Layout ---------------------------------------------------------------
@@ -642,6 +676,7 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
               : "Can't play this channel",
           hasAudio: index == selection.audioIndex,
           autofocus: index == 0,
+          focusNode: _focusFor(channel.url),
           // The first tile's note starts below the back button.
           noteTop: index == 0 && widget.showBackButton ? 64 : 8,
           // Select always gives this tile the sound (on the sound tile it

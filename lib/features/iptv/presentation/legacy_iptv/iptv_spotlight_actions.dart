@@ -116,7 +116,19 @@ class IptvSpotlightActions {
                     style: TextStyle(color: t.fg, fontWeight: FontWeight.w800),
                   ),
                 ),
-                CloseButton(onPressed: () => Navigator.of(dialogContext).pop()),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  tooltip: 'Close',
+                  // With no action for this channel there is no tile to
+                  // focus; Close takes it so the remote is not stranded.
+                  autofocus:
+                      record == null &&
+                      !canSave &&
+                      !IptvEpgService.isEpgCapable(channel) &&
+                      !multiView &&
+                      multiViewCount <= 0,
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                ),
               ],
             ),
             children: [

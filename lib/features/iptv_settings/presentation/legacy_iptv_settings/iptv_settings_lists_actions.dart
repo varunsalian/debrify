@@ -85,6 +85,8 @@ class IptvSettingsListsActions {
         ),
         actions: [
           TextButton(
+            // A remote needs a live button; the safe one takes it.
+            autofocus: true,
             onPressed: () => Navigator.of(context).pop(false),
             child: const Text('Cancel'),
           ),
@@ -96,19 +98,27 @@ class IptvSettingsListsActions {
       ),
     );
     if (confirmed != true || !_deps.mounted()) return;
+    final slot = customLists.indexWhere((entry) => entry.id == list.id);
     await IptvFavoritesStorage.deleteIptvList(list.id);
     await reloadLists();
     if (!_deps.mounted()) return;
-    // The deleted row's focus node is gone with it; land DPAD on the same
-    // slot of a surviving list, or on Create when the section empties.
+    // The deleted row's focus node is gone with it; land DPAD on the Delete
+    // button of the list now in that slot (the last list when it was last),
+    // or on Create when the section empties.
     if (PlatformUtil.isTelevision) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!_deps.mounted()) return;
-        if (_deps.focusOwner.listFocusNodes.isEmpty) {
+        final count = customLists.length;
+        if (count == 0) {
           _deps.focusAndReveal(_deps.focusOwner.createListFocusNode);
-        } else {
-          _deps.focusAndReveal(_deps.focusOwner.listFocusNodes.first);
+          return;
         }
+        final row = slot < 0 ? 0 : (slot < count ? slot : count - 1);
+        final node =
+            listNodeAt(row * 4 + 3) ?? _deps.focusOwner.listFocusNodes.first;
+        // The two-pane layout draws its own rows on other nodes: asking an
+        // unattached node would only pend a steal for a later resize.
+        if (node.context != null) _deps.focusAndReveal(node);
       });
     }
     _deps.showSnackBar('Deleted "${list.name}"', isError: false);
@@ -126,6 +136,15 @@ class IptvSettingsListsActions {
     order.insert(target, list.id);
     await IptvFavoritesStorage.reorderIptvLists(order);
     await reloadLists();
+    if (!_deps.mounted() || !PlatformUtil.isTelevision) return;
+    // Focus nodes belong to row positions, so the arrow that was pressed is
+    // now on the list that swapped places: follow the moved list instead, so
+    // pressing again keeps moving it.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_deps.mounted()) return;
+      final node = listNodeAt(target * 4 + (delta < 0 ? 1 : 2));
+      if (node?.context != null) _deps.focusAndReveal(node!);
+    });
   }
 
   /// Rename / reorder / delete for one list, as a sheet.

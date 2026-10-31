@@ -24,6 +24,7 @@ class MultiViewTile extends StatefulWidget {
     this.failedMessage = "Can't play this channel",
     required this.hasAudio,
     this.autofocus = false,
+    this.focusNode,
     required this.onSelected,
     required this.onLongPressed,
   });
@@ -56,6 +57,10 @@ class MultiViewTile extends StatefulWidget {
   static const holdDuration = Duration(milliseconds: 500);
   final bool hasAudio;
   final bool autofocus;
+
+  /// Supplied by the page so it can move focus between tiles (after a
+  /// removal); the tile owns one of its own otherwise.
+  final FocusNode? focusNode;
   final VoidCallback onSelected;
   final VoidCallback onLongPressed;
 
@@ -64,7 +69,8 @@ class MultiViewTile extends StatefulWidget {
 }
 
 class _MultiViewTileState extends State<MultiViewTile> {
-  final FocusNode _focusNode = FocusNode(debugLabel: 'multi-view tile');
+  late final FocusNode _focusNode =
+      widget.focusNode ?? FocusNode(debugLabel: 'multi-view tile');
   bool _ready = false;
 
   /// Whether the fallback note is still on screen (see [MultiViewTile.note]).
@@ -145,7 +151,7 @@ class _MultiViewTileState extends State<MultiViewTile> {
     _noteTimer?.cancel();
     _holdTimer?.cancel();
     _focusNode.removeListener(_onFocusChange);
-    _focusNode.dispose();
+    if (widget.focusNode == null) _focusNode.dispose();
     super.dispose();
   }
 
