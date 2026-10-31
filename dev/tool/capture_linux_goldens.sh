@@ -44,6 +44,9 @@ flutter test "${tests[@]}" > /out/replay.txt 2>&1 || { tail -20 /out/replay.txt 
 git ls-files -m -o --exclude-standard "$GOLDEN_GLOB" > /out/changed.txt
 while read -r f; do mkdir -p "/out/files/$(dirname "$f")"; cp "$f" "/out/files/$f"; done < /out/changed.txt
 CONTAINER
-while read -r f; do cp "$out/files/$f" "$repo/$f"; done < "$out/changed.txt"
+while read -r f; do
+  mkdir -p "$repo/$(dirname "$f")"
+  cp "$out/files/$f" "$repo/$f"
+done < "$out/changed.txt"
 echo "Linux goldens updated: $(wc -l < "$out/changed.txt" | tr -d ' ') file(s)"
 cat "$out/changed.txt"
