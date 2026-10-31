@@ -306,7 +306,19 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
       _retire(entry, disposeNow: true);
       return;
     }
+    // The sound may have moved while this tile was opening, and an engine
+    // still opening can drop a volume change (the Android TV player ignores
+    // one until its native player exists): apply the current choice now.
+    unawaited(engine.setVolume(_isAudioUrl(url) ? 100 : 0));
     if (mounted) setState(() {});
+  }
+
+  /// Whether the tile for [url] is the one with sound right now.
+  bool _isAudioUrl(String url) {
+    final selection = ref.read(multiViewSelectionProvider);
+    final channels = _visibleChannels(selection);
+    if (channels.isEmpty) return false;
+    return channels[selection.audioIndex % channels.length].url == url;
   }
 
   /// A stream that had played and then died is reopened as it is (live
@@ -575,6 +587,11 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
                   'copy of the channel.',
             null => null,
           },
+          noteTag: switch (entry?.fallback) {
+            MultiViewFallback.fourKBusy => 'HD version',
+            MultiViewFallback.backup => 'backup copy',
+            null => null,
+          },
           failedMessage: (entry?.fourKExhausted ?? false)
               ? 'This box plays one 4K channel at a time, and there is no HD '
                     'version of this channel. Watch it full screen, or remove '
@@ -582,11 +599,10 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
               : "Can't play this channel",
           hasAudio: index == selection.audioIndex,
           autofocus: index == 0,
-          // Select moves the sound; on the tile that already has it, Select
-          // opens its actions, so remotes without a Menu key reach them.
-          onSelected: () => index == selection.audioIndex
-              ? _openTileActions(index)
-              : _applyAudio(index),
+          // Select always gives this tile the sound (on the sound tile it
+          // re-applies the volumes); holding OK, the Menu key, a long press or
+          // a right click opens its actions.
+          onSelected: () => _applyAudio(index),
           onLongPressed: () => _openTileActions(index),
         ),
       ),

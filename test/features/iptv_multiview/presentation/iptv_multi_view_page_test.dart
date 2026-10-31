@@ -5,14 +5,19 @@ import 'dart:async';
 
 import 'package:debrify/features/iptv_multiview/application/multi_view_selection_notifier.dart';
 import 'package:debrify/features/iptv_multiview/presentation/iptv_multi_view_page.dart';
+import 'package:debrify/features/iptv_multiview/presentation/multi_view_tile.dart';
 import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/widgets/trailer_engine.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Stream urls whose open() throws, as a decoder refusing a stream does.
 final _refused = <String>{};
+
+/// When set, every engine's open waits for it (a stream still connecting).
+Completer<void>? _holdOpen;
 
 final class _FakeEngine implements TrailerEngine {
   _FakeEngine(this.url);
@@ -50,13 +55,19 @@ final class _FakeEngine implements TrailerEngine {
     Map<String, String>? httpHeaders,
   }) async {
     openedUrl = videoUrl;
+    await _holdOpen?.future;
     if (_refused.contains(videoUrl)) throw StateError('decoder init failed');
     opened = true;
     volumes.add(volume);
   }
 
+  /// Like the Android TV player, a volume change before the stream opened
+  /// is dropped.
   @override
-  Future<void> setVolume(double volume) async => volumes.add(volume);
+  Future<void> setVolume(double volume) async {
+    if (opened) volumes.add(volume);
+  }
+
   @override
   Future<void> seek(Duration position) async {}
   @override
@@ -106,6 +117,7 @@ void main() {
     versions = {};
     versionLookups = [];
     _refused.clear();
+    _holdOpen = null;
     container = ProviderContainer(
       overrides: [
         multiViewOwnerProvider.overrideWithValue(() => owner),
@@ -288,14 +300,22 @@ void main() {
     expect(engineOf('3').volume, 0);
   });
 
-  testWidgets('Select on the sound tile offers full screen, which pops with '
+  testWidgets('a long press offers full screen, which pops with '
       'the channel after the engines are released', (tester) async {
     notifier()
       ..add(_ch('1'))
       ..add(_ch('2'));
     await mount(tester);
 
+    // A tap on the sound tile keeps the sound there; it opens nothing.
     await tester.tap(find.byKey(const ValueKey('video-https://tv.test/1.ts')));
+    await tester.pumpAndSettle();
+    expect(find.text('Watch full screen'), findsNothing);
+    expect(engineOf('1').volume, 100);
+
+    await tester.longPress(
+      find.byKey(const ValueKey('video-https://tv.test/1.ts')),
+    );
     await tester.pumpAndSettle();
     expect(find.text('Watch full screen'), findsOneWidget);
     await tester.tap(find.text('Watch full screen'));
@@ -304,6 +324,78 @@ void main() {
     expect(chosen?.url, 'https://tv.test/1.ts');
     expect(released.isCompleted, isTrue);
     expect(engines.every((e) => e.disposals == 1), isTrue);
+  });
+
+  testWidgets('a short OK moves the sound; holding OK opens the actions', (
+    tester,
+  ) async {
+    notifier()
+      ..add(_ch('1'))
+      ..add(_ch('2'));
+    await mount(tester);
+    // The first tile has focus: move to the second.
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(container.read(multiViewSelectionProvider).audioIndex, 1);
+    expect(find.text('Watch full screen'), findsNothing);
+    // Pressing OK again on the sound tile still opens nothing.
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(find.text('Watch full screen'), findsNothing);
+    expect(engineOf('2').volume, 100);
+
+    // Hold OK on the tile WITHOUT the sound: the actions open, and the hold
+    // does not also select it.
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pumpAndSettle();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.select);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(find.text('Watch full screen'), findsOneWidget);
+    expect(container.read(multiViewSelectionProvider).audioIndex, 1);
+    expect(engineOf('1').volume, 0);
+  });
+
+  testWidgets('moving focus mid-hold opens nothing', (tester) async {
+    notifier()
+      ..add(_ch('1'))
+      ..add(_ch('2'));
+    await mount(tester);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Watch full screen'), findsNothing);
+    expect(container.read(multiViewSelectionProvider).audioIndex, 0);
+  });
+
+  testWidgets('the sound moved while a tile was opening reaches it', (
+    tester,
+  ) async {
+    _holdOpen = Completer<void>();
+    notifier()
+      ..add(_ch('1'))
+      ..add(_ch('2'));
+    await mount(tester, settle: false);
+
+    // The tile is still connecting: its player drops this volume change.
+    notifier().setAudio(1);
+    await tester.pump();
+    _holdOpen!.complete();
+    await tester.pumpAndSettle();
+
+    expect(engineOf('1').volume, 0);
+    expect(engineOf('2').volume, 100);
   });
 
   testWidgets('empty, or another profile\'s selection, shows the hint', (
@@ -355,6 +447,14 @@ void main() {
         find.textContaining('This box plays one 4K channel at a time'),
         findsOneWidget,
       );
+      // The note goes after a few seconds; a short tag stays by the name.
+      await tester.pump(MultiViewTile.noteDuration);
+      await tester.pump();
+      expect(find.byKey(const ValueKey('tile-fallback-note')), findsNothing);
+      expect(
+        find.text('4K: ELEVEN SPORTS 1 ᵁᴴᴰ ³⁸⁴⁰ᴾ · HD version'),
+        findsOneWidget,
+      );
       // The channel that was added is still the tile's channel.
       expect(container.read(multiViewSelectionProvider).channels[1], fourK);
     });
@@ -388,8 +488,7 @@ void main() {
       notifier().add(fourK);
       await mount(tester);
 
-      // The only tile has the sound: Select opens its actions.
-      await tester.tap(find.byKey(const ValueKey('tile-fallback-note')));
+      await tester.longPress(find.byKey(const ValueKey('tile-fallback-note')));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Watch full screen'));
       await tester.pumpAndSettle();
