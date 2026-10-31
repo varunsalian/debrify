@@ -66,7 +66,8 @@
 1939 lib/services/profiles/profile_restore_coordinator.dart
 1937 lib/services/remote_control/remote_control_state.dart
 1928 lib/screens/profiles/profile_gate_looks.dart
-1864 lib/screens/collections/collection_folder_screen.dart
+# 2026-10-31: Spotlight folders on phones open on their rows, not the merged All shelf (+3).
+1867 lib/screens/collections/collection_folder_screen.dart
 1844 lib/screens/video_player/widgets/player_menu_panel.dart
 1826 lib/utils/series_parser.dart
 1804 lib/services/xtream_codes_service.dart
@@ -162,7 +163,8 @@
 886 lib/screens/metadata_explore_page.dart
 884 lib/widgets/detail/theme/detail_themes.dart
 883 lib/screens/playlist_screen.dart
-879 lib/widgets/detail/detail_episode_cells.dart
+# 2026-10-31: the hold-hint pill's ink is a named constant the colour guard allows (+4).
+883 lib/widgets/detail/detail_episode_cells.dart
 876 lib/services/webdav_sync/webdav_sync_codec.dart
 875 lib/widgets/tv_keyboard.dart
 873 lib/screens/settings/premiumize_settings_page.dart

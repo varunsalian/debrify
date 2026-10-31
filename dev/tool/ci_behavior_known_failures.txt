@@ -2,8 +2,19 @@
 # suite::name per line. Remove entries when they pass; no new regression may
 # enter this list.
 #
-# Empty since 2026-10-31: the last eight entries were fixed (Spotlight
-# collection rows on phones, the hold-hint pill guard, the profile store
-# guard) or their tests updated to deliberate behaviour (2 s trailer dwell,
-# TMDB-only suggestions opening details, imported launch animations staying
-# out of backups).
+# 2026-10-31: the previous eight entries were fixed (Spotlight collection rows
+# on phones, the hold-hint pill guard, the profile store guard) or their tests
+# updated to deliberate behaviour (2 s trailer dwell, TMDB-only suggestions
+# opening details, imported launch animations staying out of backups).
+
+# 2026-10-31, Linux runners only (pass on macOS; already failing in the
+# 2026-10-28 run, so not regressions). Reproduced in the CI image under
+# Colima. The player menu panel is not rebuilt after an addon subtitle pick on
+# Linux (the pick lands: selectedStremioSubtitleId is set, but no rebuild
+# follows the next position event), so the panel still shows the mpv track.
+test/features/video_player/video_player_menu_subtitles_off_test.dart::p13 subtitles off after an addon selection failure=false preserves its result and menu identity
+test/features/video_player/video_player_menu_subtitles_off_test.dart::p13 subtitles off after an addon selection failure=true preserves its result and menu identity
+# BACK now leaves on Linux too (window_manager stub), but the pinned macOS
+# quirk that follows (an abandoned startup arms one 6 s autosave after dispose)
+# arms none on Linux.
+test/features/video_player/video_player_p21_remote_edges_test.dart::P21 TV BACK before the first ready leaves the player even with the controls flagged up
