@@ -72,9 +72,6 @@ class VpAddonSubtitles {
   // Windows-125x, etc.) instead of our http client pre-decoding as UTF-8.
   final Set<String> tempSubtitleFiles = {};
 
-  /// Numbers each download's partial file (see [downloadStremioSubtitleToTempFile]).
-  static int _partialSequence = 0;
-
   /// Download an addon subtitle's raw bytes and write them to a temp file.
   ///
   /// Returning a file path (rather than a pre-decoded string) lets libmpv
@@ -133,9 +130,7 @@ class VpAddonSubtitles {
         ).timeout(const Duration(seconds: 15));
         final payload = prepareExternalSubtitlePayload(responseBytes, uri);
         final file = File('${dir.path}/stremio_sub_$stem.${payload.extension}');
-        // Its own partial file: two downloads of the same subtitle (an
-        // auto-load and a menu pick) must not rename each other's bytes away.
-        final partial = File('${file.path}.${_partialSequence++}.part');
+        final partial = File('${file.path}.part');
         await partial.writeAsBytes(payload.bytes, flush: true);
         if (file.existsSync()) file.deleteSync();
         await partial.rename(file.path);
