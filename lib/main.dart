@@ -1,3 +1,4 @@
+import 'package:debrify/core/platform/preferences_file_recovery.dart';
 import 'package:debrify/services/addon_auto_update_scheduler.dart';
 import 'package:debrify/widgets/iptv/multi_view_launcher.dart';
 import 'package:debrify/services/storage/alldebrid_storage.dart';
@@ -199,6 +200,34 @@ Future<void> _capImageCache() async {
 // (TvAwarePageTransitionsBuilder) along with the root ThemeData construction
 // it belongs to — both are shared by the legacy and themed builds.
 
+/// The desktop preferences repair's outcome, recorded once the diagnostic
+/// log is up — on the failure path too, where a kept or failed repair is the
+/// reason the app could not start.
+({PreferencesFileRecovery outcome, String? error})? _preferencesRecovery;
+
+void _recordPreferencesRecovery() {
+  final recovery = _preferencesRecovery;
+  _preferencesRecovery = null;
+  if (recovery == null ||
+      const {
+        PreferencesFileRecovery.missing,
+        PreferencesFileRecovery.valid,
+        PreferencesFileRecovery.busy,
+      }.contains(recovery.outcome)) {
+    return;
+  }
+  DiagnosticLog.instance.recordEvent(
+    source: 'app',
+    event: 'preferences_file_recovery',
+    fields: {
+      'outcome': DiagnosticLabel(recovery.outcome.name),
+      if (recovery.error case final error?)
+        'error_type': DiagnosticLabel(error),
+    },
+    durable: true,
+  );
+}
+
 Future<void> main(List<String> launchArguments) async {
   try {
     await _mainUnchecked(launchArguments);
@@ -208,6 +237,7 @@ Future<void> main(List<String> launchArguments) async {
     // failure into a second failure or delay the fallback screen indefinitely.
     try {
       await DiagnosticLog.instance.initialize();
+      _recordPreferencesRecovery();
       DiagnosticLog.instance.recordError(
         source: 'app',
         event: 'bootstrap_failure',
@@ -273,10 +303,14 @@ Future<void> _mainUnchecked(List<String> launchArguments) async {
   // Apply app-wide Siri Remote thresholds before any focusable UI is mounted.
   // This is inert on Android, iOS, desktop, and web.
   TvosRemoteTuning.install();
+  // Before the first preferences read: a desktop preferences file left empty
+  // or zero-filled by a crash mid-write would otherwise fail every launch.
+  _preferencesRecovery = await recoverDesktopPreferencesFile();
   // Reinstall an interrupted WebDAV adoption's process-wide database barrier
   // before any startup service has a chance to open profile-owned bytes.
   await ProfileDatabaseAdoptionGate.restorePersisted();
   await DiagnosticLog.instance.initialize();
+  _recordPreferencesRecovery();
   LocalValidationDiagnostics.start();
   WebDavLogUpload.instance.start();
   // On a release tvOS build, Dart's print() lands on stdout, which the device

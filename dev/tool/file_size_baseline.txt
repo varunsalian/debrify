@@ -42,7 +42,8 @@
 # 2026-10-29 SMB recording upload: the app-lifetime upload host wraps the root scope's child (+4).
 # 2026-10-29 Sports & leagues filter: root scope installs sportsAppOverrides() (+2).
 # 2026-10-30 overnight features: root scope adds multiViewAppOverrides(); the addon auto-update scheduler starts with the catalog refresh (+3).
-4191 lib/main.dart
+# 2026-11-01: a desktop preferences file left unreadable by an interrupted write is repaired before the first read (+34; the repair lives in lib/core/platform/preferences_file_recovery.dart).
+4225 lib/main.dart
 4086 lib/services/iptv_catalog_db.dart
 3906 lib/services/stremio_service.dart
 3776 android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt

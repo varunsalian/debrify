@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/platform/preferences_file_recovery.dart';
 import '../../models/profiles/profile_policy.dart';
 import '../../utils/app_storage.dart';
 import '../android_native_downloader.dart';
@@ -279,6 +280,11 @@ class ProfileDeviceResetService {
     }
     final support = await AppStorage.support();
     await _deleteExactFile(p.join(support.path, 'downloads_db_v1.json'));
+    // The startup preferences repair's backup and set-aside copy hold the
+    // same preferences the clear above just removed.
+    for (final name in preferencesRecoveryFileNames) {
+      await _deleteExactFile(p.join(support.path, name));
+    }
     final documents = await AppStorage.documents();
     for (final name in ProfileDatabaseSnapshot.databaseNames) {
       await _deleteSqliteFamily(p.join(documents.path, name));
