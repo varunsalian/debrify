@@ -73,7 +73,52 @@ void main() {
       nameOf: (c) => c,
       urlOf: (c) => c,
     );
-    // Not 4K: its stream failed, so another copy at the same quality first.
-    expect(ordered, ['DE: SKY SPORTS F1 HD', 'UK: SKY SPORTS F1 SD']);
+    // Another region's feed is another channel (language, schedule).
+    expect(ordered, ['UK: SKY SPORTS F1 SD']);
+  });
+
+  test('names in other scripts keep their words', () {
+    expect(channelIdentity('RU: Футбол 1 HD').base, 'футбол 1');
+    final ordered = orderChannelVersions<String>(
+      name: 'RU: Футбол 1 HD',
+      url: 'a',
+      candidates: ['RU: Кино 1 HD', 'RU: Футбол 1 SD', 'AR: الجزيرة 1'],
+      nameOf: (c) => c,
+      urlOf: (c) => c,
+    );
+    expect(ordered, ['RU: Футбол 1 SD']);
+  });
+
+  test('a long prefix is part of the name, not a region', () {
+    expect(channelIdentity('Sky Sports: Main Event HD'), (
+      region: '',
+      base: 'sky sports main event',
+    ));
+    expect(channelIdentity('PL VIP: ELEVEN SPORTS 1 ᴿᴬᵂ').region, 'pl');
+  });
+
+  test('a name without letters has no versions', () {
+    expect(
+      orderChannelVersions<String>(
+        name: 'NFL: 01',
+        url: 'a',
+        candidates: ['NHL: 01', 'NFL: 01 HD'],
+        nameOf: (c) => c,
+        urlOf: (c) => c,
+      ),
+      isEmpty,
+    );
+  });
+
+  test('CANAL+ is not Canal, and the same region comes first', () {
+    expect(channelIdentity('PL: CANAL+ SPORT').base, 'canal+ sport');
+    final ordered = orderChannelVersions<String>(
+      name: 'PL: CANAL+ SPORT 4K',
+      url: 'a',
+      candidates: ['CANAL SPORT HD', 'CANAL+ SPORT FHD', 'PL: CANAL+ SPORT HD'],
+      nameOf: (c) => c,
+      urlOf: (c) => c,
+    );
+    expect(ordered, ['PL: CANAL+ SPORT HD', 'CANAL+ SPORT FHD']);
   });
 }

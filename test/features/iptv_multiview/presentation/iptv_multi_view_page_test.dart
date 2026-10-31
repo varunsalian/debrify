@@ -33,8 +33,12 @@ final class _FakeEngine implements TrailerEngine {
   Stream<Duration> get positionStream => const Stream.empty();
   @override
   Stream<Duration> get durationStream => const Stream.empty();
+
+  /// Playback errors after open, as a live stream that drops reports them.
+  final errors = StreamController<void>.broadcast();
+
   @override
-  Stream<void> get errorStream => const Stream.empty();
+  Stream<void> get errorStream => errors.stream;
   @override
   Future<void> get firstFrameRendered => Future.value();
   @override
@@ -328,6 +332,7 @@ void main() {
     final fourK = _named('4K: ELEVEN SPORTS 1 ᵁᴴᴰ ³⁸⁴⁰ᴾ', 'es1-4k');
     final hd = _named('PL: ELEVEN SPORTS 1 ᴴᴰ', 'es1-hd');
     final sd = _named('PL: ELEVEN SPORTS 1 SD', 'es1-sd');
+    final otherFourK = _named('4K: YES SPORT 5 ᵁᴴᴰ ³⁸⁴⁰ᴾ', 'yes5-4k');
 
     testWidgets('a refused 4K tile plays the HD version and says why', (
       tester,
@@ -335,7 +340,7 @@ void main() {
       _refused.add(fourK.url);
       versions[fourK.url] = [hd, sd];
       notifier()
-        ..add(_ch('1'))
+        ..add(otherFourK)
         ..add(fourK);
       await mount(tester);
 
@@ -354,6 +359,27 @@ void main() {
       expect(container.read(multiViewSelectionProvider).channels[1], fourK);
     });
 
+    testWidgets('removing the other 4K tile brings this one back to 4K', (
+      tester,
+    ) async {
+      _refused.add(fourK.url);
+      versions[fourK.url] = [hd];
+      notifier()
+        ..add(otherFourK)
+        ..add(fourK);
+      await mount(tester);
+      expect(find.text('Playing PL: ELEVEN SPORTS 1 ᴴᴰ'), findsOneWidget);
+
+      // The other 4K tile goes, and its decoder with it.
+      _refused.remove(fourK.url);
+      notifier().remove(0);
+      await tester.pumpAndSettle();
+
+      expect(engines.last.openedUrl, fourK.url);
+      expect(engines.last.opened, isTrue);
+      expect(find.byKey(const ValueKey('tile-fallback-note')), findsNothing);
+    });
+
     testWidgets('full screen still asks for the original 4K channel', (
       tester,
     ) async {
@@ -368,6 +394,18 @@ void main() {
       await tester.tap(find.text('Watch full screen'));
       await tester.pumpAndSettle();
       expect(chosen?.url, fourK.url);
+    });
+
+    testWidgets('a lone 4K stream that fails is not blamed on the decoder', (
+      tester,
+    ) async {
+      _refused.addAll([fourK.url, hd.url]);
+      versions[fourK.url] = [hd];
+      notifier().add(fourK);
+      await mount(tester);
+
+      expect(find.text("Can't play this channel"), findsOneWidget);
+      expect(find.textContaining('one 4K channel at a time'), findsNothing);
     });
 
     testWidgets('versions are tried in order until one plays', (tester) async {
@@ -385,7 +423,9 @@ void main() {
     ) async {
       _refused.addAll([fourK.url, hd.url]);
       versions[fourK.url] = [hd];
-      notifier().add(fourK);
+      notifier()
+        ..add(otherFourK)
+        ..add(fourK);
       await mount(tester);
 
       expect(
@@ -430,6 +470,24 @@ void main() {
         find.textContaining("original stream didn't play"),
         findsOneWidget,
       );
+    });
+
+    testWidgets('a stream that played and dropped reopens, not falls back', (
+      tester,
+    ) async {
+      versions[_ch('1').url] = [_named('DE: Channel 1', 'ch1-de')];
+      notifier().add(_ch('1'));
+      await mount(tester);
+      final first = engines.single;
+
+      first.errors.add(null);
+      await tester.pumpAndSettle();
+
+      expect(first.disposals, 1);
+      expect(engines, hasLength(2));
+      expect(engines.last.openedUrl, _ch('1').url, reason: 'same stream');
+      expect(versionLookups, isEmpty, reason: 'no fallback for a drop');
+      expect(find.byKey(const ValueKey('tile-fallback-note')), findsNothing);
     });
   });
 }

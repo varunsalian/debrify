@@ -24,10 +24,25 @@ Future<List<IptvChannel>> findMultiViewVersions(IptvChannel channel) async {
     if (playlists.isEmpty) return const [];
     final rows = await compute(_queryVersions, (
       dbPath: path,
-      catalogs: [for (final p in playlists) (p.playlistId, p.catalogKey)],
-      // Every base word, in order, anywhere in the name: narrows the scan to
-      // a handful of rows before the exact comparison in Dart.
-      pattern: '%${base.split(' ').join('%')}%',
+      catalogs: [
+        for (final p in playlists)
+          // Categories the profile hid stay hidden here too.
+          (
+            p.playlistId,
+            p.catalogKey,
+            IptvCatalogDb.hiddenGroups(p.catalogKey),
+          ),
+      ],
+      // The base's words, in order, anywhere in the name: narrows the scan
+      // before the exact comparison in Dart (shortest names first, so
+      // "ELEVEN SPORTS 1" copies come before "ELEVEN SPORTS 10 …"). LIKE
+      // folds only ASCII case, so other scripts' words are left to Dart.
+      pattern: [
+        '',
+        for (final word in base.split(' '))
+          if (RegExp(r'^[a-z0-9+]+$').hasMatch(word)) word,
+        '',
+      ].join('%'),
     ));
     final candidates = [
       for (final row in rows)
@@ -56,7 +71,7 @@ Future<List<IptvChannel>> findMultiViewVersions(IptvChannel channel) async {
 
 typedef _Args = ({
   String dbPath,
-  List<(String, String)> catalogs,
+  List<(String, String, Set<String>)> catalogs,
   String pattern,
 });
 
@@ -76,7 +91,8 @@ const _sql = """
   WHERE catalog_key = ? AND generation = ? AND name LIKE ?
     AND (CASE WHEN content_type IS NOT NULL THEN content_type = 'live'
               ELSE (duration IS NULL OR duration <= 0) END)
-  LIMIT 200
+  ORDER BY length(name)
+  LIMIT 500
 """;
 
 List<_Row> _queryVersions(_Args args) {
@@ -84,7 +100,7 @@ List<_Row> _queryVersions(_Args args) {
   try {
     db.execute('PRAGMA busy_timeout = 3000');
     final out = <_Row>[];
-    for (final (playlistId, catalogKey) in args.catalogs) {
+    for (final (playlistId, catalogKey, hidden) in args.catalogs) {
       try {
         final generation = db.select(
           'SELECT generation FROM catalogs WHERE catalog_key = ?',
@@ -96,6 +112,7 @@ List<_Row> _queryVersions(_Args args) {
           generation.first['generation'],
           args.pattern,
         ])) {
+          if (hidden.contains(row['grp'])) continue;
           out.add((
             playlistId: playlistId,
             name: row['name'] as String? ?? '',

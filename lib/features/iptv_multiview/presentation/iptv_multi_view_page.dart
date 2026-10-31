@@ -90,6 +90,13 @@ class _TileEntry {
   /// Guards against the error stream and the first frame both reporting one
   /// failure.
   bool switching = false;
+
+  /// The stream on screen has shown a frame: a later error is a drop, not a
+  /// stream the device cannot decode.
+  bool rendered = false;
+
+  /// Drops of a stream that had played; past a few, it counts as failed.
+  int drops = 0;
 }
 
 class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
@@ -166,6 +173,7 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
     final visible = _visibleChannels(selection);
     final visibleUrls = visible.map((c) => c.url).toSet();
 
+    final disposedBefore = _disposeFutures.length;
     for (final url in _entries.keys.toList()) {
       if (visibleUrls.contains(url)) continue;
       // A retired slot frees its url at once, so a channel that left and
@@ -173,6 +181,8 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
       // sees it no longer owns the url and disposes what it gets.
       _retire(_entries.remove(url)!, disposeNow: false);
     }
+    final removals = _disposeFutures.sublist(disposedBefore);
+    if (removals.isNotEmpty) unawaited(_retryFourK(visible, removals));
 
     _synced = selection;
     if (visible.isEmpty) return;
@@ -253,6 +263,7 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
       engine = await widget.engineFactory(channel, tileCount: tileCount);
     } catch (error) {
       entry.starting = false;
+      entry.switching = false; // or the next try returns at once
       _note('engine could not be created', error);
       if (_stillShows(entry, url)) unawaited(_tryNextVersion(channel, entry));
       return;
@@ -268,14 +279,14 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
     }
     entry.engine = engine;
     entry.switching = false;
+    entry.rendered = false;
     entry.errors = engine.errorStream.listen(
-      (_) => unawaited(_tryNextVersion(channel, entry)),
+      (_) => unawaited(_onStreamError(channel, entry, engine)),
     );
     unawaited(
-      engine.firstFrameRendered.then<void>(
-        (_) {},
-        onError: (Object _) => _tryNextVersion(channel, entry),
-      ),
+      engine.firstFrameRendered.then<void>((_) {
+        if (identical(entry.engine, engine)) entry.rendered = true;
+      }, onError: (Object _) => _tryNextVersion(channel, entry)),
     );
     try {
       await engine.open(
@@ -298,6 +309,81 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
     if (mounted) setState(() {});
   }
 
+  /// A stream that had played and then died is reopened as it is (live
+  /// streams drop and come back); one that never showed a frame, or keeps
+  /// dropping, moves on to the next version.
+  Future<void> _onStreamError(
+    IptvChannel channel,
+    _TileEntry entry,
+    TrailerEngine engine,
+  ) async {
+    if (!identical(entry.engine, engine)) return;
+    if (!entry.rendered || entry.drops >= _maxDrops) {
+      return _tryNextVersion(channel, entry);
+    }
+    entry.drops++;
+    if (entry.switching || !_stillShows(entry, channel.url)) return;
+    entry.switching = true;
+    await _dropEngine(entry);
+    if (!_stillShows(entry, channel.url)) return;
+    entry.starting = true;
+    setState(() {});
+    final count = _visibleChannels(ref.read(multiViewSelectionProvider)).length;
+    await _startEngine(channel, entry, count);
+  }
+
+  static const _maxDrops = 3;
+
+  /// Detaches [entry]'s engine and waits until it released its decoder.
+  Future<void> _dropEngine(_TileEntry entry) async {
+    unawaited(entry.errors?.cancel());
+    entry.errors = null;
+    final engine = entry.engine;
+    entry.engine = null;
+    if (engine == null) return;
+    engine.detach();
+    final disposal = _disposeAfterFrame(engine);
+    _disposeFutures.add(disposal);
+    if (mounted) setState(() {});
+    await disposal.then<void>((_) {}, onError: (Object _) {});
+  }
+
+  /// A tile left the grid: tiles that only lost a decoder to another 4K tile
+  /// (out of versions, or showing an HD copy) try their 4K stream again once
+  /// that tile's decoder is free, so "remove another 4K tile" really works.
+  Future<void> _retryFourK(
+    List<IptvChannel> visible,
+    List<Future<void>> removals,
+  ) async {
+    final waiting = [
+      for (final channel in visible)
+        if (_entries[channel.url] case final entry?
+            when entry.fourKExhausted ||
+                entry.fallback == MultiViewFallback.fourKBusy)
+          (channel, entry),
+    ];
+    if (waiting.isEmpty) return;
+    await Future.wait(removals).then<void>((_) {}, onError: (Object _) {});
+    for (final (channel, entry) in waiting) {
+      if (!_stillShows(entry, channel.url) || entry.switching) continue;
+      entry.switching = true;
+      await _dropEngine(entry);
+      if (!_stillShows(entry, channel.url)) continue;
+      entry
+        ..failed = false
+        ..fourKExhausted = false
+        ..playing = null
+        ..fallback = null
+        ..nextVersion = 0
+        ..starting = true;
+      setState(() {});
+      final count = _visibleChannels(
+        ref.read(multiViewSelectionProvider),
+      ).length;
+      await _startEngine(channel, entry, count);
+    }
+  }
+
   /// The stream on [entry] failed: drop its engine and play the next version
   /// of [channel] (an HD copy of a 4K channel the device cannot decode next
   /// to another, another provider's copy of a dead stream), or say why the
@@ -306,18 +392,8 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
     final url = channel.url;
     if (entry.switching || !_stillShows(entry, url)) return;
     entry.switching = true;
-    unawaited(entry.errors?.cancel());
-    entry.errors = null;
-    final engine = entry.engine;
-    entry.engine = null;
-    if (engine != null) {
-      engine.detach();
-      // Free its decoder before the next version asks for one.
-      final disposal = _disposeAfterFrame(engine);
-      _disposeFutures.add(disposal);
-      if (mounted) setState(() {});
-      await disposal.then<void>((_) {}, onError: (Object _) {});
-    }
+    // Free its decoder before the next version asks for one.
+    await _dropEngine(entry);
     final lookup = widget.versions;
     if (entry.versions == null && lookup != null) {
       final found = await lookup(
@@ -327,19 +403,26 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
     }
     if (!_stillShows(entry, url)) return;
     final versions = entry.versions ?? const <IptvChannel>[];
-    final fourK = channelQuality(channel.name) == 3;
+    // "One 4K channel at a time" only when another 4K tile is on screen; a
+    // lone 4K stream that fails is just a stream that did not play.
+    final visible = _visibleChannels(ref.read(multiViewSelectionProvider));
+    final fourKBusy =
+        channelQuality(channel.name) == 3 &&
+        visible.any((c) => c.url != url && channelQuality(c.name) == 3);
     if (entry.nextVersion >= versions.length) {
       setState(() {
         entry.failed = true;
-        entry.fourKExhausted = fourK;
+        entry.switching = false;
+        entry.fourKExhausted = fourKBusy;
       });
       return;
     }
     entry
       ..playing = versions[entry.nextVersion++]
-      ..fallback = fourK
+      ..fallback = fourKBusy
           ? MultiViewFallback.fourKBusy
           : MultiViewFallback.backup
+      ..drops = 0
       ..starting = true;
     setState(() {});
     final count = _visibleChannels(ref.read(multiViewSelectionProvider)).length;
