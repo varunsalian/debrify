@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import '../../../models/torrent.dart';
 import '../../../services/series_source_fetcher.dart';
 import '../../../services/stream_badges_service.dart';
+import '../../../ui/core/source_metadata_labels.dart';
 import '../../../utils/platform_util.dart';
 import '../../../utils/source_quality.dart';
 import '../../../utils/tv_keys.dart';
@@ -191,9 +192,9 @@ class _SourceSheetState extends State<SourceSheet> {
     if (source.isEmpty) return 'Other sources';
     // The title-level binding (torrent_playback_service._torrentFromSource).
     if (source.toLowerCase() == 'pinned') return 'Pinned source';
-    if (source.toLowerCase().startsWith('stremio:')) {
-      source = source.substring('stremio:'.length);
-    }
+    final name = sourceKeyName(source);
+    if (name == null) return 'Other sources';
+    source = name;
     return source
         .split(RegExp(r'[_-]'))
         .map((word) {

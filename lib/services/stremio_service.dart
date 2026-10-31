@@ -6,6 +6,7 @@ import 'metadata_preferences_service.dart';
 import 'home_return_cache.dart';
 import 'local_series_completion_service.dart';
 import 'prepared_stream_requests.dart';
+import 'source_selection_diagnostics.dart';
 import 'stremio_anime_episode_ids.dart';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
@@ -1621,12 +1622,22 @@ class StremioService {
           .toList(growable: false);
       if (sameId.length == 1) addon = sameId.single;
     }
+
+    void missed(String reason) {
+      if (!prepare) logPinnedSourceMiss(season, episode, reason);
+    }
+
     if (addon == null ||
         !addon.enabled ||
         !addon.supportsStreams ||
         !(_isApplicable(addon, type, contentId) ||
             (originCatalogId?.isNotEmpty == true &&
                 _supportsType(addon, type)))) {
+      missed(
+        addon == null
+            ? 'addon_not_matched'
+            : (addon.enabled ? 'addon_not_applicable' : 'addon_disabled'),
+      );
       return null;
     }
 
@@ -1645,7 +1656,10 @@ class StremioService {
         season: season,
         episode: episode,
       );
-      if (exact == null) return null;
+      if (exact == null) {
+        missed('episode_id_unresolved');
+        return null;
+      }
       streamId = exact;
     }
 
@@ -1661,12 +1675,16 @@ class StremioService {
       streams,
       preserveOrder: true,
     ).where((torrent) => torrent.isDirectStream).toList(growable: false);
-    return selectPinnedDirectStream(
+    final match = selectPinnedDirectStream(
       direct,
       streamKey: streamKey,
       streamIndex: streamIndex,
       bingeGroup: bingeGroup,
     );
+    if (match == null) {
+      missed(pinnedDirectMissReason(direct, bingeGroup));
+    }
+    return match;
   }
 
   /// Shared matching half of [resolvePinnedDirectStream], also used to mark

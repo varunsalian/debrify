@@ -29,6 +29,7 @@
 # 2026-10-28 regfix P3-1 (+review P3-a): same-profile addon read returns the read list; stale lists kept out of cache/storage (+12, 3858 -> 3870); exit: next stremio_service.dart extraction.
 # 2026-10-28 regfix review P3-e: @visibleForTesting debugAddonDecoder hook for a deterministic decode-race test (+4, 3870 -> 3874); exit: next stremio_service.dart extraction.
 # 2026-10-31 AIOMetadata anime: series meta names show-wide anime episodes by their IMDb coordinate, and anime once stored as custom is checked again (+14, 3874 -> 3888; the policy lives in stremio_anime_episode_ids.dart); exit: next stremio_service.dart extraction.
+# 2026-11-01 next-episode diagnostics: a saved direct source that misses an episode records why (+18, 3888 -> 3906; the classifier lives in pinned_direct_stream_match.dart); exit: next stremio_service.dart extraction.
 # 2026-10-28 regfix P3-6: retired-launch rethrow in network tuning reads + debugLaunchOnAndroid test hook (+6, 2153 -> 2159); exit: next android_tv_player_bridge.dart extraction.
 # 2026-10-28 recording output: one device key registered in the profile key lists (+1 each); no other growth.
 # 2026-10-31: +1 for persist: false on the facade's action SnackBar (exception table row).
@@ -43,7 +44,7 @@
 # 2026-10-30 overnight features: root scope adds multiViewAppOverrides(); the addon auto-update scheduler starts with the catalog refresh (+3).
 4191 lib/main.dart
 4086 lib/services/iptv_catalog_db.dart
-3888 lib/services/stremio_service.dart
+3906 lib/services/stremio_service.dart
 3776 android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt
 # 2026-10-31: +1 for persist: false on an action SnackBar (Flutter 3.44 keeps them on screen).
 # 2026-10-31 DPAD: the guide's category and source pickers focus their first row; the wide layout enters the schedule on the airing row (+14).
@@ -101,7 +102,8 @@
 1379 lib/widgets/iptv/iptv_epg_panel.dart
 1347 lib/screens/video_player/widgets/stremio_tv_guide_sheet.dart
 1325 lib/screens/profiles/profile_setup_flow.dart
-1313 lib/screens/video_player/widgets/source_sheet.dart
+# 2026-11-01: the in-player Sources sheet never titles a group with an addon's configuration hash (+1).
+1314 lib/screens/video_player/widgets/source_sheet.dart
 1307 lib/services/external_player_service.dart
 1302 lib/features/player_launch/data/android_tv_native_launch.dart
 1286 lib/services/backup_restore_service.dart

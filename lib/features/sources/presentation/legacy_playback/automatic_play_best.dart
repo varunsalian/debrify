@@ -23,6 +23,7 @@ import 'package:debrify/services/series_source_service.dart';
 import 'package:debrify/services/source_selection_diagnostics.dart';
 import 'package:debrify/services/stream_url_validator.dart';
 import 'package:debrify/services/video_player_launcher.dart';
+import 'package:debrify/ui/core/source_metadata_labels.dart';
 import 'package:debrify/utils/filter_ladder.dart';
 import 'package:debrify/widgets/pipeline_loading_overlay.dart';
 import 'package:flutter/material.dart';
@@ -127,7 +128,7 @@ final class AutomaticPlayBest {
           videoUrl: direct.directUrl!,
           httpHeaders: direct.httpHeaders,
           title: direct.displayTitle,
-          subtitle: direct.source.isNotEmpty ? direct.source : null,
+          subtitle: sourceProviderName(direct),
           stremioSources: torrents,
           stremioCurrentSourceIndex: torrents.indexOf(direct),
           resolveSourceToPlaylist:

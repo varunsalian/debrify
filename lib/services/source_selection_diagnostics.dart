@@ -69,6 +69,16 @@ void logSourceSelection(
   );
 }
 
+/// A saved direct source that missed an episode, with a fixed [reason]
+/// label (see `pinnedDirectMissReason`).
+void logPinnedSourceMiss(int? season, int? episode, String reason) =>
+    logSourceSelection(
+      'pinned_source_missed',
+      season: season,
+      episode: episode,
+      reason: reason,
+    );
+
 /// Privacy-safe tracing for IPTV discovery, Quick Play, and durable pins.
 ///
 /// Provider and catalog identifiers are hashed. Callers must pass only fixed,
