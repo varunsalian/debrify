@@ -137,7 +137,11 @@ void main() {
     return engine;
   }
 
-  Future<void> mount(WidgetTester tester, {bool settle = true}) async {
+  Future<void> mount(
+    WidgetTester tester, {
+    bool settle = true,
+    bool showBackButton = true,
+  }) async {
     tester.view.physicalSize = const Size(1280, 720);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -157,6 +161,7 @@ void main() {
                         return versions[channel.url] ?? const [];
                       },
                       released: released,
+                      showBackButton: showBackButton,
                     ),
                   ),
                 );
@@ -360,6 +365,60 @@ void main() {
     expect(find.text('Watch full screen'), findsOneWidget);
     expect(container.read(multiViewSelectionProvider).audioIndex, 1);
     expect(engineOf('1').volume, 0);
+  });
+
+  testWidgets('the back button leaves and releases every engine', (
+    tester,
+  ) async {
+    notifier()
+      ..add(_ch('1'))
+      ..add(_ch('2'));
+    await mount(tester);
+
+    await tester.tap(find.byKey(const ValueKey('multi-view-back')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(IptvMultiViewPage), findsNothing);
+    expect(chosen, isNull, reason: 'leaving picks no channel');
+    expect(released.isCompleted, isTrue);
+    expect(engines.every((e) => e.disposals == 1), isTrue);
+  });
+
+  testWidgets('Escape leaves too', (tester) async {
+    notifier().add(_ch('1'));
+    await mount(tester);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(IptvMultiViewPage), findsNothing);
+  });
+
+  testWidgets('Escape still leaves after the focused tile was removed', (
+    tester,
+  ) async {
+    notifier()
+      ..add(_ch('1'))
+      ..add(_ch('2'));
+    await mount(tester);
+
+    await tester.longPress(
+      find.byKey(const ValueKey('video-https://tv.test/1.ts')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Remove from multi-view'));
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(IptvMultiViewPage), findsNothing);
+  });
+
+  testWidgets('TV remotes have Back: no button over the grid', (tester) async {
+    notifier().add(_ch('1'));
+    await mount(tester, showBackButton: false);
+
+    expect(find.byKey(const ValueKey('multi-view-back')), findsNothing);
   });
 
   testWidgets('moving focus mid-hold opens nothing', (tester) async {

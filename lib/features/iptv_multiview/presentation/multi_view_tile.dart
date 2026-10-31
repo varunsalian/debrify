@@ -20,6 +20,7 @@ class MultiViewTile extends StatefulWidget {
     this.playingName,
     this.note,
     this.noteTag,
+    this.noteTop = 8,
     this.failedMessage = "Can't play this channel",
     required this.hasAudio,
     this.autofocus = false,
@@ -44,6 +45,10 @@ class MultiViewTile extends StatefulWidget {
   final String? playingName;
   final String? note;
   final String? noteTag;
+
+  /// Where the note starts from the tile's top edge (below anything the page
+  /// lays over the tile, such as its back button).
+  final double noteTop;
 
   static const noteDuration = Duration(seconds: 6);
 
@@ -287,7 +292,7 @@ class _MultiViewTileState extends State<MultiViewTile> {
                       if (widget.note != null && _noteShown && !widget.failed)
                         Positioned(
                           left: 8,
-                          top: 8,
+                          top: widget.noteTop,
                           right: 8,
                           child: _FallbackNote(
                             playingName: widget.playingName,

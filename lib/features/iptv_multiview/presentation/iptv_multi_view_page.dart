@@ -12,6 +12,7 @@ import 'package:debrify/features/iptv_multiview/presentation/multi_view_tile.dar
 import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/widgets/trailer_engine.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Builds the engine for one tile. [tileCount] is the number of tiles at the
@@ -42,9 +43,14 @@ class IptvMultiViewPage extends ConsumerStatefulWidget {
     required this.engineFactory,
     this.versions,
     this.released,
+    this.showBackButton = true,
   });
 
   final MultiViewEngineFactory engineFactory;
+
+  /// A back button over the grid, for devices without a system Back (Mac,
+  /// iPhone, iPad, desktops). TV remotes have Back and leave it off.
+  final bool showBackButton;
 
   /// Looks up a channel's other versions when it fails; null never retries.
   final MultiViewVersions? versions;
@@ -525,11 +531,48 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
   Widget build(BuildContext context) {
     final selection = ref.watch(multiViewSelectionProvider);
     final visible = _visibleChannels(selection);
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: visible.isEmpty
-          ? _buildEmpty()
-          : _buildGrid(selection, visible.length),
+    return CallbackShortcuts(
+      // Escape leaves on a keyboard, as Back does on a remote.
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.escape): () =>
+            Navigator.of(context).maybePop(),
+      },
+      // Leftover focus (a removed tile, an empty page) stays inside this
+      // scope, under the Escape binding, instead of the route above it.
+      child: FocusScope(
+        autofocus: true,
+        child: Scaffold(
+          backgroundColor: Colors.black,
+          body: Stack(
+            fit: StackFit.expand,
+            children: [
+              visible.isEmpty
+                  ? _buildEmpty()
+                  : _buildGrid(selection, visible.length),
+              if (widget.showBackButton)
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  child: SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.all(10),
+                      child: IconButton(
+                        key: const ValueKey('multi-view-back'),
+                        tooltip: 'Back',
+                        onPressed: () => Navigator.of(context).maybePop(),
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.black.withValues(alpha: 0.6),
+                          foregroundColor: Colors.white,
+                        ),
+                        icon: const Icon(Icons.arrow_back_rounded),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -599,6 +642,8 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
               : "Can't play this channel",
           hasAudio: index == selection.audioIndex,
           autofocus: index == 0,
+          // The first tile's note starts below the back button.
+          noteTop: index == 0 && widget.showBackButton ? 64 : 8,
           // Select always gives this tile the sound (on the sound tile it
           // re-applies the volumes); holding OK, the Menu key, a long press or
           // a right click opens its actions.
