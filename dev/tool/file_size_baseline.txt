@@ -86,7 +86,8 @@
 1602 lib/widgets/iptv/iptv_channel_row.dart
 1599 lib/widgets/remote/remote_config_export.dart
 1582 lib/screens/settings/home_sections_filter_page.dart
-1571 lib/widgets/remote/remote_transfer_all.dart
+# 2026-11-01: TV focus lands on the first option when Send everything opens (+16).
+1587 lib/widgets/remote/remote_transfer_all.dart
 1536 lib/widgets/tv_text_field.dart
 # 2026-11-01: the phone episode rail leaves room for the lifted Up Next card below the season pill (+19).
 1541 lib/widgets/detail/detail_layout_showcase.dart
@@ -153,7 +154,8 @@
 991 lib/screens/settings/real_debrid_settings_page.dart
 991 lib/screens/stremio_tv/widgets/stremio_tv_repo_browser_dialog.dart
 991 lib/services/profiles/profile_migration_service.dart
-976 lib/widgets/remote/remote_control_screen.dart
+# 2026-11-01: the hidden send workspace no longer takes TV focus behind an open view (+6).
+982 lib/widgets/remote/remote_control_screen.dart
 973 lib/screens/video_player/widgets/styled_dock.dart
 958 lib/widgets/playlist_grid_card.dart
 953 lib/screens/settings/quick_play_settings_page.dart

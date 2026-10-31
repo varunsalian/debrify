@@ -41,6 +41,7 @@ import '../../services/profiles/connection_resource_service.dart';
 import '../../services/profiles/device_key_provider.dart';
 import '../../services/profiles/portable_profile_package.dart';
 import '../../models/profiles/profile_policy.dart';
+import '../../utils/platform_util.dart';
 
 /// One-click "Transfer Everything" flow. Pushes all configured services
 /// (debrid keys, Trakt/Simkl sessions, search engines, PikPak, WebDAV,
@@ -77,6 +78,11 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
   late final RemoteControlState _remoteState;
   int _eligibilityCheck = 0;
   bool _loading = true;
+
+  /// The first option. The button that opened this view is hidden behind it,
+  /// so on TV focus moves here once the options load (autofocus alone loses
+  /// to the focus history and leaves the remote on the header).
+  final FocusNode _firstOptionNode = FocusNode(debugLabel: 'transfer-first');
   bool _transferring = false;
 
   /// The credential gate runs BEFORE any item is sent and can take several
@@ -123,6 +129,7 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
   void dispose() {
     _remoteState.removeListener(_handleRemoteStateChanged);
     _pikpakPasswordController.dispose();
+    _firstOptionNode.dispose();
     super.dispose();
   }
 
@@ -465,6 +472,13 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
         _includeProfiles = canSendProfileGraph;
         _loading = false;
       });
+      if (PlatformUtil.isTelevision) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _firstOptionNode.context != null) {
+            _firstOptionNode.requestFocus();
+          }
+        });
+      }
     } catch (_) {
       debugPrint('RemoteTransferAll: setup inventory failed');
       if (mounted) {
@@ -1489,6 +1503,7 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
                   RadioListTile<bool>(
                     value: true,
                     enabled: !busy,
+                    focusNode: _firstOptionNode,
                     title: const Text('All profiles & their data'),
                     subtitle: const Text(
                       'Profiles, PINs, photos, settings, accounts, addons, TV channels and IPTV data.',
@@ -1497,6 +1512,7 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
                 RadioListTile<bool>(
                   value: false,
                   enabled: !busy,
+                  focusNode: _canSendProfileGraph ? null : _firstOptionNode,
                   title: const Text('Current profile’s setup only'),
                   subtitle: const Text(
                     'Accounts, addons, tracking preferences, search and supported IPTV setup.',
