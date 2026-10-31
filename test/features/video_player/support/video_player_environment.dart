@@ -263,6 +263,11 @@ class VideoPlayerEnvironment {
             if (call.method == 'isTelevision') return false;
             throw StateError('Unexpected downloader call ${call.method}');
           }
+          // A windowed player: on Linux/Windows hosts Escape asks this before
+          // quitting, and a null answer would throw instead of leaving.
+          if (name == 'window_manager' && call.method == 'isFullScreen') {
+            return false;
+          }
           return null;
         },
       );
