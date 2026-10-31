@@ -14,7 +14,8 @@ class _EmptyDvr extends StatelessWidget {
   /// Shown first (the network share's status row).
   final Widget? top;
   const _EmptyDvr({
-    this.top,
+    // Required though nullable, like the hub bar's onSettings.
+    required this.top,
     required this.onSchedule,
     required this.showAlarmBanner,
     required this.onOpenAlarmSettings,

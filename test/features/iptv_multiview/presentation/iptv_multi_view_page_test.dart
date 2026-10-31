@@ -11,9 +11,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+/// Stream urls whose open() throws, as a decoder refusing a stream does.
+final _refused = <String>{};
+
 final class _FakeEngine implements TrailerEngine {
   _FakeEngine(this.url);
   final String url;
+  String? openedUrl;
   final volumes = <double>[];
   bool opened = false;
   bool detached = false;
@@ -41,6 +45,8 @@ final class _FakeEngine implements TrailerEngine {
     required bool loop,
     Map<String, String>? httpHeaders,
   }) async {
+    openedUrl = videoUrl;
+    if (_refused.contains(videoUrl)) throw StateError('decoder init failed');
     opened = true;
     volumes.add(volume);
   }
@@ -69,6 +75,9 @@ final class _FakeEngine implements TrailerEngine {
 IptvChannel _ch(String id) =>
     IptvChannel(name: 'Channel $id', url: 'https://tv.test/$id.ts');
 
+IptvChannel _named(String name, String id) =>
+    IptvChannel(name: name, url: 'https://tv.test/$id.ts');
+
 void main() {
   late Object owner;
   late ProviderContainer container;
@@ -76,6 +85,8 @@ void main() {
   Completer<void>? holdFactory;
   late Completer<void> released;
   IptvChannel? chosen;
+  late Map<String, List<IptvChannel>> versions;
+  late List<String> versionLookups;
 
   MultiViewSelectionNotifier notifier() =>
       container.read(multiViewSelectionProvider.notifier);
@@ -88,6 +99,9 @@ void main() {
     holdFactory = null;
     released = Completer<void>();
     chosen = null;
+    versions = {};
+    versionLookups = [];
+    _refused.clear();
     container = ProviderContainer(
       overrides: [
         multiViewOwnerProvider.overrideWithValue(() => owner),
@@ -122,6 +136,10 @@ void main() {
                   MaterialPageRoute(
                     builder: (_) => IptvMultiViewPage(
                       engineFactory: factory,
+                      versions: (channel) async {
+                        versionLookups.add(channel.url);
+                        return versions[channel.url] ?? const [];
+                      },
                       released: released,
                     ),
                   ),
@@ -304,5 +322,114 @@ void main() {
       find.byKey(const ValueKey('video-https://tv.test/1.ts')),
       findsNothing,
     );
+  });
+
+  group('a tile the device cannot play', () {
+    final fourK = _named('4K: ELEVEN SPORTS 1 ᵁᴴᴰ ³⁸⁴⁰ᴾ', 'es1-4k');
+    final hd = _named('PL: ELEVEN SPORTS 1 ᴴᴰ', 'es1-hd');
+    final sd = _named('PL: ELEVEN SPORTS 1 SD', 'es1-sd');
+
+    testWidgets('a refused 4K tile plays the HD version and says why', (
+      tester,
+    ) async {
+      _refused.add(fourK.url);
+      versions[fourK.url] = [hd, sd];
+      notifier()
+        ..add(_ch('1'))
+        ..add(fourK);
+      await mount(tester);
+
+      expect(versionLookups, [fourK.url], reason: 'looked up once');
+      final refused = engines.firstWhere((e) => e.openedUrl == fourK.url);
+      expect(refused.disposals, 1, reason: 'decoder released');
+      final playing = engines.last;
+      expect(playing.openedUrl, hd.url);
+      expect(playing.opened, isTrue);
+      expect(find.text('Playing PL: ELEVEN SPORTS 1 ᴴᴰ'), findsOneWidget);
+      expect(
+        find.textContaining('This box plays one 4K channel at a time'),
+        findsOneWidget,
+      );
+      // The channel that was added is still the tile's channel.
+      expect(container.read(multiViewSelectionProvider).channels[1], fourK);
+    });
+
+    testWidgets('full screen still asks for the original 4K channel', (
+      tester,
+    ) async {
+      _refused.add(fourK.url);
+      versions[fourK.url] = [hd];
+      notifier().add(fourK);
+      await mount(tester);
+
+      // The only tile has the sound: Select opens its actions.
+      await tester.tap(find.byKey(const ValueKey('tile-fallback-note')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Watch full screen'));
+      await tester.pumpAndSettle();
+      expect(chosen?.url, fourK.url);
+    });
+
+    testWidgets('versions are tried in order until one plays', (tester) async {
+      _refused.addAll([fourK.url, hd.url]);
+      versions[fourK.url] = [hd, sd];
+      notifier().add(fourK);
+      await mount(tester);
+
+      expect(engines.map((e) => e.openedUrl), [fourK.url, hd.url, sd.url]);
+      expect(find.text('Playing PL: ELEVEN SPORTS 1 SD'), findsOneWidget);
+    });
+
+    testWidgets('a 4K tile with no playable version explains the limit', (
+      tester,
+    ) async {
+      _refused.addAll([fourK.url, hd.url]);
+      versions[fourK.url] = [hd];
+      notifier().add(fourK);
+      await mount(tester);
+
+      expect(
+        find.textContaining('there is no HD version of this channel'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('tile-fallback-note')), findsNothing);
+    });
+
+    testWidgets('a non-4K stream with no copy says it cannot play', (
+      tester,
+    ) async {
+      _refused.add(_ch('2').url);
+      notifier()
+        ..add(_ch('1'))
+        ..add(_ch('2'));
+      await mount(tester);
+
+      expect(find.text("Can't play this channel"), findsOneWidget);
+      final opens = engines.length;
+      // Moving the sound must not restart a tile that has given up.
+      await tester.tap(
+        find.byKey(const ValueKey('video-https://tv.test/1.ts')),
+      );
+      await tester.pumpAndSettle();
+      notifier().setAudio(0);
+      await tester.pumpAndSettle();
+      expect(engines.length, opens);
+    });
+
+    testWidgets('a copy of a dead non-4K stream is labelled as a copy', (
+      tester,
+    ) async {
+      final backup = _named('DE: Channel 2', 'ch2-de');
+      _refused.add(_ch('2').url);
+      versions[_ch('2').url] = [backup];
+      notifier().add(_ch('2'));
+      await mount(tester);
+
+      expect(find.text('Playing DE: Channel 2'), findsOneWidget);
+      expect(
+        find.textContaining("original stream didn't play"),
+        findsOneWidget,
+      );
+    });
   });
 }

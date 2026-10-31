@@ -17,7 +17,9 @@ class _HubBar extends StatelessWidget {
   const _HubBar({
     required this.onBack,
     required this.onSchedule,
-    this.onSettings,
+    // Required though nullable: every caller states it, and an optional
+    // parameter of this private class reads as unused to the analyzer.
+    required this.onSettings,
     this.onScheduleDown,
   });
 

@@ -2,8 +2,6 @@
 // "can't play" message), the channel-name overlay, and the focus/remote
 // plumbing. All playback state lives in the page-owned engine; this widget
 // only renders it and forwards activation/long-press gestures.
-import 'dart:async';
-
 import 'package:debrify/widgets/trailer_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -16,6 +14,9 @@ class MultiViewTile extends StatefulWidget {
     required this.channelName,
     required this.engine,
     required this.failed,
+    this.playingName,
+    this.note,
+    this.failedMessage = "Can't play this channel",
     required this.hasAudio,
     this.autofocus = false,
     required this.onSelected,
@@ -28,8 +29,14 @@ class MultiViewTile extends StatefulWidget {
   /// after the tile was retired) — the loading placeholder shows either way.
   final TrailerEngine? engine;
 
-  /// True when `open` threw or the engine's error stream fired.
+  /// True once nothing for this tile could play (the page tried every
+  /// version it found); [failedMessage] says why.
   final bool failed;
+  final String failedMessage;
+
+  /// The version on screen when it is not [channelName], and [note] on why.
+  final String? playingName;
+  final String? note;
   final bool hasAudio;
   final bool autofocus;
   final VoidCallback onSelected;
@@ -42,8 +49,6 @@ class MultiViewTile extends StatefulWidget {
 class _MultiViewTileState extends State<MultiViewTile> {
   final FocusNode _focusNode = FocusNode(debugLabel: 'multi-view tile');
   bool _ready = false;
-  bool _localFailed = false;
-  StreamSubscription<void>? _errorSub;
 
   @override
   void initState() {
@@ -55,31 +60,25 @@ class _MultiViewTileState extends State<MultiViewTile> {
   void didUpdateWidget(covariant MultiViewTile oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.engine != widget.engine) {
-      _errorSub?.cancel();
       _ready = false;
-      _localFailed = false;
       _watchEngine();
     }
   }
 
+  /// Shows the video once its first frame is up. Failures are the page's:
+  /// it switches to another version of the channel or marks [failed].
   void _watchEngine() {
     final engine = widget.engine;
     if (engine == null) return;
-    engine.firstFrameRendered
-        .then<void>((_) {
-          if (mounted) setState(() => _ready = true);
-        })
-        .catchError((Object _) {
-          if (mounted) setState(() => _localFailed = true);
-        });
-    _errorSub = engine.errorStream.listen((_) {
-      if (mounted) setState(() => _localFailed = true);
-    });
+    engine.firstFrameRendered.then<void>((_) {
+      if (mounted && identical(widget.engine, engine)) {
+        setState(() => _ready = true);
+      }
+    }, onError: (Object _) {});
   }
 
   @override
   void dispose() {
-    _errorSub?.cancel();
     _focusNode.dispose();
     super.dispose();
   }
@@ -105,11 +104,15 @@ class _MultiViewTileState extends State<MultiViewTile> {
 
   Widget _buildContent() {
     final engine = widget.engine;
-    if (widget.failed || _localFailed) {
-      return const Center(
-        child: Text(
-          "Can't play this channel",
-          style: TextStyle(color: Colors.white70),
+    if (widget.failed) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(
+            widget.failedMessage,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white70),
+          ),
         ),
       );
     }
@@ -184,6 +187,16 @@ class _MultiViewTileState extends State<MultiViewTile> {
                     fit: StackFit.expand,
                     children: [
                       _buildContent(),
+                      if (widget.note != null && !widget.failed)
+                        Positioned(
+                          left: 8,
+                          top: 8,
+                          right: 8,
+                          child: _FallbackNote(
+                            playingName: widget.playingName,
+                            note: widget.note!,
+                          ),
+                        ),
                       Positioned(
                         left: 8,
                         bottom: 8,
@@ -218,6 +231,54 @@ class _MultiViewTileState extends State<MultiViewTile> {
               );
             },
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Why a tile shows another version of its channel: what plays, and why.
+class _FallbackNote extends StatelessWidget {
+  const _FallbackNote({required this.playingName, required this.note});
+
+  final String? playingName;
+  final String note;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.topLeft,
+      child: Container(
+        key: const ValueKey('tile-fallback-note'),
+        constraints: const BoxConstraints(maxWidth: 420),
+        padding: const EdgeInsets.fromLTRB(10, 7, 10, 8),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.72),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (playingName != null)
+              Text(
+                'Playing $playingName',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            const SizedBox(height: 2),
+            Text(
+              note,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.white70, fontSize: 11),
+            ),
+          ],
         ),
       ),
     );

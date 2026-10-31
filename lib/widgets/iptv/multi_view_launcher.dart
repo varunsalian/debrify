@@ -9,6 +9,7 @@ import 'package:debrify/features/iptv_multiview/presentation/iptv_multi_view_pag
 import 'package:debrify/features/iptv_multiview/presentation/multi_view_engines.dart';
 import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/services/main_page_bridge.dart';
+import 'package:debrify/widgets/iptv/multi_view_versions.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -66,6 +67,7 @@ abstract final class MultiViewLauncher {
           MultiViewAddResult.duplicate => 'Already in multi-view',
           MultiViewAddResult.full => 'Multi-view is full ($max channels)',
         }),
+        persist: false, // auto-hide, as before Flutter 3.44
         action: count >= 2
             ? SnackBarAction(
                 label: 'Open',
@@ -96,6 +98,7 @@ abstract final class MultiViewLauncher {
       MaterialPageRoute<IptvChannel>(
         builder: (_) => IptvMultiViewPage(
           engineFactory: createMultiViewEngine,
+          versions: findMultiViewVersions,
           released: released,
         ),
       ),

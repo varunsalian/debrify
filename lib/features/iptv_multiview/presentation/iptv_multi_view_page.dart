@@ -6,6 +6,7 @@
 import 'dart:async';
 
 import 'package:debrify/features/iptv_multiview/application/multi_view_selection_notifier.dart';
+import 'package:debrify/features/iptv_multiview/models/channel_versions.dart';
 import 'package:debrify/features/iptv_multiview/models/multi_view_selection.dart';
 import 'package:debrify/features/iptv_multiview/presentation/multi_view_tile.dart';
 import 'package:debrify/models/iptv_playlist.dart';
@@ -21,15 +22,32 @@ typedef MultiViewEngineFactory =
       required int tileCount,
     });
 
+/// Other versions of a channel to try when it cannot play, best first.
+typedef MultiViewVersions =
+    Future<List<IptvChannel>> Function(IptvChannel channel);
+
+/// Why a tile plays a version other than the channel that was added.
+enum MultiViewFallback {
+  /// The original is 4K and the device would not decode another 4K stream.
+  fourKBusy,
+
+  /// The original stream did not play; this is another copy of it.
+  backup,
+}
+
 /// The multi-view page: black scaffold, no app bar, [multiViewGrid] tiles.
 class IptvMultiViewPage extends ConsumerStatefulWidget {
   const IptvMultiViewPage({
     super.key,
     required this.engineFactory,
+    this.versions,
     this.released,
   });
 
   final MultiViewEngineFactory engineFactory;
+
+  /// Looks up a channel's other versions when it fails; null never retries.
+  final MultiViewVersions? versions;
 
   /// Completed once the page is gone and every engine finished disposing,
   /// so the caller can start the full player (the page pops with the
@@ -55,6 +73,23 @@ class _TileEntry {
 
   /// True while the factory is still building this slot's engine.
   bool starting = false;
+
+  /// The version on screen when it is not the channel that was added.
+  IptvChannel? playing;
+  MultiViewFallback? fallback;
+
+  /// Versions to try, loaded on the first failure; [nextVersion] indexes it.
+  List<IptvChannel>? versions;
+  int nextVersion = 0;
+
+  /// The original was 4K when the last version also failed.
+  bool fourKExhausted = false;
+
+  StreamSubscription<void>? errors;
+
+  /// Guards against the error stream and the first frame both reporting one
+  /// failure.
+  bool switching = false;
 }
 
 class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
@@ -88,6 +123,7 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
     // they get is disposed on arrival.
     for (final entry in _entries.values) {
       entry.retired = true;
+      unawaited(entry.errors?.cancel());
       final engine = entry.engine;
       if (engine == null) continue;
       entry.engine = null;
@@ -144,7 +180,12 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
     final tileCount = visible.length;
     for (final channel in visible) {
       final existing = _entries[channel.url];
-      if (existing != null && (existing.engine != null || existing.starting)) {
+      // A slot switching versions, or out of versions, keeps its state.
+      if (existing != null &&
+          (existing.engine != null ||
+              existing.starting ||
+              existing.switching ||
+              existing.failed)) {
         continue;
       }
       final entry = existing ?? _TileEntry(channel.name);
@@ -164,6 +205,8 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
 
   void _retire(_TileEntry entry, {required bool disposeNow}) {
     entry.retired = true;
+    unawaited(entry.errors?.cancel());
+    entry.errors = null;
     final engine = entry.engine;
     if (engine == null) return;
     entry.engine = null;
@@ -193,7 +236,10 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
     _TileEntry entry,
     int tileCount,
   ) async {
+    // The slot stays keyed by the channel that was added; [entry.playing] is
+    // what actually streams when a fallback is in use.
     final url = channel.url;
+    final stream = entry.playing ?? channel;
     final selection = _synced;
     final isAudioTile =
         selection != null &&
@@ -205,10 +251,10 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
     TrailerEngine engine;
     try {
       engine = await widget.engineFactory(channel, tileCount: tileCount);
-    } catch (error, stack) {
+    } catch (error) {
       entry.starting = false;
-      _report('multi-view engine factory failed', error, stack);
-      if (_stillShows(entry, url)) setState(() => entry.failed = true);
+      _note('engine could not be created', error);
+      if (_stillShows(entry, url)) unawaited(_tryNextVersion(channel, entry));
       return;
     }
     entry.starting = false;
@@ -221,20 +267,28 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
       return;
     }
     entry.engine = engine;
+    entry.switching = false;
+    entry.errors = engine.errorStream.listen(
+      (_) => unawaited(_tryNextVersion(channel, entry)),
+    );
+    unawaited(
+      engine.firstFrameRendered.then<void>(
+        (_) {},
+        onError: (Object _) => _tryNextVersion(channel, entry),
+      ),
+    );
     try {
       await engine.open(
-        videoUrl: channel.url,
+        videoUrl: stream.url,
         // The page owns volume: the sound tile plays at 100, every other
         // tile stays muted (initial volumes are 100/0 by contract).
         volume: isAudioTile ? 100 : 0,
         loop: false,
-        httpHeaders: channel.playbackHeaders,
+        httpHeaders: stream.playbackHeaders,
       );
-    } catch (error, stack) {
-      _report('multi-view tile open failed', error, stack);
-      // No video widget ever mounted for this engine, so it can go now.
-      _retire(entry, disposeNow: true);
-      if (mounted) setState(() => entry.failed = true);
+    } catch (error) {
+      _note('stream did not open', error);
+      unawaited(_tryNextVersion(channel, entry));
       return;
     }
     if (!_stillShows(entry, url)) {
@@ -242,6 +296,54 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
       return;
     }
     if (mounted) setState(() {});
+  }
+
+  /// The stream on [entry] failed: drop its engine and play the next version
+  /// of [channel] (an HD copy of a 4K channel the device cannot decode next
+  /// to another, another provider's copy of a dead stream), or say why the
+  /// tile cannot play once none is left.
+  Future<void> _tryNextVersion(IptvChannel channel, _TileEntry entry) async {
+    final url = channel.url;
+    if (entry.switching || !_stillShows(entry, url)) return;
+    entry.switching = true;
+    unawaited(entry.errors?.cancel());
+    entry.errors = null;
+    final engine = entry.engine;
+    entry.engine = null;
+    if (engine != null) {
+      engine.detach();
+      // Free its decoder before the next version asks for one.
+      final disposal = _disposeAfterFrame(engine);
+      _disposeFutures.add(disposal);
+      if (mounted) setState(() {});
+      await disposal.then<void>((_) {}, onError: (Object _) {});
+    }
+    final lookup = widget.versions;
+    if (entry.versions == null && lookup != null) {
+      final found = await lookup(
+        channel,
+      ).then((list) => list, onError: (Object _) => const <IptvChannel>[]);
+      entry.versions = found;
+    }
+    if (!_stillShows(entry, url)) return;
+    final versions = entry.versions ?? const <IptvChannel>[];
+    final fourK = channelQuality(channel.name) == 3;
+    if (entry.nextVersion >= versions.length) {
+      setState(() {
+        entry.failed = true;
+        entry.fourKExhausted = fourK;
+      });
+      return;
+    }
+    entry
+      ..playing = versions[entry.nextVersion++]
+      ..fallback = fourK
+          ? MultiViewFallback.fourKBusy
+          : MultiViewFallback.backup
+      ..starting = true;
+    setState(() {});
+    final count = _visibleChannels(ref.read(multiViewSelectionProvider)).length;
+    await _startEngine(channel, entry, count);
   }
 
   /// Whether [entry] still owns the live slot for [url] and that slot is on
@@ -254,15 +356,11 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
     ).any((c) => c.url == url);
   }
 
-  void _report(String context, Object error, StackTrace stack) {
-    FlutterError.reportError(
-      FlutterErrorDetails(
-        exception: error,
-        stack: stack,
-        context: ErrorDescription(context),
-      ),
-    );
-  }
+  /// A tile failing is an expected path (the next version is tried), so it
+  /// is logged, not reported as an app error. The type only: stream URLs
+  /// carry provider credentials.
+  void _note(String what, Object error) =>
+      debugPrint('Multi-view: $what (${error.runtimeType})');
 
   // --- Interaction ----------------------------------------------------------
 
@@ -384,6 +482,21 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
           channelName: channel.name,
           engine: entry?.engine,
           failed: entry?.failed ?? false,
+          playingName: entry?.playing?.name,
+          note: switch (entry?.fallback) {
+            MultiViewFallback.fourKBusy =>
+              'This box plays one 4K channel at a time, so this tile shows '
+                  'the HD version. Watch full screen for 4K.',
+            MultiViewFallback.backup =>
+              "The original stream didn't play, so this tile shows another "
+                  'copy of the channel.',
+            null => null,
+          },
+          failedMessage: (entry?.fourKExhausted ?? false)
+              ? 'This box plays one 4K channel at a time, and there is no HD '
+                    'version of this channel. Watch it full screen, or remove '
+                    'another 4K tile.'
+              : "Can't play this channel",
           hasAudio: index == selection.audioIndex,
           autofocus: index == 0,
           // Select moves the sound; on the tile that already has it, Select
