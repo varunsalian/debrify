@@ -8,13 +8,16 @@
 # opening details, imported launch animations staying out of backups).
 
 # 2026-10-31, Linux runners only (pass on macOS; already failing in the
-# 2026-10-28 run, so not regressions). Reproduced in the CI image under
-# Colima. The player menu panel is not rebuilt after an addon subtitle pick on
-# Linux (the pick lands: selectedStremioSubtitleId is set, but no rebuild
-# follows the next position event), so the panel still shows the mpv track.
+# 2026-10-28 run, so not regressions; same five failures in run 41187856162).
+# On Linux, Escape asks window_manager whether the player is fullscreen before
+# quitting; the test environment has no window manager, so BACK never leaves.
+# Answering that call in the harness makes the player quit asynchronously,
+# which leaks teardown work into ~10 other Linux tests, so it needs its own
+# change. The subtitles-off pair: the menu panel is not rebuilt after an addon
+# subtitle pick on Linux (the pick lands; no rebuild follows), so it still
+# shows the mpv track.
 test/features/video_player/video_player_menu_subtitles_off_test.dart::p13 subtitles off after an addon selection failure=false preserves its result and menu identity
 test/features/video_player/video_player_menu_subtitles_off_test.dart::p13 subtitles off after an addon selection failure=true preserves its result and menu identity
-# BACK now leaves on Linux too (window_manager stub), but the pinned macOS
-# quirk that follows (an abandoned startup arms one 6 s autosave after dispose)
-# arms none on Linux.
+test/features/video_player/video_player_p21_tv_keys_test.dart::transition P21 TV BACK on the hidden bar is left to the desktop mapping, which leaves the player
+test/features/video_player/video_player_p21_tv_keys_test.dart::transition P21 TV during a transition the remote drives nothing but BACK still leaves
 test/features/video_player/video_player_p21_remote_edges_test.dart::P21 TV BACK before the first ready leaves the player even with the controls flagged up
