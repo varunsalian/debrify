@@ -358,13 +358,33 @@ const Set<String> _cricketWords = {
   't20is',
 };
 
+/// Words of other sports that also play "Tests" between the same countries
+/// ("Rugby Championship Test: RSA v AUS", "AUS v NZ Netball Test").
+const Set<String> _otherTestSports = {
+  'rugby',
+  'union',
+  'league',
+  'sevens',
+  'netball',
+  'hockey',
+  'springboks',
+  'wallabies',
+  'lions',
+};
+
 /// Whether a guide title (normalized) names a men's cricket game by one of
-/// its country-code [pairs]: the pair, a cricket word, and no women's or
-/// youth marker ("Int CRI W '26: RSA v AUS", "IND v ENG U19").
+/// its country-code [pairs]: the pair, a cricket word, no other sport's
+/// word, and no women's or youth marker ("Int CRI W '26: RSA v AUS", "IND v
+/// ENG U19").
 bool sportsTitleNamesCodePair(String normalized, List<String> pairs) {
   if (pairs.isEmpty) return false;
   if (!pairs.any((pair) => sportsTextContains(normalized, pair))) return false;
   final words = normalized.split(' ');
   if (!words.any(_cricketWords.contains)) return false;
-  return !words.any((w) => _labelQualifiers.contains(w) || w == 'xi');
+  return !words.any(
+    (w) =>
+        _labelQualifiers.contains(w) ||
+        w == 'xi' ||
+        _otherTestSports.contains(w),
+  );
 }

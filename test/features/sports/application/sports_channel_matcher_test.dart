@@ -709,6 +709,8 @@ void main() {
           _listing('Some Channel', 'Australia aus documentary'),
           // Same countries, other games: rugby, the women's side.
           _listing('SuperSport Rugby', 'Rugby Championship: RSA v AUS'),
+          _listing('SS Rugby', 'Rugby Championship Test: RSA v AUS'),
+          _listing('Fox Netball', 'Constellation Cup Test: AUS v RSA Netball'),
           _listing('SS Variety', "Int CRI W '26: RSA v AUS 1st T20"),
         ]),
         ['SuperSport Cricket'],
