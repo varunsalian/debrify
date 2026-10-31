@@ -566,6 +566,7 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
                 ? 'Logout could not be confirmed. Retry or choose Forget connection to disconnect on this device.'
                 : _userFacingSyncError(error),
           ),
+          persist: false, // auto-hide, as before Flutter 3.44
           action: SnackBarAction(label: 'Retry', onPressed: _logout),
         ),
       );
@@ -606,6 +607,7 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(message),
+          persist: false, // auto-hide, as before Flutter 3.44
           action:
               report.disposition != WebDavSyncCycleDisposition.completed ||
                   !report.localPublicationConfirmed ||
@@ -877,6 +879,7 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(_userFacingSyncError(error)),
+        persist: false, // auto-hide, as before Flutter 3.44
         action: onRetry == null
             ? null
             : SnackBarAction(label: 'Retry', onPressed: onRetry),

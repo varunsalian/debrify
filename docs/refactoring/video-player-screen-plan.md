@@ -12947,6 +12947,7 @@ responsibility lives in a collaborator.
 
 | Date | Commit | Reason | Scope | Exact count (old → new) | Members added | Reviewer |
 |---|---|---|---|---|---|---|
+| 2026-10-31 | (this commit) | Flutter 3.44 keeps a SnackBar with an action on screen until dismissed; the "keeps dropping · Retry" SnackBar in the `_iptvLiveRecovery` field initializer gets `persist: false` to auto-hide again, like the app's 8 other action SnackBars | one named argument in retained facade code; a collaborator cannot set an argument on a SnackBar the facade builds | 8562 → 8563 | none | review agent |
 
 (Empty at completion. Every later change to the facade's exact count or
 frozen declaration list, including exit-driven ones marked "exit N", adds a

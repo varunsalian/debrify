@@ -720,6 +720,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             "${_currentIptvChannel?.name ?? 'This channel'} keeps dropping",
           ),
           duration: const Duration(seconds: 8),
+          persist: false, // auto-hide, as before Flutter 3.44
           action: SnackBarAction(
             label: 'Retry',
             onPressed: () => _iptvLiveRecovery.userRetry('snackbar-retry'),

@@ -121,7 +121,9 @@ VIDEO_PLAYER_SIZE_CEILING = 800
 # series closed (2026-10-29) the cap is a shrink-only ceiling, not an exact
 # size: growth past it fails, edits that keep or shrink the size pass.
 VIDEO_PLAYER_COMPLETE = True
-VIDEO_PLAYER_FACADE_CAP = 8562
+# +1 on 2026-10-31: persist: false on the facade's action SnackBar (Flutter
+# 3.44 keeps action SnackBars on screen); see the plan's exception table.
+VIDEO_PLAYER_FACADE_CAP = 8563
 VIDEO_PLAYER_FACADE_EXPORTS = (
     "video_player/models/playlist_entry.dart",
     "video_player/models/channel_entry.dart",

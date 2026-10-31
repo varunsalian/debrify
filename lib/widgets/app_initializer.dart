@@ -420,6 +420,7 @@ class _AppInitializerState extends State<AppInitializer>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(message),
+          persist: false, // auto-hide, as before Flutter 3.44
           action: SnackBarAction(
             label: 'OPEN SETTINGS',
             onPressed: () => MainPageBridge.switchTab?.call(MainTab.settings),

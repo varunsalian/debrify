@@ -30,7 +30,8 @@
 # 2026-10-28 regfix review P3-e: @visibleForTesting debugAddonDecoder hook for a deterministic decode-race test (+4, 3870 -> 3874); exit: next stremio_service.dart extraction.
 # 2026-10-28 regfix P3-6: retired-launch rethrow in network tuning reads + debugLaunchOnAndroid test hook (+6, 2153 -> 2159); exit: next android_tv_player_bridge.dart extraction.
 # 2026-10-28 recording output: one device key registered in the profile key lists (+1 each); no other growth.
-8562 lib/screens/video_player_screen.dart
+# 2026-10-31: +1 for persist: false on the facade's action SnackBar (exception table row).
+8563 lib/screens/video_player_screen.dart
 6919 lib/services/profiles/profile_registry.dart
 6478 android/app/src/main/java/com/debrify/app/tv/TorboxTvPlayerActivity.java
 5475 lib/services/remote_control/remote_command_router.dart
@@ -43,7 +44,8 @@
 4086 lib/services/iptv_catalog_db.dart
 3874 lib/services/stremio_service.dart
 3776 android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt
-3667 lib/screens/video_player/widgets/iptv_channel_sheet.dart
+# 2026-10-31: +1 for persist: false on an action SnackBar (Flutter 3.44 keeps them on screen).
+3668 lib/screens/video_player/widgets/iptv_channel_sheet.dart
 3035 android/app/src/main/kotlin/com/debrify/app/MainActivity.kt
 2875 lib/services/playlist_player_service.dart
 2800 lib/screens/downloads_screen.dart
@@ -83,7 +85,8 @@
 1522 lib/widgets/detail/detail_layout_showcase.dart
 1504 lib/screens/stremio_tv/stremio_tv_filter_page.dart
 1479 lib/screens/see_all/mdblist_see_all_screen.dart
-1465 lib/screens/settings/sync_and_migrate_page.dart
+# 2026-10-31: +3 for persist: false on its three action SnackBars (Flutter 3.44 keeps them on screen).
+1468 lib/screens/settings/sync_and_migrate_page.dart
 1461 lib/widgets/iptv/iptv_filters.dart
 1457 lib/models/series_playlist.dart
 1449 lib/screens/settings/profile_backup_flows.dart

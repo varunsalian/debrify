@@ -124,6 +124,7 @@ class RecordingsHubScheduling {
           content: const Text(
             'Allow "Alarms & reminders" for Debrify to schedule recordings',
           ),
+          persist: false, // auto-hide, as before Flutter 3.44
           action: SnackBarAction(
             label: 'Settings',
             onPressed: () =>

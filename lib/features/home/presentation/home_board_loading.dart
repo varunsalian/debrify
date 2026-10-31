@@ -244,6 +244,7 @@ class HomeBoardLoading {
             content: const Text(
               "Couldn't refresh Home. Showing previous rows.",
             ),
+            persist: false, // auto-hide, as before Flutter 3.44
             action: SnackBarAction(
               label: 'Retry',
               onPressed: () {
