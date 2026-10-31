@@ -97,6 +97,7 @@ class SportsEventCard extends StatelessWidget {
     required this.followed,
     required this.watch,
     required this.onPressed,
+    this.checking = false,
     this.focusNode,
     this.autofocus = false,
     this.width,
@@ -112,6 +113,10 @@ class SportsEventCard extends StatelessWidget {
   final bool followed;
 
   final SportsWatchOptions watch;
+
+  /// The guide has not answered for this board yet: [watch] is empty
+  /// because nothing was looked up, not because nothing carries the game.
+  final bool checking;
   final VoidCallback onPressed;
 
   /// Supplied by the board so focus survives a rebuild; owned by the pill
@@ -172,7 +177,7 @@ class SportsEventCard extends StatelessWidget {
       return [name, ?later, if (extra > 0) '+$extra'].join(' ');
     }
     if (watch.possible.isNotEmpty) return '${watch.possible.length} possible';
-    return 'Not on your channels yet';
+    return checking ? 'Checking your channels…' : 'Not on your channels yet';
   }
 
   /// The whole card is one control, so the sentence a screen reader needs is

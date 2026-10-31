@@ -26,6 +26,7 @@ class SportsBoardHeader extends StatelessWidget {
   const SportsBoardHeader({
     super.key,
     required this.updatedAt,
+    this.loading = false,
     required this.filter,
     required this.counts,
     required this.followingOnly,
@@ -39,6 +40,9 @@ class SportsBoardHeader extends StatelessWidget {
 
   /// When the fixtures on screen were loaded; null before the first load.
   final DateTime? updatedAt;
+
+  /// Feeds are still answering: the title says so instead of "Updated".
+  final bool loading;
 
   final SportsBoardFilter filter;
   final Map<SportsBoardFilter, int> counts;
@@ -107,7 +111,17 @@ class SportsBoardHeader extends StatelessWidget {
           tracking: -0.2,
         ),
       ),
-      if (updatedAt case final at?) ...[
+      if (loading) ...[
+        const SizedBox(width: 10),
+        Flexible(
+          child: sportsLabelText(
+            'Loading fixtures…',
+            _tokens.fgFaint,
+            size: 12,
+            ellipsize: true,
+          ),
+        ),
+      ] else if (updatedAt case final at?) ...[
         const SizedBox(width: 10),
         Flexible(
           child: sportsLabelText(

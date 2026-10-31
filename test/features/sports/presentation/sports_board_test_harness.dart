@@ -190,8 +190,15 @@ class SportsBoardHarness {
     ),
   );
 
-  Future<void> mount(WidgetTester tester) async {
+  /// [settle] is false for a board left loading: its skeleton animates, so
+  /// settling would never finish.
+  Future<void> mount(WidgetTester tester, {bool settle = true}) async {
     await tester.pumpWidget(app());
-    await tester.pumpAndSettle();
+    if (settle) {
+      await tester.pumpAndSettle();
+    } else {
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+    }
   }
 }

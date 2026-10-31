@@ -518,6 +518,34 @@ void main() {
     expect(h.state.updatedAt, h.clock);
   });
 
+  test('leagues land on the board as they answer', () async {
+    final h = BoardHarness(
+      bodies: {
+        'ucl': fixture('espn_ucl_finished.json'),
+        'epl': fixture('espn_epl_scheduled.json'),
+      },
+    );
+    addTearDown(h.dispose);
+    // The first request (a UCL day) is held; the EPL feed answers at once.
+    final gate = Completer<String>();
+    h.fetch.gate = gate;
+    final refresh = h.controller.refresh();
+    await pumpEventQueue();
+
+    expect(h.state.events, isNotEmpty, reason: 'EPL is on the board already');
+    expect(h.state.loading, isTrue, reason: 'UCL is still loading');
+    expect(h.state.watchResolved, isFalse, reason: 'the guide waits for all');
+    expect(h.state.updatedAt, isNull);
+    final early = h.eventIds;
+
+    gate.complete(fixture('espn_ucl_finished.json'));
+    await refresh;
+    expect(h.state.loading, isFalse);
+    expect(h.state.watchResolved, isTrue);
+    expect(h.eventIds.length, greaterThan(early.length));
+    expect(h.eventIds, containsAll(early));
+  });
+
   test('a profile switch during a refresh publishes nothing', () async {
     final h = BoardHarness(bodies: {'ucl': fixture('espn_ucl_finished.json')});
     addTearDown(h.dispose);

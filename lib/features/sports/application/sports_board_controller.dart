@@ -43,6 +43,7 @@ class SportsBoardState {
     this.error,
     this.updatedAt,
     this.watch = const {},
+    this.watchResolved = false,
     this.liveSportsListings = const [],
   });
 
@@ -67,6 +68,10 @@ class SportsBoardState {
   /// Watch options keyed by `'<leagueId>/<eventId>'`.
   final Map<String, SportsWatchOptions> watch;
 
+  /// False until the guide has answered once: a card without an entry is
+  /// still being checked, not known to be off every channel.
+  final bool watchResolved;
+
   /// What is airing now on the user's sports channels.
   final List<SportsGuideListing> liveSportsListings;
 
@@ -87,6 +92,7 @@ class SportsBoardState {
     bool clearError = false,
     DateTime? updatedAt,
     Map<String, SportsWatchOptions>? watch,
+    bool? watchResolved,
     List<SportsGuideListing>? liveSportsListings,
   }) => SportsBoardState(
     events: events ?? this.events,
@@ -97,6 +103,7 @@ class SportsBoardState {
     error: clearError ? null : error ?? this.error,
     updatedAt: updatedAt ?? this.updatedAt,
     watch: watch ?? this.watch,
+    watchResolved: watchResolved ?? this.watchResolved,
     liveSportsListings: liveSportsListings ?? this.liveSportsListings,
   );
 }
@@ -195,23 +202,38 @@ class SportsBoardController extends Notifier<SportsBoardState> {
     }
 
     final leagues = ref.read(sportsLeaguesProvider);
-    final batches = await Future.wait([
-      for (final league in leagues) _fetch(league, fromUtc, toUtc, force),
-    ]);
-    if (!current()) return;
-
+    // Leagues answer at very different speeds (one ESPN day against a
+    // week of cricket series): each batch is published as it lands, so the
+    // board fills in instead of showing a skeleton until the slowest feed
+    // returns. `loading` stays set until every league answered.
     var failures = 0;
     final merged = <String, SportsEvent>{};
-    for (final batch in batches) {
-      if (batch == null) {
-        failures++;
-        continue;
-      }
-      for (final event in batch) {
-        merged.putIfAbsent('${event.leagueId}/${event.id}', () => event);
-      }
-    }
-    final events = merged.values.toList()..sort(_byStartThenId);
+    List<SportsEvent> sorted() => merged.values.toList()..sort(_byStartThenId);
+    await Future.wait([
+      for (final league in leagues)
+        _fetch(league, fromUtc, toUtc, force).then((batch) {
+          if (!current()) return;
+          if (batch == null) {
+            failures++;
+            return;
+          }
+          var added = false;
+          for (final event in batch) {
+            final key = '${event.leagueId}/${event.id}';
+            if (!merged.containsKey(key)) {
+              merged[key] = event;
+              added = true;
+            }
+          }
+          // A first load shows what is in; a timed refresh keeps the full
+          // board up rather than shrinking it to the early feeds.
+          if (added && state.loading) {
+            state = state.copyWith(events: sorted());
+          }
+        }),
+    ]);
+    if (!current()) return;
+    final events = sorted();
 
     if (events.isEmpty && failures > 0 && failures == leagues.length) {
       state = state.copyWith(loading: false, error: kSportsBoardLoadFailed);
@@ -359,6 +381,7 @@ class SportsBoardController extends Notifier<SportsBoardState> {
     }
     if (!current()) return;
     state = state.copyWith(
+      watchResolved: true,
       watch: {
         for (final event in near)
           '${event.leagueId}/${event.id}': matchSportsEvent(

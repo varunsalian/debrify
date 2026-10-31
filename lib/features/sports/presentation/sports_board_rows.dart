@@ -7,6 +7,7 @@
 // control is a [SportsFocusPill], so the D-pad contract is identical to the
 // card and the details panel.
 import 'dart:math' as math;
+import 'dart:ui' as ui show TextDirection;
 
 import 'package:debrify/features/sports/application/sports_board_sections.dart';
 import 'package:debrify/features/sports/models/sports_models.dart';
@@ -74,6 +75,7 @@ class SportsBoardSectionSliver extends StatelessWidget {
     required this.watchFor,
     required this.onCardPressed,
     this.autofocusFirst = false,
+    this.checkingChannels = false,
     this.now,
   });
 
@@ -88,6 +90,9 @@ class SportsBoardSectionSliver extends StatelessWidget {
 
   /// Only the first card of the first section may claim focus on mount.
   final bool autofocusFirst;
+
+  /// The guide has not answered yet (see SportsEventCard.checking).
+  final bool checkingChannels;
 
   @override
   Widget build(BuildContext context) => SliverMainAxisGroup(
@@ -114,6 +119,7 @@ class SportsBoardSectionSliver extends StatelessWidget {
             hideScores: hideScores,
             followed: isFollowed(event),
             watch: watchFor(event),
+            checking: checkingChannels,
             onPressed: () => onCardPressed(event),
             autofocus: autofocusFirst && index == 0,
             now: now,
@@ -289,8 +295,29 @@ class SportsBoardLiveChannelsRow extends StatelessWidget {
 }
 
 /// Three placeholder sections while the first refresh is in flight.
-class SportsBoardSkeletonRows extends StatelessWidget {
+/// Three placeholder sections, in the board's own shapes (a sport chip row,
+/// a heading, card plates with their header and footer bands), with a soft
+/// sheen moving across so the wait reads as loading, not as a blank board.
+class SportsBoardSkeletonRows extends StatefulWidget {
   const SportsBoardSkeletonRows({super.key});
+
+  @override
+  State<SportsBoardSkeletonRows> createState() =>
+      _SportsBoardSkeletonRowsState();
+}
+
+class _SportsBoardSkeletonRowsState extends State<SportsBoardSkeletonRows>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _sheen = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1400),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _sheen.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -302,31 +329,74 @@ class SportsBoardSkeletonRows extends StatelessWidget {
           _cardMinWidth,
           _gridGap,
         );
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (final row in const [0, 1, 2]) ...[
-              _row(row, math.min(columns, 3), height),
-              const SizedBox(height: 18),
+        return AnimatedBuilder(
+          animation: _sheen,
+          builder: (context, child) => ShaderMask(
+            blendMode: BlendMode.srcATop,
+            shaderCallback: (bounds) => LinearGradient(
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+              // A narrow highlight sweeping left to right over the plates.
+              colors: [
+                Colors.transparent,
+                Colors.white.withValues(alpha: 0.08),
+                Colors.transparent,
+              ],
+              stops: const [0.35, 0.5, 0.65],
+              transform: _SheenSlide(_sheen.value),
+            ).createShader(bounds),
+            child: child,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _chipRow(),
+              const SizedBox(height: 16),
+              for (final row in const [0, 1, 2]) ...[
+                _row(row, math.min(columns, 3), height),
+                const SizedBox(height: 18),
+              ],
             ],
-          ],
+          ),
         );
       },
     );
   }
 
+  Widget _plate(double width, double height, {double radius = 5}) => Container(
+    width: width,
+    height: height,
+    decoration: BoxDecoration(
+      color: _tokens.hairline,
+      borderRadius: BorderRadius.circular(radius),
+    ),
+  );
+
+  /// Clipped, not scrolled: a narrow board shows as many chips as fit.
+  Widget _chipRow() => SizedBox(
+    height: 32,
+    child: ClipRect(
+      child: OverflowBox(
+        alignment: Alignment.centerLeft,
+        maxWidth: double.infinity,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final width in const [72.0, 104.0, 92.0, 128.0]) ...[
+              _plate(width, 32, radius: 16),
+              const SizedBox(width: 8),
+            ],
+          ],
+        ),
+      ),
+    ),
+  );
+
   Widget _row(int index, int cards, double height) => Column(
     key: ValueKey('sports-board-skeleton-$index'),
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Container(
-        width: 96,
-        height: 11,
-        decoration: BoxDecoration(
-          color: _tokens.hairline,
-          borderRadius: BorderRadius.circular(5),
-        ),
-      ),
+      _plate(96, 11),
       const SizedBox(height: 10),
       Row(
         children: [
@@ -340,6 +410,18 @@ class SportsBoardSkeletonRows extends StatelessWidget {
   );
 }
 
+/// Slides the sheen gradient across the full width over one cycle.
+class _SheenSlide extends GradientTransform {
+  const _SheenSlide(this.t);
+  final double t;
+
+  @override
+  Matrix4? transform(Rect bounds, {ui.TextDirection? textDirection}) =>
+      Matrix4.translationValues(bounds.width * (t * 2 - 1), 0, 0);
+}
+
+/// A card-shaped plate with the header line, two side lines and the footer
+/// band a real card has, so the layout does not jump when fixtures land.
 class _SkeletonCard extends StatelessWidget {
   const _SkeletonCard({required this.height});
 
@@ -348,10 +430,38 @@ class _SkeletonCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     height: height,
+    padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
     decoration: BoxDecoration(
       color: _tokens.panel,
       borderRadius: BorderRadius.circular(14),
       border: Border.all(color: _tokens.hairline),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [_line(118, 10), const Spacer(), _line(44, 10)]),
+        const SizedBox(height: 18),
+        _line(160, 13),
+        const SizedBox(height: 12),
+        _line(132, 13),
+        const Spacer(),
+        Container(
+          padding: const EdgeInsets.only(top: 9),
+          decoration: BoxDecoration(
+            border: Border(top: BorderSide(color: _tokens.hairline)),
+          ),
+          child: _line(150, 10),
+        ),
+      ],
+    ),
+  );
+
+  Widget _line(double width, double height) => Container(
+    width: width,
+    height: height,
+    decoration: BoxDecoration(
+      color: _tokens.hairline,
+      borderRadius: BorderRadius.circular(height / 2),
     ),
   );
 }
