@@ -36,6 +36,17 @@ class RecordingOutputPrefsTest {
 	}
 
 	@Test
+	fun aDriveFolderAndItsLabelAreRead() {
+		val prefs = RecordingOutputPrefs.parse(
+			"""{"directoryPath":"/storage/AAAA/Recordings","treeDisplayName":"SanDisk USB"}""",
+		)
+		assertNull(prefs.treeUri)
+		assertEquals("/storage/AAAA/Recordings", prefs.directoryPath)
+		assertEquals("SanDisk USB", prefs.folderLabel)
+		assertNull(RecordingOutputPrefs.parse(null).directoryPath)
+	}
+
+	@Test
 	fun explicitZeroEndPadTurnsTheDefaultOff() {
 		val prefs = RecordingOutputPrefs.parse("""{"endPadMinutes":0}""")
 		assertEquals(0L, prefs.endPadMs)

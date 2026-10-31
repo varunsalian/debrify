@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../features/recording_output/data/recording_output_store.dart';
 import '../features/recording_output/models/recording_output_settings.dart';
+import '../features/recording_output/models/storage_volume_choice.dart';
 import '../utils/platform_util.dart';
 import '../models/profiles/profile_policy.dart';
 import 'profiles/device_job_store.dart';
@@ -175,6 +176,7 @@ class AndroidNativeDownloader {
     String subDir = 'Debrify/Recordings',
     String mimeType = 'video/mp2t',
     String? treeUri,
+    String? directoryPath,
   }) async {
     final saved = await saveLocalFileDetails(
       path: path,
@@ -182,18 +184,22 @@ class AndroidNativeDownloader {
       subDir: subDir,
       mimeType: mimeType,
       treeUri: treeUri,
+      directoryPath: directoryPath,
     );
     return saved?.reference;
   }
 
   /// Detailed variant used when the caller must show the provider-assigned
   /// name. Android storage providers may rename a colliding file.
+  /// [directoryPath] (a drive folder chosen without a system picker) is used
+  /// when there is no [treeUri].
   static Future<AndroidSavedLocalFile?> saveLocalFileDetails({
     required String path,
     required String fileName,
     String subDir = 'Debrify/Recordings',
     String mimeType = 'video/mp2t',
     String? treeUri,
+    String? directoryPath,
   }) async {
     if (!Platform.isAndroid) return null;
     try {
@@ -204,6 +210,7 @@ class AndroidNativeDownloader {
             'subDir': subDir,
             'mimeType': mimeType,
             if (treeUri != null) 'treeUri': treeUri,
+            if (directoryPath != null) 'directoryPath': directoryPath,
           });
       // Accept the old string response as well so a hot-restarted Dart
       // isolate can still talk to a native runner built before this change.
@@ -265,6 +272,47 @@ class AndroidNativeDownloader {
     if (!Platform.isAndroid) return false;
     return _invokeBool('forgetDownloadTask', {'taskId': taskId});
   }
+
+  /// Whether [pickDownloadDirectory] has a system folder picker to open;
+  /// many Android TV boxes have none. A runner without the storage-volumes
+  /// channel (or any channel failure) answers true, so the picker is still
+  /// tried as before.
+  static Future<bool> canPickFolders() async {
+    if (!Platform.isAndroid) return false;
+    try {
+      return await _storageVolumes.invokeMethod<bool>('canPickFolders') ?? true;
+    } on PlatformException {
+      return true;
+    } on MissingPluginException {
+      return true;
+    }
+  }
+
+  /// The removable drives mounted now (StorageVolumes.kt), each with
+  /// [folder] in this app's own folder there: where recordings go on a
+  /// device without a folder picker. Empty when there are none or the
+  /// lookup failed.
+  static Future<List<StorageVolumeChoice>> listStorageVolumes({
+    String folder = 'Recordings',
+  }) async {
+    if (!Platform.isAndroid) return const [];
+    try {
+      final raw = await _storageVolumes.invokeMethod<List<Object?>>(
+        'listVolumes',
+        {'folder': folder},
+      );
+      return [
+        for (final entry in raw ?? const <Object?>[])
+          ?StorageVolumeChoice.fromMap(entry),
+      ];
+    } on PlatformException {
+      return const [];
+    } on MissingPluginException {
+      return const [];
+    }
+  }
+
+  static const _storageVolumes = MethodChannel('debrify/storage_volumes');
 
   /// Opens the system folder picker (ACTION_OPEN_DOCUMENT_TREE) and persists
   /// the grant. Returns {treeUri, displayName}, or null if the user backed out.

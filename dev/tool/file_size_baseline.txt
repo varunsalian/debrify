@@ -46,7 +46,7 @@
 3776 android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt
 # 2026-10-31: +1 for persist: false on an action SnackBar (Flutter 3.44 keeps them on screen).
 3668 lib/screens/video_player/widgets/iptv_channel_sheet.dart
-3035 android/app/src/main/kotlin/com/debrify/app/MainActivity.kt
+3027 android/app/src/main/kotlin/com/debrify/app/MainActivity.kt
 2875 lib/services/playlist_player_service.dart
 2800 lib/screens/downloads_screen.dart
 2584 lib/services/webdav_sync/webdav_sync_local_adapter.dart
@@ -115,7 +115,7 @@
 1159 lib/screens/debrify_tv/layouts/spotlight_phone.dart
 1158 lib/services/webdav_protocol_client.dart
 1152 android/app/src/main/kotlin/com/debrify/app/download/MediaStoreDownloadService.kt
-1142 android/app/src/main/kotlin/com/debrify/app/recording/LiveRecordingService.kt
+1133 android/app/src/main/kotlin/com/debrify/app/recording/LiveRecordingService.kt
 1123 lib/services/debrid_service.dart
 1114 lib/services/profiles/connection_resource_service.dart
 1110 lib/widgets/detail/detail_layout_console.dart

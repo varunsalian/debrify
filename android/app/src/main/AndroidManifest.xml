@@ -45,6 +45,10 @@
         <intent>
             <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
         </intent>
+        <!-- Whether a system folder picker exists (many TV boxes have none). -->
+        <intent>
+            <action android:name="android.intent.action.OPEN_DOCUMENT_TREE" />
+        </intent>
     </queries>
 
     <!-- TV compatibility flags (do not restrict phone installs) -->

@@ -8,8 +8,10 @@ import 'dart:io';
 import 'package:debrify/features/recording_output/data/share_library_repository.dart';
 import 'package:debrify/features/recording_output/data/share_stream_server.dart';
 import 'package:debrify/features/recording_output/models/recording_output_settings.dart';
+import 'package:debrify/features/recording_output/models/storage_volume_choice.dart';
 import 'package:debrify/features/recording_output/presentation/network_share_settings_page.dart';
 import 'package:debrify/features/recording_output/presentation/recording_output_settings_page.dart';
+import 'package:debrify/features/recording_output/presentation/storage_drive_dialog.dart';
 import 'package:debrify/features/recordings/presentation/legacy_recordings/recordings_hub_dependencies.dart';
 import 'package:debrify/services/android_native_downloader.dart';
 import 'package:file_picker/file_picker.dart';
@@ -23,8 +25,8 @@ bool get recordingOutputSettingsAvailable =>
     Platform.isMacOS;
 
 /// Pushes the settings page. Folder choice is offered where a picked folder
-/// is writable: the Android system picker, and the Windows/Linux directory
-/// picker. macOS keeps the default folder (its sandbox grants picked folders
+/// is writable: the Android system picker (or, on a device without one, a
+/// drive chooser), and the Windows/Linux directory picker. macOS keeps the default folder (its sandbox grants picked folders
 /// read-only), but still gets padding and the SMB copy.
 Future<void> openRecordingOutputSettings(BuildContext context) {
   final android = Platform.isAndroid;
@@ -72,8 +74,53 @@ Future<void> openNetworkShareSettings(BuildContext context) =>
       MaterialPageRoute<void>(builder: (_) => const NetworkShareSettingsPage()),
     );
 
-Future<({String? treeUri, String? displayName, String? path})?>
-_pickAndroidFolder() async {
+/// A chosen recordings folder, as [RecordingFolderPick] returns it.
+typedef RecordingFolderPickResult = ({
+  String? treeUri,
+  String? displayName,
+  String? path,
+});
+
+/// The device's folder picker, or the drive chooser where there is none.
+Future<RecordingFolderPickResult?> _pickAndroidFolder(
+  BuildContext context,
+  RecordingOutputSettings current,
+) => pickAndroidRecordingFolder(context, current);
+
+/// The Android "Save recordings to" choice: the system picker where there
+/// is one, else the drive chooser. The functions stand in for the native
+/// channels in tests.
+@visibleForTesting
+Future<RecordingFolderPickResult?> pickAndroidRecordingFolder(
+  BuildContext context,
+  RecordingOutputSettings current, {
+  Future<bool> Function() canPickFolders =
+      AndroidNativeDownloader.canPickFolders,
+  Future<RecordingFolderPickResult?> Function() systemPicker =
+      _pickWithSystemPicker,
+  Future<List<StorageVolumeChoice>> Function() listVolumes =
+      AndroidNativeDownloader.listStorageVolumes,
+}) async {
+  if (await canPickFolders()) return systemPicker();
+  final drives = await listVolumes();
+  if (!context.mounted) return null;
+  final choice = await showStorageDriveDialog(
+    context,
+    volumes: drives,
+    currentPath: current.treeUri == null ? current.directoryPath : null,
+  );
+  switch (choice) {
+    case StorageDriveSelected(:final volume):
+      return (treeUri: null, displayName: volume.name, path: volume.path);
+    case StorageDriveNetworkShare():
+      if (context.mounted) await openNetworkShareSettings(context);
+      return null;
+    case null:
+      return null;
+  }
+}
+
+Future<RecordingFolderPickResult?> _pickWithSystemPicker() async {
   final picked = await AndroidNativeDownloader.pickDownloadDirectory();
   final tree = picked?['treeUri'] as String?;
   if (tree == null || tree.isEmpty) return null;
@@ -84,8 +131,10 @@ _pickAndroidFolder() async {
   );
 }
 
-Future<({String? treeUri, String? displayName, String? path})?>
-_pickDesktopFolder() async {
+Future<RecordingFolderPickResult?> _pickDesktopFolder(
+  BuildContext context,
+  RecordingOutputSettings current,
+) async {
   final path = await FilePicker.platform.getDirectoryPath(
     dialogTitle: 'Save recordings to',
   );

@@ -13,8 +13,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../application/smb_fakes.dart';
 
-Future<({String? treeUri, String? displayName, String? path})?>
-_cancelPick() async => null;
+Future<({String? treeUri, String? displayName, String? path})?> _cancelPick(
+  BuildContext context,
+  RecordingOutputSettings current,
+) async => null;
 
 class FakeStore implements RecordingOutputStoreApi {
   FakeStore(this.settings);
@@ -151,7 +153,7 @@ void main() {
     final store = await pumpPage(
       tester,
       platform: RecordingPlatform.android,
-      folderPicker: () async {
+      folderPicker: (_, _) async {
         if (!picked) return null;
         picked = false;
         return (
@@ -168,6 +170,40 @@ void main() {
     expect(store.writes.single.treeDisplayName, 'Mixtape Drive');
     expect(find.text('Mixtape Drive'), findsOneWidget);
     expect(find.text('Use default folder'), findsOneWidget);
+  });
+
+  testWidgets('a drive chosen after a picked tree replaces the tree', (
+    tester,
+  ) async {
+    final store = await pumpPage(
+      tester,
+      platform: RecordingPlatform.android,
+      initial: const RecordingOutputSettings(
+        treeUri: 'content://tree',
+        treeDisplayName: 'Old tree',
+        endPadMinutes: 5,
+      ),
+      folderPicker: (_, current) async {
+        expect(current.treeUri, 'content://tree');
+        return (
+          treeUri: null,
+          displayName: 'SanDisk USB',
+          path: '/storage/ABCD/Android/data/com.debrify.app/files/Recordings',
+        );
+      },
+    );
+    await tester.tap(find.text('Save recordings to'));
+    await tester.pumpAndSettle();
+    final saved = store.writes.single;
+    // Native code prefers a tree: one left behind would win over the drive.
+    expect(saved.treeUri, isNull);
+    expect(
+      saved.directoryPath,
+      '/storage/ABCD/Android/data/com.debrify.app/files/Recordings',
+    );
+    expect(saved.treeDisplayName, 'SanDisk USB');
+    expect(saved.endPadMinutes, 5);
+    expect(find.text('SanDisk USB'), findsOneWidget);
   });
 
   testWidgets('use default folder clears the folder fields', (tester) async {

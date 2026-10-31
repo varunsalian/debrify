@@ -651,26 +651,11 @@ class MainActivity : FlutterActivity() {
             com.debrify.app.recording.LiveRecordingService.legacyStorageGranted(this)
         ) {
             val dir = com.debrify.app.recording.LiveRecordingService.legacyRecordingsDir()
-            val files = runCatching { dir.listFiles() }.getOrNull() ?: emptyArray()
-            for (file in files) {
-                if (!file.isFile || file.absolutePath in coveredPaths) continue
-                val ext = file.extension.lowercase()
-                if (ext !in setOf("ts", "mts", "m2ts", "mkv", "mp4")) continue
-                out.add(
-                    mapOf(
-                        "taskId" to null,
-                        "uri" to android.net.Uri.fromFile(file).toString(),
-                        "name" to file.name,
-                        "channelName" to null,
-                        "bytes" to file.length(),
-                        "recordedAtMs" to file.lastModified(),
-                        "durationMs" to null,
-                        "ownerProfileId" to null,
-                        "ownershipState" to "unassigned",
-                    ),
-                )
-            }
+            out.addAll(com.debrify.app.recording.RecordingDestination.unindexedFiles(dir, coveredPaths))
         }
+        // In-player recordings saved to a chosen drive have no index entry either.
+        com.debrify.app.recording.RecordingDestination.chosenDirectory(this)?.takeIf { includeUnassigned }
+            ?.let { out.addAll(com.debrify.app.recording.RecordingDestination.unindexedFiles(it, coveredPaths)) }
         return out
     }
 
@@ -1305,6 +1290,7 @@ class MainActivity : FlutterActivity() {
 		super.configureFlutterEngine(flutterEngine)
         localSourceAccess?.dispose()
         localSourceAccess = com.debrify.app.storage.LocalSourceAccess(this, flutterEngine.dartExecutor.binaryMessenger)
+        com.debrify.app.storage.StorageVolumes.register(this, flutterEngine.dartExecutor.binaryMessenger)
 		com.debrify.app.security.DeviceSecretCipherPlugin.register(this, flutterEngine)
 		MethodChannel(
 			flutterEngine.dartExecutor.binaryMessenger,
@@ -1696,6 +1682,7 @@ class MainActivity : FlutterActivity() {
 						val subDir = call.argument<String>("subDir") ?: "Debrify/Recordings"
 						val mimeType = call.argument<String>("mimeType") ?: "video/mp2t"
 						val treeUri = call.argument<String>("treeUri")
+						val directoryPath = call.argument<String>("directoryPath")
 						if (path.isNullOrEmpty()) {
 							result.error("bad_args", "path is required", null)
 							return@setMethodCallHandler
@@ -1707,10 +1694,15 @@ class MainActivity : FlutterActivity() {
 						Thread {
 							val savedUri = if (!treeUri.isNullOrEmpty()) {
 								saveLocalFileToSaf(path, fileName, subDir, mimeType, treeUri)
+							} else if (!directoryPath.isNullOrEmpty()) {
+								com.debrify.app.recording.RecordingDestination.moveIntoDirectory(this, java.io.File(path), fileName, directoryPath)?.toString()
+									?: saveRecordingToMediaStore(path, fileName, subDir, mimeType) // drive gone
 							} else {
 								saveRecordingToMediaStore(path, fileName, subDir, mimeType)
 							}
-							val savedName = if (savedUri != null) {
+							val savedName = if (savedUri?.startsWith("file:") == true) {
+								Uri.parse(savedUri).lastPathSegment ?: fileName
+							} else if (savedUri != null) {
 								runCatching {
 									contentResolver.query(
 										Uri.parse(savedUri),

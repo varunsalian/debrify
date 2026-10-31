@@ -15,7 +15,6 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
-import android.os.StatFs
 import androidx.core.app.NotificationCompat
 import androidx.core.app.TaskStackBuilder
 import java.io.BufferedInputStream
@@ -113,7 +112,7 @@ class LiveRecordingService : Service() {
 		private const val SERVICE_NOTIFICATION_ID = 9100
 		private const val GROUP_KEY_RECORDINGS = "com.debrify.app.recordings.GROUP"
 
-		private const val MIN_FREE_BYTES = 200L * 1024 * 1024
+		const val MIN_FREE_BYTES = 200L * 1024 * 1024
 
 		/** Sent when the channel declares no User-Agent of its own. Providers
 		 *  routinely block default library UAs (the app's mpv path learned
@@ -536,10 +535,8 @@ class LiveRecordingService : Service() {
 	private fun runCapture(state: RecordingState): Outcome {
 		val share = SmbRecordingOutput.targetFor(this, state.ownerProfileId)
 			?.let { SmbRecordingOutput.open(it, state.fileName) }
-		// Local free space says nothing about a picked folder (USB, network share).
-		if (share == null && RecordingDestination.usableTree(this) == null &&
-			freeSpaceBytes() in 0 until MIN_FREE_BYTES
-		) {
+		// Measured where the file goes; unknown (-1) for a picked SAF folder.
+		if (share == null && RecordingDestination.freeBytes(this) in 0 until MIN_FREE_BYTES) {
 			return Outcome.Failed("not enough free storage")
 		}
 
@@ -990,12 +987,6 @@ class LiveRecordingService : Service() {
 			}
 		}, STALL_CHECK_INTERVAL_MS)
 	}
-
-	private fun freeSpaceBytes(): Long = try {
-		@Suppress("DEPRECATION")
-		val stat = StatFs(Environment.getExternalStorageDirectory().path)
-		stat.availableBytes
-	} catch (_: Exception) { -1L }
 
 	// ---- Notifications ------------------------------------------------------
 

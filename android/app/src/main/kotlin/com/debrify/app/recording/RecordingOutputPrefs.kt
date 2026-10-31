@@ -9,10 +9,14 @@ import org.json.JSONObject
  * JSON string `recording_output_v1` (see RecordingOutputSettings in
  * lib/features/recordings/models). Missing or malformed values fall back to
  * the behaviour before the setting existed: the default folder, no start pad
- * and a two-minute end pad.
+ * and a two-minute end pad. [directoryPath] is a drive folder chosen where
+ * the device has no system folder picker (Android TV boxes), labelled by
+ * [folderLabel].
  */
 data class RecordingOutputPrefs(
 	val treeUri: String?,
+	val directoryPath: String?,
+	val folderLabel: String?,
 	val startPadMs: Long,
 	val endPadMs: Long,
 ) {
@@ -31,9 +35,11 @@ data class RecordingOutputPrefs(
 			} catch (_: Exception) {
 				null
 			}
-			val tree = json?.optString("treeUri")?.trim()?.takeIf { it.isNotEmpty() }
+			fun text(name: String): String? = json?.optString(name)?.trim()?.takeIf { it.isNotEmpty() }
 			return RecordingOutputPrefs(
-				treeUri = tree,
+				treeUri = text("treeUri"),
+				directoryPath = text("directoryPath"),
+				folderLabel = text("treeDisplayName"),
 				startPadMs = minutes(json, "startPadMinutes", 0L),
 				endPadMs = minutes(json, "endPadMinutes", DEFAULT_END_PAD_MINUTES),
 			)

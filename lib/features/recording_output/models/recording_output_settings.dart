@@ -163,7 +163,8 @@ class RecordingOutputSettings {
 }
 
 /// Plain-English label for where recordings are saved. Custom SAF trees show
-/// their display name when the picker gave one.
+/// their display name when the picker gave one; a folder path shows its
+/// label (an Android drive's name) or else the path itself.
 String recordingLocationLabel(RecordingOutputSettings settings) {
   final treeUri = settings.treeUri;
   if (treeUri != null && treeUri.isNotEmpty) {
@@ -173,7 +174,8 @@ String recordingLocationLabel(RecordingOutputSettings settings) {
   }
   final directoryPath = settings.directoryPath;
   if (directoryPath != null && directoryPath.isNotEmpty) {
-    return directoryPath;
+    final label = settings.treeDisplayName;
+    return label != null && label.isNotEmpty ? label : directoryPath;
   }
   return 'Downloads/Debrify/Recordings';
 }

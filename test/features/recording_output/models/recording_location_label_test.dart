@@ -46,6 +46,18 @@ void main() {
       );
     });
 
+    test('a drive folder shows the drive name, not its long path', () {
+      expect(
+        recordingLocationLabel(
+          const RecordingOutputSettings(
+            directoryPath: '/storage/ABCD/Android/data/x/files/Recordings',
+            treeDisplayName: 'SanDisk USB',
+          ),
+        ),
+        'SanDisk USB',
+      );
+    });
+
     test('a custom desktop path is shown verbatim', () {
       expect(
         recordingLocationLabel(

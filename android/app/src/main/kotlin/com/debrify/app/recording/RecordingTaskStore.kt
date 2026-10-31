@@ -198,11 +198,13 @@ object RecordingTaskStore {
 							),
 						)
 					} else {
-						// A picked folder that is merely unreachable must not lose
-						// the capture: wait until it answers "absent" for sure.
+						// A picked folder (or drive) that is merely unreachable must
+						// not lose the capture: wait until it answers "absent" for sure.
 						if (uri != null && RecordingDestination.isDocument(context, uri) &&
 							destinationExists(context, uri) != false
 						) continue
+						// A file on an unplugged drive: neither there nor known gone.
+						if (uri?.scheme == "file" && destinationExists(context, uri) == null) continue
 						uri?.let { deleteDestination(context, it) }
 						put(
 							context,
@@ -272,7 +274,14 @@ object RecordingTaskStore {
 		if (SmbRecordingOutput.isShare(uri)) return null
 		if (uri.scheme == "file") {
 			return try {
-				java.io.File(uri.path!!).exists()
+				val file = java.io.File(uri.path!!)
+				when {
+					file.exists() -> true
+					// An unplugged drive: its recordings are away, not gone.
+					android.os.Environment.getExternalStorageState(file) !=
+						android.os.Environment.MEDIA_MOUNTED -> null
+					else -> false
+				}
 			} catch (_: Exception) { null }
 		}
 		if (RecordingDestination.isDocument(context, uri)) {

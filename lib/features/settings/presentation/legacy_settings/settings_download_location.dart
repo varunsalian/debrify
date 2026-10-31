@@ -110,6 +110,10 @@ class SettingsDownloadLocation {
       await chooseDownloadFolderDesktop();
       return;
     }
+    if (!await AndroidNativeDownloader.canPickFolders()) {
+      await _explainNoFolderPicker();
+      return;
+    }
     final res = await AndroidNativeDownloader.pickDownloadDirectory();
     if (res == null) return; // user backed out of the picker
     final newTree = (res['treeUri'] ?? '').toString();
@@ -127,6 +131,31 @@ class SettingsDownloadLocation {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('New downloads will be saved to "$name"')),
+    );
+  }
+
+  /// Many Android TV boxes have no system folder picker: say so, rather
+  /// than leave the button doing nothing.
+  Future<void> _explainNoFolderPicker() async {
+    if (!_deps.mounted()) return;
+    final context = _deps.context();
+    if (!context.mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('No folder picker on this TV'),
+        content: const Text(
+          'This TV has no system folder picker, so downloads are saved to '
+          'Downloads/Debrify on this device.',
+        ),
+        actions: [
+          TextButton(
+            autofocus: true,
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
     );
   }
 

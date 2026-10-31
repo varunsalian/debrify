@@ -432,6 +432,7 @@ class VpIptvRecording {
     required bool userInitiated,
   }) async {
     var published = false;
+    var savedTo = const RecordingOutputSettings();
     // One snapshot for both the native publish and its result text, so the
     // snackbar can never name a folder other than the one the file went to.
     final output = await AndroidNativeDownloader.readRecordingOutput();
@@ -442,8 +443,14 @@ class VpIptvRecording {
         fileName: fileName,
         mimeType: 'video/x-matroska',
         treeUri: output.treeUri,
+        directoryPath: output.directoryPath,
       );
       published = uri != null;
+      // A drive that went away: the native side saved to Downloads instead.
+      final onDrive = output.treeUri == null && output.directoryPath != null;
+      savedTo = onDrive && !(uri ?? '').startsWith('file:')
+          ? const RecordingOutputSettings()
+          : output;
     } catch (e) {
       debugPrint('VideoPlayer: publish recording failed: $e');
     }
@@ -455,7 +462,7 @@ class VpIptvRecording {
       SnackBar(
         content: Text(
           published
-              ? 'Recording saved to ${recordingLocationLabel(output)}'
+              ? 'Recording saved to ${recordingLocationLabel(savedTo)}'
               : "Recording couldn't be added to Downloads — "
                     'will retry next launch',
         ),

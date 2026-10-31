@@ -20,9 +20,14 @@ abstract interface class RecordingOutputStoreApi {
 }
 
 /// Result of the folder picker: null means cancelled, otherwise the chosen
-/// folder (a SAF tree on Android, a directory path on desktop).
+/// folder (a SAF tree on Android, a directory path on desktop or on an
+/// Android drive chosen without a system picker). [context] is this page's,
+/// for a picker that shows its own dialog; [current] is what is saved now.
 typedef RecordingFolderPick =
-    Future<({String? treeUri, String? displayName, String? path})?> Function();
+    Future<({String? treeUri, String? displayName, String? path})?> Function(
+      BuildContext context,
+      RecordingOutputSettings current,
+    );
 
 /// Plain [StatefulWidget] entry point: push it with a route like any other
 /// page; the AppBar back button closes it.
@@ -74,18 +79,22 @@ class _RecordingOutputSettingsPageState
   Future<void> _pickFolder() async {
     final picker = widget.folderPicker!;
     final current = _settings ?? const RecordingOutputSettings();
-    final pick = await picker();
+    final pick = await picker(context, current);
     if (pick == null || !mounted) return;
     final displayName = pick.displayName;
     final path = pick.path;
+    // From a clean folder: a drive chosen after a picked tree must not keep
+    // the tree, which would still win on the native side.
     await _save(
-      current.copyWith(
-        treeUri: pick.treeUri,
-        treeDisplayName: displayName == null || displayName.isEmpty
-            ? (path == null || path.isEmpty ? 'Chosen folder' : path)
-            : displayName,
-        directoryPath: path,
-      ),
+      current
+          .copyWith(clearFolder: true)
+          .copyWith(
+            treeUri: pick.treeUri,
+            treeDisplayName: displayName == null || displayName.isEmpty
+                ? (path == null || path.isEmpty ? 'Chosen folder' : path)
+                : displayName,
+            directoryPath: path,
+          ),
     );
   }
 
