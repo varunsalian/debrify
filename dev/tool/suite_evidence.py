@@ -18,6 +18,10 @@
   check KNOWN PATHS...         CI: run PATHS (`@file` = one path per line); fail on any failure not listed in
                                KNOWN (one suite::name per line) and on any
                                listed identity that no longer exists.
+  check --shard I/N KNOWN PATHS...
+                               the same for every N-th test path from index I
+                               (CI runs N shards in parallel); only KNOWN
+                               entries in this shard's files are expected.
 
 <evidence> is `refactor-evidence/` in the git common directory, so every
 worktree of a clone shares it; it is never committed. A fresh clone has no
@@ -295,10 +299,26 @@ def failure_details(path, identities):
             print(event.get('stackTrace', ''))
 
 
-def cmd_check(known_file, paths):
+def shard_of(paths, shard):
+    """Every n-th test path from index i for shard `i/n`; flags stay on all."""
+    index, count = (int(part) for part in shard.split('/'))
+    if not 0 <= index < count:
+        raise SystemExit(f'bad shard {shard}: want i/n with 0 <= i < n')
+    tests = [p for p in paths if not p.startswith('-')]
+    flags = [p for p in paths if p.startswith('-')]
+    return tests[index::count] + flags
+
+
+def cmd_check(known_file, paths, shard=None):
     paths = expand(paths)
+    if shard:
+        paths = shard_of(paths, shard)
     known = {line.strip() for line in Path(known_file).read_text().splitlines()
              if line.strip() and not line.startswith('#')}
+    if shard:
+        # A shard answers only for the known failures in its own files.
+        mine = {p for p in paths if not p.startswith('-')}
+        known = {k for k in known if k.split('::', 1)[0] in mine}
     # A per-run file: parallel worktrees running `check` at the same time
     # must not overwrite each other's results.
     fd, name = tempfile.mkstemp(prefix='suite_evidence_check-', suffix='.jsonl',
@@ -328,6 +348,8 @@ def main(argv):
         return cmd_run(argv[1], expand(argv[2:]))
     if argv and argv[0] == 'compare':
         return cmd_compare(argv[1:])
+    if len(argv) >= 4 and argv[0] == 'check' and argv[1] == '--shard':
+        return cmd_check(argv[3], argv[4:], shard=argv[2])
     if len(argv) >= 3 and argv[0] == 'check':
         return cmd_check(argv[1], argv[2:])
     print(__doc__)

@@ -1,13 +1,9 @@
-# Exact failures still observed in settings/gate2 and its baseline (Flutter 3.44.8).
-# Remove entries when they pass; no new regression may enter this list.
-test/profiles/profile_source_guard_test.dart::direct SharedPreferences opens stay inside reviewed adapters/stores
-test/services/webdav_sync/webdav_sync_hot_merge_test.dart::appearance stays local through build, legacy merge and materialization
-
-# 2026-10-04 merged_detail step 0: pre-existing, newly exposed by CI coverage; observed in merged_detail/base
-test/detail_theme_test.dart::no raw colour literals survive in the themed files detail_episode_cells.dart
-test/search_title_suggestions_test.dart::unresolved suggestion submits Catalog title search (error: false)
-test/search_title_suggestions_test.dart::unresolved suggestion submits Catalog title search (error: true)
-# 2026-10-04 spotlight_board step 0: pre-existing, newly exposed by CI coverage; observed in spotlight_board/base
-test/collection_native_browser_test.dart::Spotlight Home folder opens all rows directly: TargetPlatform.android TV false
-test/collection_native_browser_test.dart::Spotlight Home folder opens all rows directly: TargetPlatform.iOS TV false
-test/spotlight_board_compact_test.dart::compact presentation the touch hero asks for a trailer immediately without paging the reel
+# Exact failures still observed in CI's behaviour suite (Flutter 3.44.8), one
+# suite::name per line. Remove entries when they pass; no new regression may
+# enter this list.
+#
+# Empty since 2026-10-31: the last eight entries were fixed (Spotlight
+# collection rows on phones, the hold-hint pill guard, the profile store
+# guard) or their tests updated to deliberate behaviour (2 s trailer dwell,
+# TMDB-only suggestions opening details, imported launch animations staying
+# out of backups).

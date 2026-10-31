@@ -85,10 +85,15 @@ jobs:
           python3 dev/tool/check_analyzer_allowlist.py analyze.txt
 
   sources-behavior:
-    # The ~8-minute behaviour suite runs on PRs, main, manual runs, and on
-    # refactor pushes where ANY pushed commit's message marks a full-suite gate
-    # ("gate") or asks for it ("[full-ci]"). Every push still gets the cheap
-    # size, architecture, format and analyzer jobs above.
+    # The behaviour suite runs on PRs, main, manual runs, and on refactor
+    # pushes where ANY pushed commit's message marks a full-suite gate ("gate")
+    # or asks for it ("[full-ci]"). Every push still gets the cheap size,
+    # architecture, format and analyzer jobs above. Run serially it takes
+    # about 2.5 hours, so it is split into parallel shards (~20 minutes).
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
     if: >-
       github.event_name != 'push' ||
       github.ref == 'refs/heads/main' ||
@@ -107,12 +112,12 @@ jobs:
       - run: flutter pub get
       # Sources/TorrentPlaybackService behaviour tests. Fails on any failure
       # not listed by exact identity, and on a listed one that passes or is gone.
-      - run: python3 dev/tool/suite_evidence.py check dev/tool/ci_behavior_known_failures.txt @dev/tool/ci_behavior_tests.txt --dart-define=SETTINGS_WIDGETS_REQUIRE_ORIGINAL_LINUX=true --dart-define=PREMIUMIZE_REQUIRE_ORIGINAL_LINUX=true --dart-define=DEBRIFY_VP_TEST_HOOKS=true --concurrency=1
+      - run: python3 dev/tool/suite_evidence.py check --shard ${{ matrix.shard }}/8 dev/tool/ci_behavior_known_failures.txt @dev/tool/ci_behavior_tests.txt --dart-define=SETTINGS_WIDGETS_REQUIRE_ORIGINAL_LINUX=true --dart-define=PREMIUMIZE_REQUIRE_ORIGINAL_LINUX=true --dart-define=DEBRIFY_VP_TEST_HOOKS=true --concurrency=1
       # Keep the exact runner error/trace when a CI-only failure needs review.
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: sources-behavior-evidence
+          name: sources-behavior-evidence-${{ matrix.shard }}
           path: |
             /tmp/suite_evidence_check-*.jsonl
             /tmp/suite_evidence_check-*.stderr
