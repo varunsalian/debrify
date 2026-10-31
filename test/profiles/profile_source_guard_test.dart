@@ -16,7 +16,12 @@ void main() {
         'lib/services/profiles/profile_package_service.dart': 1,
         'lib/services/profiles/profile_data_generation.dart': 5,
         'lib/services/profiles/native_profile_projection.dart': 3,
-        'lib/services/profiles/device_key_provider.dart': 5,
+        // Device key state, including the Linux passphrase vault's wrapped
+        // key (create, unlock, recover): device-wide, never profile data.
+        'lib/services/profiles/device_key_provider.dart': 7,
+        // The device's own "a sync save is still pending" receipt
+        // (debrify_device_webdav_save_pending_v1), not a profile setting.
+        'lib/services/webdav_sync/webdav_sync_save_feedback.dart': 1,
         // Adoption must enumerate and atomically project whole scoped stores;
         // the exact count keeps any additional raw access review-visible.
         'lib/services/webdav_sync/webdav_sync_adoption_operations.dart': 2,
@@ -65,6 +70,9 @@ void main() {
       'lib/services/profiles/profile_bootstrap.dart',
       'lib/services/profiles/profile_migration_service.dart',
       'lib/services/profiles/profile_database_snapshot.dart',
+      // Storage Usage sizes files by name to label them; it never opens a
+      // database, so it cannot bypass the scoped paths.
+      'lib/features/storage_usage/data/storage_scanner.dart',
     };
     final violations = <String>[];
     for (final entity in Directory('lib').listSync(recursive: true)) {

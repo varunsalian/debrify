@@ -475,7 +475,7 @@ void main() {
     });
 
     testWidgets(
-        'the touch hero asks for a trailer immediately without paging the reel',
+        'the touch hero asks for a trailer after a short dwell without paging the reel',
         (tester) async {
       // Start useful trailer work as soon as the visible hero is eligible,
       // and change nothing else.
@@ -503,8 +503,10 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      expect(dwelled, isEmpty, reason: 'nothing before the dwell');
+      await tester.pump(const Duration(seconds: 2));
       expect(dwelled, ['tt1'],
-          reason: 'the resolve starts for the visible slide immediately');
+          reason: 'the resolve starts for the visible slide after 2 s');
       expect(find.text('Alpha'), findsWidgets,
           reason: 'and the reel has not moved');
 
@@ -512,6 +514,7 @@ void main() {
       await tester.fling(
           find.byType(SpotlightBoard), const Offset(-260, 0), 900);
       await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 2));
       expect(dwelled, ['tt1', 'tt2']);
     });
 

@@ -937,9 +937,11 @@ void main() {
           isFalse,
           reason: key,
         );
+        // An imported launch animation is a file on this device: its ID
+        // stays out of backups too (EXTERNAL_LAUNCH_ANIMATIONS_PLAN.md).
         expect(
           ProfilePreferencePortability.allowsKey(key),
-          isTrue,
+          key != 'imported_launch_animation_v1',
           reason: key,
         );
       }

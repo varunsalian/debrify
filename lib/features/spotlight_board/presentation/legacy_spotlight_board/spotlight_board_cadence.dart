@@ -79,8 +79,8 @@ class SpotlightBoardCadence {
     if (view.dpad && (_owners.navigation.row >= 0 || !view.heroNode.hasFocus)) {
       return;
     }
-    // Keep the handoff cancellable so a focus/route change in this event loop
-    // can still stop the resolve, but add no user-visible dwell.
+    // A short, cancellable dwell before the trailer resolve starts, so a
+    // focus or route change (or a quick swipe on) stops it first.
     _owners.hero.cadence = Timer(
       const Duration(seconds: 2),
       _sections.cadence.onArtDone,

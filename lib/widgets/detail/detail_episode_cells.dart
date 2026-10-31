@@ -312,6 +312,10 @@ class _DetailHoldHintState extends State<DetailHoldHint> {
   }
 }
 
+/// The hold-hint pill's ink: white on its own black glass, the same in every
+/// theme (the pill floats above the page, not on a themed surface).
+const Color _holdPillInk = Color(0xFFFFFFFF);
+
 /// Black glass with white ink, so it reads over artwork and over a light
 /// theme's ground alike — it floats above the page, not inside it.
 class _DetailHoldHintPill extends StatelessWidget {
@@ -324,7 +328,7 @@ class _DetailHoldHintPill extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.72),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
+        border: Border.all(color: _holdPillInk.withValues(alpha: 0.22)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -332,13 +336,13 @@ class _DetailHoldHintPill extends StatelessWidget {
           Icon(
             Icons.more_horiz_rounded,
             size: 15,
-            color: Colors.white.withValues(alpha: 0.92),
+            color: _holdPillInk.withValues(alpha: 0.92),
           ),
           const SizedBox(width: 6),
           Text(
             'Long press for more actions',
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.92),
+              color: _holdPillInk.withValues(alpha: 0.92),
               fontSize: 12,
               fontWeight: FontWeight.w600,
             ),

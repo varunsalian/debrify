@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import 'dart:ui' show Size;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -11,15 +12,17 @@ import 'surface_gallery.dart';
 /// Foundation goldens: the boundary demo under legacy, one dark theme and one
 /// light theme. Regenerate deliberately with:
 ///   flutter test test/theme/goldens_test.dart --update-goldens
+/// and, for CI's Linux renderer,
+///   GOLDEN_GLOB='test/theme/goldens/linux/*.png' \
+///     dev/tool/capture_linux_goldens.sh test/theme/goldens_test.dart
 void main() {
   setUpAll(disableRuntimeFonts);
 
   testWidgets('boundary demo — legacy', (tester) async {
-    await pumpThemed(tester, const BoundaryDemo(),
-        themeId: AppThemes.legacyId);
+    await pumpThemed(tester, const BoundaryDemo(), themeId: AppThemes.legacyId);
     await expectLater(
       find.byType(BoundaryDemo),
-      matchesGoldenFile('goldens/boundary_demo_legacy.png'),
+      matchesGoldenFile(_golden('boundary_demo_legacy.png')),
     );
   });
 
@@ -27,7 +30,7 @@ void main() {
     await pumpThemed(tester, const BoundaryDemo(), themeId: 'signal');
     await expectLater(
       find.byType(BoundaryDemo),
-      matchesGoldenFile('goldens/boundary_demo_signal.png'),
+      matchesGoldenFile(_golden('boundary_demo_signal.png')),
     );
   });
 
@@ -35,17 +38,22 @@ void main() {
     await pumpThemed(tester, const BoundaryDemo(), themeId: 'broadsheet');
     await expectLater(
       find.byType(BoundaryDemo),
-      matchesGoldenFile('goldens/boundary_demo_broadsheet.png'),
+      matchesGoldenFile(_golden('boundary_demo_broadsheet.png')),
     );
   });
 
-  testWidgets('boundary demo — broadsheet × dim (preset on a light ground)',
-      (tester) async {
-    await pumpThemed(tester, const BoundaryDemo(),
-        themeId: 'broadsheet', preset: TextBrightness.dim);
+  testWidgets('boundary demo — broadsheet × dim (preset on a light ground)', (
+    tester,
+  ) async {
+    await pumpThemed(
+      tester,
+      const BoundaryDemo(),
+      themeId: 'broadsheet',
+      preset: TextBrightness.dim,
+    );
     await expectLater(
       find.byType(BoundaryDemo),
-      matchesGoldenFile('goldens/boundary_demo_broadsheet_dim.png'),
+      matchesGoldenFile(_golden('boundary_demo_broadsheet_dim.png')),
     );
   });
 
@@ -56,12 +64,21 @@ void main() {
   // automatically; these exist so a human can also just look.
   for (final id in const ['legacy', 'broadsheet', 'concrete', 'noir']) {
     testWidgets('surface gallery — $id', (tester) async {
-      await pumpThemed(tester, const SurfaceGallery(),
-          themeId: id, surface: const Size(900, 2400));
+      await pumpThemed(
+        tester,
+        const SurfaceGallery(),
+        themeId: id,
+        surface: const Size(900, 2400),
+      );
       await expectLater(
         find.byType(SurfaceGallery),
-        matchesGoldenFile('goldens/surface_gallery_$id.png'),
+        matchesGoldenFile(_golden('surface_gallery_$id.png')),
       );
     });
   }
 }
+
+/// Linux renders text and anti-aliasing differently from macOS, so CI's
+/// Linux runners compare against their own captures.
+String _golden(String file) =>
+    'goldens/${Platform.isLinux ? 'linux/' : ''}$file';

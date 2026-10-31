@@ -385,7 +385,11 @@ void main() {
 
   for (final fails in [false, true]) {
     testWidgets(
-      'unresolved suggestion submits Catalog title search (error: $fails)',
+      // Native (TMDB) identities open their details directly since the
+      // native-title support (docs/simkl-native-title-support.md): an IMDb
+      // lookup that finds nothing, or fails, no longer falls back to a
+      // catalog text search.
+      'unresolved suggestion opens its details by native id (error: $fails)',
       (tester) async {
         await mount(
           tester,
@@ -398,15 +402,8 @@ void main() {
         await tester.pump(const Duration(milliseconds: 350));
         await tester.pump();
         await drive(tester, () => tester.tap(find.text('Dune (2021)')));
-        expect(find.byType(MergedDetailScreen), findsNothing);
-        expect(find.text('No catalog matches'), findsOneWidget);
-        expect(
-          tester
-              .widget<TvTextField>(find.byType(TvTextField).first)
-              .controller
-              .text,
-          'Dune',
-        );
+        expect(find.byType(MergedDetailScreen), findsOneWidget);
+        expect(find.text('No catalog matches'), findsNothing);
         expect(find.text('Retry'), findsNothing);
         await drive(tester, () => tester.pumpWidget(const SizedBox.shrink()));
       },
