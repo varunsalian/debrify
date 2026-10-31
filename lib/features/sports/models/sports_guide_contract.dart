@@ -11,9 +11,18 @@ import 'sports_models.dart';
 /// sides; a tournament has one, its title).
 @immutable
 class SportsEventNeedles {
-  const SportsEventNeedles(this.sides, {this.around, this.sport});
+  const SportsEventNeedles(
+    this.sides, {
+    this.pairs = const [],
+    this.around,
+    this.sport,
+  });
 
   final List<List<String>> sides;
+
+  /// Phrases that name the whole game on their own ("rsa v aus"): a title
+  /// holding one is about the event even without the full team names.
+  final List<String> pairs;
 
   /// When the event is on (its start, or now while a multi-day event is
   /// live): a stream name dated days away from this is another game.
@@ -29,6 +38,7 @@ class SportsEventNeedles {
       (other is SportsEventNeedles &&
           other.around == around &&
           other.sport == sport &&
+          listEquals(other.pairs, pairs) &&
           other.sides.length == sides.length &&
           [
             for (var i = 0; i < sides.length; i++)
@@ -39,6 +49,7 @@ class SportsEventNeedles {
   int get hashCode => Object.hash(
     around,
     sport,
+    Object.hashAll(pairs),
     Object.hashAll([for (final s in sides) Object.hashAll(s)]),
   );
 }

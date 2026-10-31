@@ -367,6 +367,8 @@ class SportsBoardController extends Notifier<SportsBoardState> {
             channels: snapshot.channels,
             namedChannels: snapshot.namedChannels,
             now: now,
+            tourCoverage:
+                near.where((e) => e.leagueId == event.leagueId).length == 1,
           ),
       },
       liveSportsListings: snapshot.liveSportsListings,
@@ -414,9 +416,9 @@ class SportsBoardController extends Notifier<SportsBoardState> {
     final needles = <String>[];
     for (final event in events) {
       for (final broadcaster in event.broadcasts) {
-        final base = channelBaseName(broadcaster);
-        if (base.isEmpty || needles.contains(base)) continue;
-        needles.add(base);
+        for (final base in sportsBroadcasterNeedles(broadcaster)) {
+          if (!needles.contains(base)) needles.add(base);
+        }
       }
     }
     return needles;

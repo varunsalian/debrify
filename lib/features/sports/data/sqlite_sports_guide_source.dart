@@ -411,10 +411,18 @@ class _GuideAccumulator {
   );
 }
 
-/// One LIKE token per needle: its longest word (ties → first) of 4+ characters.
+/// One LIKE token per needle: its longest word (ties → first) of 4+
+/// characters; a short code pair ("rsa v aus") is its own token, whole.
 List<String> _titleTokens(List<String> needles) {
   final tokens = <String>[];
   for (final needle in needles) {
+    if (_codePair.hasMatch(needle)) {
+      // Spaces as wildcards: "RSA v. AUS" and "RSA vs. AUS" still pass the
+      // pre-filter; the normalized check after it decides.
+      final token = needle.replaceAll(' ', '%');
+      if (!tokens.contains(token)) tokens.add(token);
+      continue;
+    }
     var longest = '';
     for (final word in needle.split(' ')) {
       if (word.length > longest.length) longest = word;
@@ -469,6 +477,7 @@ int _columnMillis(Object? value) => value is num ? value.toInt() : 0;
 int _toMillis(DateTime value) => value.toUtc().millisecondsSinceEpoch;
 
 final RegExp _digits = RegExp(r'^[0-9]+$');
+final RegExp _codePair = RegExp(r'^[a-z]{2,4} vs? [a-z]{2,4}$');
 
 const int _minTokenLength = 4;
 const int _tokenChunk = 40;

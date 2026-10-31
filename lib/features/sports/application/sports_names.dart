@@ -198,3 +198,52 @@ int channelQualityRank(String channelName) {
   if (tokens.any(_hdTokens.contains)) return 1;
   return 0;
 }
+
+/// The full channel names behind the short broadcaster names the feed uses,
+/// keyed by [channelBaseName] of the short form: "Golf Chnl" is the channel
+/// every playlist calls "Golf Channel".
+const Map<String, List<String>> _broadcasterAliases = {
+  'golf chnl': ['golf channel', 'nbc golf'],
+  'tennis chnl': ['tennis channel'],
+  'usa net': ['usa network'],
+  'btn': ['big ten network'],
+  'msgsn': ['msg sportsnet', 'msg sports network'],
+  'tele': ['telemundo'],
+  'nfl net': ['nfl network'],
+  'mlb net': ['mlb network'],
+  'nhl net': ['nhl network'],
+  'cbssn': ['cbs sports network'],
+};
+
+/// Channel base names to look for when the feed names [broadcaster]: its own
+/// base name plus the full names of a known short form.
+List<String> sportsBroadcasterNeedles(String broadcaster) {
+  final base = channelBaseName(broadcaster);
+  if (base.isEmpty) return const [];
+  return [base, ...?_broadcasterAliases[base]];
+}
+
+/// Country codes cricket listings use for national sides ("Int CRI '26: RSA
+/// v AUS 3rd Test"), keyed by [normalizeSportsText]ed team name.
+const Map<String, List<String>> kCricketCountryCodes = {
+  'south africa': ['rsa', 'sa'],
+  'australia': ['aus'],
+  'india': ['ind'],
+  'england': ['eng'],
+  'new zealand': ['nz', 'nzl'],
+  'pakistan': ['pak'],
+  'sri lanka': ['sl', 'slk'],
+  'bangladesh': ['ban'],
+  'west indies': ['wi'],
+  'afghanistan': ['afg'],
+  'zimbabwe': ['zim'],
+  'ireland': ['ire'],
+  'netherlands': ['ned'],
+  'united arab emirates': ['uae'],
+  'scotland': ['sco'],
+  'namibia': ['nam'],
+  'nepal': ['nep'],
+  'oman': ['oma'],
+  'united states': ['usa'],
+  'canada': ['can'],
+};

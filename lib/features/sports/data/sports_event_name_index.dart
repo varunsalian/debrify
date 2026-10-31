@@ -45,10 +45,11 @@ class SportsEventNameIndex {
 }
 
 bool _namesAllSides(SportsEventNeedles event, String normalized) =>
-    event.sides.isNotEmpty &&
-    event.sides.every(
-      (variants) => variants.any((v) => sportsTextContains(normalized, v)),
-    );
+    (event.sides.isNotEmpty &&
+        event.sides.every(
+          (variants) => variants.any((v) => sportsTextContains(normalized, v)),
+        )) ||
+    sportsTitleNamesCodePair(normalized, event.pairs);
 
 Map<String, Set<int>> _teamEventsByWord(List<SportsEventNeedles> events) {
   final byWord = <String, Set<int>>{};

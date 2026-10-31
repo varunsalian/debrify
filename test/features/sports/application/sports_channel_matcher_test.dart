@@ -657,7 +657,7 @@ void main() {
 
     test('a golf tournament matches without its sponsor name', () {
       final golf = titled('pga', 'VidantaWorld Mexico Open');
-      expect(sportsTitleNeedles(golf), ['mexico open']);
+      expect(sportsTitleNeedles(golf), ['mexico open', 'pga tour golf']);
       expect(
         guideNames(golf, [
           _listing('Golf Channel', 'PGA Tour Golf: Mexico Open, Round 1'),
@@ -665,6 +665,56 @@ void main() {
         ]),
         ['Golf Channel'],
       );
+    });
+
+    test('live tour coverage counts for the tour\'s event of the week', () {
+      final pga = titled('pga', 'VidantaWorld Mexico Open');
+      final lpga = titled('lpga', 'Maybank Championship');
+      final listings = [
+        _listing('US: GOLF CHANNEL HD', 'Live: PGA Tour Golf'),
+        _listing('Golf Replay', 'PGA Tour Golf'),
+        _listing('Champions TV', 'Live: PGA Tour Champions Golf'),
+        _listing('Golf Channel LPGA', 'Live: LPGA Tour Golf'),
+      ];
+      // Live only, and not the Champions tour.
+      expect(guideNames(pga, listings), ['US: GOLF CHANNEL HD']);
+      expect(guideNames(lpga, listings), ['Golf Channel LPGA']);
+      // With two PGA events on (an opposite-field week), untitled tour
+      // coverage could be either: only a title naming the event counts.
+      final shared = matchSportsEvent(
+        pga,
+        listings: listings,
+        channels: const [],
+        now: _kickOff,
+        tourCoverage: false,
+      );
+      expect(shared.guide, isEmpty);
+    });
+
+    test('a cricket listing by country codes names the game', () {
+      final test = SportsEvent(
+        id: 'rsa-aus',
+        leagueId: 'intl-cricket',
+        start: _kickOff,
+        status: SportsEventStatus.live,
+        home: _team('sa', 'South Africa', shortName: 'S Africa'),
+        away: _team('aus', 'Australia'),
+      );
+      expect(sportsCodePairs(test), contains('rsa v aus'));
+      expect(sportsTitleNeedles(test), contains('rsa v aus'));
+      expect(
+        guideNames(test, [
+          _listing('SuperSport Cricket', "Int CRI '26: RSA v AUS 3rd Test D4"),
+          _listing('SS Grandstand', "Int CRI HL '26: RSA v AUS 3rd Test D4"),
+          _listing('Some Channel', 'Australia aus documentary'),
+          // Same countries, other games: rugby, the women's side.
+          _listing('SuperSport Rugby', 'Rugby Championship: RSA v AUS'),
+          _listing('SS Variety', "Int CRI W '26: RSA v AUS 1st T20"),
+        ]),
+        ['SuperSport Cricket'],
+      );
+      // Codes are a cricket thing only.
+      expect(sportsCodePairs(_matchEvent()), isEmpty);
     });
 
     test('a NASCAR race matches by its venue', () {
@@ -894,6 +944,32 @@ void main() {
       );
       expect(options.isEmpty, isTrue);
     });
+  });
+
+  test('a short broadcaster name finds the channel under its full name', () {
+    final golf = SportsEvent(
+      id: 'pga-1',
+      leagueId: 'pga',
+      start: _kickOff,
+      status: SportsEventStatus.live,
+      title: 'VidantaWorld Mexico Open',
+      broadcasts: const ['Golf Chnl'],
+    );
+    final options = matchSportsEvent(
+      golf,
+      listings: const [],
+      channels: [_channel('US: GOLF CHANNEL HD'), _channel('Golf TV')],
+      now: _kickOff,
+    );
+    expect(options.possible.map((o) => o.channel.name), [
+      'US: GOLF CHANNEL HD',
+    ]);
+    expect(sportsBroadcasterNeedles('Golf Chnl'), [
+      'golf chnl',
+      'golf channel',
+      'nbc golf',
+    ]);
+    expect(sportsBroadcasterNeedles('ESPN'), ['espn']);
   });
 
   group('tennis surnames', () {

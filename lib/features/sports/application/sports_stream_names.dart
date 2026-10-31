@@ -20,6 +20,10 @@ const List<String> kSportsNonLiveWords = [
   'goals show',
   // Fox Sports' 20-minute highlights packages: "South Africa v Australia Mini".
   'mini',
+  // Listing shorthand for highlights: "Int CRI HL '26: RSA v AUS",
+  // "Sri Lanka v England Hlts".
+  'hl',
+  'hlts',
 ];
 
 /// Separators between the two sides in a stream name ("A vs B", "A v B",
@@ -339,4 +343,28 @@ List<({int start, int end})> _spans(String padded, List<String> variants) {
     }
   }
   return spans;
+}
+
+/// Words that mark a listing as cricket, so a code pair ("RSA v AUS") is
+/// not a rugby, hockey or netball game between the same countries.
+const Set<String> _cricketWords = {
+  'cri',
+  'cricket',
+  'test',
+  'odi',
+  'odis',
+  't20',
+  't20i',
+  't20is',
+};
+
+/// Whether a guide title (normalized) names a men's cricket game by one of
+/// its country-code [pairs]: the pair, a cricket word, and no women's or
+/// youth marker ("Int CRI W '26: RSA v AUS", "IND v ENG U19").
+bool sportsTitleNamesCodePair(String normalized, List<String> pairs) {
+  if (pairs.isEmpty) return false;
+  if (!pairs.any((pair) => sportsTextContains(normalized, pair))) return false;
+  final words = normalized.split(' ');
+  if (!words.any(_cricketWords.contains)) return false;
+  return !words.any((w) => _labelQualifiers.contains(w) || w == 'xi');
 }

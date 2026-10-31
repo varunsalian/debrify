@@ -76,6 +76,9 @@ List<String> sportsTitleNeedles(SportsEvent event) {
         if (!needles.contains(variant)) needles.add(variant);
       }
     }
+    for (final pair in sportsCodePairs(event)) {
+      if (!needles.contains(pair)) needles.add(pair);
+    }
     return needles;
   }
   final raw = event.title ?? '';
@@ -96,9 +99,14 @@ List<String> sportsTitleNeedles(SportsEvent event) {
       ];
     case SportKind.golf:
       // Sponsors come and go in listings ("Mexico Open" vs "VidantaWorld
-      // Mexico Open"): match the last two words.
+      // Mexico Open"): match the last two words. Then the tour's own
+      // coverage title, which never names the event ("Live: PGA Tour
+      // Golf"); a tour plays one event a week, so live tour coverage is it.
       final words = title.split(' ');
-      return [words.skip(words.length > 2 ? words.length - 2 : 0).join(' ')];
+      return [
+        words.skip(words.length > 2 ? words.length - 2 : 0).join(' '),
+        ...?_golfTourTitles[event.leagueId],
+      ];
     case SportKind.motorsport:
       final venue = _atVenue.firstMatch(title)?.group(1);
       if (venue != null && venue.isNotEmpty) return [venue];
@@ -125,6 +133,48 @@ List<String> sportsSideVariants(SportsEvent event, SportsTeam side) {
       : [...variants, surname];
 }
 
+/// Coverage titles of a golf tour, by league id ("PGA Tour Champions Golf"
+/// is another tour and does not contain "pga tour golf").
+const Map<String, List<String>> _golfTourTitles = {
+  'pga': ['pga tour golf'],
+  'lpga': ['lpga tour golf', 'lpga golf'],
+};
+
+/// Country-code pairs a cricket listing may name the game by ("RSA v AUS",
+/// "aus vs rsa"), from [kCricketCountryCodes] and the feed's abbreviations.
+/// Empty for other sports and for sides without a known code.
+List<String> sportsCodePairs(SportsEvent event) {
+  if (!event.isTeamEvent ||
+      sportsLeagueById(event.leagueId)?.sport != SportKind.cricket) {
+    return const [];
+  }
+  List<String> codes(SportsTeam team) {
+    final out = <String>[
+      ...?kCricketCountryCodes[normalizeSportsText(team.name)],
+    ];
+    final abbreviation = normalizeSportsText(team.abbreviation);
+    if (abbreviation.length >= 2 &&
+        abbreviation.length <= 4 &&
+        !abbreviation.contains(' ') &&
+        !out.contains(abbreviation) &&
+        out.isNotEmpty) {
+      out.add(abbreviation);
+    }
+    return out;
+  }
+
+  final home = codes(event.home!);
+  final away = codes(event.away!);
+  return [
+    for (final h in home)
+      for (final a in away)
+        for (final separator in const ['v', 'vs']) ...[
+          '$h $separator $a',
+          '$a $separator $h',
+        ],
+  ];
+}
+
 /// What a guide title or channel name must mention to be about [event]: both
 /// sides for a game, else the event's title needles as one side; with when
 /// it is on (see [_eventDay]) and its sport.
@@ -137,6 +187,7 @@ SportsEventNeedles sportsEventNeedles(SportsEvent event, {DateTime? now}) {
         sportsSideVariants(event, event.home!),
         sportsSideVariants(event, event.away!),
       ],
+      pairs: sportsCodePairs(event),
       around: around,
       sport: sport,
     );
@@ -162,14 +213,19 @@ DateTime _eventDay(SportsEvent event, DateTime? now) =>
 /// grouped per channel base name into one option holding the best-quality
 /// copy, followed by channels whose own name names the match (a provider's
 /// event stream). Possible options come from the event's broadcasters.
+///
+/// [tourCoverage] lets a golf event claim its tour's untitled live coverage
+/// ("Live: PGA Tour Golf"); the caller turns it off when the tour has more
+/// than one event on, as in an opposite-field week.
 SportsWatchOptions matchSportsEvent(
   SportsEvent event, {
   required List<SportsGuideListing> listings,
   required List<SportsChannelRef> channels,
   List<SportsChannelRef> namedChannels = const [],
   DateTime? now,
+  bool tourCoverage = true,
 }) {
-  final guideGroups = _guideGroups(event, listings, now);
+  final guideGroups = _guideGroups(event, listings, now, tourCoverage);
   final namedGroups = _namedGroups(event, namedChannels, guideGroups.keys, now);
   final guide = [
     ..._guideOptions(event, guideGroups),
@@ -263,6 +319,7 @@ Map<String, List<SportsGuideListing>> _guideGroups(
   SportsEvent event,
   List<SportsGuideListing> listings,
   DateTime? now,
+  bool tourCoverage,
 ) {
   final homeVariants = event.isTeamEvent
       ? sportsSideVariants(event, event.home!)
@@ -273,6 +330,7 @@ Map<String, List<SportsGuideListing>> _guideGroups(
   final needles = event.isTeamEvent
       ? const <String>[]
       : sportsTitleNeedles(event);
+  final pairs = sportsCodePairs(event);
   final groups = <String, List<SportsGuideListing>>{};
   for (final listing in listings) {
     if (!_qualifies(
@@ -281,7 +339,9 @@ Map<String, List<SportsGuideListing>> _guideGroups(
       now: now,
       homeVariants: homeVariants,
       awayVariants: awayVariants,
+      pairs: pairs,
       needles: needles,
+      tourCoverage: tourCoverage,
     )) {
       continue;
     }
@@ -331,7 +391,9 @@ bool _qualifies(
   required DateTime? now,
   required List<String> homeVariants,
   required List<String> awayVariants,
+  required List<String> pairs,
   required List<String> needles,
+  required bool tourCoverage,
 }) {
   if (!_timingMatches(listing, event, now)) return false;
   final title = normalizeSportsText(listing.title);
@@ -339,15 +401,23 @@ bool _qualifies(
     return false;
   }
   if (event.isTeamEvent) {
-    return homeVariants.any((v) => sportsTextContains(title, v)) &&
-        awayVariants.any((v) => sportsTextContains(title, v));
+    return (homeVariants.any((v) => sportsTextContains(title, v)) &&
+            awayVariants.any((v) => sportsTextContains(title, v))) ||
+        sportsTitleNamesCodePair(title, pairs);
   }
   if (needles.isEmpty) return false;
   final sport = sportsLeagueById(event.leagueId)?.sport ?? SportKind.motorsport;
   final context =
       _contextPhrases[sport] ?? _contextPhrases[SportKind.motorsport]!;
   if (!context.any((phrase) => sportsTextContains(title, phrase))) return false;
-  // A fight card is found by either fighter; other events by their needle.
+  // A fight card is found by either fighter; a golf event by its name or by
+  // its tour's live coverage; other events by their needle.
+  if (sport == SportKind.golf &&
+      tourCoverage &&
+      sportsTextContains(title, 'live') &&
+      needles.skip(1).any((tour) => sportsTextContains(title, tour))) {
+    return true;
+  }
   return sport == SportKind.combat
       ? needles.any((needle) => sportsTextContains(title, needle))
       : sportsTextContains(title, needles.first);
@@ -385,8 +455,8 @@ List<SportsWatchOption> _possibleOptions(
   // Insertion order keeps broadcaster order, then channel order.
   final groups = <String, List<SportsChannelRef>>{};
   for (final broadcaster in event.broadcasts) {
-    final needle = channelBaseName(broadcaster);
-    if (needle.isEmpty) continue;
+    final needles = sportsBroadcasterNeedles(broadcaster);
+    if (needles.isEmpty) continue;
     // Bases grouped by an earlier broadcaster already hold every channel that
     // matches this needle, so they are skipped; bases opened by this
     // broadcaster keep collecting their remaining copies.
@@ -395,7 +465,9 @@ List<SportsWatchOption> _possibleOptions(
       final base = channelBaseName(channel.name);
       if (base.isEmpty) continue;
       if (guideBases.contains(base) || grouped.contains(base)) continue;
-      if (!_broadcasterMatches(needle, base)) continue;
+      if (!needles.any((needle) => _broadcasterMatches(needle, base))) {
+        continue;
+      }
       groups.putIfAbsent(base, () => <SportsChannelRef>[]).add(channel);
     }
   }

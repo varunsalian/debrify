@@ -691,6 +691,48 @@ void main() {
       expect(named.last.name, 'BD 1: Bangladesh vs West Indies');
     });
 
+    test('a short country-code pair still finds its listing', () {
+      final db = _GuideDatabase(path);
+      db.catalog();
+      db.channel(
+        name: 'SuperSport Cricket',
+        url: 'http://h/ss.ts',
+        attributes: const {'tvg-id': 'ss'},
+      );
+      db.guide();
+      db.programme(
+        channelId: 'ss',
+        title: "Int CRI '26: RSA v AUS 3rd Test D4",
+        startMs: _ms(-1),
+        stopMs: _ms(5),
+      );
+      db.programme(
+        channelId: 'ss',
+        title: 'Test Cricket: RSA v. AUS',
+        startMs: _ms(-1),
+        stopMs: _ms(5),
+      );
+
+      final snapshot = run(
+        db,
+        titleNeedles: const ['south africa', 'australia', 'rsa v aus'],
+        events: const [
+          SportsEventNeedles(
+            [
+              ['south africa'],
+              ['australia'],
+            ],
+            pairs: ['rsa v aus'],
+          ),
+        ],
+      );
+
+      expect(snapshot.listings.map((l) => l.title), [
+        "Int CRI '26: RSA v AUS 3rd Test D4",
+        'Test Cricket: RSA v. AUS',
+      ]);
+    });
+
     test('a single-side event never names a channel', () {
       final db = _GuideDatabase(path);
       db.catalog();
