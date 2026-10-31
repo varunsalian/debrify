@@ -394,10 +394,23 @@ void main() {
       listings: [listing],
       channels: const [SportsChannelRef(name: 'Paramount+ HD', url: 'b')],
       liveSportsListings: [listing],
+      namedChannels: const [
+        SportsChannelRef(name: 'UCL 04: Manchester United vs Como', url: 'c'),
+      ],
     );
     await h.controller.refresh();
 
     final query = h.guide.queries.single;
+    // Each near fixture goes along whole, both sides paired.
+    expect(
+      query.events.where(
+        (e) =>
+            e.sides.length == 2 &&
+            e.sides[0].contains('como') &&
+            e.sides[1].contains('manchester united'),
+      ),
+      hasLength(1),
+    );
     expect(query.nowUtc, h.clock);
     expect(query.fromUtc, h.clock.subtract(const Duration(hours: 3)));
     expect(query.toUtc, h.clock.add(const Duration(hours: 36)));
@@ -413,11 +426,11 @@ void main() {
     final live = h.state.events.firstWhere(
       (e) => e.status == SportsEventStatus.live,
     );
-    expect(
-      h.state.watchFor(live).guide.single.channel.name,
+    expect(h.state.watchFor(live).guide.map((o) => o.channel.name), [
       'Sky Sports Main Event',
-    );
-    expect(h.state.watchFor(live).guide.single.listing, listing);
+      'UCL 04: Manchester United vs Como',
+    ]);
+    expect(h.state.watchFor(live).guide.first.listing, listing);
     expect(
       h.state.watchFor(live).possible.single.channel.name,
       'Paramount+ HD',

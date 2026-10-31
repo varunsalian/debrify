@@ -1,4 +1,6 @@
 import 'package:debrify/features/sports/application/sports_channel_matcher.dart';
+import 'package:debrify/features/sports/application/sports_names.dart';
+import 'package:debrify/features/sports/application/sports_stream_names.dart';
 import 'package:debrify/features/sports/models/sports_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -775,4 +777,169 @@ void main() {
       );
     });
   });
+
+  group('channels named for the match', () {
+    SportsWatchOptions match({
+      List<SportsGuideListing> listings = const [],
+      List<SportsChannelRef> channels = const [],
+      required List<SportsChannelRef> named,
+      List<String> broadcasts = const [],
+    }) => matchSportsEvent(
+      _matchEvent(broadcasts: broadcasts),
+      listings: listings,
+      channels: channels,
+      namedChannels: named,
+      now: _kickOff,
+    );
+
+    test('an event stream naming both teams is a watch option', () {
+      final options = match(
+        named: [
+          _channel('UEFA 03: Arsenal vs Bayern Munich FHD'),
+          _channel('UEFA 03: Arsenal vs Bayern Munich HD'),
+        ],
+      );
+      expect(options.guide, hasLength(1));
+      final option = options.guide.single;
+      expect(option.kind, SportsMatchKind.channelName);
+      expect(option.listing, isNull);
+      // Copies of one stream merge, the sharper one leading.
+      expect(option.channel.name, 'UEFA 03: Arsenal vs Bayern Munich FHD');
+      expect(
+        option.variants.single.name,
+        'UEFA 03: Arsenal vs Bayern Munich HD',
+      );
+    });
+
+    test('guide listings come first, then named channels', () {
+      final options = match(
+        listings: _specListings(),
+        named: [_channel('Events 1: Arsenal v Bayern')],
+      );
+      expect(options.guide.map((o) => o.kind), [
+        SportsMatchKind.guide,
+        SportsMatchKind.channelName,
+      ]);
+    });
+
+    test('a club channel holding both names is not the derby', () {
+      final derby = SportsEvent(
+        id: 'sa-1',
+        leagueId: 'ucl',
+        start: _kickOff,
+        status: SportsEventStatus.live,
+        home: _team('int', 'Internazionale'),
+        away: _team('mil', 'AC Milan'),
+      );
+      final options = matchSportsEvent(
+        derby,
+        listings: const [],
+        channels: const [],
+        namedChannels: [
+          _channel('Inter Milan TV'),
+          _channel('Serie A 01: Inter vs Milan'),
+        ],
+        now: _kickOff,
+      );
+      expect(options.guide.map((o) => o.channel.name), [
+        'Serie A 01: Inter vs Milan',
+      ]);
+    });
+
+    test('same-day streams lead, then undated, then a day off', () {
+      final options = match(
+        named: [
+          _channel('NEXT | Arsenal vs Bayern | Tue 27 Oct 12:00'),
+          _channel('UCL 02: Arsenal vs Bayern'),
+          _channel('US (CBS 01) | Arsenal vs. Bayern (2026-10-28 19:55:00)'),
+        ],
+      );
+      expect(options.guide.map((o) => o.channel.name), [
+        'US (CBS 01) | Arsenal vs. Bayern (2026-10-28 19:55:00)',
+        'UCL 02: Arsenal vs Bayern',
+        'NEXT | Arsenal vs Bayern | Tue 27 Oct 12:00',
+      ]);
+    });
+
+    test('a channel naming one team, or a recap, is not', () {
+      final options = match(
+        listings: _specListings(),
+        named: [
+          _channel('Arsenal TV'),
+          _channel('Arsenal v Bayern Highlights'),
+        ],
+      );
+      expect(
+        options.guide.where((o) => o.kind == SportsMatchKind.channelName),
+        isEmpty,
+      );
+    });
+
+    test('a named channel is not offered again as a possible one', () {
+      final options = match(
+        named: [_channel('Arsenal v Bayern')],
+        channels: [_channel('Arsenal v Bayern')],
+        broadcasts: const ['Arsenal v Bayern'],
+      );
+      expect(options.guide, hasLength(1));
+      expect(options.possible, isEmpty);
+    });
+
+    test('non-team events never match by channel name', () {
+      final options = matchSportsEvent(
+        _raceEvent(),
+        listings: const [],
+        channels: const [],
+        namedChannels: [_channel('Mexico City Grand Prix 24/7')],
+      );
+      expect(options.isEmpty, isTrue);
+    });
+  });
+
+  group('tennis surnames', () {
+    final match = SportsEvent(
+      id: 'wta-1',
+      leagueId: 'wta',
+      start: _kickOff,
+      status: SportsEventStatus.live,
+      home: _team('ds', 'Diana Shnaider', shortName: 'D. Shnaider'),
+      away: _team('mp', 'Mia Pohankova', shortName: 'M. Pohankova'),
+    );
+
+    test('a player is also known by surname', () {
+      expect(sportsSideVariants(match, match.home!), contains('shnaider'));
+      // Team sports keep their names as they are.
+      final game = _matchEvent();
+      expect(sportsSideVariants(game, game.home!), ['arsenal']);
+    });
+
+    test('guide titles and stream names by surname both match', () {
+      final options = matchSportsEvent(
+        match,
+        listings: [
+          _listing('Tennis Channel', 'WTA Tokyo: Shnaider v Pohankova'),
+        ],
+        channels: const [],
+        namedChannels: [_channel('TENNIS 02: Shnaider vs Pohankova')],
+        now: _kickOff,
+      );
+      expect(options.guide.map((o) => o.kind), [
+        SportsMatchKind.guide,
+        SportsMatchKind.channelName,
+      ]);
+    });
+  });
+
+  test(
+    'sportsEventNeedles: both teams for a game, title needles otherwise',
+    () {
+      expect(sportsEventNeedles(_matchEvent()).sides, [
+        ['arsenal'],
+        ['bayern munich', 'bayern', 'bayern munchen', 'fc bayern'],
+      ]);
+      expect(sportsEventNeedles(_raceEvent()).sides, [
+        ['mexico city'],
+      ]);
+    },
+  );
 }

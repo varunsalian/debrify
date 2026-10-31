@@ -44,6 +44,7 @@ void main() {
     List<SportsGuidePlaylist> playlists = _playlists,
     List<String> titleNeedles = const [],
     List<String> channelNeedles = const [],
+    List<SportsEventNeedles> events = const [],
   }) {
     db.close();
     return querySportsGuide(
@@ -55,9 +56,21 @@ void main() {
         nowUtc: _now,
         titleNeedles: titleNeedles,
         channelNeedles: channelNeedles,
+        events: events,
       ),
     );
   }
+
+  const cricket = [
+    SportsEventNeedles([
+      ['bangladesh'],
+      ['west indies'],
+    ]),
+    SportsEventNeedles([
+      ['south africa'],
+      ['australia'],
+    ]),
+  ];
 
   group('channels', () {
     test('returns broadcaster channels in position order, capped at 200', () {
@@ -570,6 +583,129 @@ void main() {
         run(db, titleNeedles: const ['real madrid']).listings,
         hasLength(2000),
       );
+    });
+  });
+
+  group('per-event needles', () {
+    test('titles naming one team cannot crowd out the match', () {
+      final db = _GuideDatabase(path);
+      db.catalog();
+      db.channel(
+        name: 'News 24',
+        url: 'http://h/news.ts',
+        attributes: const {'tvg-id': 'news'},
+      );
+      db.channel(
+        name: 'T Sports',
+        url: 'http://h/t.ts',
+        position: 2,
+        attributes: const {'tvg-id': 't'},
+      );
+      db.guide();
+      for (var i = 0; i < 2100; i++) {
+        db.programme(
+          channelId: 'news',
+          title: 'Australia news $i',
+          startMs: _ms(-1),
+          stopMs: _ms(2),
+        );
+      }
+      db.programme(
+        channelId: 't',
+        title: 'Live Cricket: Bangladesh vs West Indies, 2nd Test',
+        startMs: _ms(-1),
+        stopMs: _ms(5),
+      );
+      db.programme(
+        channelId: 't',
+        title: 'Bangladesh v West Indies Highlights',
+        startMs: _ms(-1),
+        stopMs: _ms(5),
+      );
+
+      final snapshot = run(
+        db,
+        titleNeedles: const [
+          'bangladesh',
+          'west indies',
+          'south africa',
+          'australia',
+        ],
+        events: cricket,
+      );
+
+      expect(snapshot.listings.map((l) => l.title), [
+        'Live Cricket: Bangladesh vs West Indies, 2nd Test',
+      ]);
+    });
+
+    test('event streams are found by name, with or without a guide', () {
+      final db = _GuideDatabase(path);
+      db.catalog();
+      db.channel(
+        name: 'CRICKET 03: Bangladesh vs West Indies',
+        url: 'http://h/c3.ts',
+        group: 'Live Events',
+      );
+      db.channel(name: 'Bangladesh TV', url: 'http://h/btv.ts', position: 2);
+      db.channel(
+        name: 'Bangladesh v West Indies Highlights',
+        url: 'http://h/hl.ts',
+        position: 3,
+      );
+      db.channel(name: 'Sky Sports Cricket', url: 'http://h/s.ts', position: 4);
+
+      final snapshot = run(
+        db,
+        playlists: const [
+          SportsGuidePlaylist(playlistId: 'pl-1', catalogKey: _catalogKey),
+        ],
+        events: cricket,
+      );
+
+      expect(snapshot.namedChannels.map((c) => c.name), [
+        'CRICKET 03: Bangladesh vs West Indies',
+      ]);
+      expect(snapshot.namedChannels.single.group, 'Live Events');
+    });
+
+    test('one fixture\'s many copies leave room for the others', () {
+      final db = _GuideDatabase(path);
+      db.catalog();
+      for (var i = 0; i < 40; i++) {
+        db.channel(
+          name: 'SA $i: South Africa vs Australia',
+          url: 'http://h/sa$i.ts',
+          position: i,
+        );
+      }
+      db.channel(
+        name: 'BD 1: Bangladesh vs West Indies',
+        url: 'http://h/bd.ts',
+        position: 99,
+      );
+
+      final named = run(db, events: cricket).namedChannels;
+
+      expect(named.where((c) => c.name.startsWith('SA ')), hasLength(12));
+      expect(named.last.name, 'BD 1: Bangladesh vs West Indies');
+    });
+
+    test('a single-side event never names a channel', () {
+      final db = _GuideDatabase(path);
+      db.catalog();
+      db.channel(name: 'Mexico Open Golf 24/7', url: 'http://h/g.ts');
+
+      final snapshot = run(
+        db,
+        events: const [
+          SportsEventNeedles([
+            ['mexico open'],
+          ]),
+        ],
+      );
+
+      expect(snapshot.namedChannels, isEmpty);
     });
   });
 

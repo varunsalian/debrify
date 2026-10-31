@@ -315,7 +315,20 @@ class SportsBoardController extends Notifier<SportsBoardState> {
     ];
     final titleNeedles = _titleNeedles(near);
     final channelNeedles = _channelNeedles(near);
-    final key = '${titleNeedles.join('|')}#${channelNeedles.join('|')}';
+    final fixtures = [
+      for (final event in near) sportsEventNeedles(event, now: now),
+    ];
+    // The pairing matters too: the scan keeps only titles and channel names
+    // naming a whole fixture, so a new fixture of teams already on the board
+    // must not reuse a snapshot made without it.
+    final pairs = [
+      for (final e in fixtures)
+        '${e.sides.map((side) => side.join(',')).join('/')}@'
+            '${e.around?.day}',
+    ];
+    final key =
+        '${titleNeedles.join('|')}#${channelNeedles.join('|')}#'
+        '${pairs.join('|')}';
     final cached = _guide;
     final fresh =
         cached != null &&
@@ -332,6 +345,7 @@ class SportsBoardController extends Notifier<SportsBoardState> {
             nowUtc: now.toUtc(),
             titleNeedles: titleNeedles,
             channelNeedles: channelNeedles,
+            events: fixtures,
           ),
         );
         if (!current()) return;
@@ -351,6 +365,7 @@ class SportsBoardController extends Notifier<SportsBoardState> {
             event,
             listings: snapshot.listings,
             channels: snapshot.channels,
+            namedChannels: snapshot.namedChannels,
             now: now,
           ),
       },

@@ -362,7 +362,9 @@ class SportsGuideListing {
 }
 
 /// How a [SportsWatchOption] was found.
-enum SportsMatchKind { guide, broadcaster }
+/// How an option was found: a guide listing naming the match, a channel
+/// whose own name names it (an event stream), or a broadcaster's name.
+enum SportsMatchKind { guide, channelName, broadcaster }
 
 /// One watchable option for an event, either confirmed in the guide or
 /// inferred from a broadcaster name.

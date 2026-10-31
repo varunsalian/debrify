@@ -30,6 +30,9 @@ const noListingCopy =
 /// Subtitle on a possible-channel row: the feed named it, the guide did not.
 const possibleChannelCopy = 'Listed broadcaster — not confirmed in your guide';
 
+/// Subtitle on a channel whose own name is this match (an event stream).
+const namedChannelCopy = 'Named for this match';
+
 /// Opens the details for [event]: a 420 px panel docked right on wide screens,
 /// a bottom sheet capped at 88 % of the height on narrow ones.
 ///
@@ -179,9 +182,19 @@ class _DetailsSurfaceState extends State<_DetailsSurface> {
     final guide = widget.watch.guide;
     final possible = widget.watch.possible;
     final rows = <Widget>[_header(), const SizedBox(height: 16), _matchup()];
-    if (guide.isNotEmpty) {
-      rows.add(_sectionTitle('In your guide', tick: true));
-      for (final option in guide) {
+    // Guide listings first, then event streams found by their own name:
+    // on the user's channels, but not in their guide.
+    for (final (kind, title) in const [
+      (SportsMatchKind.guide, 'In your guide'),
+      (SportsMatchKind.channelName, 'On your channels'),
+    ]) {
+      final options = [
+        for (final option in guide)
+          if (option.kind == kind) option,
+      ];
+      if (options.isEmpty) continue;
+      rows.add(_sectionTitle(title, tick: true));
+      for (final option in options) {
         rows.add(_channelRow(option, autofocus: _claimFocus()));
       }
     }
@@ -359,7 +372,7 @@ class _DetailsSurfaceState extends State<_DetailsSurface> {
   Widget _channelRow(SportsWatchOption option, {required bool autofocus}) {
     final channel = option.channel;
     final listing = option.listing;
-    final confirmed = option.kind == SportsMatchKind.guide;
+    final confirmed = option.kind != SportsMatchKind.broadcaster;
     final action = confirmed ? 'Watch' : 'Open';
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
@@ -407,7 +420,10 @@ class _DetailsSurfaceState extends State<_DetailsSurface> {
                     ],
                   ),
                   sportsLabelText(
-                    listing?.title ?? possibleChannelCopy,
+                    listing?.title ??
+                        (option.kind == SportsMatchKind.channelName
+                            ? namedChannelCopy
+                            : possibleChannelCopy),
                     subtle,
                     size: 11.5,
                     ellipsize: true,

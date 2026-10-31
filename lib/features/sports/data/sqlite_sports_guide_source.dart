@@ -7,6 +7,7 @@
 import 'dart:convert';
 
 import 'package:debrify/features/sports/application/sports_names.dart';
+import 'package:debrify/features/sports/data/sports_event_name_index.dart';
 import 'package:debrify/features/sports/models/sports_guide_contract.dart';
 import 'package:debrify/features/sports/models/sports_models.dart';
 import 'package:debrify/services/xmltv_epg_source.dart';
@@ -126,17 +127,25 @@ class _GuideChannel {
 /// Collects the three result sets of one query across every playlist, applying
 /// the global caps so a huge catalog cannot produce a huge snapshot.
 class _GuideAccumulator {
-  _GuideAccumulator(this._query);
+  _GuideAccumulator(this._query) : _names = SportsEventNameIndex(_query.events);
 
   final SportsGuideQuery _query;
   final List<SportsChannelRef> _channels = [];
   final List<SportsGuideListing> _listings = [];
   final List<SportsGuideListing> _liveSports = [];
+  final List<SportsChannelRef> _named = [];
+
+  /// Named channels kept per event, so one fixture's many copies cannot
+  /// use up the room every other fixture needs.
+  final Map<int, int> _namedPerEvent = {};
+
+  final SportsEventNameIndex _names;
 
   SportsGuideSnapshot snapshot() => SportsGuideSnapshot(
     listings: List<SportsGuideListing>.unmodifiable(_listings),
     channels: List<SportsChannelRef>.unmodifiable(_channels),
     liveSportsListings: List<SportsGuideListing>.unmodifiable(_liveSports),
+    namedChannels: List<SportsChannelRef>.unmodifiable(_named),
   );
 
   void addPlaylist(Database db, SportsGuidePlaylist playlist) {
@@ -144,6 +153,8 @@ class _GuideAccumulator {
     if (generation == null) return;
     final channels = _liveChannels(db, playlist, generation);
     _addChannels(channels);
+    // Event streams are found by name, guide or not.
+    _addNamedChannels(channels);
     final guideKey = playlist.guideKey;
     if (guideKey == null) return;
     final nameToId = _guideNameToId(db, guideKey);
@@ -207,6 +218,25 @@ class _GuideAccumulator {
         continue;
       }
       _channels.add(channel.ref);
+    }
+  }
+
+  void _addNamedChannels(List<_GuideChannel> channels) {
+    if (!_names.hasTeamEvents) return;
+    for (final channel in channels) {
+      if (_named.length >= _maxNamedChannels) return;
+      final events = _names.teamEventsNamedBy(
+        channel.ref.name,
+        channel.baseName,
+      );
+      var keep = false;
+      for (final event in events) {
+        final count = _namedPerEvent[event] ?? 0;
+        if (count >= _maxNamedPerEvent) continue;
+        _namedPerEvent[event] = count + 1;
+        keep = true;
+      }
+      if (keep) _named.add(channel.ref);
     }
   }
 
@@ -356,11 +386,17 @@ class _GuideAccumulator {
     return rowsById;
   }
 
+  /// Whether a guide row is worth keeping. With per-event needles, only a
+  /// title naming a whole event that is not a recap counts: a title naming
+  /// one team ("Australia news") must not use up the listing cap.
   bool _titleContainsNeedle(String title) {
     final normalized = normalizeSportsText(title);
-    return _query.titleNeedles.any(
-      (needle) => sportsTextContains(normalized, needle),
-    );
+    if (_query.events.isEmpty) {
+      return _query.titleNeedles.any(
+        (needle) => sportsTextContains(normalized, needle),
+      );
+    }
+    return _names.namesEvent(normalized);
   }
 
   SportsGuideListing _listing(
@@ -438,6 +474,8 @@ const int _minTokenLength = 4;
 const int _tokenChunk = 40;
 const int _idChunk = 400;
 const int _maxChannels = 200;
+const int _maxNamedChannels = 300;
+const int _maxNamedPerEvent = 12;
 const int _maxListings = 2000;
 const int _maxLiveSports = 40;
 const int _maxSportsChannels = 300;

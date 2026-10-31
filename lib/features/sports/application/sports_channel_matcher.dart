@@ -4,24 +4,10 @@
 // touches a database or a playlist; the guide snapshot is handed in by the
 // caller so matching stays deterministic and testable.
 import 'package:debrify/features/sports/application/sports_names.dart';
+import 'package:debrify/features/sports/application/sports_stream_names.dart';
+import 'package:debrify/features/sports/models/sports_guide_contract.dart';
 import 'package:debrify/features/sports/models/sports_leagues.dart';
 import 'package:debrify/features/sports/models/sports_models.dart';
-
-/// Programme titles containing one of these are recap shows, not the live game.
-const List<String> kSportsNonLiveWords = [
-  'highlights',
-  'replay',
-  'review',
-  'preview',
-  'classics',
-  'rewind',
-  'magazine',
-  'reaction',
-  'analysis',
-  'goals show',
-  // Fox Sports' 20-minute highlights packages: "South Africa v Australia Mini".
-  'mini',
-];
 
 /// A listing may start this far from kick-off and still be the live broadcast.
 const Duration _timingTolerance = Duration(hours: 2);
@@ -86,7 +72,7 @@ List<String> sportsTitleNeedles(SportsEvent event) {
   if (event.isTeamEvent) {
     final needles = <String>[];
     for (final team in <SportsTeam>[event.home!, event.away!]) {
-      for (final variant in teamNameVariants(team)) {
+      for (final variant in sportsSideVariants(event, team)) {
         if (!needles.contains(variant)) needles.add(variant);
       }
     }
@@ -123,26 +109,154 @@ List<String> sportsTitleNeedles(SportsEvent event) {
   return needle.isEmpty ? const [] : [needle];
 }
 
+/// The names one side of [event] goes by: [teamNameVariants], plus the
+/// player's surname in tennis, where listings and stream names say "Sinner v
+/// Alcaraz" while the feed says "Jannik Sinner". (A women's team's name
+/// without "Women" is allowed only where a stream name says it is a women's
+/// game; see sportsChannelNamesMatch.)
+List<String> sportsSideVariants(SportsEvent event, SportsTeam side) {
+  final variants = teamNameVariants(side);
+  if (sportsLeagueById(event.leagueId)?.sport != SportKind.tennis) {
+    return variants;
+  }
+  final surname = _surname(side.name);
+  return surname == null || variants.contains(surname)
+      ? variants
+      : [...variants, surname];
+}
+
+/// What a guide title or channel name must mention to be about [event]: both
+/// sides for a game, else the event's title needles as one side; with when
+/// it is on (see [_eventDay]) and its sport.
+SportsEventNeedles sportsEventNeedles(SportsEvent event, {DateTime? now}) {
+  final around = _eventDay(event, now);
+  final sport = sportsLeagueById(event.leagueId)?.sport;
+  if (event.isTeamEvent) {
+    return SportsEventNeedles(
+      [
+        sportsSideVariants(event, event.home!),
+        sportsSideVariants(event, event.away!),
+      ],
+      around: around,
+      sport: sport,
+    );
+  }
+  final needles = sportsTitleNeedles(event);
+  return SportsEventNeedles(
+    [if (needles.isNotEmpty) needles],
+    around: around,
+    sport: sport,
+  );
+}
+
+/// The day a stream of [event] is dated: today while it is live (day three
+/// of a Test is today's stream), else its start.
+DateTime _eventDay(SportsEvent event, DateTime? now) =>
+    event.status == SportsEventStatus.live && now != null
+    ? now.toUtc()
+    : event.start.toUtc();
+
 /// Finds guide-confirmed and possible watch options for [event].
 ///
 /// Guide options are listings whose title names the match at the right time,
 /// grouped per channel base name into one option holding the best-quality
-/// copy. Possible options come from the event's broadcasters.
+/// copy, followed by channels whose own name names the match (a provider's
+/// event stream). Possible options come from the event's broadcasters.
 SportsWatchOptions matchSportsEvent(
   SportsEvent event, {
   required List<SportsGuideListing> listings,
   required List<SportsChannelRef> channels,
+  List<SportsChannelRef> namedChannels = const [],
   DateTime? now,
 }) {
   final guideGroups = _guideGroups(event, listings, now);
-  final guide = _guideOptions(event, guideGroups);
+  final namedGroups = _namedGroups(event, namedChannels, guideGroups.keys, now);
+  final guide = [
+    ..._guideOptions(event, guideGroups),
+    ..._namedOptions(namedGroups, _eventDay(event, now)),
+  ];
   final possible = _possibleOptions(
     event,
     channels,
-    guideBases: guideGroups.keys.toSet(),
+    guideBases: {...guideGroups.keys, ...namedGroups.keys},
   );
   return SportsWatchOptions(guide: guide, possible: possible);
 }
+
+/// Channels whose name is a stream of [event] (see
+/// [sportsChannelNamesMatch]), grouped per base name like guide listings;
+/// bases already found in the guide are left to their listing.
+Map<String, List<SportsChannelRef>> _namedGroups(
+  SportsEvent event,
+  List<SportsChannelRef> channels,
+  Iterable<String> guideBases,
+  DateTime? now,
+) {
+  final groups = <String, List<SportsChannelRef>>{};
+  if (!event.isTeamEvent || channels.isEmpty) return groups;
+  final home = sportsSideVariants(event, event.home!);
+  final away = sportsSideVariants(event, event.away!);
+  final around = _eventDay(event, now);
+  final sport = sportsLeagueById(event.leagueId)?.sport;
+  final taken = guideBases.toSet();
+  for (final channel in channels) {
+    if (!sportsChannelNamesMatch(
+      channel.name,
+      home,
+      away,
+      around: around,
+      sport: sport,
+    )) {
+      continue;
+    }
+    final base = channelBaseName(channel.name);
+    if (base.isEmpty || taken.contains(base)) continue;
+    groups.putIfAbsent(base, () => <SportsChannelRef>[]).add(channel);
+  }
+  return groups;
+}
+
+/// One option per group: streams dated the event's day first, then undated
+/// ones, then those a day off (a local date across midnight, or yesterday's
+/// stream left up); input order breaks ties.
+List<SportsWatchOption> _namedOptions(
+  Map<String, List<SportsChannelRef>> groups,
+  DateTime around,
+) {
+  int gap(SportsWatchOption option) =>
+      switch (sportsChannelNameDayGap(option.channel.name, around)) {
+        0 => 0,
+        null => 1,
+        _ => 2,
+      };
+  final options = _namedGroupOptions(groups);
+  final order = [for (var i = 0; i < options.length; i++) i]
+    ..sort((a, b) {
+      final byGap = gap(options[a]).compareTo(gap(options[b]));
+      return byGap != 0 ? byGap : a.compareTo(b);
+    });
+  return [for (final i in order) options[i]];
+}
+
+List<SportsWatchOption> _namedGroupOptions(
+  Map<String, List<SportsChannelRef>> groups,
+) => [
+  for (final members in groups.values)
+    () {
+      final best = _bestQualityIndex(
+        members,
+        (c) => channelQualityRank(c.name),
+      );
+      return SportsWatchOption(
+        channel: members[best],
+        kind: SportsMatchKind.channelName,
+        variants: [
+          for (var i = 0; i < members.length; i++)
+            if (i != best) members[i],
+        ],
+      );
+    }(),
+];
 
 /// Qualifying listings grouped by channel base name, in listing input order.
 Map<String, List<SportsGuideListing>> _guideGroups(
@@ -151,10 +265,10 @@ Map<String, List<SportsGuideListing>> _guideGroups(
   DateTime? now,
 ) {
   final homeVariants = event.isTeamEvent
-      ? teamNameVariants(event.home!)
+      ? sportsSideVariants(event, event.home!)
       : const <String>[];
   final awayVariants = event.isTeamEvent
-      ? teamNameVariants(event.away!)
+      ? sportsSideVariants(event, event.away!)
       : const <String>[];
   final needles = event.isTeamEvent
       ? const <String>[]

@@ -288,6 +288,44 @@ void main() {
     expect(find.text('Possible channels'), findsNothing);
   });
 
+  testWidgets('an event stream found by name is watchable on your channels', (
+    tester,
+  ) async {
+    final h = _Harness(
+      watch: const SportsWatchOptions(
+        guide: [
+          SportsWatchOption(channel: _tnt, kind: SportsMatchKind.channelName),
+        ],
+      ),
+    );
+    await h.open(tester);
+
+    expect(find.text('On your channels'), findsOneWidget);
+    expect(find.text('In your guide'), findsNothing);
+    expect(find.text(namedChannelCopy), findsOneWidget);
+    expect(find.text(possibleChannelCopy), findsNothing);
+    expect(find.text('Watch'), findsOneWidget);
+    expect(find.text('Open'), findsNothing);
+  });
+
+  testWidgets('guide listings and named streams keep their own sections', (
+    tester,
+  ) async {
+    final h = _Harness(
+      watch: const SportsWatchOptions(
+        guide: [
+          _guideOption,
+          SportsWatchOption(channel: _tnt, kind: SportsMatchKind.channelName),
+        ],
+      ),
+    );
+    await h.open(tester);
+
+    expect(find.text('In your guide'), findsOneWidget);
+    expect(find.text('On your channels'), findsOneWidget);
+    expect(find.text('Watch'), findsNWidgets(2));
+  });
+
   testWidgets('possible channels are a separate section ending in Open', (
     tester,
   ) async {
