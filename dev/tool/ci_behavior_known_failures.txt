@@ -13,11 +13,12 @@
 # quitting; the test environment has no window manager, so BACK never leaves.
 # Answering that call in the harness makes the player quit asynchronously,
 # which leaks teardown work into ~10 other Linux tests, so it needs its own
-# change. The subtitles-off pair: the menu panel is not rebuilt after an addon
-# subtitle pick on Linux (the pick lands; no rebuild follows), so it still
-# shows the mpv track.
-test/features/video_player/video_player_menu_subtitles_off_test.dart::p13 subtitles off after an addon selection failure=false preserves its result and menu identity
-test/features/video_player/video_player_menu_subtitles_off_test.dart::p13 subtitles off after an addon selection failure=true preserves its result and menu identity
+# change. The subtitles-off pair (`~`, known-flaky: passed in run 41194828643,
+# failed in the runs before): the menu panel is not always rebuilt after an
+# addon subtitle pick on Linux (the pick lands; no rebuild follows), so it
+# can still show the mpv track.
+~test/features/video_player/video_player_menu_subtitles_off_test.dart::p13 subtitles off after an addon selection failure=false preserves its result and menu identity
+~test/features/video_player/video_player_menu_subtitles_off_test.dart::p13 subtitles off after an addon selection failure=true preserves its result and menu identity
 test/features/video_player/video_player_p21_tv_keys_test.dart::transition P21 TV BACK on the hidden bar is left to the desktop mapping, which leaves the player
 test/features/video_player/video_player_p21_tv_keys_test.dart::transition P21 TV during a transition the remote drives nothing but BACK still leaves
 test/features/video_player/video_player_p21_remote_edges_test.dart::P21 TV BACK before the first ready leaves the player even with the controls flagged up

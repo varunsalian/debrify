@@ -20,6 +20,8 @@
                                listed identity that no longer exists. Files
                                with unexpected failures are re-run once; a
                                test that then passes is reported as FLAKY.
+                               A KNOWN line `~suite::name` is known-flaky:
+                               pass or fail, it only has to exist.
   check --shard I/N KNOWN PATHS...
                                the same for every N-th test path from index I
                                (CI runs N shards in parallel); only KNOWN
@@ -315,12 +317,17 @@ def cmd_check(known_file, paths, shard=None):
     paths = expand(paths)
     if shard:
         paths = shard_of(paths, shard)
-    known = {line.strip() for line in Path(known_file).read_text().splitlines()
-             if line.strip() and not line.startswith('#')}
+    listed = [line.strip() for line in Path(known_file).read_text().splitlines()
+              if line.strip() and not line.startswith('#')]
+    # `~suite::name` marks a known-flaky test: either outcome is accepted, but
+    # it must still exist.
+    known = {k for k in listed if not k.startswith('~')}
+    flaky_known = {k[1:] for k in listed if k.startswith('~')}
     if shard:
         # A shard answers only for the known failures in its own files.
         mine = {p for p in paths if not p.startswith('-')}
         known = {k for k in known if k.split('::', 1)[0] in mine}
+        flaky_known = {k for k in flaky_known if k.split('::', 1)[0] in mine}
     # A per-run file: parallel worktrees running `check` at the same time
     # must not overwrite each other's results.
     fd, name = tempfile.mkstemp(prefix='suite_evidence_check-', suffix='.jsonl',
@@ -330,8 +337,8 @@ def cmd_check(known_file, paths, shard=None):
     flutter_test_json(paths, out)
     results, _ = outcomes(out)
     failing = {k for k, v in results.items() if v not in ('success', 'skipped')}
-    unexpected = sorted(failing - known)
-    stale = sorted(k for k in known if k not in results)
+    unexpected = sorted(failing - known - flaky_known)
+    stale = sorted(k for k in known | flaky_known if k not in results)
     fixed = sorted(k for k in known if results.get(k) == 'success')
     print(dict(Counter(results.values())))
     if unexpected:
