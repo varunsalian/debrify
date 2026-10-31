@@ -28,6 +28,7 @@
 # 2026-10-25: Phase 21b end state: facade is an EXACT exception (check_search_architecture.py VIDEO_PLAYER_FACADE_CAP, a shrink-only ceiling since the freeze checks retired). 8639 -> 8562 after C1-C3. Exits: (1) startup orchestration decomposition, (2) build decomposition (interim facade <= T), (3) D1 per-collaborator migration (facade <= 800). Raises only by the reviewed raise procedure (video-player-screen-plan.md).
 # 2026-10-28 regfix P3-1 (+review P3-a): same-profile addon read returns the read list; stale lists kept out of cache/storage (+12, 3858 -> 3870); exit: next stremio_service.dart extraction.
 # 2026-10-28 regfix review P3-e: @visibleForTesting debugAddonDecoder hook for a deterministic decode-race test (+4, 3870 -> 3874); exit: next stremio_service.dart extraction.
+# 2026-10-31 AIOMetadata anime: series meta names show-wide anime episodes by their IMDb coordinate, and anime once stored as custom is checked again (+14, 3874 -> 3888; the policy lives in stremio_anime_episode_ids.dart); exit: next stremio_service.dart extraction.
 # 2026-10-28 regfix P3-6: retired-launch rethrow in network tuning reads + debugLaunchOnAndroid test hook (+6, 2153 -> 2159); exit: next android_tv_player_bridge.dart extraction.
 # 2026-10-28 recording output: one device key registered in the profile key lists (+1 each); no other growth.
 # 2026-10-31: +1 for persist: false on the facade's action SnackBar (exception table row).
@@ -42,7 +43,7 @@
 # 2026-10-30 overnight features: root scope adds multiViewAppOverrides(); the addon auto-update scheduler starts with the catalog refresh (+3).
 4191 lib/main.dart
 4086 lib/services/iptv_catalog_db.dart
-3874 lib/services/stremio_service.dart
+3888 lib/services/stremio_service.dart
 3776 android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt
 # 2026-10-31: +1 for persist: false on an action SnackBar (Flutter 3.44 keeps them on screen).
 # 2026-10-31 DPAD: the guide's category and source pickers focus their first row; the wide layout enters the schedule on the airing row (+14).

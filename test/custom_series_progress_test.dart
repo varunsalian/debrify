@@ -339,6 +339,143 @@ void main() {
     expect(ProfilePreferencePortability.allowsKey('series_source_custom-series:' + 'z' * 300), isFalse);
   });
 
+  group('AIOMetadata anime', () {
+    // AIOMetadata keeps anime under `mal:` and names episodes per cour
+    // (`mal:<id>:<n>`) while stamping the show's IMDb ID. With the TVDB
+    // layout the numbering is the show's, so progress, trackers and sources
+    // stay on the IMDb ID; per-cour numbering stays custom.
+    const show = StremioMeta(
+      id: 'mal:21',
+      imdbId: 'tt0388629',
+      type: 'series',
+      name: 'One Piece',
+    );
+
+    Future<StremioAddon> serve(
+      List<Map<String, Object>> videos, {
+      int status = 200,
+    }) async {
+      final previousHttp = HttpOverrides.current;
+      HttpOverrides.global = null;
+      addTearDown(() => HttpOverrides.global = previousHttp);
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      server.listen((r) async {
+        r.response.statusCode = status;
+        r.response.headers.contentType = ContentType.json;
+        r.response.write(
+          jsonEncode({
+            'meta': {'id': 'mal:21', 'imdb_id': 'tt0388629', 'videos': videos},
+          }),
+        );
+        await r.response.close();
+      });
+      addTearDown(() => server.close(force: true));
+      final base = 'http://127.0.0.1:${server.port}';
+      return StremioAddon(
+        id: 'com.aio.metadata',
+        name: 'AIOMetadata',
+        baseUrl: base,
+        manifestUrl: '$base/manifest.json',
+        resources: ['meta', 'catalog'],
+        types: ['series', 'anime'],
+      );
+    }
+
+    Future<StremioService> install(
+      StremioAddon addon, [
+      Map<String, Object> prefs = const {},
+    ]) async {
+      SharedPreferences.setMockInitialValues({
+        'stremio_addons_v1': jsonEncode([addon.toJson()]),
+        ...prefs,
+      });
+      final service = StremioService.instance..invalidateCache();
+      addTearDown(service.invalidateCache);
+      return service;
+    }
+
+    const tvdbLayout = [
+      {'id': 'mal:21:1', 'season': 1, 'episode': 1},
+      {'id': 'mal:2:1', 'season': 2, 'episode': 1},
+    ];
+
+    test('the TVDB layout keeps the IMDb progress key', () async {
+      final addon = await serve(tvdbLayout);
+      final service = await install(addon);
+
+      final scoped = await service.scopeSeriesProgress(show, addon);
+
+      expect(scoped, same(show));
+      expect(
+        service.catalogProgressIdentity(show.withSourceAddon(addon)),
+        'tt0388629',
+      );
+      expect(
+        (await service.fetchSeriesMeta(addon, 'mal:21'))!.map((v) => v['id']),
+        ['tt0388629:1:1', 'tt0388629:2:1'],
+      );
+    });
+
+    test('per-cour numbering stays custom', () async {
+      final addon = await serve(const [
+        {'id': 'mal:21:1', 'season': 1, 'episode': 1},
+        {'id': 'mal:21:2', 'season': 1, 'episode': 2},
+      ]);
+      final service = await install(addon);
+
+      final scoped = await service.scopeSeriesProgress(show, addon);
+
+      expect(CustomSeriesIdentity.isCustom(scoped.imdbId), isTrue);
+    });
+
+    test('a custom key stored before the fix is checked again', () async {
+      final addon = await serve(tvdbLayout);
+      final key =
+          'catalog_progress_identity_v1:'
+          '${addon.portableConfigurationKey}:mal:21';
+      final service = await install(addon, {
+        key: show.withCustomSeriesIdentity(addon).imdbId!,
+      });
+
+      final scoped = await service.scopeSeriesProgress(show, addon);
+
+      expect(scoped, same(show));
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString(key), 'tt0388629');
+    });
+
+    test('a stored custom key stays while the addon is down', () async {
+      final addon = await serve(tvdbLayout, status: 503);
+      final custom = show.withCustomSeriesIdentity(addon).imdbId!;
+      final service = await install(addon, {
+        'catalog_progress_identity_v1:'
+                '${addon.portableConfigurationKey}:mal:21':
+            custom,
+      });
+
+      final scoped = await service.scopeSeriesProgress(show, addon);
+
+      expect(scoped.imdbId, custom);
+    });
+
+    test('a stored custom key stays custom for per-cour numbering', () async {
+      final addon = await serve(const [
+        {'id': 'mal:21:1', 'season': 1, 'episode': 1},
+        {'id': 'mal:21:2', 'season': 1, 'episode': 2},
+      ]);
+      final custom = show.withCustomSeriesIdentity(addon).imdbId!;
+      final service = await install(addon, {
+        'catalog_progress_identity_v1:'
+                '${addon.portableConfigurationKey}:mal:21':
+            custom,
+      });
+
+      final scoped = await service.scopeSeriesProgress(show, addon);
+
+      expect(scoped.imdbId, custom);
+    });
+  });
+
   test('catalog identity, next and completion use custom inventory', () async {
     final previousHttp = HttpOverrides.current;
     HttpOverrides.global = null;

@@ -6,6 +6,7 @@ import 'metadata_preferences_service.dart';
 import 'home_return_cache.dart';
 import 'local_series_completion_service.dart';
 import 'prepared_stream_requests.dart';
+import 'stremio_anime_episode_ids.dart';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -2913,7 +2914,10 @@ class StremioService {
         final videos = meta?['videos'] as List<dynamic>?;
         if (videos == null || videos.isEmpty) return null;
 
-        final result = videos.whereType<Map<String, dynamic>>().toList();
+        final result = withImdbAnimeEpisodeIds(
+          meta!,
+          videos.whereType<Map<String, dynamic>>().toList(),
+        );
         // Evict expired entries, then the oldest beyond the cap.
         final now = DateTime.now();
         _seriesMetaCache.removeWhere(
@@ -3105,10 +3109,17 @@ class StremioService {
       '$_progressIdentityPrefix${addon.portableConfigurationKey}:${item.id}',
     );
     // A proven custom catalog remains isolated even while its provider is down.
-    if (CustomSeriesIdentity.isCustom(previous)) {
+    // Anime once misread as custom (AIOMetadata's `mal:` episode IDs) is
+    // checked again against the metadata.
+    Future<StremioMeta> keepCustom() async {
       final scoped = item.withCustomSeriesIdentity(addon);
       await _rememberCatalogProgress(scoped, addon, canContinue: canContinue);
       return scoped;
+    }
+
+    final recheck = mayHaveImdbAnimeEpisodes(item.id, imdb);
+    if (CustomSeriesIdentity.isCustom(previous) && !recheck) {
+      return keepCustom();
     }
     final cached =
         _seriesMetaCache['${addon.portableConfigurationKey}:${item.id}'];
@@ -3125,6 +3136,9 @@ class StremioService {
         cachedVideos ??
         (needsMetadata ? await fetchSeriesMeta(addon, item.id) : null);
     if (canContinue != null && !canContinue()) return item;
+    if (videos == null && CustomSeriesIdentity.isCustom(previous)) {
+      return keepCustom();
+    }
     if (videos == null && previous == imdb) {
       await _rememberCatalogProgress(item, addon, canContinue: canContinue);
       return item;
