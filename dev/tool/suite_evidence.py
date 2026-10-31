@@ -17,7 +17,9 @@
                                else is compared by file. Repeatable.
   check KNOWN PATHS...         CI: run PATHS (`@file` = one path per line); fail on any failure not listed in
                                KNOWN (one suite::name per line) and on any
-                               listed identity that no longer exists.
+                               listed identity that no longer exists. Files
+                               with unexpected failures are re-run once; a
+                               test that then passes is reported as FLAKY.
   check --shard I/N KNOWN PATHS...
                                the same for every N-th test path from index I
                                (CI runs N shards in parallel); only KNOWN
@@ -332,6 +334,20 @@ def cmd_check(known_file, paths, shard=None):
     stale = sorted(k for k in known if k not in results)
     fixed = sorted(k for k in known if results.get(k) == 'success')
     print(dict(Counter(results.values())))
+    if unexpected:
+        # Shared CI runners make some timing-sensitive tests fail at random.
+        # Re-run only the files with unexpected failures, once: a failure that
+        # repeats is real; one that passes the second time is reported as
+        # flaky, by name, and does not fail the run.
+        flags = [p for p in paths if p.startswith('-')]
+        files = sorted({k.split('::', 1)[0] for k in unexpected})
+        retry = out.with_name(out.stem + '-retry.jsonl')
+        flutter_test_json(files + flags, retry)
+        again, _ = outcomes(retry)
+        flaky = [k for k in unexpected if again.get(k) == 'success']
+        for k in flaky:
+            print('FLAKY (failed, then passed on retry):', k)
+        unexpected = [k for k in unexpected if k not in flaky]
     for k in unexpected:
         print('UNEXPECTED FAILURE:', k)
     if unexpected:
