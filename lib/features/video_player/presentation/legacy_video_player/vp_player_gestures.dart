@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:debrify/screens/video_player/constants/timing_constants.dart';
 import 'package:debrify/screens/video_player/models/gesture_state.dart';
 import 'package:debrify/screens/video_player/models/hud_state.dart';
+import 'package:debrify/services/player_controls_display_settings.dart';
 import 'package:debrify/services/player_display_controls.dart';
 import 'package:debrify/services/player_gesture_settings.dart';
 import 'package:flutter/material.dart';
@@ -31,6 +32,7 @@ class VpPlayerGestures {
   /// active profile's value (the gestures read the cache synchronously).
   VpPlayerGestures(this._host) {
     unawaited(PlayerGestureSettings.load());
+    unawaited(PlayerControlsDisplaySettings.load());
   }
   final VpPlayerGesturesHost _host;
 

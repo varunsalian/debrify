@@ -686,6 +686,10 @@
     ],
     [
       "Playback",
+      "Icons only"
+    ],
+    [
+      "Playback",
       "Preferred external player"
     ],
     [
@@ -1293,6 +1297,10 @@
     [
       "Playback",
       "Auto-sync addon subtitles"
+    ],
+    [
+      "Playback",
+      "Icons only"
     ],
     [
       "Playback",

@@ -13,6 +13,7 @@ import 'package:debrify/screens/video_player/services/network_tuning.dart';
 import 'package:debrify/screens/video_player/services/subtitle_settings_service.dart';
 import 'package:debrify/services/android_native_downloader.dart';
 import 'package:debrify/services/external_player_service.dart';
+import 'package:debrify/services/player_controls_display_settings.dart';
 import 'package:debrify/services/player_gesture_settings.dart';
 import 'package:debrify/services/skip_segment_service.dart';
 import 'package:debrify/services/storage/external_player_storage.dart';
@@ -181,6 +182,7 @@ class PlaybackSettingsLoad {
       final startPortrait =
           await PlayerSettingsStorage.getPlayerStartPortrait();
       final swipeSeek = await PlayerGestureSettings.load();
+      await PlayerControlsDisplaySettings.load();
       final subtitleForcedOnly =
           await SubtitleSettingsStorage.getSubtitleForcedOnly();
       final subtitleOnlyForeignAudio =
@@ -256,6 +258,8 @@ class PlaybackSettingsLoad {
         _deps.values.iptvDecoderMode = iptvDecoderMode;
         _deps.values.startPortrait = startPortrait;
         _deps.values.swipeSeek = swipeSeek;
+        _deps.values.iconOnlyControls =
+            PlayerControlsDisplaySettings.iconOnly.value;
         _deps.sub.subtitleOnlyForeignAudio = subtitleOnlyForeignAudio;
         _deps.sub.subtitleForcedOnly = subtitleForcedOnly;
         _deps.sub.subtitleAutoSync = subtitleAutoSync;

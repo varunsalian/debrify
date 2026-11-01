@@ -6,6 +6,7 @@ import 'styled_dock.dart';
 import '../models/gesture_state.dart';
 import '../services/playback_ui_clock.dart';
 import 'netflix_control_button.dart';
+import '../../../services/player_controls_display_settings.dart';
 
 class Controls extends StatelessWidget {
   final String title;
@@ -309,6 +310,14 @@ class Controls extends StatelessWidget {
     return dock;
   }
 
+  /// `-42:55`: what is left, never below zero. No "-00:00" before the
+  /// duration is known.
+  String _timeLeft(PlaybackUiClockValue value) {
+    if (value.duration <= Duration.zero) return _format(value.duration);
+    final left = value.duration - value.position;
+    return '-${_format(left.isNegative ? Duration.zero : left)}';
+  }
+
   String _format(Duration d) {
     final sign = d.isNegative ? '-' : '';
     final abs = d.abs();
@@ -534,13 +543,51 @@ class Controls extends StatelessWidget {
                                       ),
                                     ),
                                     const SizedBox(width: 12),
-                                    Text(
-                                      _format(value.duration),
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
-                                      ),
+                                    // Tap: the total or the time left.
+                                    ValueListenableBuilder<bool>(
+                                      valueListenable:
+                                          PlayerControlsDisplaySettings
+                                              .showRemaining,
+                                      builder: (context, remaining, _) =>
+                                          Semantics(
+                                            container: true,
+                                            button: true,
+                                            onTapHint: remaining
+                                                ? 'Show total time'
+                                                : 'Show time left',
+                                            child: MouseRegion(
+                                              cursor: SystemMouseCursors.click,
+                                              child: GestureDetector(
+                                                behavior:
+                                                    HitTestBehavior.opaque,
+                                                onTap:
+                                                    PlayerControlsDisplaySettings
+                                                        .toggleRemaining,
+                                                child: ConstrainedBox(
+                                                  constraints:
+                                                      const BoxConstraints(
+                                                        minHeight: 44,
+                                                      ),
+                                                  child: Center(
+                                                    widthFactor: 1,
+                                                    child: Text(
+                                                      remaining
+                                                          ? _timeLeft(value)
+                                                          : _format(
+                                                              value.duration,
+                                                            ),
+                                                      style: const TextStyle(
+                                                        color: Colors.white,
+                                                        fontSize: 14,
+                                                        fontWeight:
+                                                            FontWeight.w500,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
                                     ),
                                   ],
                                 );

@@ -3,6 +3,7 @@ import 'package:debrify/screens/video_player/services/playback_ui_clock.dart';
 import 'package:debrify/screens/video_player/widgets/dock_style.dart';
 import 'package:debrify/screens/video_player/widgets/dock_widgets.dart';
 import 'package:debrify/screens/video_player/widgets/styled_dock.dart';
+import 'package:debrify/services/player_controls_display_settings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -36,6 +37,8 @@ void main() {
     required PlayerDockSize dockSize,
     required bool withPanel,
     double infoPanelHeight = 0,
+    Duration position = const Duration(minutes: 68),
+    Duration duration = const Duration(minutes: 166),
   }) {
     final arrangement = DockArrangement.forViewport(size);
     final metrics = DockMetrics.compute(
@@ -73,9 +76,9 @@ void main() {
                     ? SizedBox(height: infoPanelHeight, width: size.width)
                     : null,
                 clock: ValueNotifier(
-                  const PlaybackUiClockValue(
-                    position: Duration(minutes: 68),
-                    duration: Duration(minutes: 166),
+                  PlaybackUiClockValue(
+                    position: position,
+                    duration: duration,
                     generation: 0,
                   ),
                 ),
@@ -375,5 +378,155 @@ void main() {
       findsOneWidget,
       reason: 'PiP must survive hideOptions',
     );
+  });
+
+  group('readouts and labels', () {
+    const size = Size(800, 700); // regular: readouts flank the bar
+    tearDown(() {
+      PlayerControlsDisplaySettings.showRemaining.value = false;
+      PlayerControlsDisplaySettings.iconOnly.value = false;
+    });
+
+    Future<void> pump(
+      WidgetTester tester, {
+      Duration position = const Duration(minutes: 68),
+      Duration duration = const Duration(minutes: 166),
+    }) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        host(
+          size: size,
+          safeArea: EdgeInsets.zero,
+          textScale: 1.0,
+          dockSize: PlayerDockSize.auto,
+          withPanel: false,
+          position: position,
+          duration: duration,
+        ),
+      );
+      await tester.pump();
+    }
+
+    testWidgets('the seek row readouts sit flush with both edges', (
+      tester,
+    ) async {
+      // A user saw far more space after the duration than before the
+      // position: loose Flexibles left their unused share at the row's end.
+      // The user's own numbers: short readouts leave the most room unused.
+      await pump(
+        tester,
+        position: const Duration(minutes: 3, seconds: 25),
+        duration: const Duration(minutes: 46, seconds: 20),
+      );
+      final left = tester.getRect(find.text('03:25')).left;
+      final right = size.width - tester.getRect(find.text('46:20')).right;
+      expect(right, closeTo(left, 1));
+    });
+
+    testWidgets('tapping the duration switches to the time left', (
+      tester,
+    ) async {
+      await pump(tester);
+      await tester.tap(find.text('2:46:00'));
+      await tester.pump();
+
+      expect(find.text('-1:38:00'), findsOneWidget);
+      expect(PlayerControlsDisplaySettings.showRemaining.value, isTrue);
+
+      await tester.tap(find.text('-1:38:00'));
+      await tester.pump();
+      expect(find.text('2:46:00'), findsOneWidget);
+    });
+
+    testWidgets('the duration is a full-height tap target', (tester) async {
+      await pump(tester);
+      final readout = find.ancestor(
+        of: find.text('2:46:00'),
+        matching: find.byType(GestureDetector),
+      );
+      expect(
+        tester.getSize(readout.first).height,
+        greaterThanOrEqualTo(DockLayoutInput.minTarget),
+      );
+    });
+
+    test('the time left never reads below zero or before a duration', () {
+      PlaybackUiClockValue at(int position, int duration) =>
+          PlaybackUiClockValue(
+            position: Duration(seconds: position),
+            duration: Duration(seconds: duration),
+            generation: 0,
+          );
+      expect(DockDurationReadout.text(at(205, 2780), true), '-42:55');
+      expect(DockDurationReadout.text(at(205, 2780), false), '46:20');
+      expect(DockDurationReadout.text(at(2790, 2780), true), '-00:00');
+      expect(DockDurationReadout.text(at(0, 0), true), '00:00');
+    });
+
+    testWidgets('both choices fit every approved viewport and text scale', (
+      tester,
+    ) async {
+      PlayerControlsDisplaySettings.showRemaining.value = true;
+      PlayerControlsDisplaySettings.iconOnly.value = true;
+      for (final size in viewports) {
+        for (final scale in scales) {
+          tester.view.physicalSize = size;
+          tester.view.devicePixelRatio = 1.0;
+          addTearDown(tester.view.reset);
+          await tester.pumpWidget(
+            host(
+              size: size,
+              safeArea: EdgeInsets.zero,
+              textScale: scale,
+              dockSize: PlayerDockSize.auto,
+              withPanel: false,
+            ),
+          );
+          await tester.pump();
+          final err = tester.takeException();
+          if (err != null) fail('$size / scale $scale: $err');
+        }
+      }
+    });
+
+    testWidgets('icons only also applies to the narrow row', (tester) async {
+      const phone = Size(599, 360);
+      tester.view.physicalSize = phone;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      PlayerControlsDisplaySettings.iconOnly.value = true;
+      await tester.pumpWidget(
+        host(
+          size: phone,
+          safeArea: EdgeInsets.zero,
+          textScale: 1.0,
+          dockSize: PlayerDockSize.auto,
+          withPanel: false,
+        ),
+      );
+      await tester.pump();
+      expect(find.text('More'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('icons only drops the tool labels and keeps the tools', (
+      tester,
+    ) async {
+      await pump(tester);
+      final chips = find.byType(DockChip).evaluate().length;
+      expect(find.text('More'), findsOneWidget);
+
+      PlayerControlsDisplaySettings.iconOnly.value = true;
+      await tester.pump();
+
+      expect(find.text('More'), findsNothing);
+      expect(
+        find.byType(DockChip).evaluate().length,
+        greaterThanOrEqualTo(chips),
+      );
+      expect(tester.takeException(), isNull);
+    });
   });
 }

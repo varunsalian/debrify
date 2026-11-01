@@ -42,6 +42,7 @@ typedef PlaybackPlayerSectionDependencies = ({
   Future<void> Function(bool enabled) setSkipSegmentsEnabled,
   Future<void> Function(bool enabled) setStartPortrait,
   Future<void> Function(bool enabled) setSwipeSeek,
+  Future<void> Function(bool enabled) setIconOnlyControls,
   PlaybackSubtitleRowsState subRows,
   PlaybackValuesState values,
 });
@@ -143,6 +144,24 @@ class PlaybackPlayerSection {
                   onChanged: _deps.setSwipeSeek,
                 ),
               ],
+            ],
+          ),
+          const SizedBox(height: 16),
+        ],
+        // Off TV: a TV's player has its own controls. No FocusNode for the
+        // same reason as the phone rows above.
+        if (!PlatformUtil.isTelevision) ...[
+          _deps.defaultsCard(
+            'Player controls',
+            'How the buttons under the progress bar look',
+            [
+              buildCheckboxTile(
+                _deps.context(),
+                title: 'Icons only',
+                subtitle: 'Hide the labels under the player buttons',
+                value: _deps.values.iconOnlyControls,
+                onChanged: _deps.setIconOnlyControls,
+              ),
             ],
           ),
           const SizedBox(height: 16),

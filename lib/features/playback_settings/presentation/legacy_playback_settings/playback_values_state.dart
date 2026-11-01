@@ -34,6 +34,8 @@ class PlaybackValuesState {
 
   bool swipeSeek = true; // Phone only, on by default
 
+  bool iconOnlyControls = false; // Off TV, opt-in
+
   int movieCompletionThreshold =
       LocalCompletionStorage.defaultLocalCompletionThreshold;
 
