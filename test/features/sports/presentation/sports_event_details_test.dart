@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/intl.dart';
+import 'sports_board_test_harness.dart' show useTwentyFourHourClock;
 
 const _panelKey = ValueKey('sports-details-panel');
 const _sheetKey = ValueKey('sports-details-sheet');
@@ -160,6 +161,7 @@ class _Harness {
 }
 
 void main() {
+  useTwentyFourHourClock();
   testWidgets('a wide view docks a 420 px panel on the right', (tester) async {
     final h = _Harness(watch: const SportsWatchOptions(guide: [_guideOption]));
     await h.open(tester, size: const Size(1000, 800));

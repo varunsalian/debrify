@@ -14,8 +14,8 @@ import 'package:debrify/features/sports/models/sports_models.dart';
 import 'package:debrify/widgets/iptv/styles/iptv_style.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:intl/intl.dart';
 
+import 'sports_clock.dart';
 import 'sports_event_card.dart';
 import 'sports_team_crest.dart';
 
@@ -28,8 +28,6 @@ const _cardMinWidth = 258.0;
 const _gridGap = 12.0;
 const _channelTileWidth = 300.0;
 const _channelTileHeight = 116.0;
-
-final _boardTimeFormat = DateFormat('HH:mm');
 
 /// The heading every board section shares: an uppercase title, the number of
 /// fixtures when given, and a hairline running to the edge. The live section
@@ -200,15 +198,16 @@ class SportsBoardLiveChannelsRow extends StatelessWidget {
           clipBehavior: Clip.none,
           itemCount: listings.length,
           separatorBuilder: (_, _) => const SizedBox(width: 12),
-          itemBuilder: (_, index) => _tile(listings[index]),
+          itemBuilder: (context, index) =>
+              _tile(listings[index], sportsClock(context)),
         ),
       ),
     ],
   );
 
-  Widget _tile(SportsGuideListing listing) {
+  Widget _tile(SportsGuideListing listing, SportsClock clock) {
     final channel = listing.channel;
-    final range = _range(listing);
+    final range = _range(listing, clock);
     return SizedBox(
       width: _channelTileWidth,
       child: SportsFocusPill.row(
@@ -289,9 +288,8 @@ class SportsBoardLiveChannelsRow extends StatelessWidget {
     return (done.inSeconds / total.inSeconds).clamp(0.0, 1.0);
   }
 
-  String _range(SportsGuideListing listing) =>
-      '${_boardTimeFormat.format(listing.start.toLocal())}–'
-      '${_boardTimeFormat.format(listing.stop.toLocal())}';
+  String _range(SportsGuideListing listing, SportsClock clock) =>
+      '${clock(listing.start.toLocal())}–${clock(listing.stop.toLocal())}';
 }
 
 /// Three placeholder sections while the first refresh is in flight.

@@ -16,6 +16,7 @@ import 'package:debrify/widgets/iptv/styles/iptv_style.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import 'sports_clock.dart';
 import 'sports_event_card_bodies.dart';
 import 'sports_team_crest.dart';
 
@@ -37,24 +38,29 @@ double sportsEventCardHeight(BuildContext context) =>
 ///
 /// [now] exists so tests can pin the "is this today" decision; production
 /// leaves it null and reads the wall clock.
-String sportsEventStatusText(SportsEvent event, {DateTime? now}) {
+String sportsEventStatusText(
+  SportsEvent event, {
+  required SportsClock clock,
+  DateTime? now,
+}) {
   final label = event.statusLabel.trim();
-  final clock = event.clock?.trim() ?? '';
+  final gameClock = event.clock?.trim() ?? '';
   return switch (event.status) {
-    SportsEventStatus.live => clock.isEmpty ? 'LIVE' : 'LIVE $clock',
+    SportsEventStatus.live => gameClock.isEmpty ? 'LIVE' : 'LIVE $gameClock',
     SportsEventStatus.finished => label.isEmpty ? 'FT' : label,
     SportsEventStatus.postponed => 'Postponed',
     SportsEventStatus.scheduled => _kickoffText(
       event.start,
       now ?? DateTime.now(),
+      clock,
     ),
   };
 }
 
-/// Local `HH:mm`, prefixed with the weekday once the fixture is not today.
-String _kickoffText(DateTime startUtc, DateTime now) {
+/// Local clock time, prefixed with the weekday once the fixture is not today.
+String _kickoffText(DateTime startUtc, DateTime now, SportsClock clock) {
   final local = startUtc.toLocal();
-  final time = DateFormat('HH:mm').format(local);
+  final time = clock(local);
   final day = DateFormat('yyyy-MM-dd');
   if (day.format(local) == day.format(now.toLocal())) return time;
   return '${DateFormat('EEE').format(local)} $time';
@@ -159,20 +165,21 @@ class SportsEventCard extends StatelessWidget {
   /// `from 13:30` while the first guide option's listing has not begun: a
   /// channel is offered up to two hours early, and until then it airs
   /// something else.
-  String? get _startsLater {
+  String? _startsLater(SportsClock clock) {
     final listing = watch.guide.firstOrNull?.listing;
-    final clock = now ?? DateTime.now();
-    if (listing == null || !listing.start.isAfter(clock)) return null;
+    if (listing == null || !listing.start.isAfter(now ?? DateTime.now())) {
+      return null;
+    }
     // Weekday-prefixed once it is not today, like the kick-off time.
-    return 'from ${_kickoffText(listing.start, clock)}';
+    return 'from ${_kickoffText(listing.start, now ?? DateTime.now(), clock)}';
   }
 
   /// The footer, as the plain sentence the card paints.
-  String get _watchText {
+  String _watchText(SportsClock clock) {
     final guide = watch.guide;
     if (guide.isNotEmpty) {
       final name = sportsChannelDisplayName(guide.first.channel.name);
-      final later = _startsLater;
+      final later = _startsLater(clock);
       final extra = guide.length - 1;
       return [name, ?later, if (extra > 0) '+$extra'].join(' ');
     }
@@ -182,14 +189,14 @@ class SportsEventCard extends StatelessWidget {
 
   /// The whole card is one control, so the sentence a screen reader needs is
   /// built here rather than from the painted text runs.
-  String get _semanticLabel => <String>[
+  String _semanticLabel(SportsClock clock) => <String>[
     if (followed) 'Followed',
     _leagueName,
     if ((event.group ?? '').trim().isNotEmpty) event.group!.trim(),
     event.displayTitle,
-    sportsEventStatusText(event, now: now),
+    sportsEventStatusText(event, clock: clock, now: now),
     ?_badge,
-    _watchText,
+    _watchText(clock),
   ].join(', ');
 
   @override
@@ -197,7 +204,7 @@ class SportsEventCard extends StatelessWidget {
     width: width,
     height: sportsEventCardHeight(context),
     child: SportsFocusPill(
-      label: _semanticLabel,
+      label: _semanticLabel(sportsClock(context)),
       style: event.status == SportsEventStatus.live
           ? _liveCardStyle
           : _cardStyle,
@@ -209,7 +216,7 @@ class SportsEventCard extends StatelessWidget {
       builder: (context, ink, subtle) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _header(),
+          _header(sportsClock(context)),
           const SizedBox(height: 10),
           Expanded(
             child: ClipRect(
@@ -224,13 +231,13 @@ class SportsEventCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          _footer(),
+          _footer(sportsClock(context)),
         ],
       ),
     ),
   );
 
-  Widget _header() => Row(
+  Widget _header(SportsClock clock) => Row(
     children: [
       Expanded(
         child: Row(
@@ -261,7 +268,7 @@ class SportsEventCard extends StatelessWidget {
         ),
       ),
       const SizedBox(width: 8),
-      _status(),
+      _status(clock),
     ],
   );
 
@@ -280,7 +287,7 @@ class SportsEventCard extends StatelessWidget {
     ),
   );
 
-  Widget _status() {
+  Widget _status(SportsClock clock) {
     if (event.status == SportsEventStatus.live) {
       final clock = event.clock?.trim() ?? '';
       return Row(
@@ -304,7 +311,7 @@ class SportsEventCard extends StatelessWidget {
       _ => _tokens.fg,
     };
     return sportsLabelText(
-      sportsEventStatusText(event, now: now),
+      sportsEventStatusText(event, clock: clock, now: now),
       color,
       size: 11.5,
       weight: FontWeight.w700,
@@ -312,7 +319,7 @@ class SportsEventCard extends StatelessWidget {
     );
   }
 
-  Widget _footer() {
+  Widget _footer(SportsClock clock) {
     final guide = watch.guide;
     final Widget content;
     if (guide.isNotEmpty) {
@@ -330,11 +337,12 @@ class SportsEventCard extends StatelessWidget {
               ellipsize: true,
             ),
           ),
-          if (_startsLater case final later?) ...[
+          if (_startsLater(clock) case final later?) ...[
             const SizedBox(width: 6),
             sportsLabelText(later, _tokens.fgDim, size: 11, tabular: true),
           ],
-          if (_startsLater != null && extra > 0) const SizedBox(width: 8),
+          if (_startsLater(clock) != null && extra > 0)
+            const SizedBox(width: 8),
           if (extra > 0)
             sportsLabelText('+$extra', _tokens.fgDim, size: 11, tabular: true),
         ],
@@ -346,7 +354,7 @@ class SportsEventCard extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: sportsLabelText(
-              _watchText,
+              _watchText(clock),
               _tokens.fgDim,
               size: 12,
               ellipsize: true,
@@ -356,7 +364,7 @@ class SportsEventCard extends StatelessWidget {
       );
     } else {
       content = sportsLabelText(
-        _watchText,
+        _watchText(clock),
         _tokens.fgFaint,
         size: 12,
         ellipsize: true,

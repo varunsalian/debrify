@@ -11,8 +11,8 @@ import 'package:debrify/features/sports/models/sports_models.dart';
 import 'package:debrify/widgets/iptv/styles/iptv_style.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:intl/intl.dart';
 
+import 'sports_clock.dart';
 import 'sports_event_card.dart';
 import 'sports_team_crest.dart';
 
@@ -125,7 +125,6 @@ class _DetailsSurface extends StatefulWidget {
 class _DetailsSurfaceState extends State<_DetailsSurface> {
   final Set<String> _teamKeys = {};
   final Set<String> _leagueIds = {};
-  final _timeFormat = DateFormat('HH:mm');
 
   /// Reset per build: only the first focusable control claims autofocus.
   bool _focusClaimed = false;
@@ -267,7 +266,7 @@ class _DetailsSurfaceState extends State<_DetailsSurface> {
       ),
       const SizedBox(width: 8),
       sportsLabelText(
-        sportsEventStatusText(_event),
+        sportsEventStatusText(_event, clock: sportsClock(context)),
         _tokens.fgDim,
         size: 12,
         weight: FontWeight.w600,
@@ -439,9 +438,10 @@ class _DetailsSurfaceState extends State<_DetailsSurface> {
     );
   }
 
-  String _timeRange(SportsGuideListing listing) =>
-      '${_timeFormat.format(listing.start.toLocal())}–'
-      '${_timeFormat.format(listing.stop.toLocal())}';
+  String _timeRange(SportsGuideListing listing) {
+    final clock = sportsClock(context);
+    return '${clock(listing.start.toLocal())}–${clock(listing.stop.toLocal())}';
+  }
 
   /// Follow targets: one pill per team, or the league for a non-team event.
   List<({String name, String key, bool on, VoidCallback flip})>

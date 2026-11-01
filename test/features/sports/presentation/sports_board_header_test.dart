@@ -65,6 +65,7 @@ String? _count(WidgetTester tester, String key) => tester
     .data;
 
 void main() {
+  useTwentyFourHourClock();
   setUp(() => PlatformUtil.debugSetAndroidTvCached(true));
   tearDown(() {
     PlatformUtil.debugSetAndroidTvCached(null);

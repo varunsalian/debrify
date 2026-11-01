@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/intl.dart';
+import 'sports_board_test_harness.dart' show useTwentyFourHourClock;
 
 const _home = SportsTeam(
   id: '1',
@@ -128,6 +129,7 @@ SportsEventCard _card({
 );
 
 void main() {
+  useTwentyFourHourClock();
   testWidgets('live fixture shows league, clock, both teams and scores', (
     tester,
   ) async {
@@ -216,6 +218,57 @@ void main() {
     );
     expect(find.text('2'), findsNothing);
     expect(find.text('1'), findsNothing);
+  });
+
+  testWidgets('a 12-hour device reads the kick-off in 12-hour time', (
+    tester,
+  ) async {
+    // A user asked for "regular times instead of military timing": the board
+    // follows the device's 12/24-hour preference, like the calendars.
+    final now = DateTime.now();
+    final tonight = DateTime(now.year, now.month, now.day, 20, 15);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
+          child: child!,
+        ),
+        home: Scaffold(
+          body: Center(
+            child: _card(event: _scheduled(start: tonight)),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('8:15 PM'), findsOneWidget);
+    expect(find.text('20:15'), findsNothing);
+  });
+
+  testWidgets('a 12-hour device reads "from" in 12-hour time', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
+          child: child!,
+        ),
+        home: Scaffold(
+          body: Center(
+            child: _card(
+              watch: SportsWatchOptions(guide: [_guide(_sky)]),
+              now: _kickoff.subtract(const Duration(minutes: 30)),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('from ${DateFormat('h:mm a').format(_kickoff.toLocal())}'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('scheduled fixture names the weekday once it is not today', (

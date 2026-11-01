@@ -8,8 +8,8 @@
 import 'package:debrify/features/sports/application/sports_board_sections.dart';
 import 'package:debrify/widgets/iptv/styles/iptv_style.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
+import 'sports_clock.dart';
 import 'sports_team_crest.dart';
 import 'sports_when_switch.dart';
 
@@ -61,7 +61,7 @@ class SportsBoardHeader extends StatelessWidget {
       if (width >= _singleRowMinWidth) {
         return Row(
           children: [
-            Expanded(child: _title()),
+            Expanded(child: _title(context)),
             _when(expand: false),
             const SizedBox(width: 14),
             _tools(),
@@ -74,7 +74,7 @@ class SportsBoardHeader extends StatelessWidget {
           children: [
             Row(
               children: [
-                Expanded(child: _title()),
+                Expanded(child: _title(context)),
                 const SizedBox(width: 12),
                 _tools(),
               ],
@@ -87,7 +87,7 @@ class SportsBoardHeader extends StatelessWidget {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _title(),
+          _title(context),
           const SizedBox(height: 12),
           _when(expand: true),
           const SizedBox(height: 12),
@@ -97,7 +97,7 @@ class SportsBoardHeader extends StatelessWidget {
     },
   );
 
-  Widget _title() => Row(
+  Widget _title(BuildContext context) => Row(
     crossAxisAlignment: CrossAxisAlignment.baseline,
     textBaseline: TextBaseline.alphabetic,
     children: [
@@ -125,7 +125,7 @@ class SportsBoardHeader extends StatelessWidget {
         const SizedBox(width: 10),
         Flexible(
           child: sportsLabelText(
-            'Updated ${DateFormat('HH:mm').format(at.toLocal())}',
+            'Updated ${sportsClock(context)(at.toLocal())}',
             _tokens.fgFaint,
             size: 12,
             tabular: true,
