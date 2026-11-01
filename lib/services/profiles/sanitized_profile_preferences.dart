@@ -66,7 +66,7 @@ abstract final class SanitizedProfilePreferences {
       case 'subtitle_style_index':
         return _boundedInt(value, 0, 4);
       case 'subtitle_color_index':
-        return _boundedInt(value, 0, 7);
+        return _boundedInt(value, 0, 8);
       case 'subtitle_bg_index':
         return _boundedInt(value, 0, 4);
       case 'subtitle_outline_color_index':

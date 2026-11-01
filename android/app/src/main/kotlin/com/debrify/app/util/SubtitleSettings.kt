@@ -69,7 +69,9 @@ object SubtitleSettings {
         ColorOption("Magenta", Color.parseColor("#FF00FF")),
         ColorOption("Red", Color.parseColor("#FF4444")),
         ColorOption("Blue", Color.parseColor("#4488FF")),
-        ColorOption("Orange", Color.parseColor("#FF8800"))
+        ColorOption("Orange", Color.parseColor("#FF8800")),
+        // Appended: the index is stored and shared with the Flutter player.
+        ColorOption("Light grey", Color.parseColor("#CCCCCC"))
     )
 
     // Background options
