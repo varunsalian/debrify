@@ -20,7 +20,8 @@ enum PreferencesFileRecovery {
 
   /// The file was unreadable, no good backup existed, and starting fresh is
   /// not safe here (Linux keeps its device key in preferences), so the file
-  /// is left for the startup failure screen.
+  /// is left as it was: the startup failure screen shows, unless it is one the
+  /// plugin itself tolerates as empty.
   kept,
 
   /// Another Debrify process owns the file; it was not touched.
@@ -85,7 +86,9 @@ Future<PreferencesFileRecovery> recoverPreferencesFile(
   if (!restorable && !allowReset) return PreferencesFileRecovery.kept;
   // Stage the backup first: if anything below fails, the good backup and the
   // unreadable file are both still on disk for the next launch.
-  if (restorable) await backup.copy(temp.path);
+  if (restorable) {
+    await temp.writeAsBytes(await backup.readAsBytes(), flush: true);
+  }
   await _replace(file, corrupt);
   if (!restorable) return PreferencesFileRecovery.reset;
   await temp.rename(file.path);
@@ -95,10 +98,17 @@ Future<PreferencesFileRecovery> recoverPreferencesFile(
 String _join(Directory dir, String name) =>
     '${dir.path}${Platform.pathSeparator}$name';
 
-/// Windows rename does not replace an existing destination.
+/// Renames over [to], which keeps [to] if the rename fails for any reason.
+/// Only a rename refused because [to] exists (Windows errors 80 and 183)
+/// deletes it and tries again.
 Future<void> _replace(File from, File to) async {
-  if (Platform.isWindows && await to.exists()) await to.delete();
-  await from.rename(to.path);
+  try {
+    await from.rename(to.path);
+  } on FileSystemException catch (error) {
+    if (!const {80, 183}.contains(error.osError?.errorCode)) rethrow;
+    await to.delete();
+    await from.rename(to.path);
+  }
 }
 
 /// The plugin never writes an empty file (an empty map is `{}`), so empty is
