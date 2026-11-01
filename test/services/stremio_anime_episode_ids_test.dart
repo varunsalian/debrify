@@ -44,13 +44,24 @@ void main() {
     ]);
   });
 
-  test('an IMDb-named special proves the layout too', () {
-    final videos = [ep('tt9999999:0:1', 0, 1), ep('mal:30:1', 1, 1)];
+  test('an IMDb-named special proves nothing about regular episodes', () {
+    // AIOMetadata names every special this way, whatever the layout; a later
+    // cour numbered from 1 must stay on its own IDs.
+    final videos = [ep('tt9999999:0:1', 0, 1), ep('mal:25777:1', 1, 1)];
 
-    expect(ids(withImdbAnimeEpisodeIds({'imdb_id': 'tt9999999'}, videos)), [
-      'tt9999999:0:1',
-      'tt9999999:1:1',
-    ]);
+    expect(
+      withImdbAnimeEpisodeIds({'imdb_id': 'tt9999999'}, videos),
+      same(videos),
+    );
+    expect(
+      ids(
+        withImdbAnimeEpisodeIds({
+          'imdb_id': 'tt9999999',
+          '_metaProvider': 'tvdb',
+        }, videos),
+      ),
+      ['tt9999999:0:1', 'tt9999999:1:1'],
+    );
   });
 
   test('IMDb IDs that disagree with the numbering keep the addon IDs', () {
@@ -131,11 +142,65 @@ void main() {
     );
   });
 
-  test('Kitsu, TMDB, specials and other IDs keep their names', () {
+  test('a mapped special keeps its own ID', () {
+    final videos = [
+      ep('mal:9:1', 0, 1),
+      ep('mal:21:1', 1, 1),
+      ep('mal:2:1', 2, 1),
+    ];
+
+    expect(ids(withImdbAnimeEpisodeIds(meta, videos)), [
+      'mal:9:1',
+      'tt0388629:1:1',
+      'tt0388629:2:1',
+    ]);
+  });
+
+  test('an IMDb-named special cannot vouch for several cours in a season', () {
+    // Absolute order: IMDb S1E13 is not this episode.
+    final videos = [
+      ep('tt9999999:0:1', 0, 1),
+      ep('mal:30:1', 1, 1),
+      ep('mal:30:12', 1, 12),
+      ep('mal:31:1', 1, 13),
+    ];
+
+    expect(
+      withImdbAnimeEpisodeIds({
+        'imdb_id': 'tt9999999',
+        '_metaProvider': 'tvdb',
+      }, videos),
+      same(videos),
+    );
+  });
+
+  test('an IMDb-named episode cannot vouch for several cours either', () {
+    final videos = [
+      ep('mal:30:1', 1, 1),
+      ep('tt9999999:1:12', 1, 12),
+      ep('mal:31:1', 1, 13),
+    ];
+
+    expect(
+      withImdbAnimeEpisodeIds({'imdb_id': 'tt9999999'}, videos),
+      same(videos),
+    );
+  });
+
+  test('episodes that would share a coordinate keep the addon IDs', () {
+    final videos = [
+      ep('mal:1:1', 1, 1),
+      ep('mal:2:1', 1, 1),
+      ep('mal:3:1', 2, 1),
+    ];
+
+    expect(withImdbAnimeEpisodeIds(meta, videos), same(videos));
+  });
+
+  test('Kitsu, TMDB and other IDs keep their names', () {
     final videos = [
       ep('kitsu:12:1', 1, 1),
       ep('tmdb:37854:2:1', 2, 1),
-      ep('mal:21:900', 0, 900),
       ep('mal:21:5', null, 5),
       ep('cut-1', 2, 2),
     ];

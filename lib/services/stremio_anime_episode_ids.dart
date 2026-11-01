@@ -11,15 +11,18 @@ final _animeEpisodeId = RegExp(r'^((?:mal|anilist|anidb):[0-9]+):([0-9]+)$');
 /// the trackers only know `tt…:S:E`, so those episodes found no sources.
 ///
 /// The numbering counts as the show's only with evidence: regular episodes
-/// span more than one season, some episode already carries its own plain
-/// `tt…:S:E` ID (AIOMetadata's fallback for unmapped episodes and specials),
-/// or AIOMetadata names a show-wide layout (`_metaProvider` tvdb/tmdb/imdb)
-/// for a single cour whose IDs count its episodes the same way. Its MAL and
-/// Kitsu layouts number each cour from season 1 and stay as they are, as do
-/// lists numbered in absolute order (their IDs disagree with the numbering).
-/// `kitsu:` IDs (Torrentio and Comet take them) and `tmdb:` IDs
-/// (AIOMetadata's fallback exactly when the IMDb episode is unknown) are
-/// never renamed.
+/// span more than one season, or a single season holds one cour whose IDs
+/// count its episodes the same way and either a regular episode already carries
+/// its own plain `tt…:S:E` ID (AIOMetadata's fallback for unmapped episodes) or
+/// AIOMetadata names a show-wide layout (`_metaProvider` tvdb/tmdb/imdb). A
+/// single season holding several cours may be absolute order, so it stays as
+/// it is, as do AIOMetadata's MAL and Kitsu layouts, which number each cour from
+/// season 1, and any list whose `tt…` IDs disagree with their own numbering or
+/// whose episodes would share a coordinate. Specials are neither renamed nor
+/// evidence: AIOMetadata's show-wide layouts already name every one `tt…:0:N`,
+/// which says nothing about the regular episodes. `kitsu:` IDs (Torrentio and
+/// Comet take them) and `tmdb:` IDs (AIOMetadata's fallback exactly when the
+/// IMDb episode is unknown) are never renamed.
 List<Map<String, dynamic>> withImdbAnimeEpisodeIds(
   Map<String, dynamic> meta,
   List<Map<String, dynamic>> videos,
@@ -37,16 +40,18 @@ List<Map<String, dynamic>> withImdbAnimeEpisodeIds(
   final cours = <String>{};
   var imdbNumbered = false;
   var courNumbered = true;
+  final coordinates = <(int, int)>{};
   for (final video in videos) {
     final (season, episode) = _coordinate(video);
     if (season == null || episode == null || season < 0) continue;
+    if (!coordinates.add((season, episode))) return videos;
     final id = video['id']?.toString() ?? '';
     if (imdbEpisode.firstMatch(id) case final match?) {
       if (int.tryParse(match[1]!) != season ||
           int.tryParse(match[2]!) != episode) {
         return videos;
       }
-      imdbNumbered = true;
+      if (season > 0) imdbNumbered = true;
     }
     if (season == 0) continue;
     seasons.add(season);
@@ -55,11 +60,12 @@ List<Map<String, dynamic>> withImdbAnimeEpisodeIds(
       if (int.tryParse(match[2]!) != episode) courNumbered = false;
     }
   }
-  final showWideLayout =
-      const {'tvdb', 'tmdb', 'imdb'}.contains(provider) &&
-      cours.length <= 1 &&
-      courNumbered;
-  if (!imdbNumbered && seasons.length < 2 && !showWideLayout) return videos;
+  final showWide =
+      seasons.length >= 2 ||
+      (cours.length <= 1 &&
+          courNumbered &&
+          (imdbNumbered || const {'tvdb', 'tmdb', 'imdb'}.contains(provider)));
+  if (!showWide) return videos;
   return [
     for (final video in videos)
       switch (_coordinate(video)) {

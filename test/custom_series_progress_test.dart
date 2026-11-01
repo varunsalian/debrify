@@ -394,7 +394,9 @@ void main() {
       return service;
     }
 
+    // AIOMetadata names every special by its IMDb coordinate.
     const tvdbLayout = [
+      {'id': 'tt0388629:0:1', 'season': 0, 'episode': 1},
       {'id': 'mal:21:1', 'season': 1, 'episode': 1},
       {'id': 'mal:2:1', 'season': 2, 'episode': 1},
     ];
@@ -412,7 +414,7 @@ void main() {
       );
       expect(
         (await service.fetchSeriesMeta(addon, 'mal:21'))!.map((v) => v['id']),
-        ['tt0388629:1:1', 'tt0388629:2:1'],
+        ['tt0388629:0:1', 'tt0388629:1:1', 'tt0388629:2:1'],
       );
     });
 
