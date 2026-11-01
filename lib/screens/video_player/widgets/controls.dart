@@ -542,52 +542,51 @@ class Controls extends StatelessWidget {
                                         ),
                                       ),
                                     ),
-                                    const SizedBox(width: 12),
-                                    // Tap: the total or the time left.
+                                    // Tap: the total or the time left. The
+                                    // target matches the slider's height (this
+                                    // row must not grow on a short screen) and
+                                    // takes in the gap beside it.
                                     ValueListenableBuilder<bool>(
                                       valueListenable:
                                           PlayerControlsDisplaySettings
                                               .showRemaining,
-                                      builder: (context, remaining, _) =>
-                                          Semantics(
-                                            container: true,
-                                            button: true,
-                                            onTapHint: remaining
-                                                ? 'Show total time'
-                                                : 'Show time left',
-                                            child: MouseRegion(
-                                              cursor: SystemMouseCursors.click,
-                                              child: GestureDetector(
-                                                behavior:
-                                                    HitTestBehavior.opaque,
-                                                onTap:
-                                                    PlayerControlsDisplaySettings
-                                                        .toggleRemaining,
-                                                child: ConstrainedBox(
-                                                  constraints:
-                                                      const BoxConstraints(
-                                                        minHeight: 44,
-                                                      ),
-                                                  child: Center(
-                                                    widthFactor: 1,
-                                                    child: Text(
-                                                      remaining
-                                                          ? _timeLeft(value)
-                                                          : _format(
-                                                              value.duration,
-                                                            ),
-                                                      style: const TextStyle(
-                                                        color: Colors.white,
-                                                        fontSize: 14,
-                                                        fontWeight:
-                                                            FontWeight.w500,
-                                                      ),
+                                      builder: (context, remaining, _) => Semantics(
+                                        container: true,
+                                        button: true,
+                                        onTapHint: remaining
+                                            ? 'Show total time'
+                                            : 'Show time left',
+                                        child: MouseRegion(
+                                          cursor: SystemMouseCursors.click,
+                                          child: GestureDetector(
+                                            behavior: HitTestBehavior.opaque,
+                                            onTap: PlayerControlsDisplaySettings
+                                                .toggleRemaining,
+                                            child: ConstrainedBox(
+                                              constraints: const BoxConstraints(
+                                                minHeight: 24,
+                                              ),
+                                              child: Container(
+                                                alignment: Alignment.center,
+                                                padding:
+                                                    const EdgeInsetsDirectional.only(
+                                                      start: 12,
                                                     ),
+                                                child: Text(
+                                                  remaining
+                                                      ? _timeLeft(value)
+                                                      : _format(value.duration),
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.w500,
                                                   ),
                                                 ),
                                               ),
                                             ),
                                           ),
+                                        ),
+                                      ),
                                     ),
                                   ],
                                 );
