@@ -914,3 +914,16 @@ test/features/video_player/video_player_p21_remote_symmetry_test.dart
 test/features/video_player/video_player_p21_timer_owners_test.dart
 test/features/video_player/video_player_p21_tracker_paths_test.dart
 test/features/video_player/video_player_p21_press_routing_test.dart
+# 2026-11-01: regression coverage for user-reported fixes (all pass on Linux).
+test/core/platform/preferences_file_recovery_test.dart
+test/custom_series_progress_test.dart
+test/dock_layout_test.dart
+test/features/sports/presentation/sports_event_card_test.dart
+test/media_server_library_panel_test.dart
+test/services/pinned_direct_stream_match_test.dart
+test/services/player_controls_display_settings_test.dart
+test/services/stremio_anime_episode_ids_test.dart
+test/simkl_launch_custom_identity_test.dart
+test/subtitle_color_options_test.dart
+test/ui/core/source_metadata_labels_test.dart
+test/widgets/text_prompt_dialog_test.dart
