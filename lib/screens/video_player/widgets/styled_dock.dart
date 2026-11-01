@@ -509,20 +509,23 @@ class StyledDock extends StatelessWidget {
             final scaledLabel = MediaQuery.textScalerOf(
               context,
             ).scale(metrics.label);
-            double chipWidth(_Tool t, bool labelled) =>
-                metrics.icon +
-                metrics.padX * 2 +
-                (labelled
-                    ? metrics.gap * 0.75 + t.label.length * scaledLabel * 0.62
-                    : 0);
+            final iconOnly = PlayerControlsDisplaySettings.iconOnly.value;
+            double chipWidth(_Tool t, bool labelled) => iconOnly
+                ? metrics.target
+                : metrics.icon +
+                      metrics.padX * 2 +
+                      (labelled
+                          ? metrics.gap * 0.75 +
+                                t.label.length * scaledLabel * 0.62
+                          : 0);
             final transportWidth =
                 (hasPrevious && onPrevious != null ? metrics.target : 0) +
                 metrics.target * 1.32 +
                 (hasNext && onNext != null ? metrics.target : 0) +
                 metrics.gap * 3;
-            final iconOnly = PlayerControlsDisplaySettings.iconOnly.value;
-            final moreWidth =
-                metrics.icon + metrics.padX * 2 + (iconOnly ? 0 : 30);
+            final moreWidth = iconOnly
+                ? metrics.target
+                : metrics.icon + metrics.padX * 2 + 30;
 
             bool fits(int count, bool labelled, double gap) {
               var width = transportWidth + moreWidth + gap * (count + 1);

@@ -39,6 +39,7 @@ void main() {
     double infoPanelHeight = 0,
     Duration position = const Duration(minutes: 68),
     Duration duration = const Duration(minutes: 166),
+    void Function(double extent, int generation)? onDockExtent,
   }) {
     final arrangement = DockArrangement.forViewport(size);
     final metrics = DockMetrics.compute(
@@ -72,6 +73,7 @@ void main() {
                 arrangement: arrangement,
                 title: 'Dune: Part Two',
                 subtitle: '2024 · 2h 46m',
+                onDockExtent: onDockExtent,
                 infoPanel: withPanel
                     ? SizedBox(height: infoPanelHeight, width: size.width)
                     : null,
@@ -452,6 +454,61 @@ void main() {
       );
     });
 
+    testWidgets('the wide readout keeps the minimum tap target', (
+      tester,
+    ) async {
+      const wide = Size(1280, 800);
+      tester.view.physicalSize = wide;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        host(
+          size: wide,
+          safeArea: EdgeInsets.zero,
+          textScale: 1.0,
+          dockSize: PlayerDockSize.auto,
+          withPanel: false,
+        ),
+      );
+      await tester.pump();
+      final readout = find.ancestor(
+        of: find.textContaining('  /  '),
+        matching: find.byType(GestureDetector),
+      );
+      expect(
+        tester.getSize(readout.first).height,
+        greaterThanOrEqualTo(DockLayoutInput.minTarget),
+      );
+    });
+
+    testWidgets('flipping icons only republishes the dock height', (
+      tester,
+    ) async {
+      // The band protecting the dock follows this: a flip can remove a row.
+      final extents = <double>[];
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        host(
+          size: size,
+          safeArea: EdgeInsets.zero,
+          textScale: 1.0,
+          dockSize: PlayerDockSize.auto,
+          withPanel: false,
+          onDockExtent: (extent, _) => extents.add(extent),
+        ),
+      );
+      await tester.pump();
+      final labelled = extents.last;
+
+      PlayerControlsDisplaySettings.iconOnly.value = true;
+      await tester.pump();
+      await tester.pump();
+
+      expect(extents.last, lessThan(labelled));
+    });
+
     test('the time left never reads below zero or before a duration', () {
       PlaybackUiClockValue at(int position, int duration) =>
           PlaybackUiClockValue(
@@ -508,6 +565,10 @@ void main() {
       );
       await tester.pump();
       expect(find.text('More'), findsNothing);
+      expect(
+        find.descendant(of: find.byType(DockChip), matching: find.byType(Text)),
+        findsNothing,
+      );
       expect(tester.takeException(), isNull);
     });
 
@@ -522,6 +583,10 @@ void main() {
       await tester.pump();
 
       expect(find.text('More'), findsNothing);
+      expect(
+        find.descendant(of: find.byType(DockChip), matching: find.byType(Text)),
+        findsNothing,
+      );
       expect(
         find.byType(DockChip).evaluate().length,
         greaterThanOrEqualTo(chips),
