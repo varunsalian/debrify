@@ -87,8 +87,8 @@
 1602 lib/widgets/iptv/iptv_channel_row.dart
 1599 lib/widgets/remote/remote_config_export.dart
 1582 lib/screens/settings/home_sections_filter_page.dart
-# 2026-11-01: TV focus lands on the first option when Send everything opens (+16).
-1587 lib/widgets/remote/remote_transfer_all.dart
+# 2026-11-01: TV focus lands on the first option when Send everything opens, UP and DOWN leave its radios, and the PikPak field lets DOWN reach Review (+62).
+1633 lib/widgets/remote/remote_transfer_all.dart
 1536 lib/widgets/tv_text_field.dart
 # 2026-11-01: the phone episode rail leaves room for the lifted Up Next card below the season pill (+19).
 1541 lib/widgets/detail/detail_layout_showcase.dart

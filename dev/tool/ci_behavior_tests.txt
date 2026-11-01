@@ -920,6 +920,7 @@ test/custom_series_progress_test.dart
 test/dock_layout_test.dart
 test/features/sports/presentation/sports_event_card_test.dart
 test/media_server_library_panel_test.dart
+test/remote_transfer_all_focus_test.dart
 test/services/pinned_direct_stream_match_test.dart
 test/services/player_controls_display_settings_test.dart
 test/services/stremio_anime_episode_ids_test.dart
