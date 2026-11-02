@@ -1,12 +1,12 @@
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
+import 'classic_seek_row.dart';
 import 'dock_style.dart';
 import 'styled_dock.dart';
 import '../models/gesture_state.dart';
 import '../services/playback_ui_clock.dart';
 import 'netflix_control_button.dart';
-import '../../../services/player_controls_display_settings.dart';
 
 class Controls extends StatelessWidget {
   final String title;
@@ -310,26 +310,6 @@ class Controls extends StatelessWidget {
     return dock;
   }
 
-  /// `-42:55`: what is left, never below zero. No "-00:00" before the
-  /// duration is known.
-  String _timeLeft(PlaybackUiClockValue value) {
-    if (value.duration <= Duration.zero) return _format(value.duration);
-    final left = value.duration - value.position;
-    return '-${_format(left.isNegative ? Duration.zero : left)}';
-  }
-
-  String _format(Duration d) {
-    final sign = d.isNegative ? '-' : '';
-    final abs = d.abs();
-    final h = abs.inHours;
-    final m = abs.inMinutes % 60;
-    final s = abs.inSeconds % 60;
-    if (h > 0) {
-      return '$sign${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
-    }
-    return '$sign${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
-  }
-
   // Simple rating badge for top-right
   Widget _buildMetadataRow(Map<String, dynamic> metadata) {
     // Only show rating
@@ -489,108 +469,11 @@ class Controls extends StatelessWidget {
                         children: [
                           // Progress bar with time indicators
                           if (!hideSeekbar)
-                            ValueListenableBuilder<PlaybackUiClockValue>(
-                              valueListenable: clock,
-                              builder: (context, value, _) {
-                                final total = value.duration.inMilliseconds <= 0
-                                    ? const Duration(seconds: 1)
-                                    : value.duration;
-                                final progress =
-                                    (value.position.inMilliseconds /
-                                            total.inMilliseconds)
-                                        .clamp(0.0, 1.0);
-                                return Row(
-                                  children: [
-                                    Text(
-                                      _format(value.position),
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: SliderTheme(
-                                        data: SliderTheme.of(context).copyWith(
-                                          trackHeight: 4,
-                                          activeTrackColor: const Color(
-                                            0xFFE50914,
-                                          ),
-                                          inactiveTrackColor: Colors.white
-                                              .withValues(alpha: 0.3),
-                                          thumbShape:
-                                              const RoundSliderThumbShape(
-                                                enabledThumbRadius: 6,
-                                                elevation: 2,
-                                              ),
-                                          thumbColor: const Color(0xFFE50914),
-                                          overlayShape:
-                                              const RoundSliderOverlayShape(
-                                                overlayRadius: 12,
-                                              ),
-                                        ),
-                                        child: Slider(
-                                          min: 0,
-                                          max: 1,
-                                          value: progress,
-                                          onChangeStart: (_) =>
-                                              onSeekBarChangedStart(),
-                                          onChanged: onSeekBarChanged,
-                                          onChangeEnd: (_) =>
-                                              onSeekBarChangeEnd(),
-                                        ),
-                                      ),
-                                    ),
-                                    // Tap: the total or the time left. The
-                                    // target matches the slider's height (this
-                                    // row must not grow on a short screen) and
-                                    // takes in the gap beside it.
-                                    ValueListenableBuilder<bool>(
-                                      valueListenable:
-                                          PlayerControlsDisplaySettings
-                                              .showRemaining,
-                                      builder: (context, remaining, _) => Semantics(
-                                        container: true,
-                                        button: true,
-                                        onTapHint: remaining
-                                            ? 'Show total time'
-                                            : 'Show time left',
-                                        child: MouseRegion(
-                                          cursor: SystemMouseCursors.click,
-                                          child: GestureDetector(
-                                            behavior: HitTestBehavior.opaque,
-                                            onTap: PlayerControlsDisplaySettings
-                                                .toggleRemaining,
-                                            child: ConstrainedBox(
-                                              constraints: const BoxConstraints(
-                                                minHeight: 24,
-                                              ),
-                                              child: Container(
-                                                alignment: Alignment.center,
-                                                padding:
-                                                    const EdgeInsetsDirectional.only(
-                                                      start: 12,
-                                                    ),
-                                                child: Text(
-                                                  remaining
-                                                      ? _timeLeft(value)
-                                                      : _format(value.duration),
-                                                  style: const TextStyle(
-                                                    color: Colors.white,
-                                                    fontSize: 14,
-                                                    fontWeight: FontWeight.w500,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                );
-                              },
+                            ClassicSeekRow(
+                              clock: clock,
+                              onSeekBarChangedStart: onSeekBarChangedStart,
+                              onSeekBarChanged: onSeekBarChanged,
+                              onSeekBarChangeEnd: onSeekBarChangeEnd,
                             ),
 
                           // Separates the seek row from the buttons. Dropped

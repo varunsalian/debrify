@@ -21,6 +21,7 @@ import '../services/playback_ui_clock.dart';
 import '../utils/aspect_mode_utils.dart';
 import 'dock_style.dart';
 import 'dock_widgets.dart';
+import 'seek_bubble.dart';
 
 /// One control the dock can offer, with its availability already resolved.
 class _Tool {
@@ -898,7 +899,45 @@ class StyledDock extends StatelessWidget {
         : value.duration.inMilliseconds;
     final progress = (value.position.inMilliseconds / total).clamp(0.0, 1.0);
 
-    final bar = SliderTheme(
+    // The time under the pointer, and under the thumb while the bar is held.
+    final bar = SeekBubble(
+      duration: value.duration,
+      progress: progress,
+      inset: metrics.knob * 0.8,
+      format: _fmt,
+      fill: palette.chipFill,
+      ink: palette.ink,
+      fontSize: metrics.label,
+      child: _slider(context, progress),
+    );
+
+    // Wide runs the bar edge to edge and moves the readouts into the left
+    // zone; the narrower arrangements keep them flanking it.
+    if (bleed) return SizedBox(height: metrics.target, child: bar);
+
+    final readout = TextStyle(
+      color: palette.ink,
+      fontSize: metrics.label,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    // The readouts take their own width and the bar the rest. They were
+    // loose Flexibles beside a flex-8 bar, and a loose Flexible's unused
+    // share is left empty at the row's end: a wide gap after the duration.
+    return SizedBox(
+      height: DockLayoutInput.scrubberH,
+      child: Row(
+        children: [
+          Text(_fmt(value.position), maxLines: 1, style: readout),
+          SizedBox(width: metrics.gap),
+          Expanded(child: bar),
+          DockDurationReadout(value: value, metrics: metrics, style: readout),
+        ],
+      ),
+    );
+  }
+
+  Widget _slider(BuildContext context, double progress) {
+    return SliderTheme(
       data: SliderTheme.of(context).copyWith(
         trackHeight: metrics.trackHeight,
         // deep -> hot with a bloom at the played edge. Material's flat
@@ -923,30 +962,6 @@ class StyledDock extends StatelessWidget {
         onChangeStart: (_) => onSeekBarChangedStart(),
         onChanged: onSeekBarChanged,
         onChangeEnd: (_) => onSeekBarChangeEnd(),
-      ),
-    );
-
-    // Wide runs the bar edge to edge and moves the readouts into the left
-    // zone; the narrower arrangements keep them flanking it.
-    if (bleed) return SizedBox(height: metrics.target, child: bar);
-
-    final readout = TextStyle(
-      color: palette.ink,
-      fontSize: metrics.label,
-      fontFeatures: const [FontFeature.tabularFigures()],
-    );
-    // The readouts take their own width and the bar the rest. They were
-    // loose Flexibles beside a flex-8 bar, and a loose Flexible's unused
-    // share is left empty at the row's end: a wide gap after the duration.
-    return SizedBox(
-      height: DockLayoutInput.scrubberH,
-      child: Row(
-        children: [
-          Text(_fmt(value.position), maxLines: 1, style: readout),
-          SizedBox(width: metrics.gap),
-          Expanded(child: bar),
-          DockDurationReadout(value: value, metrics: metrics, style: readout),
-        ],
       ),
     );
   }

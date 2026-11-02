@@ -157,7 +157,8 @@
 991 lib/services/profiles/profile_migration_service.dart
 # 2026-11-01: the hidden send workspace no longer takes TV focus behind an open view (+6).
 982 lib/widgets/remote/remote_control_screen.dart
-971 lib/screens/video_player/widgets/styled_dock.dart
+# 2026-11-02 seek time bubble: the bar is wrapped in SeekBubble and its slider is a method (+15, 971 -> 986).
+986 lib/screens/video_player/widgets/styled_dock.dart
 958 lib/widgets/playlist_grid_card.dart
 953 lib/screens/settings/quick_play_settings_page.dart
 946 lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play.dart
