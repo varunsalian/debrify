@@ -41,6 +41,8 @@ class _Tour {
 
   Future<void> run() async {
     _dir.createSync(recursive: true);
+    // ignore: avoid_print
+    print('DUO SYNC DIR ${_dir.path}');
     final originalOnError = FlutterError.onError;
     final originalDebugPrint = debugPrint;
 
@@ -80,17 +82,26 @@ class _Tour {
     (w) => w is Text && (w.data ?? '').contains('watching?'),
   );
   Finder get _skip => find.textContaining('Skip');
+  Finder get _welcome => find.textContaining('WELCOME');
+
+  Future<bool> waitForAny(List<Finder> finders, {int seconds = 30}) async {
+    final deadline = DateTime.now().add(Duration(seconds: seconds));
+    do {
+      if (finders.any((f) => f.evaluate().isNotEmpty)) return true;
+      await idle(const Duration(milliseconds: 250));
+    } while (DateTime.now().isBefore(deadline));
+    return false;
+  }
+
   Finder get _pill => find.byKey(const ValueKey('desktop-sidebar-pill'));
 
   Future<void> _tour() async {
-    final first = find.byWidgetPredicate(
-      (w) =>
-          (w is Text &&
-              ((w.data ?? '').contains('watching?') ||
-                  (w.data ?? '').contains('Skip'))) ||
-          w.key == const ValueKey('desktop-sidebar-pill'),
-    );
-    final appeared = await waitFor(first, seconds: 180);
+    final appeared = await waitForAny(<Finder>[
+      _gateTitle,
+      _skip,
+      _welcome,
+      _pill,
+    ], seconds: 180);
     _captureErrors();
     if (!appeared) {
       problems.add('no gate, onboarding or main screen: ${visibleTexts()}');
@@ -129,7 +140,7 @@ class _Tour {
       .map((e) => (e.widget as Text).data)
       .whereType<String>()
       .where((t) => t.trim().isNotEmpty)
-      .take(25)
+      .take(60)
       .join(' | ');
 
   void _captureErrors() {
@@ -160,12 +171,7 @@ class _Tour {
 
   Future<bool> _onboarding() async {
     step = 'onboarding';
-    final either = find.byWidgetPredicate(
-      (w) =>
-          (w is Text && (w.data ?? '').contains('Skip')) ||
-          w.key == const ValueKey('desktop-sidebar-pill'),
-    );
-    if (!await waitFor(either, seconds: 60)) {
+    if (!await waitForAny(<Finder>[_skip, _pill], seconds: 60)) {
       problems.add('neither onboarding nor main screen: ${visibleTexts()}');
       await shot('01-onboarding-missing');
       return false;

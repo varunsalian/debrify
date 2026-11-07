@@ -78,16 +78,25 @@ jobs:
           xcrun simctl spawn "$DUOCTL_UDID" launchctl list | grep -q "UIKitApplication:$bundle"
         }
 
-        # Answers the test's req-N files with ack-N. The container is looked
-        # up every pass because a reinstall moves it.
+        # Answers the test's req-N files with ack-N. The request file is
+        # searched for under the simulator's data folder, because the app's
+        # temp folder is not where get_app_container points on iOS 27.1.
+        data_root="$HOME/Library/Developer/CoreSimulator/Devices/$DUOCTL_UDID/data"
         host_loop() {
-          local seq=0 dir cmd name rc next
+          local seq=0 dir="" cmd name rc next
           while :; do
-            dir="$(xcrun simctl get_app_container "$DUOCTL_UDID" "$bundle" data 2>/dev/null)/tmp/duo"
-            next="$dir/req-$((seq + 1))"
-            if [ ! -f "$next" ]; then
-              sleep 0.3
+            next=""
+            [ -n "$dir" ] && [ -f "$dir/req-$((seq + 1))" ] && next="$dir/req-$((seq + 1))"
+            if [ -z "$next" ]; then
+              next="$(find "$data_root" -maxdepth 10 -type f -name "req-$((seq + 1))" 2>/dev/null | head -n 1)"
+            fi
+            if [ -z "$next" ]; then
+              sleep 0.5
               continue
+            fi
+            if [ "$(dirname "$next")" != "$dir" ]; then
+              dir="$(dirname "$next")"
+              echo "sync dir: $dir"
             fi
             seq=$((seq + 1))
             cmd="$(cat "$next")"
