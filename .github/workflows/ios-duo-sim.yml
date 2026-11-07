@@ -1,0 +1,138 @@
+name: iPhone Duo simulator check
+
+# Throwaway check for the ios-xcode-27 work: installs the app on GitHub's
+# iPhone Duo simulator, folds and unfolds it, and captures each screen.
+on:
+  push:
+    branches: [ios-duo-sim-check]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  duo:
+    runs-on: xcode-27
+    timeout-minutes: 45
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure TMDB build token
+      shell: python
+      env:
+        TMDB_READ_ACCESS_TOKEN: ${{ secrets.TMDB_READ_ACCESS_TOKEN }}
+      run: |
+        import json, os
+        from pathlib import Path
+        token = os.environ.get("TMDB_READ_ACCESS_TOKEN", "").strip()
+        if not token:
+            raise SystemExit("Missing repository secret: TMDB_READ_ACCESS_TOKEN")
+        config = Path(os.environ["RUNNER_TEMP"]) / "debrify-build-config.json"
+        config.write_text(json.dumps({"TMDB_READ_ACCESS_TOKEN": token}), encoding="utf-8")
+
+    - name: Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.44.8'
+        channel: 'stable'
+
+    - name: Get dependencies
+      run: flutter pub get
+
+    - name: Build for the simulator
+      run: |
+        set -euo pipefail
+        xcodebuild -version
+        xcrun --sdk iphonesimulator --show-sdk-version
+        flutter build ios --simulator --debug --dart-define=DEBRIFY_LOCAL_VALIDATION=false --dart-define-from-file="${{ runner.temp }}/debrify-build-config.json"
+
+    # Third-party code runs after this point, so drop the token file first.
+    - name: Remove build token
+      run: rm -f "${{ runner.temp }}/debrify-build-config.json"
+
+    # duoctl drives the simulator's hinge through private interfaces, so it is
+    # pinned to a reviewed commit rather than installed from a moving tap.
+    - name: Install duoctl v0.2.1
+      run: |
+        set -euo pipefail
+        git clone --depth 1 --branch v0.2.1 https://github.com/skarol/duoctl.git "$RUNNER_TEMP/duoctl"
+        test "$(git -C "$RUNNER_TEMP/duoctl" rev-parse HEAD)" = c6ff3e961a9858fb061907448e702d7d1617dc4a
+        echo "$RUNNER_TEMP/duoctl/bin" >> "$GITHUB_PATH"
+
+    - name: Boot iPhone Duo simulator
+      run: |
+        set -euo pipefail
+        runtime="$(xcrun simctl list runtimes -j | python3 -c 'import json,sys; print(next(r["identifier"] for r in json.load(sys.stdin)["runtimes"] if r["identifier"].endswith("iOS-27-1") and r["isAvailable"]))')"
+        udid="$(xcrun simctl create ci-duo "iPhone Duo" "$runtime")"
+        xcrun simctl boot "$udid"
+        xcrun simctl bootstatus "$udid" -b
+        echo "DUOCTL_UDID=$udid" >> "$GITHUB_ENV"
+        duoctl state
+
+    - name: Launch, fold, unfold and rotate
+      run: |
+        set -uo pipefail
+        out="$RUNNER_TEMP/duo"
+        mkdir -p "$out"
+        bundle=com.varunsalian.debrify
+        failures=0
+
+        alive() {
+          xcrun simctl spawn "$DUOCTL_UDID" launchctl list | grep -q "UIKitApplication:$bundle"
+        }
+        capture() {
+          sleep 5
+          duoctl state > "$out/$1.json" || { echo "::error::state failed at $1"; failures=$((failures + 1)); }
+          duoctl screenshot "$out/$1.png" || { echo "::error::screenshot failed at $1"; failures=$((failures + 1)); }
+          if alive; then
+            echo "$1: app running"
+          else
+            echo "::error::app is not running at $1"
+            failures=$((failures + 1))
+          fi
+          cat "$out/$1.json" 2>/dev/null
+        }
+        step() {
+          echo "::group::$*"
+          "$@" || { echo "::error::'$*' failed"; failures=$((failures + 1)); }
+          echo "::endgroup::"
+        }
+
+        step duoctl close --duration 1
+        step xcrun simctl install "$DUOCTL_UDID" build/ios/iphonesimulator/Runner.app
+        step xcrun simctl launch "$DUOCTL_UDID" "$bundle"
+        # Debug builds start slowly; give the first frame time to settle.
+        sleep 40
+        capture 01-cover
+
+        step duoctl open --duration 1
+        capture 02-inner
+
+        step duoctl rotate portrait
+        capture 03-inner-portrait
+
+        step duoctl rotate landscape
+        step duoctl close --duration 1
+        capture 04-cover-after-fold
+
+        step duoctl open --duration 1
+        capture 05-inner-after-unfold
+
+        step duoctl half --duration 1
+        capture 06-half-folded
+
+        xcrun simctl spawn "$DUOCTL_UDID" log show --last 15m --style compact \
+          --predicate 'process == "Runner"' > "$out/runner.log" 2>&1 || true
+        find ~/Library/Logs/DiagnosticReports -iname '*Runner*' -exec cp {} "$out/" \; 2>/dev/null || true
+
+        echo "failures: $failures"
+        [ "$failures" -eq 0 ]
+
+    - name: Upload screenshots and logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: iphone-duo-check
+        path: ${{ runner.temp }}/duo
+        if-no-files-found: warn
