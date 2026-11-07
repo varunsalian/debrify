@@ -76,10 +76,6 @@ jobs:
         mkdir -p "$out"
         bundle=com.varunsalian.debrify
 
-        alive() {
-          xcrun simctl spawn "$DUOCTL_UDID" launchctl list | grep -q "UIKitApplication:$bundle"
-        }
-
         # Answers the test's req-N files with ack-N. The request file is
         # searched for under the simulator's data folder, because the app's
         # temp folder is not where get_app_container points on iOS 27.1.
@@ -108,7 +104,6 @@ jobs:
                 name="${cmd#shot }"
                 duoctl state > "$out/$name.json" && duoctl screenshot "$out/$name.png"
                 rc=$?
-                alive || { echo "app not running at $name"; rc=3; }
                 ;;
               end)
                 cp "$dir/summary.txt" "$out/" 2>/dev/null

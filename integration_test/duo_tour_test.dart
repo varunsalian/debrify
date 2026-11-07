@@ -224,12 +224,20 @@ class _Tour {
 
   Future<void> _detailAndPlayer() async {
     step = 'detail';
-    final cards = find.byType(SpotlightBoardCard).hitTestable();
+    final cards = find.byType(SpotlightBoardCard);
     if (!await waitFor(cards, seconds: 10)) {
       notes.add('no Home card to open a detail page from');
       return;
     }
-    await tap(cards.first);
+    // On the short inner screen the card rows start below the fold.
+    await tester.ensureVisible(cards.first);
+    await idle(const Duration(seconds: 1));
+    if (cards.hitTestable().evaluate().isEmpty) {
+      notes.add('Home cards could not be scrolled into view');
+      await shot('04-detail-no-card');
+      return;
+    }
+    await tap(cards.hitTestable().first);
     if (!await waitFor(find.byType(MergedDetailScreen), seconds: 20)) {
       problems.add('detail page did not open');
       return;
