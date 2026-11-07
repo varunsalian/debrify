@@ -42,13 +42,30 @@ jobs:
 
     - name: Boot iPhone Duo simulator
       run: |
-        set -euo pipefail
+        set -uo pipefail
         runtime="$(xcrun simctl list runtimes -j | python3 -c 'import json,sys; print(next(r["identifier"] for r in json.load(sys.stdin)["runtimes"] if r["identifier"].endswith("iOS-27-1") and r["isAvailable"]))')"
-        udid="$(xcrun simctl create ci-duo "iPhone Duo" "$runtime")"
-        xcrun simctl boot "$udid"
-        xcrun simctl bootstatus "$udid" -b
-        echo "DUOCTL_UDID=$udid" >> "$GITHUB_ENV"
-        duoctl state
+        # A fresh Duo simulator sometimes finishes booting with no active
+        # display. Poll for one, and recreate the simulator if it never comes.
+        limit() { perl -e 'alarm shift; exec @ARGV' "$@"; }
+        for attempt in 1 2 3; do
+          udid="$(xcrun simctl create "ci-duo-$attempt" "iPhone Duo" "$runtime")"
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b > /dev/null
+          export DUOCTL_UDID="$udid"
+          for poll in $(seq 1 12); do
+            if limit 30 duoctl state; then
+              echo "DUOCTL_UDID=$udid" >> "$GITHUB_ENV"
+              echo "simulator ready on attempt $attempt"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::warning::attempt $attempt: no active display, recreating the simulator"
+          xcrun simctl shutdown "$udid" || true
+          xcrun simctl delete "$udid" || true
+        done
+        echo "::error::iPhone Duo simulator never showed an active display"
+        exit 1
 
     - name: Run the Duo tour
       run: |
