@@ -84,6 +84,24 @@ class _Tour {
   Finder get _skip => find.textContaining('Skip');
   Finder get _welcome => find.textContaining('WELCOME');
 
+  /// The onboarding choices are a lazy list, so on a short screen the Skip
+  /// pill is not built until the list is scrolled to it.
+  Future<void> revealSkip() async {
+    final list = find.ancestor(
+      of: find.text('Log in with WebDAV'),
+      matching: find.byType(Scrollable),
+    );
+    for (var i = 0; i < 12; i++) {
+      if (_skip.hitTestable().evaluate().isNotEmpty) return;
+      if (list.evaluate().isEmpty) return;
+      await tester.drag(list.first, const Offset(0, -200), warnIfMissed: false);
+      await idle(const Duration(milliseconds: 500));
+    }
+    if (_skip.evaluate().isNotEmpty) {
+      notes.add('onboarding Skip sits below the fold');
+    }
+  }
+
   Future<bool> waitForAny(List<Finder> finders, {int seconds = 30}) async {
     final deadline = DateTime.now().add(Duration(seconds: seconds));
     do {
@@ -171,6 +189,7 @@ class _Tour {
 
   Future<bool> _onboarding() async {
     step = 'onboarding';
+    if (_welcome.evaluate().isNotEmpty) await revealSkip();
     if (!await waitForAny(<Finder>[_skip, _pill], seconds: 60)) {
       problems.add('neither onboarding nor main screen: ${visibleTexts()}');
       await shot('01-onboarding-missing');
@@ -181,6 +200,7 @@ class _Tour {
       return true;
     }
     await everyPosture('01-onboarding');
+    await revealSkip();
     await tap(_skip.hitTestable().first);
     return true;
   }

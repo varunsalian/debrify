@@ -69,6 +69,8 @@ jobs:
 
     - name: Run the Duo tour
       run: |
+        # GitHub runs steps with -e; the host loop must survive failed lookups.
+        set +e
         set -uo pipefail
         out="$RUNNER_TEMP/duo"
         mkdir -p "$out"
@@ -88,7 +90,7 @@ jobs:
             next=""
             [ -n "$dir" ] && [ -f "$dir/req-$((seq + 1))" ] && next="$dir/req-$((seq + 1))"
             if [ -z "$next" ]; then
-              next="$(find "$data_root" -maxdepth 10 -type f -name "req-$((seq + 1))" 2>/dev/null | head -n 1)"
+              next="$(find "$data_root" -maxdepth 10 -type f -name "req-$((seq + 1))" 2>/dev/null | head -n 1 || true)"
             fi
             if [ -z "$next" ]; then
               sleep 0.5
