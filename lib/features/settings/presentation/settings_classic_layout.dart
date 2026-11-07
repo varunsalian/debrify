@@ -2,6 +2,7 @@ import 'package:debrify/screens/settings/playback_settings_section.dart';
 import 'package:debrify/screens/settings/widgets/settings_widgets.dart';
 import 'package:debrify/theme/app_looks.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
+import 'package:debrify/ui/core/shell_nav_clearance.dart';
 import 'package:debrify/utils/platform_util.dart';
 import 'package:debrify/widgets/collections/tmdb_attribution.dart';
 import 'package:flutter/material.dart';
@@ -16,7 +17,13 @@ Widget buildClassicSettingsLayout(SettingsLayout layout, BuildContext context) {
   final t = app.settings;
   return SettingsBackground(
     child: SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
+      // Clears the pill sidebar's capsule on touch tablets (zero elsewhere).
+      padding: EdgeInsets.fromLTRB(
+        16,
+        24 + ShellNavClearance.extraBelow(context, 24),
+        16,
+        32,
+      ),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: kSettingsMaxWidth),

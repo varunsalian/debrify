@@ -11,6 +11,7 @@ import '../../../screens/see_all/continue_watching_see_all_screen.dart';
 import '../../../screens/see_all/mdblist_see_all_screen.dart';
 import '../../../screens/see_all/simkl_see_all_screen.dart';
 import '../../../screens/see_all/trakt_see_all_screen.dart';
+import '../../../ui/core/shell_nav_clearance.dart';
 import '../models/discover_source_state.dart';
 import 'discover_source_panel.dart';
 import 'discover_source_picker.dart';
@@ -53,7 +54,7 @@ Widget buildDiscoverPanels({
   required ValueChanged<StremioMeta> onPlayLocal,
   required Future<List<StremioMeta>> Function() reloadLocal,
 }) {
-  final source = buildDiscoverSourcePicker(
+  final picker = buildDiscoverSourcePicker(
     selected: selected,
     isTelevision: isTelevision,
     focusNode: sourceNode,
@@ -63,6 +64,17 @@ Widget buildDiscoverPanels({
     mdblistAuthenticated: mdblistEnabled && mdblistAuthenticated,
     addons: addons,
     onSelected: onSelectSource,
+  );
+  // The picker opens every panel's filter row, 24 from the page edge, right
+  // where the pill sidebar's capsule floats on touch tablets. Indent it past
+  // the capsule there (zero elsewhere).
+  final source = Builder(
+    builder: (context) => Padding(
+      padding: EdgeInsets.only(
+        left: ShellNavClearance.extraLeading(context, 24),
+      ),
+      child: picker,
+    ),
   );
 
   return buildDiscoverSourcePanel(

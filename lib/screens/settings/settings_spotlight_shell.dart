@@ -4,6 +4,7 @@ import '../../services/main_page_bridge.dart';
 import '../../theme/app_focus.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../theme/widgets/parallax_focus.dart';
+import '../../ui/core/shell_nav_clearance.dart';
 import 'widgets/settings_widgets.dart';
 
 /// Responsive classes for the Settings root.
@@ -166,9 +167,11 @@ class _SettingsSpotlightShellState extends State<SettingsSpotlightShell> {
           SizedBox(
             width: railWidth,
             child: SingleChildScrollView(
+              // The rail's header sits under the pill sidebar's capsule on
+              // touch tablets; start below it there (zero elsewhere).
               padding: EdgeInsets.fromLTRB(
                 railHorizontal,
-                28,
+                28 + ShellNavClearance.extraBelow(context, 28),
                 railHorizontal,
                 24,
               ),
@@ -250,7 +253,13 @@ class _SettingsSpotlightShellState extends State<SettingsSpotlightShell> {
     }
     return ListView(
       key: const Key('settings-compact-root'),
-      padding: const EdgeInsets.fromLTRB(18, 24, 18, 40),
+      // Clears the pill sidebar's capsule on touch tablets (zero elsewhere).
+      padding: EdgeInsets.fromLTRB(
+        18,
+        24 + ShellNavClearance.extraBelow(context, 24),
+        18,
+        40,
+      ),
       children: [
         const SettingsRootHeader(),
         const SizedBox(height: 20),

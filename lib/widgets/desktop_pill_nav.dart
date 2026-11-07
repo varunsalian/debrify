@@ -36,6 +36,12 @@ class DesktopPillNav extends StatefulWidget {
   final UserProfile? profile;
   final VoidCallback? onProfileTap;
 
+  /// Distance from the top safe edge to the capsule. The default clears a
+  /// frameless desktop window's drag strip and window buttons; touch
+  /// tablets have neither, so the shell lifts the capsule into line with
+  /// the pages' first toolbar row.
+  final double capsuleTop;
+
   const DesktopPillNav({
     super.key,
     required this.currentIndex,
@@ -44,7 +50,38 @@ class DesktopPillNav extends StatefulWidget {
     this.expanded = false,
     this.profile,
     this.onProfileTap,
+    this.capsuleTop = desktopCapsuleTop,
   });
+
+  static const double desktopCapsuleTop = 34;
+  static const double capsuleLeft = 14;
+
+  static double _iconSize(bool expanded) => expanded ? 22 : 19;
+  static double _hPad(bool expanded) => expanded ? 14 : 11;
+  static double _vPad(bool expanded) => expanded ? 11 : 8;
+
+  /// The capsule's width once its label has quieted: icon, padding, border.
+  static double restWidth({required bool expanded}) =>
+      _iconSize(expanded) + 2 * _hPad(expanded) + 2;
+
+  /// The capsule's height: icon, padding, border.
+  static double height({required bool expanded}) =>
+      _iconSize(expanded) + 2 * _vPad(expanded) + 2;
+
+  /// Gap kept between the capsule and the page content that avoids it.
+  static const double clearanceGap = 10;
+
+  /// Where a page's top row should start so the resting capsule never
+  /// covers it (see ShellNavClearance).
+  static double clearanceFor({required bool expanded}) =>
+      capsuleLeft + restWidth(expanded: expanded) + clearanceGap;
+
+  /// Where page content clears the capsule vertically, for a capsule placed
+  /// [capsuleTop] below the page's top edge.
+  static double clearanceBelow({
+    required bool expanded,
+    required double capsuleTop,
+  }) => capsuleTop + height(expanded: expanded) + clearanceGap;
 
   /// Handles for tests.
   static const Key pillKey = ValueKey('desktop-sidebar-pill');
@@ -209,9 +246,8 @@ class _DesktopPillNavState extends State<DesktopPillNav> {
         // The capsule. Kept mounted while the panel is open (the panel
         // covers it) so the open/close transition never pops it in and out.
         Positioned(
-          left: 14 + insets.left,
-          // Below the frameless window's invisible drag strip.
-          top: 34 + insets.top,
+          left: DesktopPillNav.capsuleLeft + insets.left,
+          top: widget.capsuleTop + insets.top,
           child: AnimatedOpacity(
             opacity: _open ? 0 : 1,
             duration: slide,
@@ -233,8 +269,8 @@ class _DesktopPillNavState extends State<DesktopPillNav> {
           )];
     if (entry == null) return const SizedBox.shrink();
     final lit = _labelUp || _pillHovered;
-    final pad = widget.expanded ? 14.0 : 11.0;
-    final vpad = widget.expanded ? 11.0 : 8.0;
+    final pad = DesktopPillNav._hPad(widget.expanded);
+    final vpad = DesktopPillNav._vPad(widget.expanded);
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) {
@@ -274,7 +310,7 @@ class _DesktopPillNavState extends State<DesktopPillNav> {
               children: [
                 Icon(
                   entry.icon,
-                  size: widget.expanded ? 22 : 19,
+                  size: DesktopPillNav._iconSize(widget.expanded),
                   color: app.shell.navAccent,
                 ),
                 // The label collapses to nothing when the capsule quiets —
