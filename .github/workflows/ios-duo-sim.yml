@@ -1,7 +1,8 @@
 name: iPhone Duo simulator check
 
-# Throwaway check for the ios-xcode-27 work: installs the app on GitHub's
-# iPhone Duo simulator, folds and unfolds it, and captures each screen.
+# Throwaway check for the ios-xcode-27 work. Runs integration_test/duo_tour_test.dart
+# on GitHub's iPhone Duo simulator while a host loop folds, unfolds, rotates
+# and screenshots it on the test's request.
 on:
   push:
     branches: [ios-duo-sim-check]
@@ -13,23 +14,10 @@ permissions:
 jobs:
   duo:
     runs-on: xcode-27
-    timeout-minutes: 45
+    timeout-minutes: 75
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-
-    - name: Configure TMDB build token
-      shell: python
-      env:
-        TMDB_READ_ACCESS_TOKEN: ${{ secrets.TMDB_READ_ACCESS_TOKEN }}
-      run: |
-        import json, os
-        from pathlib import Path
-        token = os.environ.get("TMDB_READ_ACCESS_TOKEN", "").strip()
-        if not token:
-            raise SystemExit("Missing repository secret: TMDB_READ_ACCESS_TOKEN")
-        config = Path(os.environ["RUNNER_TEMP"]) / "debrify-build-config.json"
-        config.write_text(json.dumps({"TMDB_READ_ACCESS_TOKEN": token}), encoding="utf-8")
 
     - name: Setup Flutter
       uses: subosito/flutter-action@v2
@@ -38,18 +26,10 @@ jobs:
         channel: 'stable'
 
     - name: Get dependencies
-      run: flutter pub get
-
-    - name: Build for the simulator
       run: |
-        set -euo pipefail
+        flutter pub get
         xcodebuild -version
         xcrun --sdk iphonesimulator --show-sdk-version
-        flutter build ios --simulator --debug --dart-define=DEBRIFY_LOCAL_VALIDATION=false --dart-define-from-file="${{ runner.temp }}/debrify-build-config.json"
-
-    # Third-party code runs after this point, so drop the token file first.
-    - name: Remove build token
-      run: rm -f "${{ runner.temp }}/debrify-build-config.json"
 
     # duoctl drives the simulator's hinge through private interfaces, so it is
     # pinned to a reviewed commit rather than installed from a moving tap.
@@ -70,69 +50,71 @@ jobs:
         echo "DUOCTL_UDID=$udid" >> "$GITHUB_ENV"
         duoctl state
 
-    - name: Launch, fold, unfold and rotate
+    - name: Run the Duo tour
       run: |
         set -uo pipefail
         out="$RUNNER_TEMP/duo"
         mkdir -p "$out"
         bundle=com.varunsalian.debrify
-        failures=0
 
         alive() {
           xcrun simctl spawn "$DUOCTL_UDID" launchctl list | grep -q "UIKitApplication:$bundle"
         }
-        capture() {
-          sleep 5
-          duoctl state > "$out/$1.json" || { echo "::error::state failed at $1"; failures=$((failures + 1)); }
-          duoctl screenshot "$out/$1.png" || { echo "::error::screenshot failed at $1"; failures=$((failures + 1)); }
-          if alive; then
-            echo "$1: app running"
-          else
-            echo "::error::app is not running at $1"
-            failures=$((failures + 1))
-          fi
-          cat "$out/$1.json" 2>/dev/null
+
+        # Answers the test's req-N files with ack-N. The container is looked
+        # up every pass because a reinstall moves it.
+        host_loop() {
+          local seq=0 dir cmd name rc next
+          while :; do
+            dir="$(xcrun simctl get_app_container "$DUOCTL_UDID" "$bundle" data 2>/dev/null)/tmp/duo"
+            next="$dir/req-$((seq + 1))"
+            if [ ! -f "$next" ]; then
+              sleep 0.3
+              continue
+            fi
+            seq=$((seq + 1))
+            cmd="$(cat "$next")"
+            echo "[$(date +%T)] $seq: $cmd"
+            case "$cmd" in
+              "shot "*)
+                name="${cmd#shot }"
+                duoctl state > "$out/$name.json" && duoctl screenshot "$out/$name.png"
+                rc=$?
+                alive || { echo "app not running at $name"; rc=3; }
+                ;;
+              end)
+                cp "$dir/summary.txt" "$out/" 2>/dev/null
+                rc=0
+                ;;
+              *)
+                duoctl $cmd
+                rc=$?
+                ;;
+            esac
+            echo "$rc" > "$dir/ack-$seq.tmp" && mv "$dir/ack-$seq.tmp" "$dir/ack-$seq"
+            [ "$cmd" = end ] && return 0
+          done
         }
-        step() {
-          echo "::group::$*"
-          "$@" || { echo "::error::'$*' failed"; failures=$((failures + 1)); }
-          echo "::endgroup::"
-        }
 
-        step duoctl close --duration 1
-        step xcrun simctl install "$DUOCTL_UDID" build/ios/iphonesimulator/Runner.app
-        step xcrun simctl launch "$DUOCTL_UDID" "$bundle"
-        # Debug builds start slowly; give the first frame time to settle.
-        sleep 40
-        capture 01-cover
+        host_loop > "$out/host.log" 2>&1 &
+        host_pid=$!
 
-        step duoctl open --duration 1
-        capture 02-inner
+        flutter test integration_test/duo_tour_test.dart -d "$DUOCTL_UDID" \
+          --dart-define=DEBRIFY_LOCAL_VALIDATION=false 2>&1 | tee "$out/flutter_test.log"
+        rc=${PIPESTATUS[0]}
 
-        step duoctl rotate portrait
-        capture 03-inner-portrait
-
-        step duoctl rotate landscape
-        step duoctl close --duration 1
-        capture 04-cover-after-fold
-
-        step duoctl open --duration 1
-        capture 05-inner-after-unfold
-
-        step duoctl half --duration 1
-        capture 06-half-folded
-
-        xcrun simctl spawn "$DUOCTL_UDID" log show --last 15m --style compact \
+        kill "$host_pid" 2>/dev/null || true
+        echo "::group::host log"; cat "$out/host.log"; echo "::endgroup::"
+        cat "$out/summary.txt" 2>/dev/null || echo "no summary written"
+        xcrun simctl spawn "$DUOCTL_UDID" log show --last 60m --style compact \
           --predicate 'process == "Runner"' > "$out/runner.log" 2>&1 || true
         find ~/Library/Logs/DiagnosticReports -iname '*Runner*' -exec cp {} "$out/" \; 2>/dev/null || true
-
-        echo "failures: $failures"
-        [ "$failures" -eq 0 ]
+        exit "$rc"
 
     - name: Upload screenshots and logs
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: iphone-duo-check
+        name: iphone-duo-tour
         path: ${{ runner.temp }}/duo
         if-no-files-found: warn
