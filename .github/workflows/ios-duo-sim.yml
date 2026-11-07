@@ -122,11 +122,16 @@ jobs:
         host_loop > "$out/host.log" 2>&1 &
         host_pid=$!
 
+        # The tour plays this clip through the real player; the simulator
+        # shares the runner's network, so localhost reaches it.
+        python3 -m http.server 8765 --bind 127.0.0.1 --directory integration_test/assets > "$out/http.log" 2>&1 &
+        http_pid=$!
+
         flutter test integration_test/duo_tour_test.dart -d "$DUOCTL_UDID" \
           --dart-define=DEBRIFY_LOCAL_VALIDATION=false 2>&1 | tee "$out/flutter_test.log"
         rc=${PIPESTATUS[0]}
 
-        kill "$host_pid" 2>/dev/null || true
+        kill "$host_pid" "$http_pid" 2>/dev/null || true
         echo "::group::host log"; cat "$out/host.log"; echo "::endgroup::"
         cat "$out/summary.txt" 2>/dev/null || echo "no summary written"
         xcrun simctl spawn "$DUOCTL_UDID" log show --last 60m --style compact \

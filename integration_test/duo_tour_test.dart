@@ -11,6 +11,7 @@ import 'package:debrify/features/spotlight_board/presentation/legacy_spotlight_b
 import 'package:debrify/main.dart' as app;
 import 'package:debrify/screens/merged_series_detail_screen.dart';
 import 'package:debrify/screens/video_player_screen.dart';
+import 'package:debrify/services/video_player_launcher.dart';
 import 'package:debrify/widgets/youtube/youtube_video_card.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -134,6 +135,7 @@ class _Tour {
     if (!await _onboarding()) return;
     if (!await _home()) return;
     await _detailAndPlayer();
+    await _localPlayer();
     for (final tab in const <String>[
       'Search',
       'Discover',
@@ -276,6 +278,40 @@ class _Tour {
     await backToMain();
   }
 
+  /// Plays a clip the CI host serves on localhost through the app's real
+  /// launcher and player, then folds, unfolds and rotates mid-playback.
+  Future<void> _localPlayer() async {
+    step = 'player';
+    final anchor = _pill.hitTestable();
+    if (!await waitFor(anchor, seconds: 10)) {
+      problems.add('main screen not reachable before the player check');
+      return;
+    }
+    unawaited(
+      VideoPlayerLauncher.push(
+        tester.element(anchor.first),
+        const VideoPlayerLaunchArgs(
+          videoUrl: 'http://127.0.0.1:8765/duo_test.mp4',
+          title: 'Duo test clip',
+        ),
+      ),
+    );
+    final player = find.byType(VideoPlayerScreen);
+    if (!await waitFor(player, seconds: 45)) {
+      problems.add('player did not open for the local clip: ${visibleTexts()}');
+      await shot('08-player-missing');
+      return;
+    }
+    await idle(const Duration(seconds: 8));
+    await everyPosture('08-player');
+    if (player.evaluate().isEmpty) {
+      problems.add('player closed while folding');
+    } else {
+      notes.add('local clip played through every fold and rotation');
+    }
+    await backToMain();
+  }
+
   Future<void> _youtubePlayer() async {
     step = 'youtube-player';
     final field = find.byType(EditableText).hitTestable();
@@ -402,13 +438,14 @@ class _Tour {
     return finder.evaluate().isNotEmpty;
   }
 
-  Future<void> idle(Duration duration) async {
-    final deadline = DateTime.now().add(duration);
-    do {
-      await Future<void>.delayed(const Duration(milliseconds: 100));
-      await tester.pump();
-    } while (DateTime.now().isBefore(deadline));
-  }
+  /// Waits in real time. The binding runs fully live, so the engine keeps
+  /// drawing on its own; awaiting tester.pump() here would hang forever if
+  /// the simulator stopped producing frames (a sleeping host display).
+  Future<void> idle(Duration duration) => Future<void>.delayed(
+    duration < const Duration(milliseconds: 100)
+        ? const Duration(milliseconds: 100)
+        : duration,
+  );
 
   Future<bool> host(String command) async {
     _seq++;
