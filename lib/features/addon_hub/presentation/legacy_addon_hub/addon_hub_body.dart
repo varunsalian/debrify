@@ -1,5 +1,6 @@
 import 'package:debrify/features/addon_hub/models/addon_hub_kinds.dart';
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_navigation_state.dart';
+import 'package:debrify/ui/core/shell_nav_clearance.dart';
 import 'package:flutter/material.dart';
 
 typedef AddonHubBodyDeps = ({
@@ -14,14 +15,23 @@ class AddonHubBody {
   final AddonHubBodyDeps _deps;
 
   Widget buildHeader() {
-    return const Padding(
-      padding: EdgeInsets.fromLTRB(24, 14, 24, 8),
-      child: Text(
-        'Addons',
-        style: TextStyle(
-          fontSize: 22,
-          fontWeight: FontWeight.w800,
-          letterSpacing: -0.4,
+    // The title row sits under the pill sidebar's capsule on touch tablets;
+    // ShellNavClearance is zero everywhere else.
+    return Builder(
+      builder: (context) => Padding(
+        padding: EdgeInsets.fromLTRB(
+          24 + ShellNavClearance.extraLeading(context, 24),
+          14,
+          24,
+          8,
+        ),
+        child: const Text(
+          'Addons',
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.4,
+          ),
         ),
       ),
     );

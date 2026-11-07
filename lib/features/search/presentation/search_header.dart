@@ -1,3 +1,4 @@
+import 'package:debrify/ui/core/shell_nav_clearance.dart';
 import 'package:flutter/material.dart';
 
 /// Keeps the existing responsive placement of the query field and mode control.
@@ -26,7 +27,18 @@ class SearchHeader extends StatelessWidget {
         padding: EdgeInsets.fromLTRB(16, tv ? 16 : 12, 16, 8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [field, const SizedBox(height: 10), toggle],
+          children: [
+            // The field's row sits under the pill sidebar's capsule on touch
+            // tablets; start it past the capsule there (zero elsewhere).
+            Padding(
+              padding: EdgeInsets.only(
+                left: ShellNavClearance.extraLeading(context, 16),
+              ),
+              child: field,
+            ),
+            const SizedBox(height: 10),
+            toggle,
+          ],
         ),
       );
     }
