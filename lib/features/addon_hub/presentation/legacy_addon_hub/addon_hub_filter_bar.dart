@@ -2,6 +2,7 @@ import 'package:debrify/features/addon_hub/models/addon_hub_kinds.dart';
 import 'package:debrify/features/addon_hub/presentation/addon_hub_action_button.dart';
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_navigation_state.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
+import 'package:debrify/ui/core/shell_nav_clearance.dart';
 import 'package:debrify/widgets/see_all/stremio_dropdown.dart';
 import 'package:debrify/widgets/tv_text_field.dart';
 import 'package:flutter/material.dart';
@@ -165,12 +166,10 @@ class AddonHubFilterBar {
         }
 
         return Padding(
-          padding: EdgeInsets.fromLTRB(
-            narrow ? 16 : 24,
-            6,
-            narrow ? 16 : 24,
-            12,
-          ),
+          // Clear of the pill sidebar's capsule where it floats.
+          padding:
+              EdgeInsets.fromLTRB(narrow ? 16 : 24, 6, narrow ? 16 : 24, 12) +
+              ShellNavClearance.leadingInsets(context, narrow ? 16 : 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

@@ -6,6 +6,7 @@ import 'package:debrify/screens/stremio_tv/widgets/stremio_tv_tuner.dart';
 import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/mdblist/mdblist_service.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
+import 'package:debrify/ui/core/shell_nav_clearance.dart';
 import 'package:debrify/utils/tv_keys.dart';
 import 'package:debrify/widgets/tv_text_field.dart';
 import 'package:flutter/material.dart';
@@ -25,6 +26,7 @@ class StremioTvLayout {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final app = AppThemeScope.of(context);
+    final navClear = ShellNavClearance.leadingInsets(context, 20); // pill
 
     return Scaffold(
       // Match the Home board: sit the whole screen on the same cinematic
@@ -39,7 +41,7 @@ class StremioTvLayout {
                 children: [
                   // Premium header bar
                   Container(
-                    padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
+                    padding: const EdgeInsets.fromLTRB(20, 6, 20, 0) + navClear,
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.topCenter,

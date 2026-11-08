@@ -8,9 +8,9 @@ import 'package:flutter/widgets.dart';
 /// The 'pill' sidebar style runs pages full-bleed and floats a capsule over
 /// their top-left corner. Where the shell provides this, a page either
 /// starts its first toolbar row at [leading], or starts its content at
-/// [below], so the capsule never covers a control. Pages outside that shell
-/// (phones, TV, the rail styles, pushed routes) see zero clearance and keep
-/// their layout.
+/// [below], so the capsule never covers a control. Everywhere else (the
+/// phone layout, TV, desktop, the rail styles, pushed routes) the clearance
+/// is zero and pages keep their layout.
 class ShellNavClearance extends InheritedWidget {
   const ShellNavClearance({
     super.key,
@@ -37,6 +37,14 @@ class ShellNavClearance extends InheritedWidget {
   /// page's top edge.
   static double extraBelow(BuildContext context, double ownTop) =>
       math.max(0, (_of(context)?.below ?? 0) - ownTop);
+
+  /// [extraLeading] as left padding, to add to a row's own padding.
+  static EdgeInsets leadingInsets(BuildContext context, double ownLeft) =>
+      EdgeInsets.only(left: extraLeading(context, ownLeft));
+
+  /// [extraBelow] as top padding, to add to content's own padding.
+  static EdgeInsets belowInsets(BuildContext context, double ownTop) =>
+      EdgeInsets.only(top: extraBelow(context, ownTop));
 
   @override
   bool updateShouldNotify(ShellNavClearance oldWidget) =>

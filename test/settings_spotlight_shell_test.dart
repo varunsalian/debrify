@@ -5,6 +5,7 @@ import 'package:debrify/services/text_brightness.dart';
 import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/app_theme_adapter.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
+import 'package:debrify/widgets/desktop_pill_nav.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -166,6 +167,7 @@ Future<void> _pumpShell(
   WidgetTester tester,
   Size size, {
   double textScale = 1,
+  bool pillCapsule = false,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -186,18 +188,21 @@ Future<void> _pumpShell(
         ),
       ),
       home: Scaffold(
-        body: SettingsSpotlightShell(
-          categories: _categories,
-          onOpenSearch: () {},
-          compactSummary: SettingsSpotlightSummaryCard(
-            eyebrow: 'Service health',
-            title: 'Everything looks ready.',
-            subtitle: 'Two services are configured.',
-            actionLabel: 'Manage connections',
-            tone: SettingsSummaryTone.good,
-            onTap: () {},
+        body: DesktopPillNav.clearance(
+          active: pillCapsule,
+          child: SettingsSpotlightShell(
+            categories: _categories,
+            onOpenSearch: () {},
+            compactSummary: SettingsSpotlightSummaryCard(
+              eyebrow: 'Service health',
+              title: 'Everything looks ready.',
+              subtitle: 'Two services are configured.',
+              actionLabel: 'Manage connections',
+              tone: SettingsSummaryTone.good,
+              onTap: () {},
+            ),
+            categoryBuilder: (context, index) => _categoryBody(index),
           ),
-          categoryBuilder: (context, index) => _categoryBody(index),
         ),
       ),
     ),
@@ -232,6 +237,53 @@ void main() {
     expect(settingsSurfaceClassForWidth(720), SettingsSurfaceClass.medium);
     expect(settingsSurfaceClassForWidth(1079), SettingsSurfaceClass.medium);
     expect(settingsSurfaceClassForWidth(1080), SettingsSurfaceClass.expanded);
+  });
+
+  group('under the pill sidebar capsule (iPhone Duo inner screen)', () {
+    final below = DesktopPillNav.clearanceBelow(
+      expanded: true,
+      capsuleTop: DesktopPillNav.touchCapsuleTop,
+    );
+    Finder back() => find.bySemanticsLabel('Back to settings categories');
+
+    testWidgets('compact root and category start below the capsule', (
+      tester,
+    ) async {
+      await _pumpShell(tester, const Size(669, 951), pillCapsule: true);
+      expect(
+        tester.getTopLeft(find.text('Settings').first).dy,
+        greaterThanOrEqualTo(below),
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('settings-category-3')),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(back()).dy, greaterThanOrEqualTo(below));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('without the capsule the back button keeps its place', (
+      tester,
+    ) async {
+      await _pumpShell(tester, const Size(669, 951));
+      await tester.tap(
+        find.byKey(const ValueKey<String>('settings-category-3')),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(back()).dy, 16);
+    });
+
+    testWidgets('the wide rail header starts below the capsule', (
+      tester,
+    ) async {
+      await _pumpShell(tester, const Size(951, 669), pillCapsule: true);
+      expect(find.byKey(const Key('settings-wide-shell')), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('Settings').first).dy,
+        greaterThanOrEqualTo(below),
+      );
+    });
   });
 
   testWidgets('phone root opens a category and system back restores the root', (

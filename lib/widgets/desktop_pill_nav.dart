@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/app_motion.dart';
+import '../ui/core/shell_nav_clearance.dart';
 import '../theme/app_theme_scope.dart';
 import '../models/profiles/user_profile.dart';
 import 'profiles/profile_avatar_view.dart';
@@ -54,7 +55,24 @@ class DesktopPillNav extends StatefulWidget {
   });
 
   static const double desktopCapsuleTop = 34;
+  static const double touchCapsuleTop = 10;
   static const double capsuleLeft = 14;
+
+  /// Touch devices have no window strip to clear, so the capsule lines up
+  /// with the pages' first row, which [clearance] indents around it.
+  static double capsuleTopFor({required bool touch}) =>
+      touch ? touchCapsuleTop : desktopCapsuleTop;
+
+  /// Wraps the shell's page. Always the same widget, zero when [active] is
+  /// false, so a layout flip (folding a phone) keeps the page's state.
+  static Widget clearance({required bool active, required Widget child}) =>
+      ShellNavClearance(
+        leading: active ? clearanceFor(expanded: true) : 0,
+        below: active
+            ? clearanceBelow(expanded: true, capsuleTop: touchCapsuleTop)
+            : 0,
+        child: child,
+      );
 
   static double _iconSize(bool expanded) => expanded ? 22 : 19;
   static double _hPad(bool expanded) => expanded ? 14 : 11;
