@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'startup_error_policy.dart';
+
 class StartupStreamPolicy {
   static const Duration aioStreamsErrorSlateMaxDuration = Duration(minutes: 3);
 
@@ -151,6 +153,10 @@ class ChannelStartupWatch {
     _subscriptions.addAll([
       errors.listen((error) {
         if (isCurrent() && shouldDeferError?.call(error) == true) return;
+        // A channel has no startup deadline to fall back on, so only errors
+        // known not to stop playback (no audio device, a subtitle file, a
+        // few damaged frames) are ignored; anything else still fails.
+        if (!_errors.rejects(StartupErrorPolicy.classify(error))) return;
         fail();
       }),
       widths.listen((width) {
@@ -176,6 +182,7 @@ class ChannelStartupWatch {
   final void Function()? onReady;
   final bool _isAioStreams;
   final List<StreamSubscription<dynamic>> _subscriptions = [];
+  final StartupErrorTally _errors = StartupErrorTally(rejectUnknown: true);
   bool _pending = true;
   bool _failed = false;
   bool _accepted = false;

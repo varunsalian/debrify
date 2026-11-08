@@ -390,7 +390,10 @@ class StartupDriver {
       await tick();
       if (activeProbes.isNotEmpty) {
         for (final p in f.players) {
-          p.emit('error', 'fixture shutdown pending candidate');
+          p.emit(
+            'error',
+            'Failed to open https://fixture.invalid/shutdown-pending.mkv.',
+          );
         }
         await tick();
       }

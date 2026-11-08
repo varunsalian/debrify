@@ -125,7 +125,10 @@ void main() {
               await d.tick(const Duration(milliseconds: 1100));
               expect(d.event('candidate_result'), hasLength(1));
             } else {
-              d.player.emit('error', 'fixture ordinary source error');
+              d.player.emit(
+                'error',
+                'Failed to open https://fixture.invalid/ordinary-source.mkv.',
+              );
             }
             await d.result();
             await d.f.until(t, () => d.activeProbes.isEmpty);
