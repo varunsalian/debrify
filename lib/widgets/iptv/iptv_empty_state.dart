@@ -16,46 +16,60 @@ class IptvEmptyState extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              hasPlaylists ? Icons.live_tv : Icons.playlist_add,
-              size: 80,
-              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              hasPlaylists
-                  ? 'Select a Playlist'
-                  : 'No IPTV Playlists',
-              style: theme.textTheme.headlineSmall?.copyWith(
-                color: colorScheme.onSurface,
-                fontWeight: FontWeight.bold,
+    // Scrollable so a short pane (a folding phone mid-fold, a landscape
+    // phone) can't clip it; when the pane is tall enough the minHeight keeps
+    // it centred exactly as before.
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            minWidth: constraints.maxWidth.isFinite ? constraints.maxWidth : 0,
+            minHeight: constraints.maxHeight.isFinite
+                ? constraints.maxHeight
+                : 0,
+          ),
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    hasPlaylists ? Icons.live_tv : Icons.playlist_add,
+                    size: 80,
+                    color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    hasPlaylists ? 'Select a Playlist' : 'No IPTV Playlists',
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      color: colorScheme.onSurface,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    hasPlaylists
+                        ? 'Choose a playlist from the dropdown above to browse channels'
+                        : 'Add M3U playlists in Settings to start watching',
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  if (!hasPlaylists && onAddPlaylist != null) ...[
+                    const SizedBox(height: 24),
+                    FilledButton.icon(
+                      onPressed: onAddPlaylist,
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add Playlist'),
+                    ),
+                  ],
+                ],
               ),
             ),
-            const SizedBox(height: 12),
-            Text(
-              hasPlaylists
-                  ? 'Choose a playlist from the dropdown above to browse channels'
-                  : 'Add M3U playlists in Settings to start watching',
-              style: theme.textTheme.bodyLarge?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            if (!hasPlaylists && onAddPlaylist != null) ...[
-              const SizedBox(height: 24),
-              FilledButton.icon(
-                onPressed: onAddPlaylist,
-                icon: const Icon(Icons.add),
-                label: const Text('Add Playlist'),
-              ),
-            ],
-          ],
+          ),
         ),
       ),
     );

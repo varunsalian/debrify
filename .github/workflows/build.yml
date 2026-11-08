@@ -310,7 +310,9 @@ jobs:
 
   ios:
     if: github.event_name == 'release' || github.event.inputs.job == 'all' || github.event.inputs.job == 'ios'
-    runs-on: macos-latest
+    # The iOS 27.1 SDK is what lets the app fill iPhone Duo's inner display.
+    # Older SDKs show it in a centered window. Only the xcode-27 image has it.
+    runs-on: xcode-27
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -336,6 +338,17 @@ jobs:
 
     - name: Get dependencies
       run: flutter pub get
+
+    - name: Require the iOS 27.1 SDK or later
+      run: |
+        set -euo pipefail
+        xcodebuild -version
+        sdk="$(xcrun --sdk iphoneos --show-sdk-version)"
+        echo "iphoneos SDK: $sdk"
+        if [ "$(printf '%s\n' 27.1 "$sdk" | sort -V | head -n1)" != "27.1" ]; then
+          echo "::error::iOS SDK $sdk is older than 27.1; the app would not fill iPhone Duo's inner display"
+          exit 1
+        fi
 
     - name: Build iOS (unsigned)
       run: flutter build ios --release --dart-define=DEBRIFY_LOCAL_VALIDATION=false --no-codesign --dart-define-from-file="${{ runner.temp }}/debrify-build-config.json"

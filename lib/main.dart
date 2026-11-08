@@ -4033,7 +4033,12 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                               children: [
                                 // Page fills the whole area so its own
                                 // background covers the animated backdrop.
-                                Positioned.fill(child: _buildAnimatedPage()),
+                                Positioned.fill(
+                                  child: DesktopPillNav.clearance(
+                                    active: desktopPill && expandDesktopSidebar,
+                                    child: _buildAnimatedPage(),
+                                  ),
+                                ),
                                 // Invisible top strip keeps frameless desktop
                                 // windows draggable now that the AppBar is gone.
                                 if (isDesktopWide)
@@ -4088,6 +4093,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                         Positioned.fill(
                           child: DesktopPillNav(
                             expanded: expandDesktopSidebar,
+                            capsuleTop: DesktopPillNav.capsuleTopFor(
+                              touch: expandDesktopSidebar,
+                            ),
                             currentIndex: nonTvSelected == -1
                                 ? 0
                                 : nonTvSelected,
