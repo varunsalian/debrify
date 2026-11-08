@@ -43,7 +43,7 @@
 # 2026-10-29 Sports & leagues filter: root scope installs sportsAppOverrides() (+2).
 # 2026-10-30 overnight features: root scope adds multiViewAppOverrides(); the addon auto-update scheduler starts with the catalog refresh (+3).
 # 2026-11-01: a desktop preferences file left unreadable by an interrupted write is repaired before the first read (+34; the repair lives in lib/core/platform/preferences_file_recovery.dart).
-4225 lib/main.dart
+4233 lib/main.dart
 4086 lib/services/iptv_catalog_db.dart
 3906 lib/services/stremio_service.dart
 3776 android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt
@@ -143,7 +143,7 @@
 1027 lib/widgets/parents_guide_section.dart
 1025 lib/services/webdav_sync/webdav_sync_scheduler.dart
 1023 lib/services/webdav_sync/webdav_sync_graph.dart
-1021 lib/screens/settings/settings_spotlight_shell.dart
+1025 lib/screens/settings/settings_spotlight_shell.dart
 1021 lib/services/webdav_sync/webdav_sync_tombstones.dart
 1016 lib/widgets/see_all/stremio_dropdown.dart
 # 2026-10-30 SMB direct recording: the share and its sealed password reach the native recorder through the profile projection (+3).
@@ -192,6 +192,7 @@
 829 lib/services/main_page_bridge.dart
 828 lib/services/webdav_sync/webdav_sync_circle_merge.dart
 # 2026-11-01: TV focus returns to the grid after a folder, page or episode screen (+93); exit: split the item screen out of this file.
+# 2026-11-08 iPhone Duo pill clearance (small fix, no extraction): main.dart +8 for the capsule-top and clearance wiring (4225 -> 4233); settings_spotlight_shell +4 for three below-capsule paddings (1021 -> 1025). Both files keep their existing exit milestones.
 916 lib/screens/media_server_library_panel.dart
 823 lib/screens/see_all/trakt_see_all_screen.dart
 804 lib/services/webdav_sync/webdav_sync_models.dart

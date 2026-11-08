@@ -17,13 +17,10 @@ Widget buildClassicSettingsLayout(SettingsLayout layout, BuildContext context) {
   final t = app.settings;
   return SettingsBackground(
     child: SingleChildScrollView(
-      // Clears the pill sidebar's capsule on touch tablets (zero elsewhere).
-      padding: EdgeInsets.fromLTRB(
-        16,
-        24 + ShellNavClearance.extraBelow(context, 24),
-        16,
-        32,
-      ),
+      // Below the pill sidebar's capsule where one floats here.
+      padding:
+          const EdgeInsets.fromLTRB(16, 24, 16, 32) +
+          ShellNavClearance.belowInsets(context, 24),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: kSettingsMaxWidth),

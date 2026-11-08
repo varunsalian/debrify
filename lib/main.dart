@@ -122,7 +122,6 @@ import 'widgets/tv_ambient_art_stage.dart';
 import 'widgets/app_tab_switcher.dart';
 import 'widgets/tv_sidebar_nav.dart';
 import 'widgets/desktop_pill_nav.dart';
-import 'ui/core/shell_nav_clearance.dart';
 import 'widgets/desktop_sidebar_nav.dart';
 import 'services/remote_control/remote_control_state.dart';
 import 'services/remote_control/remote_command_router.dart';
@@ -1570,10 +1569,6 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   bool _didCheckSupportCampaign = false;
   bool _startupModalActive = false;
   bool _supportCampaignResolved = false;
-
-  /// Capsule offset from the top safe edge on touch tablets, where the
-  /// desktop window strip it otherwise clears does not exist.
-  static const double _touchPillCapsuleTop = 10;
   bool _autoUpdateCheckResolved = false;
 
   /// True while a Cloud-hub provider route is on the stack, so a rapid re-tap or
@@ -4038,22 +4033,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                               children: [
                                 // Page fills the whole area so its own
                                 // background covers the animated backdrop.
-                                // The clearance wrapper is always mounted
-                                // (zero when unused) so folding a phone
-                                // between layouts keeps the page's state.
                                 Positioned.fill(
-                                  child: ShellNavClearance(
-                                    leading: desktopPill && expandDesktopSidebar
-                                        ? DesktopPillNav.clearanceFor(
-                                            expanded: true,
-                                          )
-                                        : 0,
-                                    below: desktopPill && expandDesktopSidebar
-                                        ? DesktopPillNav.clearanceBelow(
-                                            expanded: true,
-                                            capsuleTop: _touchPillCapsuleTop,
-                                          )
-                                        : 0,
+                                  child: DesktopPillNav.clearance(
+                                    active: desktopPill && expandDesktopSidebar,
                                     child: _buildAnimatedPage(),
                                   ),
                                 ),
@@ -4111,12 +4093,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                         Positioned.fill(
                           child: DesktopPillNav(
                             expanded: expandDesktopSidebar,
-                            // Touch tablets have no window strip to clear, so
-                            // the capsule lines up with the pages' first row,
-                            // which ShellNavClearance indents around it.
-                            capsuleTop: expandDesktopSidebar
-                                ? _touchPillCapsuleTop
-                                : DesktopPillNav.desktopCapsuleTop,
+                            capsuleTop: DesktopPillNav.capsuleTopFor(
+                              touch: expandDesktopSidebar,
+                            ),
                             currentIndex: nonTvSelected == -1
                                 ? 0
                                 : nonTvSelected,
