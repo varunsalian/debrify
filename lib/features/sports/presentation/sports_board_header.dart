@@ -8,8 +8,8 @@
 import 'package:debrify/features/sports/application/sports_board_sections.dart';
 import 'package:debrify/widgets/iptv/styles/iptv_style.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
+import 'sports_clock.dart';
 import 'sports_team_crest.dart';
 import 'sports_when_switch.dart';
 
@@ -26,6 +26,7 @@ class SportsBoardHeader extends StatelessWidget {
   const SportsBoardHeader({
     super.key,
     required this.updatedAt,
+    this.loading = false,
     required this.filter,
     required this.counts,
     required this.followingOnly,
@@ -39,6 +40,9 @@ class SportsBoardHeader extends StatelessWidget {
 
   /// When the fixtures on screen were loaded; null before the first load.
   final DateTime? updatedAt;
+
+  /// Feeds are still answering: the title says so instead of "Updated".
+  final bool loading;
 
   final SportsBoardFilter filter;
   final Map<SportsBoardFilter, int> counts;
@@ -57,7 +61,7 @@ class SportsBoardHeader extends StatelessWidget {
       if (width >= _singleRowMinWidth) {
         return Row(
           children: [
-            Expanded(child: _title()),
+            Expanded(child: _title(context)),
             _when(expand: false),
             const SizedBox(width: 14),
             _tools(),
@@ -70,7 +74,7 @@ class SportsBoardHeader extends StatelessWidget {
           children: [
             Row(
               children: [
-                Expanded(child: _title()),
+                Expanded(child: _title(context)),
                 const SizedBox(width: 12),
                 _tools(),
               ],
@@ -83,7 +87,7 @@ class SportsBoardHeader extends StatelessWidget {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _title(),
+          _title(context),
           const SizedBox(height: 12),
           _when(expand: true),
           const SizedBox(height: 12),
@@ -93,7 +97,7 @@ class SportsBoardHeader extends StatelessWidget {
     },
   );
 
-  Widget _title() => Row(
+  Widget _title(BuildContext context) => Row(
     crossAxisAlignment: CrossAxisAlignment.baseline,
     textBaseline: TextBaseline.alphabetic,
     children: [
@@ -107,11 +111,21 @@ class SportsBoardHeader extends StatelessWidget {
           tracking: -0.2,
         ),
       ),
-      if (updatedAt case final at?) ...[
+      if (loading) ...[
         const SizedBox(width: 10),
         Flexible(
           child: sportsLabelText(
-            'Updated ${DateFormat('HH:mm').format(at.toLocal())}',
+            'Loading fixtures…',
+            _tokens.fgFaint,
+            size: 12,
+            ellipsize: true,
+          ),
+        ),
+      ] else if (updatedAt case final at?) ...[
+        const SizedBox(width: 10),
+        Flexible(
+          child: sportsLabelText(
+            'Updated ${sportsClock(context)(at.toLocal())}',
             _tokens.fgFaint,
             size: 12,
             tabular: true,

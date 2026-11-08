@@ -15,11 +15,13 @@ import 'package:flutter/material.dart';
 
 import 'package:flutter/foundation.dart' show ValueListenable;
 
+import '../../../services/player_controls_display_settings.dart';
 import '../models/gesture_state.dart';
 import '../services/playback_ui_clock.dart';
 import '../utils/aspect_mode_utils.dart';
 import 'dock_style.dart';
 import 'dock_widgets.dart';
+import 'seek_bubble.dart';
 
 /// One control the dock can offer, with its availability already resolved.
 class _Tool {
@@ -201,12 +203,7 @@ class StyledDock extends StatelessWidget {
     this.infoPanelGeneration = 0,
   });
 
-  static String _fmt(Duration d) {
-    final h = d.inHours;
-    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return h > 0 ? '$h:$m:$s' : '$m:$s';
-  }
+  static String _fmt(Duration d) => dockClockText(d);
 
   /// The canonical label — the same helper the legacy dock uses, so the two
   /// styles never disagree about what a mode is called.
@@ -323,13 +320,19 @@ class StyledDock extends StatelessWidget {
           bottom: 0,
           left: 0,
           right: 0,
-          child: onDockExtent == null
-              ? _bottomUnit(context, tools)
-              : DockExtentReporter(
-                  onExtent: onDockExtent!,
-                  generation: geometryGeneration,
-                  child: _bottomUnit(context, tools),
-                ),
+          // The icon-only choice changes the tool rows, so they follow it live.
+          // The listener sits outside the reporter, which measures when it
+          // builds: a flip can change the dock's height by a whole row.
+          child: ValueListenableBuilder<bool>(
+            valueListenable: PlayerControlsDisplaySettings.iconOnly,
+            builder: (context, _, _) => onDockExtent == null
+                ? _bottomUnit(context, tools)
+                : DockExtentReporter(
+                    onExtent: onDockExtent!,
+                    generation: geometryGeneration,
+                    child: _bottomUnit(context, tools),
+                  ),
+          ),
         ),
       ],
     );
@@ -507,18 +510,23 @@ class StyledDock extends StatelessWidget {
             final scaledLabel = MediaQuery.textScalerOf(
               context,
             ).scale(metrics.label);
-            double chipWidth(_Tool t, bool labelled) =>
-                metrics.icon +
-                metrics.padX * 2 +
-                (labelled
-                    ? metrics.gap * 0.75 + t.label.length * scaledLabel * 0.62
-                    : 0);
+            final iconOnly = PlayerControlsDisplaySettings.iconOnly.value;
+            double chipWidth(_Tool t, bool labelled) => iconOnly
+                ? metrics.target
+                : metrics.icon +
+                      metrics.padX * 2 +
+                      (labelled
+                          ? metrics.gap * 0.75 +
+                                t.label.length * scaledLabel * 0.62
+                          : 0);
             final transportWidth =
                 (hasPrevious && onPrevious != null ? metrics.target : 0) +
                 metrics.target * 1.32 +
                 (hasNext && onNext != null ? metrics.target : 0) +
                 metrics.gap * 3;
-            final moreWidth = metrics.icon + metrics.padX * 2 + 30;
+            final moreWidth = iconOnly
+                ? metrics.target
+                : metrics.icon + metrics.padX * 2 + 30;
 
             bool fits(int count, bool labelled, double gap) {
               var width = transportWidth + moreWidth + gap * (count + 1);
@@ -528,9 +536,10 @@ class StyledDock extends StatelessWidget {
               return width <= available;
             }
 
-            // Step down in order until something fits.
+            // Step down in order until something fits. Icon-only starts
+            // where step 3 would end up.
             var count = 3;
-            var labelled = true;
+            var labelled = !iconOnly;
             var gap = metrics.gap;
             if (!fits(count, labelled, gap)) {
               gap = metrics.gap * 0.75; // 1: tighten gaps
@@ -580,6 +589,7 @@ class StyledDock extends StatelessWidget {
                           DockChip(
                             icon: Icons.more_horiz_rounded,
                             label: 'More',
+                            showLabel: !iconOnly,
                             active: true,
                             onPressed: () => _openOverflow(context, tools),
                             metrics: metrics,
@@ -621,11 +631,13 @@ class StyledDock extends StatelessWidget {
             ).scale(metrics.label);
             String labelFor(_Tool t) =>
                 t.value == null ? t.label : '${t.label} · ${t.value}';
+            final iconOnly = PlayerControlsDisplaySettings.iconOnly.value;
             double chipWidth(String text) =>
                 metrics.icon +
                 metrics.padX * 2 +
-                metrics.gap * 0.75 +
-                text.length * scaledLabel * 0.62;
+                (iconOnly
+                    ? 0
+                    : metrics.gap * 0.75 + text.length * scaledLabel * 0.62);
 
             // Budget every slot against the WIDEST chip rather than each
             // chip's own estimate. `Wrap` re-lays by real width, so a
@@ -654,6 +666,7 @@ class StyledDock extends StatelessWidget {
                   DockChip(
                     icon: tool.icon,
                     label: labelFor(tool),
+                    showLabel: !iconOnly,
                     active: tool.active,
                     tint: tool.tint,
                     onPressed: tool.onPressed,
@@ -664,6 +677,7 @@ class StyledDock extends StatelessWidget {
                   DockChip(
                     icon: Icons.more_horiz_rounded,
                     label: 'More',
+                    showLabel: !iconOnly,
                     active: true,
                     onPressed: () => _openOverflow(context, tools),
                     metrics: metrics,
@@ -688,7 +702,6 @@ class StyledDock extends StatelessWidget {
               SizedBox(width: metrics.gap),
               _volume(context),
             ],
-            SizedBox(width: metrics.gap),
             _timeReadout(),
             SizedBox(width: metrics.gap * 1.5),
             Expanded(child: _nowPlaying()),
@@ -790,14 +803,15 @@ class StyledDock extends StatelessWidget {
   Widget _timeReadout() {
     return ValueListenableBuilder<PlaybackUiClockValue>(
       valueListenable: clock,
-      builder: (context, value, _) => Text(
-        '${_fmt(value.position)}  /  ${_fmt(value.duration)}',
-        maxLines: 1,
+      builder: (context, value, _) => DockDurationReadout(
+        value: value,
+        metrics: metrics,
         style: TextStyle(
           color: palette.inkDim,
           fontSize: metrics.label,
           fontFeatures: const [FontFeature.tabularFigures()],
         ),
+        prefix: '${_fmt(value.position)}  /  ',
       ),
     );
   }
@@ -885,7 +899,45 @@ class StyledDock extends StatelessWidget {
         : value.duration.inMilliseconds;
     final progress = (value.position.inMilliseconds / total).clamp(0.0, 1.0);
 
-    final bar = SliderTheme(
+    // The time under the pointer, and under the thumb while the bar is held.
+    final bar = SeekBubble(
+      duration: value.duration,
+      progress: progress,
+      inset: metrics.knob * 0.8,
+      format: _fmt,
+      fill: palette.chipFill,
+      ink: palette.ink,
+      fontSize: metrics.label,
+      child: _slider(context, progress),
+    );
+
+    // Wide runs the bar edge to edge and moves the readouts into the left
+    // zone; the narrower arrangements keep them flanking it.
+    if (bleed) return SizedBox(height: metrics.target, child: bar);
+
+    final readout = TextStyle(
+      color: palette.ink,
+      fontSize: metrics.label,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    // The readouts take their own width and the bar the rest. They were
+    // loose Flexibles beside a flex-8 bar, and a loose Flexible's unused
+    // share is left empty at the row's end: a wide gap after the duration.
+    return SizedBox(
+      height: DockLayoutInput.scrubberH,
+      child: Row(
+        children: [
+          Text(_fmt(value.position), maxLines: 1, style: readout),
+          SizedBox(width: metrics.gap),
+          Expanded(child: bar),
+          DockDurationReadout(value: value, metrics: metrics, style: readout),
+        ],
+      ),
+    );
+  }
+
+  Widget _slider(BuildContext context, double progress) {
+    return SliderTheme(
       data: SliderTheme.of(context).copyWith(
         trackHeight: metrics.trackHeight,
         // deep -> hot with a bloom at the played edge. Material's flat
@@ -910,45 +962,6 @@ class StyledDock extends StatelessWidget {
         onChangeStart: (_) => onSeekBarChangedStart(),
         onChanged: onSeekBarChanged,
         onChangeEnd: (_) => onSeekBarChangeEnd(),
-      ),
-    );
-
-    // Wide runs the bar edge to edge and moves the readouts into the left
-    // zone; the narrower arrangements keep them flanking it.
-    if (bleed) return SizedBox(height: metrics.target, child: bar);
-
-    return SizedBox(
-      height: DockLayoutInput.scrubberH,
-      child: Row(
-        children: [
-          Flexible(
-            child: Text(
-              _fmt(value.position),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: palette.ink,
-                fontSize: metrics.label,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
-          ),
-          SizedBox(width: metrics.gap),
-          Expanded(flex: 8, child: bar),
-          SizedBox(width: metrics.gap),
-          Flexible(
-            child: Text(
-              _fmt(value.duration),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: palette.ink,
-                fontSize: metrics.label,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

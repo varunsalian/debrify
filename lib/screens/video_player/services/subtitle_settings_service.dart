@@ -104,6 +104,9 @@ class SubtitleColor {
     SubtitleColor('Red', Color(0xFFFF4444)),
     SubtitleColor('Blue', Color(0xFF4488FF)),
     SubtitleColor('Orange', Color(0xFFFF8800)),
+    // Softer than white under HDR and Dolby Vision. Appended: the setting
+    // is stored as an index, here and in the Android TV player's table.
+    SubtitleColor('Light grey', Color(0xFFCCCCCC)),
   ];
 
   static const int defaultIndex = 0; // White

@@ -12,6 +12,7 @@ import 'package:debrify/features/iptv_multiview/presentation/multi_view_tile.dar
 import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/widgets/trailer_engine.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Builds the engine for one tile. [tileCount] is the number of tiles at the
@@ -42,9 +43,14 @@ class IptvMultiViewPage extends ConsumerStatefulWidget {
     required this.engineFactory,
     this.versions,
     this.released,
+    this.showBackButton = true,
   });
 
   final MultiViewEngineFactory engineFactory;
+
+  /// A back button over the grid, for devices without a system Back (Mac,
+  /// iPhone, iPad, desktops). TV remotes have Back and leave it off.
+  final bool showBackButton;
 
   /// Looks up a channel's other versions when it fails; null never retries.
   final MultiViewVersions? versions;
@@ -107,6 +113,15 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
   /// handoff awaits them; page teardown keeps them too.
   final List<Future<void>> _disposeFutures = [];
 
+  /// One focus node per tile url, so a removal can hand focus to the tile
+  /// that takes the slot (a remote has nothing focused otherwise).
+  final Map<String, FocusNode> _tileFocus = {};
+
+  FocusNode _focusFor(String url) => _tileFocus.putIfAbsent(
+    url,
+    () => FocusNode(debugLabel: 'multi-view tile $url'),
+  );
+
   MultiViewSelection? _synced;
 
   @override
@@ -136,6 +151,9 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
       entry.engine = null;
       engine.detach();
       _disposeFutures.add(engine.dispose());
+    }
+    for (final node in _tileFocus.values) {
+      node.dispose();
     }
     final released = widget.released;
     if (released != null) {
@@ -180,6 +198,12 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
       // came back gets a fresh engine; an in-flight factory for the old slot
       // sees it no longer owns the url and disposes what it gets.
       _retire(_entries.remove(url)!, disposeNow: false);
+      // Its focus node goes once the tile unmounted (never inline: the
+      // tile's own dispose still detaches from it this frame).
+      final node = _tileFocus.remove(url);
+      if (node != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => node.dispose());
+      }
     }
     final removals = _disposeFutures.sublist(disposedBefore);
     if (removals.isNotEmpty) unawaited(_retryFourK(visible, removals));
@@ -306,7 +330,19 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
       _retire(entry, disposeNow: true);
       return;
     }
+    // The sound may have moved while this tile was opening, and an engine
+    // still opening can drop a volume change (the Android TV player ignores
+    // one until its native player exists): apply the current choice now.
+    unawaited(engine.setVolume(_isAudioUrl(url) ? 100 : 0));
     if (mounted) setState(() {});
+  }
+
+  /// Whether the tile for [url] is the one with sound right now.
+  bool _isAudioUrl(String url) {
+    final selection = ref.read(multiViewSelectionProvider);
+    final channels = _visibleChannels(selection);
+    if (channels.isEmpty) return false;
+    return channels[selection.audioIndex % channels.length].url == url;
   }
 
   /// A stream that had played and then died is reopened as it is (live
@@ -481,6 +517,8 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
           children: [
             ListTile(
               key: const ValueKey('watch-full-screen'),
+              // A remote needs a live row the moment the sheet opens.
+              autofocus: true,
               title: const Text(
                 'Watch full screen',
                 style: TextStyle(color: Colors.white),
@@ -498,7 +536,7 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
               ),
               onTap: () {
                 Navigator.of(sheetContext).pop();
-                ref.read(multiViewSelectionProvider.notifier).remove(index);
+                _removeTile(index);
               },
             ),
           ],
@@ -507,17 +545,68 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
     );
   }
 
+  /// Removes the tile and focuses the one that takes its place (the last
+  /// tile when it was last), so the remote keeps a target.
+  void _removeTile(int index) {
+    final notifier = ref.read(multiViewSelectionProvider.notifier);
+    notifier.remove(index);
+    final channels = _visibleChannels(ref.read(multiViewSelectionProvider));
+    if (channels.isEmpty) return;
+    final next =
+        channels[index < channels.length ? index : channels.length - 1];
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focusFor(next.url).requestFocus();
+    });
+  }
+
   // --- Layout ---------------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
     final selection = ref.watch(multiViewSelectionProvider);
     final visible = _visibleChannels(selection);
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: visible.isEmpty
-          ? _buildEmpty()
-          : _buildGrid(selection, visible.length),
+    return CallbackShortcuts(
+      // Escape leaves on a keyboard, as Back does on a remote.
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.escape): () =>
+            Navigator.of(context).maybePop(),
+      },
+      // Leftover focus (a removed tile, an empty page) stays inside this
+      // scope, under the Escape binding, instead of the route above it.
+      child: FocusScope(
+        autofocus: true,
+        child: Scaffold(
+          backgroundColor: Colors.black,
+          body: Stack(
+            fit: StackFit.expand,
+            children: [
+              visible.isEmpty
+                  ? _buildEmpty()
+                  : _buildGrid(selection, visible.length),
+              if (widget.showBackButton)
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  child: SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.all(10),
+                      child: IconButton(
+                        key: const ValueKey('multi-view-back'),
+                        tooltip: 'Back',
+                        onPressed: () => Navigator.of(context).maybePop(),
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.black.withValues(alpha: 0.6),
+                          foregroundColor: Colors.white,
+                        ),
+                        icon: const Icon(Icons.arrow_back_rounded),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -575,6 +664,11 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
                   'copy of the channel.',
             null => null,
           },
+          noteTag: switch (entry?.fallback) {
+            MultiViewFallback.fourKBusy => 'HD version',
+            MultiViewFallback.backup => 'backup copy',
+            null => null,
+          },
           failedMessage: (entry?.fourKExhausted ?? false)
               ? 'This box plays one 4K channel at a time, and there is no HD '
                     'version of this channel. Watch it full screen, or remove '
@@ -582,11 +676,13 @@ class _IptvMultiViewPageState extends ConsumerState<IptvMultiViewPage> {
               : "Can't play this channel",
           hasAudio: index == selection.audioIndex,
           autofocus: index == 0,
-          // Select moves the sound; on the tile that already has it, Select
-          // opens its actions, so remotes without a Menu key reach them.
-          onSelected: () => index == selection.audioIndex
-              ? _openTileActions(index)
-              : _applyAudio(index),
+          focusNode: _focusFor(channel.url),
+          // The first tile's note starts below the back button.
+          noteTop: index == 0 && widget.showBackButton ? 64 : 8,
+          // Select always gives this tile the sound (on the sound tile it
+          // re-applies the volumes); holding OK, the Menu key, a long press or
+          // a right click opens its actions.
+          onSelected: () => _applyAudio(index),
           onLongPressed: () => _openTileActions(index),
         ),
       ),

@@ -4,6 +4,7 @@ import 'package:debrify/services/storage/tracker_episode_progress_storage.dart';
 import 'package:debrify/services/storage/trakt_storage.dart';
 import 'package:flutter/foundation.dart';
 
+import '../models/media_identity.dart';
 import '../models/profiles/profile_policy.dart';
 import '../utils/episode_progress_merge.dart';
 import 'episode_tracker_snapshot_revision.dart';
@@ -326,7 +327,7 @@ class EpisodeTrackerSnapshotService {
         snapshotRevision: snapshotRevision,
       );
 
-      return _refreshTraktSnapshot(
+      return await _refreshTraktSnapshot(
         key: key,
         storeWriteKey: storeWriteKey,
         force: force,
@@ -430,6 +431,8 @@ class EpisodeTrackerSnapshotService {
     String imdbId, {
     bool force = false,
   }) async {
+    // A catalog's own show is local-only: Simkl has no ID for it.
+    if (!MediaIdentity.isApiId(imdbId)) return null;
     ProfileAsyncAuthorization? authorization;
     String? storeWriteKey;
     int? snapshotRevision;
@@ -470,7 +473,7 @@ class EpisodeTrackerSnapshotService {
         snapshotRevision: refreshRevision,
       );
 
-      return _refreshCoordinator.run(
+      return await _refreshCoordinator.run(
         key: key,
         ttl: _refreshTtl,
         force: force,
@@ -611,7 +614,7 @@ class EpisodeTrackerSnapshotService {
       // Playback remains fresh on every launch (zero TTL), while concurrent
       // callers share one request. Its read/modify/write is serialized with
       // full-history replacement via [operationKey].
-      return _refreshCoordinator.run(
+      return await _refreshCoordinator.run(
         key: key,
         ttl: Duration.zero,
         force: force,
@@ -732,7 +735,7 @@ class EpisodeTrackerSnapshotService {
         snapshotRevision: snapshotRevision,
       );
 
-      return _refreshCoordinator.run(
+      return await _refreshCoordinator.run(
         key: key,
         ttl: _refreshTtl,
         force: force,

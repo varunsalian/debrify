@@ -32,3 +32,16 @@ Torrent? matchPinnedDirectStream(
   }
   return null;
 }
+
+/// Why [matchPinnedDirectStream] found nothing, as a fixed diagnostic label.
+/// A saved group naming a torrent hash is a season pack, which should offer
+/// every episode, so its miss is worth a look; a quality/release group
+/// usually belongs to a single-episode release whose next episode comes from
+/// another release.
+String pinnedDirectMissReason(List<Torrent> direct, String? bingeGroup) {
+  if (direct.isEmpty) return 'no_direct_streams';
+  if (bingeGroup == null || bingeGroup.isEmpty) return 'profile_missing';
+  return RegExp(r'[0-9a-fA-F]{40}').hasMatch(bingeGroup)
+      ? 'pack_group_missing'
+      : 'binge_group_missing';
+}

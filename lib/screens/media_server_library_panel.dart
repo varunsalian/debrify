@@ -11,6 +11,7 @@ import '../services/media_server_service.dart';
 import '../services/profiles/profile_runtime.dart';
 import '../services/video_player_launcher.dart';
 import '../theme/app_theme_scope.dart';
+import '../utils/platform_util.dart';
 import '../widgets/see_all/stremio_dropdown.dart';
 import '../widgets/tv_text_field.dart';
 import 'settings/media_server_settings_page.dart';
@@ -40,6 +41,18 @@ class _MediaServerLibraryPanelState extends State<MediaServerLibraryPanel> {
   final _search = TextEditingController();
   final _scroll = ScrollController();
   final _gridFocus = FocusNode(debugLabel: 'media-library-grid');
+
+  /// Opening a folder (or going back up) swaps the grid for a spinner, which
+  /// disposes the focused card. On TV nothing was left focused afterwards and
+  /// the remote could not reach the folder's episodes; the next page takes
+  /// focus at its first card instead.
+  bool _focusGridOnLoad = false;
+
+  /// Back from an episode, focus returns to the card that was opened rather
+  /// than the first one, so the remote stays where it was in the season.
+  String? _restoreId;
+  double _restoreOffset = 0;
+  final _restoreFocus = FocusNode(debugLabel: 'media-library-restore');
   List<ConnectionResource> _servers = [];
   List<MediaServerLibraryItem> _libraries = [];
   final _trail = <MediaServerLibraryItem>[];
@@ -69,11 +82,15 @@ class _MediaServerLibraryPanelState extends State<MediaServerLibraryPanel> {
     _search.dispose();
     _scroll.dispose();
     _gridFocus.dispose();
+    _restoreFocus.dispose();
     super.dispose();
   }
 
   void _profileChanged() {
     _generation++;
+    _focusGridOnLoad = false;
+    _restoreId = null;
+    _restoreOffset = 0;
     setState(() {
       _session = null;
       _servers = [];
@@ -189,6 +206,10 @@ class _MediaServerLibraryPanelState extends State<MediaServerLibraryPanel> {
     final session = _session;
     if (session == null || _libraryId == null) return;
     final generation = ++_generation;
+    // Owned by THIS load: one overtaken by a newer load never takes focus.
+    final focusAfter = _focusGridOnLoad;
+    final restoreOffset = _restoreOffset;
+    _focusGridOnLoad = false;
     setState(() {
       if (reset) {
         _offsets
@@ -214,7 +235,26 @@ class _MediaServerLibraryPanelState extends State<MediaServerLibraryPanel> {
         _page = page;
         _loading = false;
       });
+      // Kept through a failed reload, so its Retry still lands in place.
+      _restoreOffset = 0;
       if (_scroll.hasClients) _scroll.jumpTo(0);
+      if (focusAfter) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || generation != _generation) return;
+          if (restoreOffset <= 0 || !_scroll.hasClients) {
+            _focusLoadedGrid(generation);
+            return;
+          }
+          // The spinner destroyed the grid, so the new one starts at the top
+          // with the opened card unbuilt: scroll back to it first.
+          _scroll.jumpTo(
+            restoreOffset.clamp(0.0, _scroll.position.maxScrollExtent),
+          );
+          WidgetsBinding.instance
+            ..addPostFrameCallback((_) => _focusLoadedGrid(generation))
+            ..scheduleFrame();
+        });
+      }
     } catch (error) {
       if (mounted && generation == _generation) {
         setState(() {
@@ -225,8 +265,31 @@ class _MediaServerLibraryPanelState extends State<MediaServerLibraryPanel> {
     }
   }
 
+  /// Focuses the opened card, or else the first one. A FocusNode keeps its
+  /// last context after its card is gone, so `mounted` is the real test, and
+  /// a request on a detached node would fire later and steal focus.
+  void _focusLoadedGrid(int generation) {
+    if (!mounted || generation != _generation) return;
+    // A load finishing under another screen must not take that screen's focus.
+    if (ModalRoute.of(context)?.isCurrent == false) return;
+    if (_restoreFocus.context?.mounted == true) {
+      _restoreFocus.requestFocus();
+    } else if (_gridFocus.context?.mounted == true) {
+      _gridFocus.requestFocus();
+    } else if (_scroll.hasClients && _scroll.offset > 0) {
+      // The opened card left the list while the first card is scrolled away.
+      _scroll.jumpTo(0);
+      WidgetsBinding.instance
+        ..addPostFrameCallback((_) => _focusLoadedGrid(generation))
+        ..scheduleFrame();
+    }
+  }
+
   void _back() {
     if (_trail.isEmpty) return;
+    _focusGridOnLoad = widget.isTelevision;
+    _restoreId = null;
+    _restoreOffset = 0;
     setState(() {
       _trail.removeLast();
       _query = '';
@@ -237,6 +300,9 @@ class _MediaServerLibraryPanelState extends State<MediaServerLibraryPanel> {
 
   void _open(MediaServerLibraryItem item) async {
     if (item.isFolder) {
+      _focusGridOnLoad = widget.isTelevision;
+      _restoreId = null;
+      _restoreOffset = 0;
       setState(() {
         _trail.add(item);
         _mode = 'browse';
@@ -246,13 +312,19 @@ class _MediaServerLibraryPanelState extends State<MediaServerLibraryPanel> {
       await _loadPage();
     } else if (item.playable && _session != null) {
       final session = _session!;
+      final offset = _scroll.hasClients ? _scroll.offset : 0.0;
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) =>
               _MediaServerItemScreen(session: session, initial: item),
         ),
       );
-      if (mounted) _loadPage(reset: false);
+      // Another profile's panel starts clean.
+      if (!mounted || !identical(_session, session)) return;
+      _focusGridOnLoad = widget.isTelevision;
+      _restoreId = item.id;
+      _restoreOffset = offset;
+      _loadPage(reset: false);
     }
   }
 
@@ -452,7 +524,9 @@ class _MediaServerLibraryPanelState extends State<MediaServerLibraryPanel> {
                           ),
                           item: items[index],
                           session: _session!,
-                          focusNode: index == 0 ? _gridFocus : null,
+                          focusNode: items[index].id == _restoreId
+                              ? _restoreFocus
+                              : (index == 0 ? _gridFocus : null),
                           onOpen: () => _open(items[index]),
                         ),
                       ),
@@ -471,6 +545,9 @@ class _MediaServerLibraryPanelState extends State<MediaServerLibraryPanel> {
                       onPressed: _offsets.length > 1
                           ? () {
                               _offsets.removeLast();
+                              _focusGridOnLoad = widget.isTelevision;
+                              _restoreId = null;
+                              _restoreOffset = 0;
                               _loadPage(reset: false);
                             }
                           : null,
@@ -484,6 +561,9 @@ class _MediaServerLibraryPanelState extends State<MediaServerLibraryPanel> {
                       onPressed: _page!.nextOffset != null
                           ? () {
                               _offsets.add(_page!.nextOffset!);
+                              _focusGridOnLoad = widget.isTelevision;
+                              _restoreId = null;
+                              _restoreOffset = 0;
                               _loadPage(reset: false);
                             }
                           : null,
@@ -511,7 +591,17 @@ class _MediaServerLibraryPanelState extends State<MediaServerLibraryPanel> {
                 style: TextStyle(color: AppThemeScope.of(context).core.tx),
               ),
               if (retry != null)
-                TextButton(onPressed: retry, child: const Text('Retry')),
+                TextButton(
+                  // After a failed load nothing else is left to focus on TV.
+                  autofocus: widget.isTelevision,
+                  onPressed: () {
+                    // This button goes with the spinner: the grid takes over.
+                    // A server retry may never load a page, so only a page's.
+                    _focusGridOnLoad = widget.isTelevision && _session != null;
+                    retry();
+                  },
+                  child: const Text('Retry'),
+                ),
               if (settings)
                 TextButton(
                   onPressed: _settings,
@@ -790,6 +880,7 @@ class _MediaServerItemScreenState extends State<_MediaServerItemScreen> {
                 if (_error != null) ...[
                   Text(_error!, style: TextStyle(color: app.core.tx)),
                   TextButton(
+                    autofocus: PlatformUtil.isTelevision && _sources == null,
                     onPressed: _busy ? null : _load,
                     child: const Text('Retry'),
                   ),
@@ -804,6 +895,8 @@ class _MediaServerItemScreenState extends State<_MediaServerItemScreen> {
                     Padding(
                       padding: const EdgeInsets.only(bottom: 12),
                       child: FilledButton.icon(
+                        // The remote lands on the first way to play.
+                        autofocus: PlatformUtil.isTelevision && i == 0,
                         onPressed: _busy ? null : () => _play(i),
                         icon: const Icon(Icons.play_arrow),
                         label: Padding(

@@ -192,6 +192,14 @@ extension SettingsLeafSlice07 on SettingsLeafBuilder {
           const ['swipe', 'seek', 'gesture', 'back gesture', 'scrub'],
           onTap: () => deps.openPlaybackSection(PlaybackSettingsSection.player),
         ),
+      if (!deps.isTelevision())
+        leaf(
+          'Playback',
+          'Icons only',
+          'Hide the labels under the player buttons',
+          const ['labels', 'buttons', 'icons', 'controls', 'compact'],
+          onTap: () => deps.openPlaybackSection(PlaybackSettingsSection.player),
+        ),
       if (deps.preferredExternalPlayerSupported())
         leaf(
           'Playback',

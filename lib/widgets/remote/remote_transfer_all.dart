@@ -41,6 +41,8 @@ import '../../services/profiles/connection_resource_service.dart';
 import '../../services/profiles/device_key_provider.dart';
 import '../../services/profiles/portable_profile_package.dart';
 import '../../models/profiles/profile_policy.dart';
+import '../../utils/platform_util.dart';
+import '../tv_text_field.dart';
 
 /// One-click "Transfer Everything" flow. Pushes all configured services
 /// (debrid keys, Trakt/Simkl sessions, search engines, PikPak, WebDAV,
@@ -77,6 +79,12 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
   late final RemoteControlState _remoteState;
   int _eligibilityCheck = 0;
   bool _loading = true;
+
+  /// The first option. The button that opened this view is hidden behind it,
+  /// so on TV focus moves here once the options load (autofocus alone loses
+  /// to the focus history and leaves the remote on the header).
+  final FocusNode _firstOptionNode = FocusNode(debugLabel: 'transfer-first');
+  final FocusNode _reviewNode = FocusNode(debugLabel: 'transfer-review');
   bool _transferring = false;
 
   /// The credential gate runs BEFORE any item is sent and can take several
@@ -123,6 +131,8 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
   void dispose() {
     _remoteState.removeListener(_handleRemoteStateChanged);
     _pikpakPasswordController.dispose();
+    _firstOptionNode.dispose();
+    _reviewNode.dispose();
     super.dispose();
   }
 
@@ -465,6 +475,13 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
         _includeProfiles = canSendProfileGraph;
         _loading = false;
       });
+      if (PlatformUtil.isTelevision) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _firstOptionNode.context != null) {
+            _firstOptionNode.requestFocus();
+          }
+        });
+      }
     } catch (_) {
       debugPrint('RemoteTransferAll: setup inventory failed');
       if (mounted) {
@@ -477,6 +494,29 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
   }
 
   bool get _hasPikpak => _items.any((i) => i.key == ConfigCommand.pikpak);
+
+  KeyEventResult _leaveOptionsOnTv(FocusNode node, KeyEvent event) {
+    if (!PlatformUtil.isTelevision || event is KeyUpEvent) {
+      return KeyEventResult.ignored;
+    }
+    final direction = switch (event.logicalKey) {
+      LogicalKeyboardKey.arrowUp => TraversalDirection.up,
+      LogicalKeyboardKey.arrowDown => TraversalDirection.down,
+      _ => null,
+    };
+    if (direction == null) return KeyEventResult.ignored;
+    FocusManager.instance.primaryFocus?.focusInDirection(direction);
+    return KeyEventResult.handled;
+  }
+
+  void _focusReview() {
+    // Disabled until a password is typed: stay on the field, don't scroll away.
+    if (!_reviewNode.canRequestFocus) return;
+    _reviewNode.requestFocus();
+    // A direct request doesn't scroll, and the item list can sit in between.
+    final context = _reviewNode.context;
+    if (context != null) Scrollable.ensureVisible(context);
+  }
 
   bool get _canStart {
     if (_transferring || _connecting || _done) return false;
@@ -1483,26 +1523,36 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
                 setState(() => _includeProfiles = value);
               }
             },
-            child: Column(
-              children: [
-                if (_canSendProfileGraph)
+            // RadioGroup binds every arrow key to choosing the next radio, so
+            // on TV focus could never leave the options for the rest of the
+            // page. UP and DOWN move focus there; Select still chooses.
+            child: Focus(
+              canRequestFocus: false,
+              skipTraversal: true,
+              onKeyEvent: _leaveOptionsOnTv,
+              child: Column(
+                children: [
+                  if (_canSendProfileGraph)
+                    RadioListTile<bool>(
+                      value: true,
+                      enabled: !busy,
+                      focusNode: _firstOptionNode,
+                      title: const Text('All profiles & their data'),
+                      subtitle: const Text(
+                        'Profiles, PINs, photos, settings, accounts, addons, TV channels and IPTV data.',
+                      ),
+                    ),
                   RadioListTile<bool>(
-                    value: true,
+                    value: false,
                     enabled: !busy,
-                    title: const Text('All profiles & their data'),
+                    focusNode: _canSendProfileGraph ? null : _firstOptionNode,
+                    title: const Text('Current profile’s setup only'),
                     subtitle: const Text(
-                      'Profiles, PINs, photos, settings, accounts, addons, TV channels and IPTV data.',
+                      'Accounts, addons, tracking preferences, search and supported IPTV setup.',
                     ),
                   ),
-                RadioListTile<bool>(
-                  value: false,
-                  enabled: !busy,
-                  title: const Text('Current profile’s setup only'),
-                  subtitle: const Text(
-                    'Accounts, addons, tracking preferences, search and supported IPTV setup.',
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           if (!_includeProfiles && _items.isEmpty && _inventoryError == null)
@@ -1518,7 +1568,18 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
                 'Login and enabled or paused state. Requires all profiles.',
               ),
             ),
-          if (!_includeProfiles && _hasPikpak)
+          // On TV a plain field keeps DOWN for its caret, and the review button
+          // below it could not be reached.
+          if (!_includeProfiles && _hasPikpak && PlatformUtil.isTelevision)
+            TvTextField(
+              controller: _pikpakPasswordController,
+              obscureText: true,
+              enabled: !busy,
+              labelText: 'PikPak password',
+              onChanged: (_) => setState(() {}),
+              onDownArrow: _focusReview,
+            )
+          else if (!_includeProfiles && _hasPikpak)
             TextField(
               controller: _pikpakPasswordController,
               obscureText: true,
@@ -1549,6 +1610,7 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
           ),
           const SizedBox(height: 20),
           FilledButton(
+            focusNode: _reviewNode,
             onPressed: _done
                 ? widget.onBack
                 : _canStart

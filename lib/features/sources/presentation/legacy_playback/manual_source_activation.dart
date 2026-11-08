@@ -28,6 +28,7 @@ import 'package:debrify/services/profiles/profile_policy_guard.dart';
 import 'package:debrify/services/series_source_service.dart';
 import 'package:debrify/services/source_selection_diagnostics.dart';
 import 'package:debrify/services/video_player_launcher.dart';
+import 'package:debrify/ui/core/source_metadata_labels.dart';
 import 'package:debrify/widgets/debrify_tv_channel_add_bridge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -138,7 +139,7 @@ final class ManualSourceActivation {
             videoUrl: torrent.directUrl!,
             httpHeaders: torrent.httpHeaders,
             title: torrent.displayTitle,
-            subtitle: torrent.source.isNotEmpty ? torrent.source : null,
+            subtitle: sourceProviderName(torrent),
             stremioSources: launchSources,
             stremioCurrentSourceIndex: launchSourceIndex,
             resolveSourceToPlaylist:

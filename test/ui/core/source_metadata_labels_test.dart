@@ -97,6 +97,21 @@ void main() {
     });
   }
 
+  test('the provider name never shows an internal addon key', () {
+    // A user saw `stremio:<64 hex>` under the episode title in the player.
+    final key = 'stremio:${'bcd4e4e0' * 8}';
+    expect(
+      sourceProviderName(row(source: key, addonName: 'Torrentio')),
+      'Torrentio',
+    );
+    expect(sourceProviderName(row(source: key)), isNull);
+    expect(sourceRowSubtitle(row(bytes: 1024, source: key)), '1.0 KB');
+    expect(sourceProviderName(row(source: 'stremio:torrentio')), 'torrentio');
+    expect(sourceProviderName(row(source: 'indexer')), 'indexer');
+    expect(sourceProviderName(row(source: '')), isNull);
+    expect(sourceProviderName(row(source: key, addonName: ' ')), isNull);
+  });
+
   test('quality label preserves pixel precedence over loose UHD', () {
     expect(sourceQualityLabel(row(name: 'UHD BluRay 1080p')), '1080p');
     expect(sourceQualityLabel(row(name: 'Movie 2160p')), '4K');

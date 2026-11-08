@@ -16,6 +16,7 @@ import 'package:debrify/services/series_source_fetcher.dart';
 import 'package:debrify/services/series_source_service.dart';
 import 'package:debrify/services/source_selection_diagnostics.dart';
 import 'package:debrify/services/video_player_launcher.dart';
+import 'package:debrify/ui/core/source_metadata_labels.dart';
 import 'package:debrify/utils/formatters.dart';
 import 'package:debrify/widgets/pipeline_loading_overlay.dart';
 import 'package:flutter/material.dart';
@@ -91,7 +92,7 @@ final class SourcePlayerLaunch {
       } else if (winner != null) {
         subtitleLine = winner.sizeBytes > 0
             ? Formatters.formatFileSize(winner.sizeBytes)
-            : (winner.source.isNotEmpty ? winner.source : null);
+            : sourceProviderName(winner);
       }
       // Organize the playlist as a TV series when the file names look like one, so
       // a keyword-launched season pack groups by season/episode and "next" walks

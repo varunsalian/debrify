@@ -17,37 +17,41 @@ void main() {
     required ValueChanged<int> onTap,
     VoidCallback? onBehindTap,
     int index = 0,
-  }) =>
-      MaterialApp(
-        home: AppThemeScope(
-          theme: AppThemes.legacy,
-          child: Stack(
-            children: [
-              // Stands in for the page: proves pointers pass the closed layer.
-              Positioned.fill(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: onBehindTap,
-                ),
-              ),
-              Positioned.fill(
-                child: DesktopPillNav(
-                  currentIndex: index,
-                  entries: const [
-                    DesktopNavEntry(Icons.home, 'Home', 'main'),
-                    DesktopNavEntry(Icons.explore, 'Discover', 'main'),
-                    DesktopNavEntry(Icons.tv, 'IPTV', 'live'),
-                  ],
-                  onTap: onTap,
-                ),
-              ),
-            ],
+    bool expanded = false,
+    double capsuleTop = DesktopPillNav.desktopCapsuleTop,
+  }) => MaterialApp(
+    home: AppThemeScope(
+      theme: AppThemes.legacy,
+      child: Stack(
+        children: [
+          // Stands in for the page: proves pointers pass the closed layer.
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onBehindTap,
+            ),
           ),
-        ),
-      );
+          Positioned.fill(
+            child: DesktopPillNav(
+              currentIndex: index,
+              entries: const [
+                DesktopNavEntry(Icons.home, 'Home', 'main'),
+                DesktopNavEntry(Icons.explore, 'Discover', 'main'),
+                DesktopNavEntry(Icons.tv, 'IPTV', 'live'),
+              ],
+              onTap: onTap,
+              expanded: expanded,
+              capsuleTop: capsuleTop,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 
-  testWidgets('capsule shows the current tab and opens the panel',
-      (tester) async {
+  testWidgets('capsule shows the current tab and opens the panel', (
+    tester,
+  ) async {
     await tester.pumpWidget(host(onTap: (_) {}));
     await tester.pumpAndSettle();
 
@@ -61,8 +65,9 @@ void main() {
     expect(find.text('IPTV'), findsOneWidget);
   });
 
-  testWidgets('picking an entry reports its index and closes the panel',
-      (tester) async {
+  testWidgets('picking an entry reports its index and closes the panel', (
+    tester,
+  ) async {
     int? picked;
     await tester.pumpWidget(host(onTap: (i) => picked = i));
     await tester.pumpAndSettle();
@@ -148,5 +153,56 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tapAt(const Offset(700, 300));
     expect(behindTaps, 2);
+  });
+
+  for (final expanded in const [false, true]) {
+    testWidgets('resting capsule matches its published footprint '
+        '(expanded: $expanded)', (tester) async {
+      await tester.pumpWidget(
+        host(
+          onTap: (_) {},
+          expanded: expanded,
+          capsuleTop: DesktopPillNav.touchCapsuleTop,
+        ),
+      );
+      // Let the arrival label quiet down to the resting icon.
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+
+      final rect = tester.getRect(find.byKey(DesktopPillNav.pillKey));
+      expect(rect.left, DesktopPillNav.capsuleLeft);
+      expect(rect.top, DesktopPillNav.touchCapsuleTop);
+      expect(rect.width, DesktopPillNav.restWidth(expanded: expanded));
+      expect(rect.height, DesktopPillNav.height(expanded: expanded));
+      expect(
+        DesktopPillNav.clearanceBelow(
+          expanded: expanded,
+          capsuleTop: DesktopPillNav.touchCapsuleTop,
+        ),
+        greaterThan(rect.bottom),
+      );
+      expect(
+        DesktopPillNav.clearanceFor(expanded: expanded),
+        greaterThan(rect.right),
+      );
+    });
+  }
+
+  testWidgets('desktop keeps the capsule below the window strip', (
+    tester,
+  ) async {
+    await tester.pumpWidget(host(onTap: (_) {}));
+    expect(
+      tester.getTopLeft(find.byKey(DesktopPillNav.pillKey)).dy,
+      DesktopPillNav.desktopCapsuleTop,
+    );
+  });
+
+  test('touch devices lift the capsule; desktop keeps the strip clearance', () {
+    expect(DesktopPillNav.capsuleTopFor(touch: true), 10);
+    expect(
+      DesktopPillNav.capsuleTopFor(touch: false),
+      DesktopPillNav.desktopCapsuleTop,
+    );
   });
 }

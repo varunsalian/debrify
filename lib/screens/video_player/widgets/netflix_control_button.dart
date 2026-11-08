@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../services/player_controls_display_settings.dart';
+
 // Netflix-style control button widget
 class NetflixControlButton extends StatelessWidget {
   final IconData icon;
@@ -18,7 +20,15 @@ class NetflixControlButton extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ValueListenableBuilder<bool>(
+    valueListenable: PlayerControlsDisplaySettings.iconOnly,
+    builder: (context, iconOnly, _) => iconOnly && label.isNotEmpty
+        // Icon-only controls keep their name for pointers and long-press.
+        ? Tooltip(message: label, child: _button(showLabel: false))
+        : _button(showLabel: true),
+  );
+
+  Widget _button({required bool showLabel}) {
     return Container(
       margin: EdgeInsets.only(right: isCompact ? 8 : 16),
       child: Material(
@@ -47,7 +57,7 @@ class NetflixControlButton extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(icon, color: Colors.white, size: isCompact ? 16 : 18),
-                if (!isCompact || label.isNotEmpty) ...[
+                if (showLabel && (!isCompact || label.isNotEmpty)) ...[
                   SizedBox(width: isCompact ? 4 : 6),
                   Text(
                     label,

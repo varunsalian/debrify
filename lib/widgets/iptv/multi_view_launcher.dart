@@ -100,6 +100,9 @@ abstract final class MultiViewLauncher {
           engineFactory: createMultiViewEngine,
           versions: findMultiViewVersions,
           released: released,
+          // Remotes have Back; everything else needs one on screen.
+          showBackButton:
+              currentMultiViewPlatform() != MultiViewPlatform.androidTv,
         ),
       ),
     );

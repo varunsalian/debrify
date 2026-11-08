@@ -250,6 +250,7 @@ Future<void> _expectGolden(String name) => expectLater(
 );
 
 void main() {
+  useTwentyFourHourClock();
   // Goldens are recorded on macOS only; other hosts render fonts differently.
   final skip = !Platform.isMacOS;
 

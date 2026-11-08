@@ -637,7 +637,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // Text subtitles stay in MediaKit's Flutter renderer. Bitmap subtitles are
   // the narrow exception: their decoded image cues cannot enter a text widget,
   // so the selection path temporarily enables mpv's native compositor.
-  bool _isSeekingWithSlider = false;
   Duration? _lastSliderSeekPos;
 
   // Channel badge auto-hide
@@ -2991,7 +2990,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                   onShowTracks: () =>
                                       _menuUi.showTracksSheet(context),
                                   onSeekBarChangedStart: () {
-                                    _isSeekingWithSlider = true;
                                     // The viewer owns the position from the
                                     // first touch — release the resume guard
                                     // NOW, not at drag end, or the landing
@@ -3008,9 +3006,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                     );
                                     _player.seek(newPos);
                                     _lastSliderSeekPos = newPos;
+                                    // A held pointer sends no hover: nothing
+                                    // else keeps the dock up during a drag.
+                                    _controlsRuntime.scheduleAutoHide();
                                   },
                                   onSeekBarChangeEnd: () {
-                                    _isSeekingWithSlider = false;
                                     _controlsRuntime.scheduleAutoHide();
                                     if (_lastSliderSeekPos != null) {
                                       final settledPosition =

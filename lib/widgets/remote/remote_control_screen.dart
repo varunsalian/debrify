@@ -222,18 +222,24 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                             if (!state.isConnected)
                               _buildNotConnectedView(state)
                             else ...[
-                              Offstage(
-                                offstage: _activeView != null,
-                                child: ValueListenableBuilder(
-                                  valueListenable: ProfileRuntime.scope,
-                                  builder: (context, scope, _) =>
-                                      RemoteSendWorkspace(
-                                        key: ValueKey(scope),
-                                        onEverything: () =>
-                                            _openView('transfer_all'),
-                                        onPhoto: () =>
-                                            _pickAndSendAvatar(state),
-                                      ),
+                              // An offstage subtree can still take focus: on TV
+                              // DOWN went to the hidden workspace's buttons, so
+                              // the open view's last button was unreachable.
+                              ExcludeFocus(
+                                excluding: _activeView != null,
+                                child: Offstage(
+                                  offstage: _activeView != null,
+                                  child: ValueListenableBuilder(
+                                    valueListenable: ProfileRuntime.scope,
+                                    builder: (context, scope, _) =>
+                                        RemoteSendWorkspace(
+                                          key: ValueKey(scope),
+                                          onEverything: () =>
+                                              _openView('transfer_all'),
+                                          onPhoto: () =>
+                                              _pickAndSendAvatar(state),
+                                        ),
+                                  ),
                                 ),
                               ),
                               if (_activeView == 'navigate')

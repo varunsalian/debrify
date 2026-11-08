@@ -221,7 +221,12 @@ void main() {
             t.binding.scheduleFrame();
             await t.pump();
             expect(f.lists.single.name, 'A');
-            expect(FocusManager.instance.primaryFocus, same(oldNode));
+            // DPAD stays on the Delete button, now of the list in that slot
+            // (the last one left), not on the first list's rename.
+            expect(
+              FocusManager.instance.primaryFocus,
+              same((f.member('listFocusNodes') as List)[3]),
+            );
             expect(() => trailing.addListener(() {}), throwsFlutterError);
             await t.runAsync(() => work);
             late Future<void> emptyWork;

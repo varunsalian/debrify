@@ -115,7 +115,7 @@ class KeywordResultsList extends StatelessWidget {
     final parts = <String>[];
     final sourceLabel = t.addonDisplayName?.trim().isNotEmpty == true
         ? t.addonDisplayName!.trim()
-        : t.source;
+        : sourceKeyName(t.source) ?? '';
     if (t.isDirectStream || t.isExternalStream) {
       if (t.sizeBytes > 0) {
         parts.add(sourceSizeLabel(t.sizeBytes));

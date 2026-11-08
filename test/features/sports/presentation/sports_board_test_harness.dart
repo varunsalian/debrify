@@ -22,6 +22,23 @@ import 'package:flutter_test/flutter_test.dart';
 
 const _fixtureDir = 'test/features/sports/fixtures';
 
+/// The board shows times in the device's 12/24-hour preference. These
+/// tests read them as a 24-hour device does.
+void useTwentyFourHourClock() {
+  setUp(
+    () =>
+        TestWidgetsFlutterBinding
+                .instance
+                .platformDispatcher
+                .alwaysUse24HourFormatTestValue =
+            true,
+  );
+  tearDown(
+    () => TestWidgetsFlutterBinding.instance.platformDispatcher
+        .clearAlwaysUse24HourTestValue(),
+  );
+}
+
 /// Fixed board clock: 2026-10-28 20:41, local.
 final boardClock = DateTime(2026, 10, 28, 20, 41);
 
@@ -190,8 +207,15 @@ class SportsBoardHarness {
     ),
   );
 
-  Future<void> mount(WidgetTester tester) async {
+  /// [settle] is false for a board left loading: its skeleton animates, so
+  /// settling would never finish.
+  Future<void> mount(WidgetTester tester, {bool settle = true}) async {
     await tester.pumpWidget(app());
-    await tester.pumpAndSettle();
+    if (settle) {
+      await tester.pumpAndSettle();
+    } else {
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+    }
   }
 }

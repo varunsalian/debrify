@@ -262,7 +262,8 @@ class AndroidTvPlayerBridge {
       final update = <String, Object>{};
       if (size is int) update['subtitle_size_index'] = size.clamp(0, 6);
       if (style is int) update['subtitle_style_index'] = style.clamp(0, 4);
-      if (color is int) update['subtitle_color_index'] = color.clamp(0, 7);
+      // Last index of SubtitleColor.options (Light grey).
+      if (color is int) update['subtitle_color_index'] = color.clamp(0, 8);
       if (background is int) {
         update['subtitle_bg_index'] = background.clamp(0, 4);
       }

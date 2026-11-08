@@ -69,10 +69,14 @@ void main() {
     ProfileSessionMemory.clearAll();
   });
 
-  Future<void> mountBoard(WidgetTester tester, SportsBoardHarness h) async {
+  Future<void> mountBoard(
+    WidgetTester tester,
+    SportsBoardHarness h, {
+    bool settle = true,
+  }) async {
     await tester.binding.setSurfaceSize(const Size(1280, 1200));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    await h.mount(tester);
+    await h.mount(tester, settle: settle);
   }
 
   testWidgets('renders day sections from fixtures', (tester) async {
@@ -196,8 +200,9 @@ void main() {
   ) async {
     final h = SportsBoardHarness(eventsByLeague: {'ucl': _uclLive});
     h.feed.gated = true;
-    await mountBoard(tester, h);
+    await mountBoard(tester, h, settle: false);
 
+    expect(find.text('Loading fixtures…'), findsOneWidget);
     for (final row in const [0, 1, 2]) {
       expect(
         find.byKey(ValueKey('sports-board-skeleton-$row')),

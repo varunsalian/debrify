@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
+import 'classic_seek_row.dart';
 import 'dock_style.dart';
 import 'styled_dock.dart';
 import '../models/gesture_state.dart';
@@ -309,18 +310,6 @@ class Controls extends StatelessWidget {
     return dock;
   }
 
-  String _format(Duration d) {
-    final sign = d.isNegative ? '-' : '';
-    final abs = d.abs();
-    final h = abs.inHours;
-    final m = abs.inMinutes % 60;
-    final s = abs.inSeconds % 60;
-    if (h > 0) {
-      return '$sign${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
-    }
-    return '$sign${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
-  }
-
   // Simple rating badge for top-right
   Widget _buildMetadataRow(Map<String, dynamic> metadata) {
     // Only show rating
@@ -480,71 +469,11 @@ class Controls extends StatelessWidget {
                         children: [
                           // Progress bar with time indicators
                           if (!hideSeekbar)
-                            ValueListenableBuilder<PlaybackUiClockValue>(
-                              valueListenable: clock,
-                              builder: (context, value, _) {
-                                final total = value.duration.inMilliseconds <= 0
-                                    ? const Duration(seconds: 1)
-                                    : value.duration;
-                                final progress =
-                                    (value.position.inMilliseconds /
-                                            total.inMilliseconds)
-                                        .clamp(0.0, 1.0);
-                                return Row(
-                                  children: [
-                                    Text(
-                                      _format(value.position),
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: SliderTheme(
-                                        data: SliderTheme.of(context).copyWith(
-                                          trackHeight: 4,
-                                          activeTrackColor: const Color(
-                                            0xFFE50914,
-                                          ),
-                                          inactiveTrackColor: Colors.white
-                                              .withValues(alpha: 0.3),
-                                          thumbShape:
-                                              const RoundSliderThumbShape(
-                                                enabledThumbRadius: 6,
-                                                elevation: 2,
-                                              ),
-                                          thumbColor: const Color(0xFFE50914),
-                                          overlayShape:
-                                              const RoundSliderOverlayShape(
-                                                overlayRadius: 12,
-                                              ),
-                                        ),
-                                        child: Slider(
-                                          min: 0,
-                                          max: 1,
-                                          value: progress,
-                                          onChangeStart: (_) =>
-                                              onSeekBarChangedStart(),
-                                          onChanged: onSeekBarChanged,
-                                          onChangeEnd: (_) =>
-                                              onSeekBarChangeEnd(),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Text(
-                                      _format(value.duration),
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                );
-                              },
+                            ClassicSeekRow(
+                              clock: clock,
+                              onSeekBarChangedStart: onSeekBarChangedStart,
+                              onSeekBarChanged: onSeekBarChanged,
+                              onSeekBarChangeEnd: onSeekBarChangeEnd,
                             ),
 
                           // Separates the seek row from the buttons. Dropped

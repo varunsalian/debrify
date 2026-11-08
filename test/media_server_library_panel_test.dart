@@ -83,6 +83,73 @@ class Library implements MediaServerLibraryAccess {
       });
 }
 
+/// A server with real latency, so the spinner replaces the grid, and a
+/// season long enough that its last episodes start unbuilt.
+class SlowLibrary extends Library {
+  final served = <String>[];
+  bool failNext = false;
+  bool episodeGone = false;
+  Duration delay = const Duration(milliseconds: 10);
+  @override
+  Future<MediaServerLibraryPage> browse({
+    String? parentId,
+    bool views = false,
+    int offset = 0,
+    String search = '',
+    String sort = 'SortName',
+    String mode = 'browse',
+    bool episodeOrder = false,
+  }) async {
+    if (views) return super.browse(views: true);
+    await Future<void>.delayed(delay);
+    served.add('$parentId');
+    if (failNext) {
+      failNext = false;
+      throw const MediaServerException('Server unavailable');
+    }
+    if (parentId == 'Library') {
+      return MediaServerLibraryPage([
+        itemRow('Intro', 'Video'),
+        itemRow('Series', 'Series'),
+        for (var i = 1; i <= 60; i++)
+          if (!(episodeGone && i == 54)) itemRow('Ep$i', 'Episode'),
+      ], null);
+    }
+    return MediaServerLibraryPage([itemRow('Season', 'Season')], null);
+  }
+}
+
+/// The show folder sits second, so its card owns its own focus node.
+class LibraryWithIntro extends Library {
+  @override
+  Future<MediaServerLibraryPage> browse({
+    String? parentId,
+    bool views = false,
+    int offset = 0,
+    String search = '',
+    String sort = 'SortName',
+    String mode = 'browse',
+    bool episodeOrder = false,
+  }) async {
+    if (!views && parentId == 'Library') {
+      calls.add('$parentId:$offset:$search');
+      return MediaServerLibraryPage([
+        itemRow('Intro', 'Video'),
+        itemRow('Series', 'Series'),
+      ], null);
+    }
+    return super.browse(
+      parentId: parentId,
+      views: views,
+      offset: offset,
+      search: search,
+      sort: sort,
+      mode: mode,
+      episodeOrder: episodeOrder,
+    );
+  }
+}
+
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -242,5 +309,219 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pumpAndSettle();
     expect(library.calls.last, 'Series:0:');
+  });
+  testWidgets('TV keeps focus in the grid as folders open and close', (
+    tester,
+  ) async {
+    // A user on Android TV could open a show's folder but never reach its
+    // episodes: the spinner disposed the focused card and nothing took over.
+    final library = LibraryWithIntro();
+    await pump(tester, library, tv: true);
+    // The remote reached the show's card without passing the first card.
+    Focus.of(tester.element(find.text('Series').first)).requestFocus();
+    await tester.pump();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(library.calls.last, 'Series:0:');
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'media-library-grid',
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(library.calls.last, 'Season:0:');
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'media-library-grid',
+    );
+
+    await tester.tap(find.byTooltip('Back to parent'));
+    await tester.pumpAndSettle();
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'media-library-grid',
+    );
+  });
+  testWidgets('TV returns focus to the opened episode after its screen', (
+    tester,
+  ) async {
+    final library = LibraryWithIntro();
+    await pump(tester, library, tv: true);
+    Focus.of(tester.element(find.text('Series').first)).requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(library.calls.last, 'Season:0:');
+
+    // Open the episode, then come back from its screen.
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'media-library-restore',
+    );
+  });
+  group('TV focus with a slow server', () {
+    String? focused() => FocusManager.instance.primaryFocus?.debugLabel;
+
+    Future<void> dragTo(WidgetTester tester, String label, double dy) async {
+      for (var i = 0; i < 60 && find.text(label).evaluate().isEmpty; i++) {
+        await tester.drag(find.byType(GridView), Offset(0, dy));
+        await tester.pump();
+      }
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> openDeepEpisode(WidgetTester tester) async {
+      await dragTo(tester, 'Ep54', -300);
+      Focus.of(tester.element(find.text('Ep54').first)).requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('back from a deep episode lands on it, in place', (
+      tester,
+    ) async {
+      await pump(tester, SlowLibrary(), tv: true);
+      await openDeepEpisode(tester);
+
+      expect(focused(), 'media-library-restore');
+      expect(find.text('Ep54'), findsWidgets);
+    });
+
+    testWidgets('the grid keeps focus after a return, as folders change', (
+      tester,
+    ) async {
+      // A FocusNode keeps its context once its card is gone, so a check on
+      // the context alone left nothing focused from here on.
+      final library = SlowLibrary();
+      await pump(tester, library, tv: true);
+      await openDeepEpisode(tester);
+
+      await dragTo(tester, 'Series', 300);
+      Focus.of(tester.element(find.text('Series').first)).requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+
+      expect(library.served.last, 'Series');
+      expect(focused(), 'media-library-grid');
+    });
+
+    testWidgets('a watched episode gone from the list falls back to the top', (
+      tester,
+    ) async {
+      final library = SlowLibrary();
+      await pump(tester, library, tv: true);
+      library.episodeGone = true;
+      await openDeepEpisode(tester);
+
+      expect(find.text('Ep54'), findsNothing);
+      expect(focused(), 'media-library-grid');
+    });
+
+    testWidgets('a later scroll never steals focus for a missing card', (
+      tester,
+    ) async {
+      final library = SlowLibrary();
+      await pump(tester, library, tv: true);
+      await openDeepEpisode(tester);
+      library.episodeGone = true;
+      Focus.of(tester.element(find.text('Ep54').first)).requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(focused(), 'media-library-grid');
+
+      await dragTo(tester, 'Ep60', -300);
+      // Building more cards must not pull focus to a stale request.
+      expect(focused(), isNot('media-library-restore'));
+    });
+
+    testWidgets('a load finishing under another screen leaves its focus', (
+      tester,
+    ) async {
+      final library = SlowLibrary();
+      await pump(tester, library, tv: true);
+      Focus.of(tester.element(find.text('Series').first)).requestFocus();
+      await tester.pump();
+      library.delay = const Duration(seconds: 5);
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pump(); // The folder's load is in flight.
+
+      final top = FocusNode(debugLabel: 'top-route');
+      addTearDown(top.dispose);
+      Navigator.of(tester.element(find.byType(MediaServerLibraryPanel))).push(
+        MaterialPageRoute<void>(
+          builder: (_) => Scaffold(
+            body: Focus(
+              focusNode: top,
+              autofocus: true,
+              child: const Text('x'),
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1)); // Past the transition.
+      expect(focused(), 'top-route');
+
+      await tester.pump(const Duration(seconds: 5)); // The load finishes.
+      await tester.pump();
+      await tester.pump();
+
+      expect(library.served.last, 'Series');
+      expect(focused(), 'top-route');
+    });
+
+    testWidgets('a failed reload keeps the place for its Retry', (
+      tester,
+    ) async {
+      final library = SlowLibrary();
+      await pump(tester, library, tv: true);
+      await dragTo(tester, 'Ep54', -300);
+      Focus.of(tester.element(find.text('Ep54').first)).requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+      library.failNext = true;
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.text('Retry'), findsOneWidget);
+
+      await tester.tap(find.text('Retry'));
+      await tester.pumpAndSettle();
+
+      expect(focused(), 'media-library-restore');
+    });
+
+    testWidgets('Retry hands focus to the grid when it succeeds', (
+      tester,
+    ) async {
+      final library = SlowLibrary();
+      await pump(tester, library, tv: true);
+      Focus.of(tester.element(find.text('Series').first)).requestFocus();
+      await tester.pump();
+      library.failNext = true;
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+      expect(find.text('Retry'), findsOneWidget);
+
+      await tester.tap(find.text('Retry'));
+      await tester.pumpAndSettle();
+
+      expect(focused(), 'media-library-grid');
+    });
   });
 }

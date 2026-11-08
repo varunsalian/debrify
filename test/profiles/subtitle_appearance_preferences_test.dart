@@ -12,7 +12,7 @@ void main() {
     );
     expect(SubtitleSize.options, hasLength(7));
     expect(SubtitleStyle.options, hasLength(5));
-    expect(SubtitleColor.options, hasLength(8));
+    expect(SubtitleColor.options, hasLength(9));
     expect(SubtitleBackground.options, hasLength(5));
     expect(SubtitleOutlineColor.options, hasLength(10));
     expect(SubtitleElevation.options, hasLength(6));

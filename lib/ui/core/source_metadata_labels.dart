@@ -1,10 +1,27 @@
 import '../../models/torrent.dart';
 import '../../utils/format_tag_detector.dart';
 
+/// The provider name a viewer recognises: the addon's own name, never the
+/// internal `stremio:<configuration hash>` key the source is filed under.
+String? sourceProviderName(Torrent t) {
+  final name = t.addonDisplayName;
+  if (name != null) return name.trim().isEmpty ? null : name;
+  return sourceKeyName(t.source);
+}
+
+/// The readable part of a source key: a legacy `stremio:<name>` key gives
+/// its name, a `stremio:<configuration hash>` key gives nothing.
+String? sourceKeyName(String source) {
+  final value = source.trim();
+  if (!value.startsWith('stremio:')) return value.isEmpty ? null : value;
+  final key = value.substring('stremio:'.length);
+  return key.isEmpty || RegExp(r'^[0-9a-f]{32,}$').hasMatch(key) ? null : key;
+}
+
 /// `size · ↑seeders · ↓leechers · SOURCE` meta line for a redesigned row.
 String sourceRowSubtitle(Torrent t, {DateTime? now}) {
   final parts = <String>[];
-  final sourceLabel = t.addonDisplayName ?? t.source;
+  final sourceLabel = sourceProviderName(t) ?? '';
   if (t.isDirectStream || t.isExternalStream) {
     if (t.sizeBytes > 0) parts.add(sourceSizeLabel(t.sizeBytes));
     if (sourceLabel.isNotEmpty) parts.add(sourceLabel.toUpperCase());

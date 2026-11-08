@@ -22,6 +22,7 @@ import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/series_source_fetcher.dart';
 import 'package:debrify/services/series_source_service.dart';
 import 'package:debrify/services/source_priority.dart';
+import 'package:debrify/services/source_selection_diagnostics.dart';
 import 'package:debrify/services/storage/quick_play_storage.dart';
 import 'package:debrify/services/stream_url_validator.dart';
 import 'package:debrify/services/stremio_service.dart';
@@ -160,6 +161,7 @@ final class SourceSeriesFetcher {
               onPreferredMissing?.call();
             }
           } catch (_) {
+            logPinnedSourceMiss(s, e, 'resolve_failed');
             if (identical(pin, pins.first)) onPreferredMissing?.call();
             /* Try the next saved source. */
           }

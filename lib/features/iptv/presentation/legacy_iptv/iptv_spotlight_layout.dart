@@ -82,6 +82,27 @@ class IptvSpotlightLayout {
 
   bool get _canShowCategoryOptions => _deps.canShowCategoryOptions();
 
+  /// The ••• options for the selected category. Hiding it clears the
+  /// selection, which removes the ••• button that had focus: DPAD then lands
+  /// on the category control instead of nowhere.
+  Future<void> _openCategoryOptions() async {
+    await _deps.promptCategoryOptions(_catalogState.selectedCategory!);
+    if (!_deps.mounted()) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_deps.mounted()) return;
+      // A detached node keeps its last context, so ask whether that
+      // context is still mounted; focus that fell back to a scope means
+      // nothing on screen holds it.
+      final options = _focusState.spotlightCategoryOptionsFocusNode;
+      final primary = FocusManager.instance.primaryFocus;
+      if (options.context?.mounted != true &&
+          (primary == null || primary is FocusScopeNode) &&
+          _focusState.categoryFilterFocusNode.canRequestFocus) {
+        _focusState.categoryFilterFocusNode.requestFocus();
+      }
+    });
+  }
+
   Map<String, int> get _categoryCounts => _deps.categoryCounts();
 
   List<IptvListMeta> get _customLists => _deps.customLists();
@@ -144,9 +165,7 @@ class IptvSpotlightLayout {
           focusNode: _focusState.categoryFilterFocusNode,
           optionsFocusNode: _focusState.spotlightCategoryOptionsFocusNode,
           onOpenOptions: _canShowCategoryOptions && _effectiveCategory != null
-              ? () => unawaited(
-                  _deps.promptCategoryOptions(_catalogState.selectedCategory!),
-                )
+              ? () => unawaited(_openCategoryOptions())
               : null,
         ),
       ),

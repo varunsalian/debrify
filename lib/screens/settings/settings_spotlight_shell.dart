@@ -4,6 +4,7 @@ import '../../services/main_page_bridge.dart';
 import '../../theme/app_focus.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../theme/widgets/parallax_focus.dart';
+import '../../ui/core/shell_nav_clearance.dart';
 import 'widgets/settings_widgets.dart';
 
 /// Responsive classes for the Settings root.
@@ -166,12 +167,10 @@ class _SettingsSpotlightShellState extends State<SettingsSpotlightShell> {
           SizedBox(
             width: railWidth,
             child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(
-                railHorizontal,
-                28,
-                railHorizontal,
-                24,
-              ),
+              // Below the pill sidebar's capsule where one floats here.
+              padding:
+                  EdgeInsets.fromLTRB(railHorizontal, 28, railHorizontal, 24) +
+                  ShellNavClearance.belowInsets(context, 28),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -250,7 +249,9 @@ class _SettingsSpotlightShellState extends State<SettingsSpotlightShell> {
     }
     return ListView(
       key: const Key('settings-compact-root'),
-      padding: const EdgeInsets.fromLTRB(18, 24, 18, 40),
+      padding:
+          const EdgeInsets.fromLTRB(18, 24, 18, 40) +
+          ShellNavClearance.belowInsets(context, 24),
       children: [
         const SettingsRootHeader(),
         const SizedBox(height: 20),
@@ -307,7 +308,10 @@ class _SettingsSpotlightShellState extends State<SettingsSpotlightShell> {
     final app = AppThemeScope.of(context);
     return ListView(
       key: const Key('settings-compact-detail'),
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 42),
+      // The back button would sit under the pill sidebar's capsule.
+      padding:
+          const EdgeInsets.fromLTRB(18, 16, 18, 42) +
+          ShellNavClearance.belowInsets(context, 16),
       children: [
         Row(
           children: [

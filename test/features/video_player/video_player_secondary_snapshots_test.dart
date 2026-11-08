@@ -129,18 +129,11 @@ void main() {
             expect(d.forTracker('simkl'), isEmpty);
             expect(d.forTracker('mdblist'), isEmpty);
             if (!remote.isCompleted) remote.complete(http.Response('{}', 404));
-            expect(
-              errors,
-              race == 'profile'
-                  ? [
-                      isA<StateError>().having(
-                        (e) => e.message,
-                        'message',
-                        'Profile session changed before async completion',
-                      ),
-                    ]
-                  : isEmpty,
-            );
+            // A guide refresh outrun by a profile switch is settled by its
+            // own failure handling. It used to escape as an unhandled
+            // StateError, the same leak that stopped Simkl users' players
+            // from opening.
+            expect(errors, isEmpty);
           } finally {
             reads.release();
             if (!remote.isCompleted) remote.complete(http.Response('{}', 404));

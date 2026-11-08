@@ -85,7 +85,6 @@ warning | unused_element_parameter | lib/features/recordings/presentation/record
 # Import removal is outside the reviewed move substitutions. No new allowances
 # beyond the original/probe identity inventory (infos/counts enforced separately).
 warning | unused_field | lib/screens/video_player_screen.dart | The value of the field '_pikPakRetryCount' isn't used. Try removing the field, or using it
-warning | unused_field | lib/screens/video_player_screen.dart | The value of the field '_isSeekingWithSlider' isn't used. Try removing the field, or using it
 warning | unused_field | lib/screens/video_player_screen.dart | The value of the field '_rainbowOpacity' isn't used. Try removing the field, or using it
 warning | unused_field | lib/screens/video_player_screen.dart | The value of the field '_transitionPhase' isn't used. Try removing the field, or using it
 warning | unused_field | lib/screens/video_player_screen.dart | The value of the field '_transitionPhase2Started' isn't used. Try removing the field, or using it

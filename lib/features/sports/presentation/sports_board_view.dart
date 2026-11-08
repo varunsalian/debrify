@@ -144,6 +144,7 @@ class _SportsBoardViewState extends ConsumerState<SportsBoardView>
                 SliverToBoxAdapter(
                   child: SportsBoardHeader(
                     updatedAt: state.updatedAt,
+                    loading: state.loading,
                     filter: state.filter,
                     counts: counts,
                     followingOnly: state.followingOnly,
@@ -157,7 +158,27 @@ class _SportsBoardViewState extends ConsumerState<SportsBoardView>
                     onRefresh: () => _controller.refresh(force: true),
                   ),
                 ),
-                const SliverToBoxAdapter(child: SizedBox(height: 14)),
+                // A hairline progress bar while feeds are still landing on a
+                // board that already shows fixtures.
+                SliverToBoxAdapter(
+                  child: SizedBox(
+                    height: 14,
+                    child: state.loading && state.events.isNotEmpty
+                        ? Align(
+                            alignment: Alignment.center,
+                            child: ClipRRect(
+                              key: const ValueKey('sports-board-progress'),
+                              borderRadius: BorderRadius.circular(2),
+                              child: LinearProgressIndicator(
+                                minHeight: 2,
+                                backgroundColor: _tokens.hairline,
+                                color: _tokens.fgDim,
+                              ),
+                            ),
+                          )
+                        : null,
+                  ),
+                ),
                 if (sections.isNotEmpty) ...[
                   SliverToBoxAdapter(
                     child: SportsSportChips(
@@ -226,6 +247,7 @@ class _SportsBoardViewState extends ConsumerState<SportsBoardView>
           hideScores: state.follows.hideScores,
           isFollowed: state.follows.followsEvent,
           watchFor: state.watchFor,
+          checkingChannels: !state.watchResolved,
           onCardPressed: _openDetails,
           autofocusFirst: focusOnMount && index == 0,
           now: now,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../tv_text_field.dart';
+import 'package:debrify/ui/core/shell_nav_clearance.dart';
 
 /// Shared search header for the "Browse" sidebar tabs (IPTV, YouTube).
 ///
@@ -132,8 +133,15 @@ class _BrowseSearchHeaderState extends State<BrowseSearchHeader> {
   Widget build(BuildContext context) {
     final hasText = widget.controller.text.isNotEmpty;
     final ink = widget.ink;
+    // The pill sidebar's capsule floats over this row's leading edge on
+    // touch tablets; start the field past it there (zero elsewhere).
+    final padding = widget.padding.resolve(Directionality.of(context));
     return Padding(
-      padding: widget.padding,
+      padding: padding.copyWith(
+        left:
+            padding.left +
+            ShellNavClearance.extraLeading(context, padding.left),
+      ),
       child: TvTextField(
         controller: widget.controller,
         focusNode: widget.focusNode,

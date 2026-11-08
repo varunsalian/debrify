@@ -397,13 +397,13 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
           Row(
             children: [
               _EpgTag(
-              'NEXT',
-              dim: true,
-              accent: widget.tokens?.accent,
-              // The dim tone is part of the style's ramp too — passing only
-              // the accent left REPLAY/NEXT on app ink under a styled panel.
-              dimColor: widget.tokens?.fgFaint,
-            ),
+                'NEXT',
+                dim: true,
+                accent: widget.tokens?.accent,
+                // The dim tone is part of the style's ramp too — passing only
+                // the accent left REPLAY/NEXT on app ink under a styled panel.
+                dimColor: widget.tokens?.fgFaint,
+              ),
               const SizedBox(width: 8),
               Text(
                 _clock(context, next.start),
@@ -565,7 +565,8 @@ class _EpgSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final veil = tint ?? AppThemeScope.of(context).core.tx.withValues(alpha: 0.07);
+    final veil =
+        tint ?? AppThemeScope.of(context).core.tx.withValues(alpha: 0.07);
     Widget bar(double w) => Container(
       width: w,
       height: 10,
@@ -611,13 +612,9 @@ class _EpgRecordChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(6),
-        color: solid
-            ? base
-            : base.withValues(alpha: emphasized ? 0.30 : 0.12),
+        color: solid ? base : base.withValues(alpha: emphasized ? 0.30 : 0.12),
         border: Border.all(
-          color: solid
-              ? base
-              : base.withValues(alpha: emphasized ? 0.9 : 0.45),
+          color: solid ? base : base.withValues(alpha: emphasized ? 0.9 : 0.45),
         ),
       ),
       child: Row(
@@ -1088,9 +1085,7 @@ class _EpgScheduleListState extends State<EpgScheduleList> {
               Text(
                 'No guide data for this channel',
                 style: TextStyle(
-                  color: t == null
-                      ? app.iptv.inkDim
-                      : t.fgDim,
+                  color: t == null ? app.iptv.inkDim : t.fgDim,
                   fontSize: 13.5,
                   fontWeight: FontWeight.w600,
                 ),
@@ -1223,9 +1218,7 @@ class _ScheduleRowState extends State<_ScheduleRow> {
         color: _focused
             ? (t == null ? app.iptv.rowFocusFill : (t.focusFill ?? t.focusTint))
             : (widget.isNow
-                  ? (t == null
-                        ? app.iptv.surfaceTint
-                        : t.selectedTint)
+                  ? (t == null ? app.iptv.surfaceTint : t.selectedTint)
                   : Colors.transparent),
         borderRadius: app.shape.br(10),
         border: Border.all(
@@ -1251,7 +1244,8 @@ class _ScheduleRowState extends State<_ScheduleRow> {
             child: Text(
               _clock(context, p.start),
               style: TextStyle(
-                color: ink?.withValues(alpha: widget.isPast ? 0.45 : 0.6) ??
+                color:
+                    ink?.withValues(alpha: widget.isPast ? 0.45 : 0.6) ??
                     (widget.isNow
                         ? (t == null ? app.home.focus : t.accent)
                         : (t == null
@@ -1278,7 +1272,8 @@ class _ScheduleRowState extends State<_ScheduleRow> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: ink?.withValues(alpha: titleAlpha) ??
+                    color:
+                        ink?.withValues(alpha: titleAlpha) ??
                         (t == null
                             ? app.core.tx.withValues(alpha: titleAlpha)
                             : t.fg.withValues(alpha: titleAlpha)),
@@ -1346,6 +1341,10 @@ class _ScheduleRowState extends State<_ScheduleRow> {
 
     return Focus(
       autofocus: widget.autofocus,
+
+      // The sheet's wide layout enters this pane by hand (this autofocus
+      // is gated off while the channel list is active) and looks for the
+      // row whose Focus carries autofocus, so DPAD lands on what is airing.
       onFocusChange: (f) {
         setState(() => _focused = f);
         if (f) {

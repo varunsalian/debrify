@@ -28,6 +28,8 @@
 # 2026-10-25: Phase 21b end state: facade is an EXACT exception (check_search_architecture.py VIDEO_PLAYER_FACADE_CAP, a shrink-only ceiling since the freeze checks retired). 8639 -> 8562 after C1-C3. Exits: (1) startup orchestration decomposition, (2) build decomposition (interim facade <= T), (3) D1 per-collaborator migration (facade <= 800). Raises only by the reviewed raise procedure (video-player-screen-plan.md).
 # 2026-10-28 regfix P3-1 (+review P3-a): same-profile addon read returns the read list; stale lists kept out of cache/storage (+12, 3858 -> 3870); exit: next stremio_service.dart extraction.
 # 2026-10-28 regfix review P3-e: @visibleForTesting debugAddonDecoder hook for a deterministic decode-race test (+4, 3870 -> 3874); exit: next stremio_service.dart extraction.
+# 2026-10-31 AIOMetadata anime: series meta names show-wide anime episodes by their IMDb coordinate, and anime once stored as custom is checked again (+14, 3874 -> 3888; the policy lives in stremio_anime_episode_ids.dart); exit: next stremio_service.dart extraction.
+# 2026-11-01 next-episode diagnostics: a saved direct source that misses an episode records why (+18, 3888 -> 3906; the classifier lives in pinned_direct_stream_match.dart); exit: next stremio_service.dart extraction.
 # 2026-10-28 regfix P3-6: retired-launch rethrow in network tuning reads + debugLaunchOnAndroid test hook (+6, 2153 -> 2159); exit: next android_tv_player_bridge.dart extraction.
 # 2026-10-28 recording output: one device key registered in the profile key lists (+1 each); no other growth.
 # 2026-10-31: +1 for persist: false on the facade's action SnackBar (exception table row).
@@ -40,12 +42,15 @@
 # 2026-10-29 SMB recording upload: the app-lifetime upload host wraps the root scope's child (+4).
 # 2026-10-29 Sports & leagues filter: root scope installs sportsAppOverrides() (+2).
 # 2026-10-30 overnight features: root scope adds multiViewAppOverrides(); the addon auto-update scheduler starts with the catalog refresh (+3).
-4191 lib/main.dart
+# 2026-11-01: a desktop preferences file left unreadable by an interrupted write is repaired before the first read (+34; the repair lives in lib/core/platform/preferences_file_recovery.dart).
+# 2026-11-08: iPhone Duo pill capsule clearance, small fix with no extraction: capsule-top and clearance wiring (+8, 4225 -> 4233).
+4233 lib/main.dart
 4086 lib/services/iptv_catalog_db.dart
-3874 lib/services/stremio_service.dart
+3906 lib/services/stremio_service.dart
 3776 android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt
 # 2026-10-31: +1 for persist: false on an action SnackBar (Flutter 3.44 keeps them on screen).
-3668 lib/screens/video_player/widgets/iptv_channel_sheet.dart
+# 2026-10-31 DPAD: the guide's category and source pickers focus their first row; the wide layout enters the schedule on the airing row (+14).
+3682 lib/screens/video_player/widgets/iptv_channel_sheet.dart
 3027 android/app/src/main/kotlin/com/debrify/app/MainActivity.kt
 2875 lib/services/playlist_player_service.dart
 2800 lib/screens/downloads_screen.dart
@@ -58,7 +63,8 @@
 2208 lib/widgets/series_browser.dart
 2197 lib/screens/video_player/widgets/tracks_sheet.dart
 2187 lib/theme/app_theme.dart
-2159 lib/services/android_tv_player_bridge.dart
+# 2026-11-01: the native subtitle colour clamp covers Light grey (+1).
+2160 lib/services/android_tv_player_bridge.dart
 2038 lib/services/debrify_tv_database.dart
 1991 lib/screens/trakt_calendar_screen.dart
 1990 lib/screens/settings/stremio_addons_page.dart
@@ -71,7 +77,8 @@
 1844 lib/screens/video_player/widgets/player_menu_panel.dart
 1826 lib/utils/series_parser.dart
 1804 lib/services/xtream_codes_service.dart
-1799 lib/services/simkl/simkl_service.dart
+# 2026-11-01: a custom show never reaches the Simkl watched-episodes lookup, which threw and stopped playback (+2).
+1801 lib/services/simkl/simkl_service.dart
 1778 lib/services/webdav_sync/webdav_sync_hot_merge.dart
 # 2026-10-29 Storage Usage: the Data & Backup pane moved to settings_tv_data_pane.dart (1829 -> 1774).
 1774 lib/screens/settings/settings_tv_layout.dart
@@ -81,9 +88,11 @@
 1602 lib/widgets/iptv/iptv_channel_row.dart
 1599 lib/widgets/remote/remote_config_export.dart
 1582 lib/screens/settings/home_sections_filter_page.dart
-1571 lib/widgets/remote/remote_transfer_all.dart
+# 2026-11-01: TV focus lands on the first option when Send everything opens, UP and DOWN leave its radios, and the PikPak field lets DOWN reach Review (+62).
+1633 lib/widgets/remote/remote_transfer_all.dart
 1536 lib/widgets/tv_text_field.dart
-1522 lib/widgets/detail/detail_layout_showcase.dart
+# 2026-11-01: the phone episode rail leaves room for the lifted Up Next card below the season pill (+19).
+1541 lib/widgets/detail/detail_layout_showcase.dart
 1504 lib/screens/stremio_tv/stremio_tv_filter_page.dart
 1479 lib/screens/see_all/mdblist_see_all_screen.dart
 # 2026-10-31: +3 for persist: false on its three action SnackBars (Flutter 3.44 keeps them on screen).
@@ -94,10 +103,12 @@
 1449 lib/screens/settings/widgets/dynamic_settings_builder.dart
 1423 tvos/Runner/AppDelegate.swift
 1391 lib/services/webdav_sync/webdav_sync_engine_state.dart
-1376 lib/widgets/iptv/iptv_epg_panel.dart
+# 2026-10-31 DPAD: the airing schedule row carries a focus label the sheet can find (+3).
+1379 lib/widgets/iptv/iptv_epg_panel.dart
 1347 lib/screens/video_player/widgets/stremio_tv_guide_sheet.dart
 1325 lib/screens/profiles/profile_setup_flow.dart
-1313 lib/screens/video_player/widgets/source_sheet.dart
+# 2026-11-01: the in-player Sources sheet never titles a group with an addon's configuration hash (+1).
+1314 lib/screens/video_player/widgets/source_sheet.dart
 1307 lib/services/external_player_service.dart
 1302 lib/features/player_launch/data/android_tv_native_launch.dart
 1286 lib/services/backup_restore_service.dart
@@ -133,7 +144,8 @@
 1027 lib/widgets/parents_guide_section.dart
 1025 lib/services/webdav_sync/webdav_sync_scheduler.dart
 1023 lib/services/webdav_sync/webdav_sync_graph.dart
-1021 lib/screens/settings/settings_spotlight_shell.dart
+# 2026-11-08: iPhone Duo pill capsule clearance, small fix with no extraction: three below-capsule paddings (+4, 1021 -> 1025).
+1025 lib/screens/settings/settings_spotlight_shell.dart
 1021 lib/services/webdav_sync/webdav_sync_tombstones.dart
 1016 lib/widgets/see_all/stremio_dropdown.dart
 # 2026-10-30 SMB direct recording: the share and its sealed password reach the native recorder through the profile projection (+3).
@@ -145,8 +157,10 @@
 991 lib/screens/settings/real_debrid_settings_page.dart
 991 lib/screens/stremio_tv/widgets/stremio_tv_repo_browser_dialog.dart
 991 lib/services/profiles/profile_migration_service.dart
-976 lib/widgets/remote/remote_control_screen.dart
-973 lib/screens/video_player/widgets/styled_dock.dart
+# 2026-11-01: the hidden send workspace no longer takes TV focus behind an open view (+6).
+982 lib/widgets/remote/remote_control_screen.dart
+# 2026-11-02 seek time bubble: the bar is wrapped in SeekBubble and its slider is a method (+15, 971 -> 986).
+986 lib/screens/video_player/widgets/styled_dock.dart
 958 lib/widgets/playlist_grid_card.dart
 953 lib/screens/settings/quick_play_settings_page.dart
 946 lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play.dart
@@ -179,6 +193,7 @@
 829 lib/screens/settings/widgets/manual_order_list.dart
 829 lib/services/main_page_bridge.dart
 828 lib/services/webdav_sync/webdav_sync_circle_merge.dart
-823 lib/screens/media_server_library_panel.dart
+# 2026-11-01: TV focus returns to the grid after a folder, page or episode screen (+93); exit: split the item screen out of this file.
+916 lib/screens/media_server_library_panel.dart
 823 lib/screens/see_all/trakt_see_all_screen.dart
 804 lib/services/webdav_sync/webdav_sync_models.dart
