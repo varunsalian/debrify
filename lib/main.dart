@@ -1,5 +1,6 @@
 import 'package:debrify/core/platform/preferences_file_recovery.dart';
 import 'package:debrify/services/addon_auto_update_scheduler.dart';
+import 'package:debrify/features/sports/presentation/sports_reminder_host.dart';
 import 'package:debrify/widgets/iptv/multi_view_launcher.dart';
 import 'package:debrify/services/storage/alldebrid_storage.dart';
 import 'package:debrify/services/storage/completion_migration_storage.dart';
@@ -1185,7 +1186,9 @@ class _DebrifyAppState extends State<DebrifyApp> {
             // the common path costs one build and no layer.
             // Copies finished recordings to an SMB share while the app runs.
             child: SmbUploadHost(
-              child: WebDavSaveStatus(child: AppTexture(child: child!)),
+              child: WebDavSaveStatus(
+                child: SportsReminderHost(child: AppTexture(child: child!)),
+              ),
             ),
           ),
         );

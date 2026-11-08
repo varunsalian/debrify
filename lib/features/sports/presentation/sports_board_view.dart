@@ -16,8 +16,10 @@ import 'package:debrify/features/sports/application/sports_board_controller.dart
 import 'package:debrify/features/sports/application/sports_board_sections.dart';
 import 'package:debrify/features/sports/application/sports_board_sports.dart';
 import 'package:debrify/features/sports/application/sports_providers.dart';
+import 'package:debrify/features/sports/application/sports_reminder_plan.dart';
 import 'package:debrify/features/sports/models/sports_leagues.dart';
 import 'package:debrify/features/sports/models/sports_models.dart';
+import 'package:debrify/features/sports/models/sports_reminder.dart';
 import 'package:debrify/utils/platform_util.dart';
 import 'package:debrify/widgets/iptv/styles/iptv_style.dart';
 import 'package:flutter/material.dart';
@@ -27,6 +29,7 @@ import 'sports_board_header.dart';
 import 'sports_board_rows.dart';
 import 'sports_event_details.dart';
 import 'sports_league_sheet.dart';
+import 'sports_reminder_pill.dart';
 import 'sports_sport_chips.dart';
 import 'sports_team_crest.dart';
 
@@ -69,6 +72,13 @@ class _SportsBoardViewState extends ConsumerState<SportsBoardView>
           mounted && _foreground && (ModalRoute.of(context)?.isCurrent ?? true);
       controller.refresh();
     });
+    // Fresh fixtures move or drop reminders whose kick-off changed.
+    ref.listenManual(sportsBoardProvider(_session), (previous, next) {
+      if (identical(previous?.events, next.events)) return;
+      unawaited(
+        ref.read(sportsRemindersProvider.notifier).reconcile(next.events),
+      );
+    });
   }
 
   bool _foreground = true;
@@ -97,12 +107,40 @@ class _SportsBoardViewState extends ConsumerState<SportsBoardView>
       onPlay: widget.onPlay,
       onToggleTeam: (teamKey) => _controller.toggleTeam(teamKey),
       onToggleLeague: (leagueId) => _controller.toggleLeague(leagueId),
+      reminder: _reminderFor(event),
     );
+  }
+
+  /// Offered while a reminder can still fire before kick-off, or to remove
+  /// one already set; null where the device cannot show reminders.
+  SportsReminderControl? _reminderFor(SportsEvent event) {
+    if (!ref.read(sportsReminderSchedulerProvider).isSupported) return null;
+    final reminders = ref.read(sportsRemindersProvider.notifier);
+    final on = reminders.isSet(event);
+    if (!on &&
+        !sportsReminderAvailable(event, ref.read(sportsClockProvider)())) {
+      return null;
+    }
+    return (on: on, toggle: () => reminders.toggle(event));
   }
 
   /// The picker writes the league choices itself; the board controller
   /// refetches when its league list changes, so nothing is reloaded here.
   Future<void> _openLeagues() => showSportsLeagueSheet(context);
+
+  /// Whether a card shows the reminder bell; called from [build].
+  bool Function(SportsEvent event)? _remindedTest() {
+    if (!ref.read(sportsReminderSchedulerProvider).isSupported) return null;
+    // While a profile switch reloads, the previous value is still exposed;
+    // its bells must not show on the new profile's board.
+    final reminders = ref.watch(sportsRemindersProvider);
+    final keys = {
+      if (!reminders.isLoading)
+        for (final reminder in reminders.value ?? const <SportsReminder>[])
+          reminder.eventKey,
+    };
+    return (event) => keys.contains(SportsReminder.keyOf(event));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -246,6 +284,7 @@ class _SportsBoardViewState extends ConsumerState<SportsBoardView>
           section: section,
           hideScores: state.follows.hideScores,
           isFollowed: state.follows.followsEvent,
+          isReminded: _remindedTest(),
           watchFor: state.watchFor,
           checkingChannels: !state.watchResolved,
           onCardPressed: _openDetails,

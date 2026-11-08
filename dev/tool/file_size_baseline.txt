@@ -44,14 +44,16 @@
 # 2026-10-30 overnight features: root scope adds multiViewAppOverrides(); the addon auto-update scheduler starts with the catalog refresh (+3).
 # 2026-11-01: a desktop preferences file left unreadable by an interrupted write is repaired before the first read (+34; the repair lives in lib/core/platform/preferences_file_recovery.dart).
 # 2026-11-08: iPhone Duo pill capsule clearance, small fix with no extraction: capsule-top and clearance wiring (+8, 4225 -> 4233).
-4233 lib/main.dart
+# 2026-11-08 sports kick-off reminders: the root scope wraps its content in SportsReminderHost (+3, 4233 -> 4236; the feature lives in lib/features/sports).
+4236 lib/main.dart
 4086 lib/services/iptv_catalog_db.dart
 3906 lib/services/stremio_service.dart
 3776 android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt
 # 2026-10-31: +1 for persist: false on an action SnackBar (Flutter 3.44 keeps them on screen).
 # 2026-10-31 DPAD: the guide's category and source pickers focus their first row; the wide layout enters the schedule on the airing row (+14).
 3682 lib/screens/video_player/widgets/iptv_channel_sheet.dart
-3027 android/app/src/main/kotlin/com/debrify/app/MainActivity.kt
+# 2026-11-08 sports kick-off reminders: one line registers the channel (+1; the code lives in sports/SportsReminders.kt).
+3028 android/app/src/main/kotlin/com/debrify/app/MainActivity.kt
 2875 lib/services/playlist_player_service.dart
 2800 lib/screens/downloads_screen.dart
 2584 lib/services/webdav_sync/webdav_sync_local_adapter.dart

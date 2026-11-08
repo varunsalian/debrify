@@ -931,3 +931,7 @@ test/simkl_launch_custom_identity_test.dart
 test/subtitle_color_options_test.dart
 test/ui/core/source_metadata_labels_test.dart
 test/widgets/text_prompt_dialog_test.dart
+# 2026-11-08: sports kick-off reminders (timing rules, profile isolation, the Remind me control).
+test/features/sports/application/sports_reminder_plan_test.dart
+test/features/sports/application/sports_reminders_notifier_test.dart
+test/features/sports/presentation/sports_reminder_pill_test.dart

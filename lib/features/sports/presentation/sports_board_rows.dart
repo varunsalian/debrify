@@ -70,6 +70,7 @@ class SportsBoardSectionSliver extends StatelessWidget {
     required this.section,
     required this.hideScores,
     required this.isFollowed,
+    this.isReminded,
     required this.watchFor,
     required this.onCardPressed,
     this.autofocusFirst = false,
@@ -83,6 +84,9 @@ class SportsBoardSectionSliver extends StatelessWidget {
   final DateTime? now;
   final bool hideScores;
   final bool Function(SportsEvent event) isFollowed;
+
+  /// Null where reminders are unavailable.
+  final bool Function(SportsEvent event)? isReminded;
   final SportsWatchOptions Function(SportsEvent event) watchFor;
   final void Function(SportsEvent event) onCardPressed;
 
@@ -116,6 +120,7 @@ class SportsBoardSectionSliver extends StatelessWidget {
             event: event,
             hideScores: hideScores,
             followed: isFollowed(event),
+            reminded: isReminded?.call(event) ?? false,
             watch: watchFor(event),
             checking: checkingChannels,
             onPressed: () => onCardPressed(event),

@@ -1291,6 +1291,7 @@ class MainActivity : FlutterActivity() {
         localSourceAccess?.dispose()
         localSourceAccess = com.debrify.app.storage.LocalSourceAccess(this, flutterEngine.dartExecutor.binaryMessenger)
         com.debrify.app.storage.StorageVolumes.register(this, flutterEngine.dartExecutor.binaryMessenger)
+        com.debrify.app.sports.SportsReminders.register(this, flutterEngine.dartExecutor.binaryMessenger)
 		com.debrify.app.security.DeviceSecretCipherPlugin.register(this, flutterEngine)
 		MethodChannel(
 			flutterEngine.dartExecutor.binaryMessenger,

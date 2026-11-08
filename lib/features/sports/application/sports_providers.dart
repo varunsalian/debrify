@@ -5,14 +5,18 @@
 // starts work: the board controller fetches when the view asks for a refresh,
 // and the app overrides the profile-backed stores in its own ProviderScope.
 import 'package:debrify/features/sports/application/sports_league_filter_notifier.dart';
+import 'package:debrify/features/sports/application/sports_reminders_notifier.dart';
+import 'package:debrify/features/sports/data/platform_sports_reminder_scheduler.dart';
 import 'package:debrify/features/sports/data/sports_feed_client.dart';
 import 'package:debrify/features/sports/data/sports_follow_store.dart';
 import 'package:debrify/features/sports/data/sports_http_fetch.dart';
 import 'package:debrify/features/sports/data/sports_league_filter_store.dart';
+import 'package:debrify/features/sports/data/sports_reminder_store.dart';
 import 'package:debrify/features/sports/models/sports_guide_contract.dart';
 import 'package:debrify/features/sports/models/sports_league_filter.dart';
 import 'package:debrify/features/sports/models/sports_leagues.dart';
 import 'package:debrify/features/sports/models/sports_models.dart';
+import 'package:debrify/features/sports/models/sports_reminder.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -22,6 +26,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 // against. Without the ignore, either half alone flags the other as redundant.
 // ignore_for_file: unnecessary_import
 export 'package:debrify/features/sports/application/sports_league_filter_notifier.dart';
+export 'package:debrify/features/sports/application/sports_reminders_notifier.dart';
 export 'package:debrify/features/sports/models/sports_league_filter.dart';
 
 /// One feed cache shared by every board instance.
@@ -93,6 +98,33 @@ final sportsProfileChangesProvider = Provider<Listenable?>(
 final sportsLeagueFilterProvider =
     AsyncNotifierProvider<SportsLeagueFilterNotifier, SportsLeagueFilter>(
       SportsLeagueFilterNotifier.new,
+      retry: (_, _) => null,
+    );
+
+/// Kick-off reminders. Like the league filter these are app-wide and declare
+/// no `dependencies`: the app keeps the notifier alive from start-up so the
+/// device's alerts follow the active profile even before the board opens.
+final sportsReminderStoreProvider = Provider<SportsReminderStore>(
+  (ref) => throw UnimplementedError(
+    'sportsReminderStoreProvider must be overridden',
+  ),
+  retry: (_, _) => null,
+);
+
+final sportsReminderSchedulerProvider = Provider<SportsReminderScheduler>(
+  (ref) => const PlatformSportsReminderScheduler(),
+  retry: (_, _) => null,
+);
+
+/// The reminders' own clock: [sportsClockProvider] is scoped to the board.
+final sportsReminderClockProvider = Provider<DateTime Function()>(
+  (ref) => DateTime.now,
+  retry: (_, _) => null,
+);
+
+final sportsRemindersProvider =
+    AsyncNotifierProvider<SportsRemindersNotifier, List<SportsReminder>>(
+      SportsRemindersNotifier.new,
       retry: (_, _) => null,
     );
 

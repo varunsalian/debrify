@@ -8,6 +8,7 @@ import 'package:debrify/features/sports/data/iptv_sports_guide_playlists.dart';
 import 'package:debrify/features/sports/data/shared_prefs_sports_prefs.dart';
 import 'package:debrify/features/sports/data/sports_follow_store.dart';
 import 'package:debrify/features/sports/data/sports_league_filter_store.dart';
+import 'package:debrify/features/sports/data/sports_reminder_store.dart';
 import 'package:debrify/features/sports/data/sqlite_sports_guide_source.dart';
 import 'package:debrify/features/sports/models/sports_models.dart';
 import 'package:debrify/features/sports/presentation/sports_board_view.dart';
@@ -29,12 +30,18 @@ final _leagueFilterStore = SportsLeagueFilterStore(
   () async => SharedPrefsSportsPrefs(await ProfilePreferences.instance()),
 );
 
-/// App-wide overrides for the Sports & leagues filter, installed in the root
-/// ProviderScope so the Sports board and IPTV settings share one notifier.
+final _reminderStore = SportsReminderStore(
+  () async => SharedPrefsSportsPrefs(await ProfilePreferences.instance()),
+);
+
+/// App-wide overrides for the Sports & leagues filter and kick-off reminders,
+/// installed in the root ProviderScope so the Sports board and IPTV settings
+/// share one notifier each.
 /// The store resolves the active profile per operation; the owner and the
 /// profile signal let the notifier drop a switched profile's choices.
 List<Override> sportsAppOverrides() => [
   sportsLeagueFilterStoreProvider.overrideWithValue(_leagueFilterStore),
+  sportsReminderStoreProvider.overrideWithValue(_reminderStore),
   sportsProfileOwnerProvider.overrideWithValue(
     ProfileSessionMemory.captureOwner,
   ),
