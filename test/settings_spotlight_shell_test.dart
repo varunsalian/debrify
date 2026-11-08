@@ -246,14 +246,15 @@ void main() {
     );
     Finder back() => find.bySemanticsLabel('Back to settings categories');
 
+    // The eyebrow is the header's first row, the one nearest the capsule.
+    double eyebrowTop(WidgetTester tester) =>
+        tester.getTopLeft(find.text('YOUR SPACE').first).dy;
+
     testWidgets('compact root and category start below the capsule', (
       tester,
     ) async {
       await _pumpShell(tester, const Size(669, 951), pillCapsule: true);
-      expect(
-        tester.getTopLeft(find.text('Settings').first).dy,
-        greaterThanOrEqualTo(below),
-      );
+      expect(eyebrowTop(tester), greaterThanOrEqualTo(below));
 
       await tester.tap(
         find.byKey(const ValueKey<String>('settings-category-3')),
@@ -263,10 +264,10 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('without the capsule the back button keeps its place', (
-      tester,
-    ) async {
+    testWidgets('without the capsule the header and back button keep their '
+        'place', (tester) async {
       await _pumpShell(tester, const Size(669, 951));
+      expect(eyebrowTop(tester), lessThan(below));
       await tester.tap(
         find.byKey(const ValueKey<String>('settings-category-3')),
       );
@@ -279,10 +280,10 @@ void main() {
     ) async {
       await _pumpShell(tester, const Size(951, 669), pillCapsule: true);
       expect(find.byKey(const Key('settings-wide-shell')), findsOneWidget);
-      expect(
-        tester.getTopLeft(find.text('Settings').first).dy,
-        greaterThanOrEqualTo(below),
-      );
+      expect(eyebrowTop(tester), greaterThanOrEqualTo(below));
+
+      await _pumpShell(tester, const Size(951, 669));
+      expect(eyebrowTop(tester), lessThan(below));
     });
   });
 

@@ -159,7 +159,11 @@ void main() {
     testWidgets('resting capsule matches its published footprint '
         '(expanded: $expanded)', (tester) async {
       await tester.pumpWidget(
-        host(onTap: (_) {}, expanded: expanded, capsuleTop: 10),
+        host(
+          onTap: (_) {},
+          expanded: expanded,
+          capsuleTop: DesktopPillNav.touchCapsuleTop,
+        ),
       );
       // Let the arrival label quiet down to the resting icon.
       await tester.pump(const Duration(seconds: 2));
@@ -167,11 +171,14 @@ void main() {
 
       final rect = tester.getRect(find.byKey(DesktopPillNav.pillKey));
       expect(rect.left, DesktopPillNav.capsuleLeft);
-      expect(rect.top, 10);
+      expect(rect.top, DesktopPillNav.touchCapsuleTop);
       expect(rect.width, DesktopPillNav.restWidth(expanded: expanded));
       expect(rect.height, DesktopPillNav.height(expanded: expanded));
       expect(
-        DesktopPillNav.clearanceBelow(expanded: expanded, capsuleTop: 10),
+        DesktopPillNav.clearanceBelow(
+          expanded: expanded,
+          capsuleTop: DesktopPillNav.touchCapsuleTop,
+        ),
         greaterThan(rect.bottom),
       );
       expect(
@@ -187,6 +194,14 @@ void main() {
     await tester.pumpWidget(host(onTap: (_) {}));
     expect(
       tester.getTopLeft(find.byKey(DesktopPillNav.pillKey)).dy,
+      DesktopPillNav.desktopCapsuleTop,
+    );
+  });
+
+  test('touch devices lift the capsule; desktop keeps the strip clearance', () {
+    expect(DesktopPillNav.capsuleTopFor(touch: true), 10);
+    expect(
+      DesktopPillNav.capsuleTopFor(touch: false),
       DesktopPillNav.desktopCapsuleTop,
     );
   });
