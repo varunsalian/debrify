@@ -1,0 +1,42 @@
+name: iOS audio probe (throwaway)
+
+# Builds lib/dev_probe/ios_audio_probe_main.dart with the Xcode 27.1 SDK, the
+# same toolchain as the v0.10.2-alpha.1 IPA, for a side-by-side device test
+# against an Xcode 26 build of the same probe.
+on:
+  push:
+    branches: [ios-audio-probe]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: xcode-27
+    timeout-minutes: 45
+    steps:
+    - uses: actions/checkout@v4
+    - uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.44.8'
+        channel: 'stable'
+    - run: |
+        flutter pub get
+        xcodebuild -version
+        xcrun --sdk iphoneos --show-sdk-version
+    - name: Build probe (unsigned)
+      run: flutter build ios --release --no-codesign -t lib/dev_probe/ios_audio_probe_main.dart
+    - name: Ad-hoc sign and package
+      run: |
+        set -euo pipefail
+        APP=build/ios/iphoneos/Runner.app
+        for d in "$APP"/Frameworks/*.dylib; do [ -f "$d" ] && codesign -f -s - --timestamp=none "$d"; done
+        for f in "$APP"/Frameworks/*.framework; do [ -d "$f" ] && codesign -f -s - --timestamp=none "$f"; done
+        codesign -f -s - --timestamp=none "$APP"
+        plutil -p "$APP/Info.plist" | grep -E "DTSDKName|DTXcode"
+        cd build/ios/iphoneos && mkdir -p Payload && cp -R Runner.app Payload/ && zip -qr probe-xcode27.ipa Payload
+    - uses: actions/upload-artifact@v4
+      with:
+        name: probe-xcode27
+        path: build/ios/iphoneos/probe-xcode27.ipa
