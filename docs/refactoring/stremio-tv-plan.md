@@ -2087,3 +2087,9 @@ test identities are E/`p3-cleanup-*`. Tests/goldens, tooling fixtures/reader/
 capture script, CI, sibling widgets, players, launcher, services and dependencies
 remain unchanged. Only the layout cap changes in shared tooling. No behavior
 change, seam, device run, push, merge or branch switch. **STOP after cleanup.**
+
+**Amendment 2026-11-08 (iPhone Duo).** The D2 layout cap moves **707 -> 709**
+in `dev/tool/check_search_architecture.py`. The header row now adds
+`ShellNavClearance.leadingInsets` so the pill sidebar's capsule no longer covers
+the search field on touch tablets: one import and one local, a small fix with no
+extraction. The exit milestone is unchanged.
