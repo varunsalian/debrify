@@ -123,8 +123,9 @@ jobs:
         host_pid=$!
 
         # The tour plays this clip through the real player; the simulator
-        # shares the runner's network, so localhost reaches it.
-        python3 -m http.server 8765 --bind 127.0.0.1 --directory integration_test/assets > "$out/http.log" 2>&1 &
+        # shares the runner's network, so localhost reaches it. The player
+        # seeks with Range requests, which python's built-in server ignores.
+        python3 integration_test/serve_range.py 8765 integration_test/assets > "$out/http.log" 2>&1 &
         http_pid=$!
 
         flutter test integration_test/duo_tour_test.dart -d "$DUOCTL_UDID" \
