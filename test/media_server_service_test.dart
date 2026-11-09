@@ -1289,6 +1289,30 @@ void main() {
   );
 
   test(
+    'anime catalogs search like series while channels stay addon-only',
+    () async {
+      await connect();
+      final anime = await TorrentService.searchByImdbWithStremio(
+        'tt123',
+        isMovie: true,
+        engineStates: const {},
+        contentType: 'anime',
+      );
+      expect(anime['torrents'], hasLength(2));
+
+      final before = requestCount;
+      final channel = await TorrentService.searchByImdbWithStremio(
+        'tt123',
+        isMovie: true,
+        engineStates: const {},
+        contentType: 'channel',
+      );
+      expect(channel['torrents'], isEmpty);
+      expect(requestCount, before);
+    },
+  );
+
+  test(
     'server audio tracks govern both filters without title or English guesses',
     () async {
       await connect();

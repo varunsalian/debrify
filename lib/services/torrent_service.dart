@@ -455,11 +455,11 @@ class TorrentService {
     final capability = await ProfileAsyncAuthorization.capture(
       ProfileFeature.torrentSearch,
     );
-    // For non-IMDB content types (TV channels, etc.), skip traditional engine search
+    // For non-IMDB content types (TV channels, etc.), skip traditional engine search.
+    // Anime catalogs are series-like, and the engines below still require a tt ID.
     final isNonImdbContent =
         contentType != null &&
-        contentType != 'movie' &&
-        contentType != 'series';
+        !const {'movie', 'series', 'anime'}.contains(contentType);
 
     // Start searches in parallel
     final List<Future<Map<String, dynamic>>> searchFutures = [];
