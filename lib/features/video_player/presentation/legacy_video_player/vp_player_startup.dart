@@ -13,6 +13,7 @@ import 'package:debrify/services/android_native_downloader.dart';
 import 'package:debrify/services/live_recording_service.dart';
 import 'package:debrify/services/profiles/profile_policy_guard.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
+import 'package:debrify/services/startup_hold_watch.dart';
 import 'package:debrify/services/startup_stream_policy.dart';
 import 'package:debrify/services/storage/episode_resume_storage.dart';
 import 'package:debrify/services/storage/player_settings_storage.dart';
@@ -22,7 +23,9 @@ import 'package:debrify/utils/platform_util.dart';
 import 'package:flutter/foundation.dart';
 import 'package:media_kit/media_kit.dart' as mk;
 
-abstract interface class VpPlayerStartupHost {
+import 'vp_start_position.dart';
+
+abstract interface class VpPlayerStartupHost implements VpStartPositionHost {
   Map<String, String>? get activeHttpHeaders;
   set activeHttpHeaders(Map<String, String>? v);
   List<PlaylistEntry>? get activePlaylist;
@@ -33,7 +36,6 @@ abstract interface class VpPlayerStartupHost {
   set currentIndex(int v);
   int get currentSourceIndex;
   set currentStreamUrl(String? v);
-  Duration get duration;
   set dynamicTitle(String v);
   String? get effectiveContentType;
   List<IptvChannel>? get effectiveIptvChannels;
@@ -45,7 +47,6 @@ abstract interface class VpPlayerStartupHost {
   set episodeMetadataReady(Future<void>? v);
   IptvTuneDiagnostics get iptvDiag;
   IptvLiveRecovery get iptvLiveRecovery;
-  mk.Player get player;
   int get playerInstanceGeneration;
   set recordingSupported(bool v);
   int get resumeVerifyEpoch;
@@ -54,8 +55,6 @@ abstract interface class VpPlayerStartupHost {
   DeferredStartupSeek get stremioTvStartupSeek;
   ChannelStartupWatch? get stremioTvStartupWatch;
   Future<void> loadDockPrefs();
-  Duration? randomStartOffset(Duration duration);
-  Duration? percentStartOffset(Duration duration);
   void scheduleAutoHide();
   Future<void> loadPlayerDefaults();
   void createPlayerInstance(AndroidVideoRendererMode rendererMode);
@@ -78,8 +77,6 @@ abstract interface class VpPlayerStartupHost {
   Map<String, String>? get httpHeaders;
   int? get iptvStartIndex;
   Future<Map<String, String>?> Function()? get requestMagicNext;
-  double? get startAtPercent;
-  bool get startFromRandom;
   int? get startIndex;
   String get title;
   String get videoUrl;
@@ -111,11 +108,6 @@ abstract interface class VpPlayerStartupHost {
   });
   Future<void> refreshEngineRecordingState();
   String resumeIdForEntry(PlaylistEntry entry);
-  Future<void> maybeRestoreResume({
-    bool preferLocalResume = false,
-    bool verifyLanding = false,
-  });
-  Future<void> seekForResume(int targetMs, {bool verifyLanding = false});
   Future<void> saveResume({bool debounced = false, Duration? positionOverride});
   Future<void> commitValidatedStremioSource(Torrent? source);
   Future<bool> openInitialVodWithFailover(
@@ -423,30 +415,9 @@ class VpPlayerStartup {
             // Wait for the video to load and duration to be available
             await _host.waitForVideoReady();
             if (!pikpakStillCurrent()) return;
-            // Random start takes precedence over resume, then startAtPercent.
-            // Same initial-open shape as the ranked branch below — and PikPak
-            // cold-storage streams are the slowest remote opens in the app, the
-            // likeliest to answer the startup seek with a restart at 0 — so the
-            // same guarded, landing-verified seeks apply.
-            if (_host.startFromRandom) {
-              final offset = _host.randomStartOffset(_host.duration);
-              if (offset != null) {
-                // A random start has no bookmark to protect — plain seek.
-                await _host.player.seek(offset);
-              } else {
-                await _host.maybeRestoreResume(verifyLanding: true);
-              }
-            } else if (_host.startAtPercent != null) {
-              final offset = _host.percentStartOffset(_host.duration);
-              if (offset != null) {
-                await _host.seekForResume(
-                  offset.inMilliseconds,
-                  verifyLanding: true,
-                );
-              }
-            } else {
-              await _host.maybeRestoreResume(verifyLanding: true);
-            }
+            // PikPak cold-storage streams are the slowest remote opens in the
+            // app, so they use the same guarded, landing-verified seeks.
+            await applyInitialStartPosition(_host);
             if (!pikpakStillCurrent()) return;
             // Restore audio and subtitle track preferences
             await _host.restoreTrackPreferences();
@@ -466,6 +437,8 @@ class VpPlayerStartup {
             isStremioTv && initialUrl.isNotEmpty && !_host.startFromRandom;
         var directOpenCompleted = false;
         int? directOpenEpoch;
+        var validatedOpen = false;
+        StartupHoldWatch? holdWatch;
         try {
           final opened = await StartupStreamPolicy.openInitialMedia(
             hasResolvedUrl: initialUrl.isNotEmpty,
@@ -498,60 +471,55 @@ class VpPlayerStartup {
               await opening;
               directOpenCompleted = true;
             },
-            openValidated: () => _host.openInitialVodWithFailover(
-              initialUrl,
-              httpHeaders: _host.activeHttpHeaders,
-              initialAttemptAlreadyFailed: initialRankedAttemptFailed,
-            ),
+            openValidated: () {
+              validatedOpen = true;
+              return _host.openInitialVodWithFailover(
+                initialUrl,
+                httpHeaders: _host.activeHttpHeaders,
+                initialAttemptAlreadyFailed: initialRankedAttemptFailed,
+              );
+            },
           );
           if (!opened) {
             await _host.reportStartupFailure();
             return;
+          }
+          // Only the validated path holds the gate through the steps below.
+          if (validatedOpen) {
+            holdWatch = StartupHoldWatch(
+              isCurrent: () => _host.mounted && !_host.screenDisposed,
+            );
           }
           // Wait for duration-dependent resume and random-start calculations.
           await _host.waitForVideoReady();
           if (!_host.mounted ||
               _host.screenDisposed ||
               (isStremioTv && _host.stremioTvStartupWatch?.hasFailed == true)) {
+            holdWatch?.release();
             return;
           }
           if (hasExternalAudio) {
+            holdWatch?.stage(StartupHoldStage.externalAudio);
             await _host.setExternalAudioTrack(_host.audioUrl!);
           }
-          // Random start takes precedence over resume, then startAtPercent.
-          if (_host.startFromRandom) {
-            final offset = _host.randomStartOffset(_host.duration);
-            if (offset != null) {
-              // A random start has no bookmark to protect and no "correct"
-              // position to verify against — plain seek, as before.
-              await _host.player.seek(offset);
-            } else {
-              await _host.maybeRestoreResume(verifyLanding: true);
-            }
-          } else if (_host.startAtPercent != null) {
-            final offset = deferStremioTvStart
-                ? null
-                : _host.percentStartOffset(_host.duration);
-            if (offset != null) {
-              // An explicit promised start position, exposed to the same
-              // startup seek failure as a stored resume.
-              await _host.seekForResume(
-                offset.inMilliseconds,
-                verifyLanding: true,
-              );
-            }
-          } else {
-            await _host.maybeRestoreResume(verifyLanding: true);
-          }
+          holdWatch?.stage(StartupHoldStage.resume);
+          await applyInitialStartPosition(
+            _host,
+            deferPercent: deferStremioTvStart,
+          );
           _host.scheduleAutoHide();
+          holdWatch?.stage(StartupHoldStage.trackRestore);
           await _host.restoreTrackPreferences();
+          holdWatch?.stage(StartupHoldStage.play);
           if (hasExternalAudio) await _host.player.play();
           // The candidate is now decoded, resume has been applied, and track
           // restoration is complete. Only now may progress escape to local
           // completion or remote scrobblers.
           _host.setStartupGateActive(false);
+          holdWatch?.release();
           _host.resumeTrackingAfterValidationGate();
         } catch (e) {
+          holdWatch?.release();
           if (isStremioTv &&
               !directOpenCompleted &&
               directOpenEpoch == _host.resumeVerifyEpoch) {

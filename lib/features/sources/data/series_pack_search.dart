@@ -6,6 +6,7 @@ import 'package:debrify/features/sources/application/source_curation.dart';
 import 'package:debrify/features/sources/application/source_search_plans.dart';
 import 'package:debrify/models/quick_play_rules.dart';
 import 'package:debrify/models/torrent.dart';
+import 'package:debrify/services/source_search_scope.dart';
 import 'package:debrify/services/torrent_service.dart';
 import 'package:debrify/utils/filter_ladder.dart';
 
@@ -89,6 +90,14 @@ final class SeriesPackSearch {
       late final List<Torrent> raw;
       try {
         final packRes = await query(stage);
+        SourceSearchScope.log(
+          surface: 'pin_packs',
+          imdbId: imdbId,
+          isMovie: false,
+          contentType: 'series',
+          enginesRequested: stage != QuickPlaySourceMode.addonsOnly,
+          result: packRes,
+        );
         raw = (packRes['torrents'] as List).cast<Torrent>();
         // Both engine and addon services report failures in-band instead of
         // throwing. A timed-out empty response is unknown, not proof that no

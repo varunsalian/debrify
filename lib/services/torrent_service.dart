@@ -10,6 +10,7 @@ import 'engine/dynamic_engine.dart';
 import 'engine/settings_manager.dart';
 import 'indexer_manager_service.dart';
 import 'profiles/profile_async_authorization.dart';
+import 'source_search_scope.dart';
 import 'stremio_service.dart';
 import 'media_server_service.dart';
 
@@ -455,19 +456,14 @@ class TorrentService {
     final capability = await ProfileAsyncAuthorization.capture(
       ProfileFeature.torrentSearch,
     );
-    // For non-IMDB content types (TV channels, etc.), skip traditional engine search.
-    // Anime catalogs are series-like, and the engines below still require a tt ID.
-    final isNonImdbContent =
-        contentType != null &&
-        !const {'movie', 'series', 'anime'}.contains(contentType);
+    // For non-IMDB content types (TV channels, etc.), skip traditional engine search
+    final isNonImdbContent = !SourceSearchScope.isImdbContent(contentType);
 
     // Start searches in parallel
     final List<Future<Map<String, dynamic>>> searchFutures = [];
 
     // Traditional engine search only for movie/series (IMDB content)
-    if (!isNonImdbContent &&
-        imdbId.startsWith('tt') &&
-        originVideoId?.trim().isNotEmpty != true) {
+    if (SourceSearchScope.enginesCanRun(imdbId, contentType, originVideoId)) {
       searchFutures.add(
         searchByImdb(
           imdbId,
