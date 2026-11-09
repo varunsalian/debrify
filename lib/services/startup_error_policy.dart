@@ -28,6 +28,10 @@ abstract final class StartupErrorPolicy {
   /// "HTTP 403", "http error 404", "HTTP: 500". A bare three-digit number is
   /// not enough: ports, paths and timestamps contain them.
   static final RegExp _httpStatus = RegExp(r'\bhttp(?: error)?:? ?[45]\d\d\b');
+  static final RegExp _url = RegExp(r'[a-z][a-z0-9+.-]*://\S+');
+  static final RegExp _startsWithLocation = RegExp(
+    r'^(?:[a-z][a-z0-9+.-]*://|/|[a-z]:[/\\]|\\\\)',
+  );
   static const Set<String> _subtitleExtensions = {
     'srt',
     'vtt',
@@ -46,7 +50,8 @@ abstract final class StartupErrorPolicy {
     if (text.contains('audio device')) {
       return (kind: StartupErrorKind.benign, label: 'audio_device');
     }
-    if (text.contains('subtitle') || _isSubtitleOpenFailure(text)) {
+    if (_withoutLocations(text).contains('subtitle') ||
+        _isSubtitleOpenFailure(text)) {
       return (kind: StartupErrorKind.benign, label: 'subtitle');
     }
     if (text.contains('can not open external file')) {
@@ -97,22 +102,37 @@ abstract final class StartupErrorPolicy {
     return (kind: StartupErrorKind.unknown, label: 'other');
   }
 
-  /// `Failed to open URL.` or `Cannot open file 'PATH'` where the path, not
-  /// a query, ends in a subtitle extension.
-  static bool _isSubtitleOpenFailure(String text) {
-    String? target;
+  /// The message without the file or URL it names, so a video that merely has
+  /// "subtitle" in its address is not mistaken for a subtitle failure.
+  static String _withoutLocations(String text) {
+    final target = _openTarget(text);
+    final remaining = target != null && _startsWithLocation.hasMatch(target)
+        ? text.replaceFirst(target, ' ')
+        : text;
+    return remaining.replaceAll(_url, ' ');
+  }
+
+  /// The URL or path in `Failed to open URL.` or `Cannot open file 'PATH'`.
+  static String? _openTarget(String text) {
     const open = 'failed to open ';
     const file = "cannot open file '";
     final openAt = text.indexOf(open);
     final fileAt = text.indexOf(file);
     if (openAt >= 0) {
-      target = text.substring(openAt + open.length).trim();
-      if (target.endsWith('.')) target = target.substring(0, target.length - 1);
-    } else if (fileAt >= 0) {
-      final rest = text.substring(fileAt + file.length);
-      final close = rest.indexOf("'");
-      target = close < 0 ? rest : rest.substring(0, close);
+      final target = text.substring(openAt + open.length).trim();
+      return target.endsWith('.')
+          ? target.substring(0, target.length - 1)
+          : target;
     }
+    if (fileAt < 0) return null;
+    final rest = text.substring(fileAt + file.length);
+    final close = rest.indexOf("'");
+    return close < 0 ? rest : rest.substring(0, close);
+  }
+
+  /// True when the opened path, not a query, ends in a subtitle extension.
+  static bool _isSubtitleOpenFailure(String text) {
+    var target = _openTarget(text);
     if (target == null) return false;
     final query = target.indexOf(RegExp('[?#]'));
     if (query >= 0) target = target.substring(0, query);

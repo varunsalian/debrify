@@ -13,6 +13,12 @@ void main() {
         'open_failed',
     'Failed to open https://cdn.example/movie.mkv?sub=en.srt.': 'open_failed',
     'Failed to open https://cdn.sub.example/movie.mkv.': 'open_failed',
+    'Failed to open https://host/subtitle-pack/movie.mkv.': 'open_failed',
+    'Failed to open /tmp/subtitle pack/movie.mkv.': 'open_failed',
+    'Failed to open /tmp/subtitle-pack/movie.mkv.': 'open_failed',
+    r'Failed to open C:\subtitle-pack\movie.mkv.': 'open_failed',
+    "Cannot open file '/tmp/subtitle-pack/movie.mkv': No such file or directory":
+        'open_failed',
     'Failed to recognize file format.': 'format',
     'No video or audio streams selected.': 'no_streams',
     'Could not open codec.': 'codec',
@@ -29,6 +35,7 @@ void main() {
     'Could not open/initialize audio device -> no sound.': 'audio_device',
     'Failed to open https://subs.example/track.vtt?token=a.': 'subtitle',
     'Failed to open /tmp/addon-subs/en.srt.': 'subtitle',
+    'Failed to open subtitle https://x.example/y': 'subtitle',
     'Can not open external file https://audio.example/track.m4a.':
         'external_file',
     'Error while decoding frame!': 'decode',
