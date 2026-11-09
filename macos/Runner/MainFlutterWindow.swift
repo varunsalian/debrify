@@ -1,16 +1,12 @@
 import Cocoa
 import FlutterMacOS
 import CryptoKit
-import Security
-
-private enum DeviceSecretError: Error {
-  case missing
-  case unreadable
-}
 
 private final class MacOsDeviceSecretCipher {
-  private let service = "com.debrify.app.profile-device-secret"
-  private let account = "device-key-v1"
+  private let store = MacOsDeviceKeyStore(
+    directory: MacOsDeviceKeyStore.defaultDirectory(),
+    legacy: KeychainLegacyDeviceKeySource()
+  )
 
   func install(on messenger: FlutterBinaryMessenger) -> FlutterMethodChannel {
     let channel = FlutterMethodChannel(name: "debrify/device_secret", binaryMessenger: messenger)
@@ -22,7 +18,7 @@ private final class MacOsDeviceSecretCipher {
           let args = call.arguments as? [String: Any]
           let allowCreate = args?["allowCreate"] as? Bool ?? true
           _ = try self.key(allowCreate: allowCreate)
-          result(true)
+          result(self.store.keyCopyDeferred ? "key_copy_deferred" : true)
         case "seal":
           let (input, aad) = try self.arguments(call)
           let box = try AES.GCM.seal(input, using: try self.key(allowCreate: false), authenticating: aad)
@@ -32,13 +28,15 @@ private final class MacOsDeviceSecretCipher {
           let (input, aad) = try self.arguments(call, payloadName: "envelope")
           let box = try AES.GCM.SealedBox(combined: input)
           result(try AES.GCM.open(box, using: try self.key(allowCreate: false), authenticating: aad).base64EncodedString())
-        case "destroy": try self.destroy(); result(nil)
+        case "destroy": try self.store.destroy(); result(nil)
         default: result(FlutterMethodNotImplemented)
         }
       } catch DeviceSecretError.missing {
         result(FlutterError(code: "device_secret_missing", message: nil, details: nil))
       } catch DeviceSecretError.unreadable {
         result(FlutterError(code: "device_secret_unreadable", message: nil, details: nil))
+      } catch DeviceSecretError.keychainDenied {
+        result(FlutterError(code: "device_secret_keychain_denied", message: nil, details: nil))
       } catch CryptoKitError.authenticationFailure {
         result(FlutterError(code: "device_secret_record_unreadable", message: nil, details: nil))
       } catch {
@@ -46,19 +44,6 @@ private final class MacOsDeviceSecretCipher {
       }
     }
     return channel
-  }
-
-  private func destroy() throws {
-    let query: [String: Any] = [
-      kSecClass as String: kSecClassGenericPassword,
-      kSecAttrService as String: service,
-      kSecAttrAccount as String: account,
-      kSecAttrSynchronizable as String: false,
-    ]
-    let status = SecItemDelete(query as CFDictionary)
-    guard status == errSecSuccess || status == errSecItemNotFound else {
-      throw NSError(domain: NSOSStatusErrorDomain, code: Int(status))
-    }
   }
 
   private func arguments(_ call: FlutterMethodCall, payloadName: String = "plaintext") throws -> (Data, Data) {
@@ -73,37 +58,7 @@ private final class MacOsDeviceSecretCipher {
   }
 
   private func key(allowCreate: Bool) throws -> SymmetricKey {
-    let query: [String: Any] = [
-      kSecClass as String: kSecClassGenericPassword,
-      kSecAttrService as String: service,
-      kSecAttrAccount as String: account,
-      kSecAttrSynchronizable as String: false,
-      kSecReturnData as String: true,
-      kSecMatchLimit as String: kSecMatchLimitOne,
-    ]
-    var item: CFTypeRef?
-    let status = SecItemCopyMatching(query as CFDictionary, &item)
-    if status == errSecSuccess {
-      guard let data = item as? Data, data.count == 32 else {
-        throw DeviceSecretError.unreadable
-      }
-      return SymmetricKey(data: data)
-    }
-    guard status == errSecItemNotFound else { throw NSError(domain: NSOSStatusErrorDomain, code: Int(status)) }
-    guard allowCreate else { throw DeviceSecretError.missing }
-    var bytes = Data(count: 32)
-    let randomStatus = bytes.withUnsafeMutableBytes { SecRandomCopyBytes(kSecRandomDefault, 32, $0.baseAddress!) }
-    guard randomStatus == errSecSuccess else { throw NSError(domain: NSOSStatusErrorDomain, code: Int(randomStatus)) }
-    let add: [String: Any] = [
-      kSecClass as String: kSecClassGenericPassword,
-      kSecAttrService as String: service,
-      kSecAttrAccount as String: account,
-      kSecAttrSynchronizable as String: false,
-      kSecValueData as String: bytes,
-    ]
-    let addStatus = SecItemAdd(add as CFDictionary, nil)
-    guard addStatus == errSecSuccess else { throw NSError(domain: NSOSStatusErrorDomain, code: Int(addStatus)) }
-    return SymmetricKey(data: bytes)
+    SymmetricKey(data: try store.key(allowCreate: allowCreate))
   }
 }
 

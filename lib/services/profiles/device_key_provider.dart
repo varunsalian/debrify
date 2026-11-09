@@ -7,6 +7,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../diagnostic_log.dart' as diagnostics;
+
 /// Process-wide device vault selected before profile resource services open.
 /// Linux unlocks locally by default; existing passphrase vaults require one
 /// unlock before opting into local storage. Other platforms use native keys.
@@ -220,7 +222,15 @@ abstract interface class DeviceSecretCipher {
   Future<List<int>> open(String envelope, {required List<int> associatedData});
 }
 
-enum DeviceVaultFailure { missing, unreadable, unavailable, recordUnreadable }
+enum DeviceVaultFailure {
+  missing,
+  unreadable,
+  unavailable,
+  recordUnreadable,
+
+  /// macOS holds the existing key but the user has not released it yet.
+  keychainDenied,
+}
 
 extension DeviceVaultFailureRecovery on DeviceVaultFailure {
   bool get requiresReset =>
@@ -252,6 +262,7 @@ class DeviceVaultException implements Exception {
       'device_secret_missing' => DeviceVaultFailure.missing,
       'device_secret_unreadable' => DeviceVaultFailure.unreadable,
       'device_secret_record_unreadable' => DeviceVaultFailure.recordUnreadable,
+      'device_secret_keychain_denied' => DeviceVaultFailure.keychainDenied,
       _ => DeviceVaultFailure.unavailable,
     };
     return DeviceVaultException(
@@ -306,6 +317,16 @@ class PlatformDeviceSecretCipher implements DeviceSecretCipher {
     // Accept true for compatibility with test doubles and any engine that was
     // already attached during a hot restart of the migration build.
     if (status == true || status == 'ready') return;
+    if (status == 'key_copy_deferred') {
+      // The key opened, but the next launch will have to ask for it again.
+      diagnostics.DiagnosticLog.instance.recordEvent(
+        source: 'device_vault',
+        event: 'key_copy_deferred',
+        level: diagnostics.DiagnosticLevel.warning,
+        durable: true,
+      );
+      return;
+    }
     if (status == 'migration_audit_required') {
       _requiresMigrationAudit = true;
       return;
