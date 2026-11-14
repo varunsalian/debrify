@@ -28,7 +28,8 @@ class IptvTitle {
   final String base;
   final int? year;
 
-  static const _pipes = r'[|¦│┃❘∣⏐⎪︱︳丨｜]';
+  /// Divider bars providers put after a tag, single and double (`NL ║ ...`).
+  static const pipes = r'[|¦│┃❘∣⏐⎪︱︳丨｜║‖∥]';
   static const _quality = {
     '4k',
     'uhd',
@@ -85,14 +86,14 @@ class IptvTitle {
     // ignore: prefer_interpolation_to_compose_strings
     r'^(?:([A-Z0-9+]{2,5}(?:-[A-Z0-9+]{2,6}){1,2}|[A-Z]{2,3}|MRVL)\s*-\s+'
             r'|([A-Z0-9+]{2,5})\s*' +
-        _pipes +
+        pipes +
         r'\s*|([A-Z]{2,3})\s*:\s*)',
   );
   static final _wrapped = RegExp(
     r'^(?:\[([A-Z0-9+]{2,5})\]|' +
-        _pipes +
+        pipes +
         r'([A-Z0-9+]{2,5})' +
-        _pipes +
+        pipes +
         r')\s*',
   );
   static final _year = RegExp(r'(?:\s+|^)((?:19|20)\d{2})$');
@@ -102,7 +103,8 @@ class IptvTitle {
   // Only a fallback interpretation. Unlike destructive normalization this can
   // accept unfamiliar provider tags without changing the canonical title.
   static final _providerVariant = RegExp(
-    r'^([A-Z0-9+]{2,6}(?:-[A-Z0-9+]{1,6}){0,3})\s*[-:|]\s+',
+    // ignore: prefer_interpolation_to_compose_strings
+    r'^([A-Z0-9+]{2,6}(?:-[A-Z0-9+]{1,6}){0,3})\s*(?:[-:]|' + pipes + r')\s+',
   );
 
   /// Comparison folding preserves non-Latin letters and numeric title words.
