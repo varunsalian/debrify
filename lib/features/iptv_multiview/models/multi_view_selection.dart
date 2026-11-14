@@ -22,6 +22,10 @@ final class MultiViewSelection {
   final Object? owner;
 
   bool get isEmpty => channels.isEmpty;
+
+  /// The channel on the tile with sound; null when no tile is pinned.
+  IptvChannel? get audioChannel =>
+      channels.isEmpty ? null : channels[audioIndex % channels.length];
 }
 
 /// Outcome of trying to pin another channel to a tile.

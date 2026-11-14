@@ -15,6 +15,7 @@ typedef IptvSpotlightActionsDeps = ({
   IptvMembershipState membershipState,
   BuildContext Function() context,
   List<IptvListMeta> Function() customLists,
+  Future<void> Function(IptvChannel channel) focusChannel,
   bool Function() mounted,
   Future<void> Function(IptvChannel channel) openListPicker,
   void Function(IptvChannel channel) openSchedulePane,
@@ -187,6 +188,8 @@ class IptvSpotlightActions {
                     MultiViewLauncher.open(
                       _deps.context(),
                       play: _deps.playChannel,
+                      onClosed: (channel) =>
+                          unawaited(_deps.focusChannel(channel)),
                     ),
                   ),
                 ),

@@ -87,10 +87,13 @@ abstract final class MultiViewLauncher {
   }
 
   /// Opens the grid. The IPTV preview behind it stops first (as for any
-  /// player launch) so its decoder is free for the tiles.
+  /// player launch) so its decoder is free for the tiles. Leaving it with Back
+  /// hands [onClosed] the channel that had the sound, so the list can put its
+  /// cursor there.
   static Future<void> open(
     BuildContext context, {
     required Future<void> Function(IptvChannel channel) play,
+    void Function(IptvChannel lastAudio)? onClosed,
   }) async {
     MainPageBridge.notifyPlayerLaunching();
     final released = Completer<void>();
@@ -114,5 +117,8 @@ abstract final class MultiViewLauncher {
     }
     // The grid counted as playback; its end lets the preview come back.
     MainPageBridge.notifyContentPlaybackStopped();
+    if (onClosed == null || !context.mounted) return;
+    final lastAudio = _notifier(context).current().audioChannel;
+    if (lastAudio != null) onClosed(lastAudio);
   }
 }
