@@ -68,6 +68,8 @@ void main() {
     '[EN] ',
     '|DE| ',
     'EN│',
+    'NL ║ ',
+    'NL ‖ ',
   ]) {
     test('matches provider prefix $prefix', () {
       expect(
@@ -88,6 +90,24 @@ void main() {
       );
     });
   }
+  test('a double-bar provider tag is removed from a series title', () {
+    // Reported on Discord: Dutch IPTV panels write "NL ║" (U+2551).
+    expect(
+      IptvTitle.matches(
+        "NL ║ Schitt's Creek (2015)",
+        "Schitt's Creek",
+        year: 2015,
+      ),
+      isTrue,
+    );
+    expect(IptvTitle.matches("NL ║ Schitt's Creek", "Schitt's Creek"), isTrue);
+    // An unfamiliar tag before a double bar still takes the fallback path.
+    expect(
+      IptvTitle.matches("ABCXYZ ║ Schitt's Creek", "Schitt's Creek"),
+      isTrue,
+    );
+  });
+
   test('retains identity words and numeric titles', () {
     for (final title in [
       '1917',

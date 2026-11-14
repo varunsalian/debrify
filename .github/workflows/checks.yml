@@ -84,6 +84,24 @@ jobs:
           flutter analyze --no-fatal-infos --no-fatal-warnings lib/features lib/screens/settings_screen.dart lib/screens/video_player_screen.dart lib/screens/search_screen.dart lib/screens/search_screen lib/services/torrent_playback_service.dart lib/services/video_player_launcher.dart lib/services/storage lib/models/ambient_trailer_surface.dart lib/models/tv_render_quality.dart lib/widgets/iptv/iptv_results_view.dart lib/screens/torbox/torbox_downloads_screen.dart lib/screens/debrid_downloads_screen.dart lib/screens/pikpak/pikpak_files_screen.dart lib/screens/settings/external_player_settings_page.dart lib/screens/settings/iptv_settings_page.dart lib/screens/playlist_content_view_screen.dart lib/screens/merged_series_detail_screen.dart lib/screens/addons/addon_hub_screen.dart lib/widgets/detail/showcase_parts.dart lib/widgets/home/spotlight_board.dart lib/widgets/episodes_panel.dart lib/screens/catalog_item_detail_screen.dart lib/screens/magic_tv_screen.dart lib/screens/stremio_tv/widgets/stremio_tv_local_catalogs_dialog.dart lib/screens/settings/widgets/settings_widgets.dart lib/screens/stremio_tv/widgets/stremio_tv_tuner.dart lib/screens/stremio_tv/stremio_tv_screen.dart lib/screens/profiles/edit_profile_screen.dart lib/widgets/iptv/spotlight/spotlight_live_timeline.dart test/support/iptv_spotlight_timeline_*.dart lib/screens/settings/iptv_settings_two_pane.dart lib/features/iptv_settings_two_pane test/support/iptv_settings_two_pane_*.dart lib/screens/settings/recordings_page.dart lib/screens/premiumize/premiumize_files_screen.dart test/support/premiumize_*.dart lib/screens/alldebrid/alldebrid_files_screen.dart test/support/alldebrid_files_*.dart | tee analyze.txt
           python3 dev/tool/check_analyzer_allowlist.py analyze.txt
 
+  macos-device-key-store:
+    # Native only and on metered macOS minutes, so it follows the behaviour
+    # suite's trigger instead of running on every push.
+    if: >-
+      github.event_name != 'push' ||
+      github.ref == 'refs/heads/main' ||
+      contains(join(github.event.commits.*.message, ' '), 'gate') ||
+      contains(join(github.event.commits.*.message, ' '), '[full-ci]')
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build key store checks
+        run: >-
+          swiftc macos/Runner/MacOsDeviceKeyStore.swift
+          dev/tool/macos_device_key_store_check/main.swift
+          -o "$RUNNER_TEMP/key_store_check"
+      - run: '"$RUNNER_TEMP/key_store_check"'
+
   sources-behavior:
     # The behaviour suite runs on PRs, main, manual runs, and on refactor
     # pushes where ANY pushed commit's message marks a full-suite gate ("gate")

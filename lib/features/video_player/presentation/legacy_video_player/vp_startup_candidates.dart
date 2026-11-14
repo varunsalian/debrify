@@ -5,6 +5,7 @@ import 'package:debrify/models/torrent.dart';
 import 'package:debrify/screens/video_player/services/android_renderer_startup_fallback.dart';
 import 'package:debrify/services/media_server_watch_sync.dart';
 import 'package:debrify/services/source_selection_diagnostics.dart';
+import 'package:debrify/services/startup_error_policy.dart';
 import 'package:debrify/services/startup_stream_policy.dart';
 import 'package:debrify/utils/episode_playback_request.dart';
 import 'package:debrify/utils/platform_util.dart';
@@ -40,7 +41,8 @@ class VpStartupCandidates {
   /// Opens one VOD candidate with the real media-kit player and keeps that
   /// exact player session on success. Unlike the old Dart HEAD probe this has
   /// no validation/playback race: decoded video or advancing position commits
-  /// the candidate; an error, open throw, or bounded startup stall rejects it.
+  /// the candidate; a fatal error (see [StartupErrorPolicy]), open throw, or
+  /// bounded startup stall rejects it.
   /// Debrid-resolved candidates skip the decode probe. The debrid API minted
   /// (and thereby vouched for) the URL moments ago, so the probe's dead-link
   /// protection is redundant — and its cost is real: committing on the first
@@ -77,12 +79,14 @@ class VpStartupCandidates {
         'elapsedMs=${stopwatch.elapsedMilliseconds} '
         'durationMs=${candidateDuration.inMilliseconds}',
       );
+      if (!ok) _recordRejection(reason, source, sourceIndex);
       completer.complete(ok);
     }
 
-    // A dead debrid link (deleted torrent race, expired token) errors or
-    // serves something with no parseable duration — either way the ladder
+    // A dead debrid link (deleted torrent race, expired token) fails to open
+    // or serves something with no parseable duration — either way the ladder
     // advances to the next candidate exactly like a failed probe.
+    final errorTally = StartupErrorTally(rejectUnknown: false);
     final subs = <StreamSubscription>[
       _host.player.stream.error.listen((error) {
         if (AndroidRendererStartupFallback.isRendererFailure(error) &&
@@ -98,7 +102,16 @@ class VpStartupCandidates {
           finish(true, 'renderer_fallback_deferred');
           return;
         }
-        finish(false, 'player_error');
+        if (_rejectsCandidate(
+          error,
+          tally: errorTally,
+          hasData: bufferedAmount > Duration.zero,
+          sourceFields: sourceFields,
+          source: source,
+          sourceIndex: sourceIndex,
+        )) {
+          finish(false, 'player_error');
+        }
       }),
       _host.player.stream.duration.listen((value) {
         candidateDuration = value;
@@ -212,6 +225,7 @@ class VpStartupCandidates {
         'positionMs=${position.inMilliseconds} '
         'durationMs=${candidateDuration.inMilliseconds}',
       );
+      if (!ok) _recordRejection(reason, source, sourceIndex);
       completer.complete(ok);
     }
 
@@ -251,6 +265,7 @@ class VpStartupCandidates {
     }
 
     var bufferedAmount = Duration.zero;
+    final errorTally = StartupErrorTally(rejectUnknown: false);
     final subs = <StreamSubscription>[
       _host.player.stream.error.listen((error) {
         if (!armed) return;
@@ -273,7 +288,16 @@ class VpStartupCandidates {
           finish(true, 'renderer_fallback_deferred');
           return;
         }
-        finish(false, 'player_error');
+        if (_rejectsCandidate(
+          error,
+          tally: errorTally,
+          hasData: bufferedAmount > Duration.zero,
+          sourceFields: sourceFields,
+          source: source,
+          sourceIndex: sourceIndex,
+        )) {
+          finish(false, 'player_error');
+        }
       }),
       _host.player.stream.width.listen((width) {
         videoWidth = width ?? 0;
@@ -355,6 +379,49 @@ class VpStartupCandidates {
     }
     return ok;
   }
+
+  /// Whether [error] rejects the candidate. Only errors that mean the source
+  /// cannot play do (see [StartupErrorPolicy]); the rest leave it to the
+  /// startup timeout. Each error type is recorded once per candidate, by
+  /// label only: the message text can carry signed URLs.
+  bool _rejectsCandidate(
+    String error, {
+    required StartupErrorTally tally,
+    required bool hasData,
+    required String sourceFields,
+    Torrent? source,
+    int? sourceIndex,
+  }) {
+    // A renderer failure the Android fallback did not take over (the caller
+    // checked that first) still means this output cannot show the source.
+    final StartupErrorClass type =
+        AndroidRendererStartupFallback.isRendererFailure(error)
+        ? (kind: StartupErrorKind.fatal, label: 'renderer')
+        : StartupErrorPolicy.classify(error);
+    final rejects = tally.rejects(type, hasData: hasData);
+    if (tally.isFirst(type.label) || rejects) {
+      debugPrint(
+        '[StartupFailover] event=player_error platform=flutter '
+        '$sourceFields kind=${type.kind.name} label=${type.label} '
+        'rejects=$rejects',
+      );
+      logSourceSelection(
+        'candidate_player_error',
+        source: source,
+        index: sourceIndex,
+        reason: '${type.kind.name}:${type.label}',
+      );
+    }
+    return rejects;
+  }
+
+  void _recordRejection(String reason, Torrent? source, int? sourceIndex) =>
+      logSourceSelection(
+        'candidate_rejected',
+        source: source,
+        index: sourceIndex,
+        reason: reason,
+      );
 
   Future<void> commitValidatedStremioSource(Torrent? source) async {
     if (identical(source, _host.openedWatchSource)) {

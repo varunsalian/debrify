@@ -116,5 +116,6 @@ class IptvViewSections {
         recordingSupport: () => recordings.recordingSupport,
         rowProjection: () => previewAndSelection.rowProjection,
         scheduleActions: () => recordings.scheduleActions,
+        startupLaunch: () => playback.startupLaunch,
       ));
 }

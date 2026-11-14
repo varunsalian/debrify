@@ -124,6 +124,7 @@ test/iptv_transfer_payload_test.dart
 test/iptv_zap_banner_test.dart
 test/profiles/iptv_catalog_table_classification_test.dart
 test/services/iptv_cw_history_test.dart
+test/services/startup_error_policy_test.dart
 test/services/webdav_sync/webdav_sync_iptv_library_test.dart
 test/widgets/iptv/spotlight/iptv_spotlight_layout_test.dart
 test/widgets/iptv/spotlight/spotlight_live_timeline_test.dart
@@ -775,6 +776,7 @@ test/features/video_player/video_player_iptv_review2_stale_ladder_error_test.dar
 test/features/video_player/video_player_source_playlist_request_test.dart
 test/features/video_player/video_player_source_sheet_lifetime_test.dart
 test/features/video_player/video_player_startup_diagnostics_test.dart
+test/features/video_player/video_player_startup_error_policy_test.dart
 test/features/video_player/video_player_startup_failure_test.dart
 test/features/video_player/video_player_startup_gate_test.dart
 test/features/video_player/video_player_startup_ladder_test.dart
@@ -929,3 +931,7 @@ test/simkl_launch_custom_identity_test.dart
 test/subtitle_color_options_test.dart
 test/ui/core/source_metadata_labels_test.dart
 test/widgets/text_prompt_dialog_test.dart
+# 2026-11-08: sports kick-off reminders (timing rules, profile isolation, the Remind me control).
+test/features/sports/application/sports_reminder_plan_test.dart
+test/features/sports/application/sports_reminders_notifier_test.dart
+test/features/sports/presentation/sports_reminder_pill_test.dart

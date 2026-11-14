@@ -20,6 +20,7 @@ import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_spotlight_co
 import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_spotlight_focus.dart';
 import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_spotlight_hero.dart';
 import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_spotlight_layout.dart';
+import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_startup_launch.dart';
 import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/services/desktop_recording_service.dart';
 import 'package:debrify/services/iptv_epg_service.dart';
@@ -43,6 +44,7 @@ typedef IptvSpotlightCompositionExternalSections = ({
   IptvRecordingSupport Function() recordingSupport,
   IptvRowProjection Function() rowProjection,
   IptvScheduleActions Function() scheduleActions,
+  IptvStartupLaunch Function() startupLaunch,
 });
 
 /// Constructs the spotlight sections for one view lifetime.
@@ -187,6 +189,9 @@ class IptvSpotlightComposition {
     membershipState: _states.membershipState,
     context: () => _view.context(),
     customLists: () => _external.favorites().customLists,
+    // The same scroll-and-focus the startup channel uses.
+    focusChannel: (IptvChannel channel) =>
+        _external.startupLaunch().scrollAndFocusStartupRow(channel),
     mounted: () => _view.mounted(),
     openListPicker: (IptvChannel channel) =>
         _external.favorites().openListPicker(channel),

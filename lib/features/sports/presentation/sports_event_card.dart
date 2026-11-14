@@ -103,6 +103,7 @@ class SportsEventCard extends StatelessWidget {
     required this.followed,
     required this.watch,
     required this.onPressed,
+    this.reminded = false,
     this.checking = false,
     this.focusNode,
     this.autofocus = false,
@@ -117,6 +118,9 @@ class SportsEventCard extends StatelessWidget {
 
   /// The user follows this event's league or one of its teams.
   final bool followed;
+
+  /// A kick-off reminder is set for this game.
+  final bool reminded;
 
   final SportsWatchOptions watch;
 
@@ -191,6 +195,7 @@ class SportsEventCard extends StatelessWidget {
   /// built here rather than from the painted text runs.
   String _semanticLabel(SportsClock clock) => <String>[
     if (followed) 'Followed',
+    if (reminded) 'Reminder set',
     _leagueName,
     if ((event.group ?? '').trim().isNotEmpty) event.group!.trim(),
     event.displayTitle,
@@ -256,6 +261,15 @@ class SportsEventCard extends StatelessWidget {
                 padding: const EdgeInsets.only(left: 4),
                 child: Icon(
                   Icons.star_rounded,
+                  size: 12,
+                  color: _tokens.accent,
+                ),
+              ),
+            if (reminded)
+              Padding(
+                padding: const EdgeInsets.only(left: 4),
+                child: Icon(
+                  Icons.notifications_active_rounded,
                   size: 12,
                   color: _tokens.accent,
                 ),

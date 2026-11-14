@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:debrify/services/startup_error_policy.dart';
 import 'package:debrify/services/startup_stream_policy.dart';
 // Flutter's test SDK supplies fake_async transitively for deterministic timers.
 // ignore: depend_on_referenced_packages
@@ -211,6 +212,48 @@ void main() {
       clock.flushMicrotasks();
       expect(probe.watch.isPending, isTrue);
       probe.errors.add('HTTP 403 Forbidden');
+      clock.flushMicrotasks();
+      expect(probe.failures, 1);
+      probe.dispose();
+    });
+  });
+
+  test('a harmless error leaves a channel pending until video plays', () {
+    fakeAsync((clock) {
+      final probe = _ChannelProbe();
+      probe.errors.add('Could not open/initialize audio device -> no sound.');
+      probe.errors.add('Failed to open /tmp/addon-subs/en.srt.');
+      clock.flushMicrotasks();
+      expect(probe.failures, 0);
+      expect(probe.watch.isPending, isTrue);
+      probe.widths.add(1920);
+      probe.positions.add(const Duration(milliseconds: 100));
+      clock.flushMicrotasks();
+      expect(probe.accepted, 1);
+      expect(probe.failures, 0);
+      probe.dispose();
+    });
+  });
+
+  test('video that never decodes fails once its decode errors repeat', () {
+    fakeAsync((clock) {
+      final probe = _ChannelProbe();
+      for (var i = 1; i < StartupErrorTally.maxDecodeErrors; i++) {
+        probe.errors.add('Error while decoding frame!');
+      }
+      clock.flushMicrotasks();
+      expect(probe.failures, 0);
+      probe.errors.add('Error while decoding frame!');
+      clock.flushMicrotasks();
+      expect(probe.failures, 1);
+      probe.dispose();
+    });
+  });
+
+  test('an unrecognised error still fails a channel', () {
+    fakeAsync((clock) {
+      final probe = _ChannelProbe();
+      probe.errors.add('fixture watch failure');
       clock.flushMicrotasks();
       expect(probe.failures, 1);
       probe.dispose();

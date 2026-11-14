@@ -92,4 +92,52 @@ void main() {
     await tester.pump();
     expect(closed, isTrue);
   });
+
+  testWidgets('refused macOS keychain retries and never offers erase', (
+    tester,
+  ) async {
+    var retries = 0;
+    var closed = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProfileRecoveryScreen(
+          deviceVaultFailure: DeviceVaultFailure.keychainDenied,
+          onRecovered: () async {},
+          onResetComplete: () async => closed = true,
+          onRetry: () async {
+            retries++;
+            return retries > 1;
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.textContaining('log in to this Mac'), findsOneWidget);
+    expect(find.textContaining('restart the device'), findsNothing);
+    expect(find.textContaining('Erase private'), findsNothing);
+    expect(find.text('Restore a backup'), findsNothing);
+
+    final retry = find.widgetWithText(FilledButton, 'Try again');
+    await tester.tap(retry);
+    await tester.pump();
+    expect(retries, 1);
+    expect(find.textContaining('did not release the key'), findsOneWidget);
+    final focused = FocusManager.instance.primaryFocus?.context?.widget;
+    expect(focused, isNotNull);
+    expect(
+      find.ancestor(of: find.byWidget(focused!), matching: retry),
+      findsOneWidget,
+    );
+
+    await tester.tap(retry);
+    await tester.pump();
+    expect(retries, 2);
+    expect(find.textContaining('did not release the key'), findsNothing);
+    expect(closed, isFalse);
+
+    await tester.tap(find.widgetWithText(TextButton, 'Close Debrify'));
+    await tester.pump();
+    expect(closed, isTrue);
+  });
 }

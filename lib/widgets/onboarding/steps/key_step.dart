@@ -261,14 +261,18 @@ class _KeyStepState extends State<KeyStep> {
                     ),
                   );
                 }
+                // Part of the field it types into, so an air-mouse click on
+                // a key does not unfocus the field (see tv_keyboard_overlay).
                 return Center(
-                  child: TvKeyboardPanel(
-                    key: const ValueKey('onboarding-keyboard-panel'),
-                    controller: controller,
-                    accent: app.core.accent,
-                    ground: app.core.pane,
-                    ink: app.core.tx,
-                    inkOnAccent: scheme.onPrimary,
+                  child: TextFieldTapRegion(
+                    child: TvKeyboardPanel(
+                      key: const ValueKey('onboarding-keyboard-panel'),
+                      controller: controller,
+                      accent: app.core.accent,
+                      ground: app.core.pane,
+                      ink: app.core.tx,
+                      inkOnAccent: scheme.onPrimary,
+                    ),
                   ),
                 );
               },

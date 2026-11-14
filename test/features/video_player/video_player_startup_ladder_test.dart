@@ -469,7 +469,10 @@ void main() {
           );
           expect(view.retrying, i > 0);
           if (i < 2) {
-            d.player.emit('error', 'fixture failed attempt');
+            d.player.emit(
+              'error',
+              'Failed to open https://fixture.invalid/failed-attempt.mkv.',
+            );
             await d.result(count: i + 1);
           } else {
             d.frame();
@@ -502,7 +505,10 @@ void main() {
           await d.begin(d.screen(sources: empty ? [] : null));
           await d.openEntered();
           expect(find.byType(PlaybackStartupView), findsOneWidget);
-          d.player.emit('error', 'fixture rejected single candidate');
+          d.player.emit(
+            'error',
+            'Failed to open https://fixture.invalid/rejected-single.mkv.',
+          );
           await d.result();
           await d.f.until(
             t,

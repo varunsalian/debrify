@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_settings_state.dart';
 import 'package:debrify/widgets/iptv/spotlight/iptv_spotlight_layout.dart';
+import 'package:debrify/widgets/iptv/spotlight/keyboard_steady_layout_builder.dart';
 import 'package:flutter/material.dart';
 
 typedef IptvRootLayoutDeps = ({
@@ -81,7 +82,8 @@ class IptvRootLayout {
     // source rail. Legacy layouts mount search above their body, so their
     // breakpoints must be evaluated by the inner LayoutBuilder after that
     // header has taken its height.
-    return LayoutBuilder(
+    return KeyboardSteadyLayoutBuilder(
+      enabled: _spotlightRequestedForDevice,
       builder: (context, outerConstraints) {
         final outerSize = Size(
           outerConstraints.maxWidth,

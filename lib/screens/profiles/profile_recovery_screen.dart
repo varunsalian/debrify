@@ -21,6 +21,10 @@ import '../../widgets/tv_text_field.dart';
 class ProfileRecoveryScreen extends StatefulWidget {
   final Future<void> Function() onRecovered;
   final Future<void> Function() onResetComplete;
+
+  /// Re-runs profile startup after the user allows keychain access. Resolves
+  /// false when the keychain refused again and this screen stays up.
+  final Future<bool> Function()? onRetry;
   final bool forceTvSafeInput;
   final DeviceVaultFailure? deviceVaultFailure;
 
@@ -28,9 +32,14 @@ class ProfileRecoveryScreen extends StatefulWidget {
     super.key,
     required this.onRecovered,
     required this.onResetComplete,
+    this.onRetry,
     this.forceTvSafeInput = false,
     this.deviceVaultFailure,
-  });
+  }) : assert(
+         deviceVaultFailure != DeviceVaultFailure.keychainDenied ||
+             onRetry != null,
+         'A refused keychain can only be recovered by retrying',
+       );
 
   @override
   State<ProfileRecoveryScreen> createState() => _ProfileRecoveryScreenState();
@@ -43,6 +52,8 @@ class _ProfileRecoveryScreenState extends State<ProfileRecoveryScreen> {
   bool get _hasDeviceVaultFailure => widget.deviceVaultFailure != null;
   bool get _deviceVaultRequiresReset =>
       widget.deviceVaultFailure?.requiresReset ?? false;
+  bool get _keychainDenied =>
+      widget.deviceVaultFailure == DeviceVaultFailure.keychainDenied;
 
   Future<String?> _promptSecret(String title, String message) async {
     final controller = TextEditingController();
@@ -97,7 +108,7 @@ class _ProfileRecoveryScreenState extends State<ProfileRecoveryScreen> {
     );
   }
 
-  Future<void> _run(Future<String> Function() operation) async {
+  Future<void> _run(Future<String?> Function() operation) async {
     if (_busy) return;
     setState(() {
       _busy = true;
@@ -211,6 +222,15 @@ class _ProfileRecoveryScreenState extends State<ProfileRecoveryScreen> {
     });
   }
 
+  Future<void> _retry() async {
+    await _run(() async {
+      final movedOn = await widget.onRetry!();
+      return movedOn
+          ? null
+          : 'macOS did not release the key. Select Try again, enter your Mac login password, and choose Allow.';
+    });
+  }
+
   Future<void> _reset() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -278,7 +298,9 @@ class _ProfileRecoveryScreenState extends State<ProfileRecoveryScreen> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  _deviceVaultRequiresReset
+                  _keychainDenied
+                      ? 'macOS needs your permission one last time so Debrify can finish moving its encryption key. Select Try again, enter the password you use to log in to this Mac, and choose Allow. Your profiles, credentials, addons, and sync bindings have not been changed.'
+                      : _deviceVaultRequiresReset
                       ? 'Debrify cannot open the secure device vault. Existing credentials, addons, and sync bindings will not be mounted. Restart the device once; if the problem continues, erase private app data and reconnect this device.'
                       : _hasDeviceVaultFailure
                       ? 'The secure device vault is temporarily unavailable. Your profiles, credentials, addons, and sync bindings have not been changed. Close Debrify, restart the device, and try again.'
@@ -306,7 +328,23 @@ class _ProfileRecoveryScreenState extends State<ProfileRecoveryScreen> {
                     ),
                   ),
                 ],
-                if (widget.deviceVaultFailure == DeviceVaultFailure.unavailable)
+                if (_keychainDenied) ...[
+                  // Stays enabled while busy so it keeps keyboard focus for the
+                  // next attempt; _run ignores presses during a running one.
+                  FilledButton.icon(
+                    onPressed: _retry,
+                    autofocus: true,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Try again'),
+                  ),
+                  const SizedBox(height: 10),
+                  TextButton.icon(
+                    onPressed: _busy ? null : widget.onResetComplete,
+                    icon: const Icon(Icons.close),
+                    label: const Text('Close Debrify'),
+                  ),
+                ] else if (widget.deviceVaultFailure ==
+                    DeviceVaultFailure.unavailable)
                   FilledButton.icon(
                     onPressed: _busy ? null : widget.onResetComplete,
                     autofocus: widget.forceTvSafeInput,

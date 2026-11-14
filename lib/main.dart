@@ -1,5 +1,6 @@
 import 'package:debrify/core/platform/preferences_file_recovery.dart';
 import 'package:debrify/services/addon_auto_update_scheduler.dart';
+import 'package:debrify/features/sports/presentation/sports_reminder_host.dart';
 import 'package:debrify/widgets/iptv/multi_view_launcher.dart';
 import 'package:debrify/services/storage/alldebrid_storage.dart';
 import 'package:debrify/services/storage/completion_migration_storage.dart';
@@ -44,6 +45,7 @@ import 'services/app_route_observer.dart';
 import 'screens/browse_screen.dart';
 import 'screens/cloud_screen.dart';
 import 'screens/search_screen.dart';
+import 'screens/startup_failure_app.dart';
 import 'widgets/iptv/iptv_results_view.dart';
 import 'widgets/youtube/youtube_results_view.dart';
 import 'screens/debrid_downloads_screen.dart';
@@ -73,6 +75,7 @@ import 'services/iptv_catalog_diagnostics.dart';
 import 'services/iptv_catalog_refresh_service.dart';
 import 'services/profiles/local_backup/local_backup_archive.dart'
     show LocalBackupScratch;
+import 'services/profiles/device_key_provider.dart';
 import 'services/profiles/profile_bootstrap.dart';
 import 'services/profiles/profile_database_adoption_gate.dart';
 import 'services/profiles/profile_migration_service.dart';
@@ -232,39 +235,43 @@ Future<void> main(List<String> launchArguments) async {
   try {
     await _mainUnchecked(launchArguments);
   } catch (error, stackTrace) {
-    WidgetsFlutterBinding.ensureInitialized();
-    // Best effort only: diagnostics must never turn an existing startup
-    // failure into a second failure or delay the fallback screen indefinitely.
-    try {
-      await DiagnosticLog.instance.initialize();
-      _recordPreferencesRecovery();
-      DiagnosticLog.instance.recordError(
-        source: 'app',
-        event: 'bootstrap_failure',
-        error: error,
-        stackTrace: stackTrace,
-        flushImmediately: false,
-      );
-      await DiagnosticLog.instance.flush();
-    } catch (_) {}
-    debugPrint('Application bootstrap failed (${error.runtimeType})');
-    debugPrint('$stackTrace');
-    // Describing the failure must never become a second failure: an
-    // exception here would leave runApp uncalled and the user staring at a
-    // blank window, which is strictly worse than the screen this block
-    // exists to show. The screen renders with or without the detail.
-    String? detail;
-    try {
-      detail = _describeStartupFailure(error, stackTrace);
-    } catch (_) {
-      detail = null;
-    }
-    runApp(_StartupFailureApp(detail: detail));
+    await _showStartupFailure(error, stackTrace);
   }
 }
 
+Future<void> _showStartupFailure(Object error, StackTrace stackTrace) async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Best effort only: diagnostics must never turn an existing startup
+  // failure into a second failure or delay the fallback screen indefinitely.
+  try {
+    await DiagnosticLog.instance.initialize();
+    _recordPreferencesRecovery();
+    DiagnosticLog.instance.recordError(
+      source: 'app',
+      event: 'bootstrap_failure',
+      error: error,
+      stackTrace: stackTrace,
+      flushImmediately: false,
+    );
+    await DiagnosticLog.instance.flush();
+  } catch (_) {}
+  debugPrint('Application bootstrap failed (${error.runtimeType})');
+  debugPrint('$stackTrace');
+  // Describing the failure must never become a second failure: an
+  // exception here would leave runApp uncalled and the user staring at a
+  // blank window, which is strictly worse than the screen this block
+  // exists to show. The screen renders with or without the detail.
+  String? detail;
+  try {
+    detail = _describeStartupFailure(error, stackTrace);
+  } catch (_) {
+    detail = null;
+  }
+  runApp(StartupFailureApp(detail: detail));
+}
+
 /// One bounded, redacted line naming what actually failed, for
-/// [_StartupFailureApp].
+/// [StartupFailureApp].
 ///
 /// A user who cannot produce a log can still photograph a screen — the same
 /// reasoning that put [ProfileBootstrap.legacyReason] on the Profiles row.
@@ -432,6 +439,34 @@ Future<void> _mainUnchecked(List<String> launchArguments) async {
 
   await CacheScratchCleanup.run();
 
+  await _bootstrapProfilesAndStart(
+    recoveryNeedsTvSafeInput: recoveryNeedsTvSafeInput,
+  );
+}
+
+/// The macOS "Try again" path. Runs under the same failure handling as a
+/// normal launch, so any failure past the keychain ends on the terminal failure
+/// screen instead of offering another run over partly started services.
+Future<bool> _retryProfileStartup({
+  required bool recoveryNeedsTvSafeInput,
+}) async {
+  try {
+    return await _bootstrapProfilesAndStart(
+      recoveryNeedsTvSafeInput: recoveryNeedsTvSafeInput,
+      isRetry: true,
+    );
+  } catch (error, stackTrace) {
+    await _showStartupFailure(error, stackTrace);
+    return true;
+  }
+}
+
+/// Returns false only when a retry was refused by the keychain again and the
+/// recovery screen stays up. A refusal fails before the registry is opened.
+Future<bool> _bootstrapProfilesAndStart({
+  required bool recoveryNeedsTvSafeInput,
+  bool isRetry = false,
+}) async {
   // Publish legacy/profile storage mode before any preference, credential,
   // cache, route, or background service can observe application state.
   try {
@@ -446,6 +481,11 @@ Future<void> _mainUnchecked(List<String> launchArguments) async {
       );
     });
   } on ProfileBootstrapRecoveryRequired catch (error) {
+    if (isRetry &&
+        error.deviceVaultFailure?.failure ==
+            DeviceVaultFailure.keychainDenied) {
+      return false;
+    }
     runApp(
       MaterialApp(
         debugShowCheckedModeBanner: false,
@@ -454,12 +494,15 @@ Future<void> _mainUnchecked(List<String> launchArguments) async {
         home: ProfileRecoveryScreen(
           onRecovered: _resumeAfterProfileRecovery,
           onResetComplete: _terminateAfterDeviceReset,
+          onRetry: () => _retryProfileStartup(
+            recoveryNeedsTvSafeInput: recoveryNeedsTvSafeInput,
+          ),
           forceTvSafeInput: recoveryNeedsTvSafeInput,
           deviceVaultFailure: error.deviceVaultFailure?.failure,
         ),
       ),
     );
-    return;
+    return true;
   }
 
   if (ProfileRuntime.isProfileCommitted &&
@@ -468,7 +511,7 @@ Future<void> _mainUnchecked(List<String> launchArguments) async {
       ProfileBootstrap.registry,
     );
     await _terminateAfterDeviceReset();
-    return;
+    return true;
   }
 
   if (ProfileRuntime.isProfileCommitted) {
@@ -484,64 +527,11 @@ Future<void> _mainUnchecked(List<String> launchArguments) async {
         existingVault: ProfileBootstrap.linuxVaultAlreadyConfigured,
       ),
     );
-    return;
+    return true;
   }
 
   await _continueApplicationStartup();
-}
-
-class _StartupFailureApp extends StatelessWidget {
-  const _StartupFailureApp({this.detail});
-
-  /// What failed, from [_describeStartupFailure]; null only if the failure
-  /// somehow produced no describable error.
-  final String? detail;
-
-  @override
-  Widget build(BuildContext context) => MaterialApp(
-    debugShowCheckedModeBanner: false,
-    themeMode: ThemeMode.dark,
-    darkTheme: ThemeData.dark(useMaterial3: true),
-    home: Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Debrify could not start safely. Close the app and try again. '
-                  'If this continues, restart the device before changing any data.',
-                  textAlign: TextAlign.center,
-                ),
-                if (detail != null) ...[
-                  const SizedBox(height: 20),
-                  const Text(
-                    'Please share this with support:',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 12, color: Colors.white54),
-                  ),
-                  const SizedBox(height: 8),
-                  // Selectable so a desktop reporter can paste it rather than
-                  // retype a photographed stack frame.
-                  SelectableText(
-                    detail!,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontFamily: 'monospace',
-                      color: Colors.white70,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
-    ),
-  );
+  return true;
 }
 
 Future<void> _resumeAfterProfileRecovery() async {
@@ -628,7 +618,7 @@ Future<void> _terminateAfterDeviceReset() async {
 /// convenience work whose honest worst case is a stale first frame, or a
 /// migration that simply retries on the next launch. Until this existed a
 /// single throw from any of them reached [main]'s catch and replaced the
-/// entire app with [_StartupFailureApp] — so one odd legacy row could lock a
+/// entire app with [StartupFailureApp] — so one odd legacy row could lock a
 /// user out of Debrify completely (issue #35, a 0.7.0-era install that could
 /// not open 0.8.3 at all). Failing these is recoverable; refusing to start is
 /// not.
@@ -1185,7 +1175,9 @@ class _DebrifyAppState extends State<DebrifyApp> {
             // the common path costs one build and no layer.
             // Copies finished recordings to an SMB share while the app runs.
             child: SmbUploadHost(
-              child: WebDavSaveStatus(child: AppTexture(child: child!)),
+              child: WebDavSaveStatus(
+                child: SportsReminderHost(child: AppTexture(child: child!)),
+              ),
             ),
           ),
         );

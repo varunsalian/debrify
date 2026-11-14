@@ -3,6 +3,7 @@ import '../../../models/torrent.dart';
 import '../../../services/iptv_source_search.dart';
 import '../../../services/profiles/profile_runtime.dart';
 import '../../../services/profiles/profile_session_memory.dart';
+import '../../../services/source_search_scope.dart';
 import '../../../services/stremio_service.dart';
 import '../../../services/torrent_service.dart';
 import '../models/source_search_request.dart';
@@ -127,6 +128,16 @@ class ServiceSourceSearchRepository implements SourceSearchRepository {
           preserveSourceOrder: true,
           originAddonKey: selection.stremioAddonKey,
           originVideoId: videoId,
+        );
+        SourceSearchScope.log(
+          surface: 'sources',
+          imdbId: selection.imdbId,
+          isMovie: !selection.isSeries,
+          season: selection.season,
+          episode: selection.episode,
+          contentType: selection.contentType,
+          originVideoId: videoId,
+          result: result,
         );
       }
       final iptvResults = iptv == null ? <IptvSourceResult>[] : await iptv;

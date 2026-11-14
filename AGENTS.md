@@ -201,6 +201,10 @@ blank lines, for handwritten application code in Dart and native languages.
   databases, secrets in secure storage, and large files in filesystem storage.
   Preserve existing preferences and schemas during extraction; storage migration
   requires its own compatibility plan and tests.
+  Exception: on macOS the device key is a private file in the app container
+  (`macos/Runner/MacOsDeviceKeyStore.swift`), because ad-hoc signed releases change
+  signature on every update and lose keychain access. Move it back to the keychain
+  if releases gain a stable Developer ID signature.
 - Keep migrations explicit and non-destructive. For SQLite work, enable and verify
   foreign keys on each physical connection outside transactions; check referential
   integrity after migrations and test reopen/cascade/restrict behavior.

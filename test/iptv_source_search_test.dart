@@ -280,6 +280,20 @@ void main() {
     },
   );
 
+  test('a double-bar prefix still names the audio language', () {
+    expect(
+      IptvSourceSearch.catalogAudioPreferenceTier(
+        IptvChannel(
+          name: "NL ║ Schitt's Creek (2015)",
+          url: 'https://panel.test/series/nl.mp4',
+          group: 'SERIES',
+        ),
+        preferredLanguage: 'nl',
+      ),
+      0,
+    );
+  });
+
   test('subtitle labels are not mistaken for an audio language', () {
     expect(
       IptvSourceSearch.catalogAudioPreferenceTier(
@@ -1061,6 +1075,45 @@ void main() {
       episode: 2,
     );
     expect(episode?.directUrl, contains('sd.cdn.test'));
+  });
+
+  test('a Dutch "NL ║" episode row is found for its series', () async {
+    // Reported on Discord: the double bar (U+2551) hid every episode.
+    playlist = IptvPlaylist(
+      id: 'generic-nl',
+      name: 'Generic NL',
+      url: 'https://m3u.test/nl.m3u',
+      addedAt: DateTime(2026),
+    );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('iptv_playlists', [
+      jsonEncode(playlist.toJson()),
+    ]);
+    ingest('vod', [
+      for (final episode in [1, 2])
+        IptvChannel(
+          name:
+              "NL ║ Schitt's Creek (2015) - S01E0$episode - Aflevering $episode",
+          url: 'https://cdn.test/series/schitts-s01e0$episode.mp4',
+          group: 'NL ║ SERIES',
+          duration: -1,
+        ),
+    ]);
+
+    final results = await IptvSourceSearch.search(
+      const AdvancedSearchSelection(
+        imdbId: 'tt3526078',
+        isSeries: true,
+        title: "Schitt's Creek",
+        year: '2015',
+        season: 1,
+        episode: 2,
+      ),
+    );
+    expect(
+      results.single.torrents.single.directUrl,
+      contains('schitts-s01e02.mp4'),
+    );
   });
 
   test('pinned Xtream ID survives a provider title rename', () async {

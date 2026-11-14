@@ -136,6 +136,50 @@ void main() {
     expect(DeviceKeyProvider.isUnlocked, isFalse);
   });
 
+  test(
+    'refused macOS keychain is retryable and never requires reset',
+    () async {
+      DeviceKeyProvider.debugLinuxOverride = false;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(deviceSecretChannel, (call) async {
+            throw PlatformException(code: 'device_secret_keychain_denied');
+          });
+
+      await expectLater(
+        DeviceKeyProvider.initialize(allowCreate: false),
+        throwsA(
+          isA<DeviceVaultException>()
+              .having(
+                (error) => error.failure,
+                'failure',
+                DeviceVaultFailure.keychainDenied,
+              )
+              .having((error) => error.requiresReset, 'requiresReset', isFalse),
+        ),
+      );
+      expect(DeviceKeyProvider.isInitialized, isFalse);
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(deviceSecretChannel, (call) async => true);
+      await DeviceKeyProvider.initialize(allowCreate: false);
+      expect(DeviceKeyProvider.isUnlocked, isTrue);
+    },
+  );
+
+  test('deferred macOS key copy still unlocks the vault', () async {
+    DeviceKeyProvider.debugLinuxOverride = false;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          deviceSecretChannel,
+          (call) async => 'key_copy_deferred',
+        );
+
+    await DeviceKeyProvider.initialize(allowCreate: false);
+
+    expect(DeviceKeyProvider.isUnlocked, isTrue);
+    expect(DeviceKeyProvider.requiresMigrationAudit, isFalse);
+  });
+
   test('pre-canary native vault waits for the resource audit', () async {
     DeviceKeyProvider.debugLinuxOverride = false;
     final methods = <String>[];

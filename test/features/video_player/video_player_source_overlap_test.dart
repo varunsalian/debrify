@@ -31,7 +31,10 @@ void main() {
         final sheet = await d.sheet();
         final older = d.select(sheet, 1, b.directUrl!);
         await d.openEntered(2);
-        d.player.emit('error', 'fixture old pick rejected while ack is held');
+        d.player.emit(
+          'error',
+          'Failed to open https://fixture.invalid/old-pick.mkv.',
+        );
         await d.result(count: 2);
         final newer = d.select(sheet, 2, c.directUrl!);
         await d.f.finish(t, newer.future);

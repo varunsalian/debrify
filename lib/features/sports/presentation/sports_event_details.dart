@@ -14,6 +14,7 @@ import 'package:flutter/services.dart';
 
 import 'sports_clock.dart';
 import 'sports_event_card.dart';
+import 'sports_reminder_pill.dart';
 import 'sports_team_crest.dart';
 
 const _tokens = IptvStyleTokens.spotlight;
@@ -45,6 +46,7 @@ Future<void> showSportsEventDetails(
   required void Function(SportsChannelRef) onPlay,
   required void Function(String teamKey) onToggleTeam,
   required void Function(String leagueId) onToggleLeague,
+  SportsReminderControl? reminder,
 }) async {
   final surface = _DetailsSurface(
     event: event,
@@ -52,6 +54,7 @@ Future<void> showSportsEventDetails(
     follows: follows,
     onToggleTeam: onToggleTeam,
     onToggleLeague: onToggleLeague,
+    reminder: reminder,
   );
   final wide = MediaQuery.sizeOf(context).width >= _wideLayoutMinWidth;
   final chosen = wide
@@ -110,6 +113,7 @@ class _DetailsSurface extends StatefulWidget {
     required this.follows,
     required this.onToggleTeam,
     required this.onToggleLeague,
+    this.reminder,
   });
 
   final SportsEvent event;
@@ -117,6 +121,9 @@ class _DetailsSurface extends StatefulWidget {
   final SportsFollows follows;
   final void Function(String teamKey) onToggleTeam;
   final void Function(String leagueId) onToggleLeague;
+
+  /// Null where reminders are unavailable: TVs, or kick-off too close.
+  final SportsReminderControl? reminder;
 
   @override
   State<_DetailsSurface> createState() => _DetailsSurfaceState();
@@ -216,8 +223,14 @@ class _DetailsSurfaceState extends State<_DetailsSurface> {
         ),
       );
     }
+    rows.add(const SizedBox(height: 18));
+    final reminder = widget.reminder;
+    if (reminder != null) {
+      rows
+        ..add(SportsReminderPill(control: reminder, autofocus: _claimFocus()))
+        ..add(const SizedBox(height: 10));
+    }
     rows
-      ..add(const SizedBox(height: 18))
       ..add(_followButtons(autofocus: _claimFocus()))
       ..add(const SizedBox(height: 10))
       ..add(

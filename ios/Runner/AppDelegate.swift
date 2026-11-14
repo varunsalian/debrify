@@ -1,5 +1,6 @@
 import Flutter
 import UIKit
+import UserNotifications
 import CryptoKit
 import Security
 
@@ -144,12 +145,29 @@ private final class ProfilePrivacyController {
   private var deviceSecretChannel: FlutterMethodChannel?
   private var profilePrivacyChannel: FlutterMethodChannel?
   private var nowPlaying: NowPlayingBridge?
+  private var sportsReminders: SportsReminderBridge?
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
     _ = excludeDeviceBoundStateFromBackup()
+    // Lets a kick-off reminder show while the app is open (see willPresent).
+    UNUserNotificationCenter.current().delegate = self
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  override func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    willPresent notification: UNNotification,
+    withCompletionHandler completionHandler:
+      @escaping (UNNotificationPresentationOptions) -> Void
+  ) {
+    if notification.request.identifier.hasPrefix(SportsReminderBridge.identifierPrefix) {
+      completionHandler([.banner, .list, .sound])
+      return
+    }
+    super.userNotificationCenter(
+      center, willPresent: notification, withCompletionHandler: completionHandler)
   }
 
   @discardableResult
@@ -199,6 +217,7 @@ private final class ProfilePrivacyController {
       deviceSecretChannel = deviceSecretCipher.install(on: registrar.messenger())
       profilePrivacyChannel = profilePrivacy.install(on: registrar.messenger())
       nowPlaying = NowPlayingBridge(messenger: registrar.messenger())
+      sportsReminders = SportsReminderBridge(messenger: registrar.messenger())
     }
   }
 

@@ -224,7 +224,10 @@ void main() {
               position: Duration.zero,
             );
             p.emit('duration', Duration.zero);
-            p.emit('error', 'fixture rejected pick before late restore');
+            p.emit(
+              'error',
+              'Failed to open https://fixture.invalid/rejected-pick.mkv.',
+            );
           };
           d.openGates[a.directUrl!] = ack;
           final action = d.select(sheet, 1, url);

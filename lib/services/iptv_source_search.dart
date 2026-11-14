@@ -175,7 +175,7 @@ class IptvSourceSearch {
     'MULTISUBS',
   };
   static final _providerPrefix = RegExp(
-    r'^([A-Z0-9+]{2,8}(?:-[A-Z0-9+]{1,8}){0,3})\s*(?:-|:|\|)\s+',
+    '^([A-Z0-9+]{2,8}(?:-[A-Z0-9+]{1,8}){0,3})\\s*(?:[-:]|${IptvTitle.pipes})\\s+',
     caseSensitive: false,
   );
 
