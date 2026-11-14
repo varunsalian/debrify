@@ -12,6 +12,7 @@ import '../utils/platform_util.dart';
 import '../utils/tv_keys.dart';
 import 'onboarding/tv_keyboard_slot.dart';
 import 'tv_keyboard.dart';
+import 'tv_keyboard_overlay.dart';
 import 'text_field_suggestions.dart';
 
 /// Text field that is safe to use on TV.
@@ -692,45 +693,20 @@ class TvTextFieldState extends State<TvTextField> {
       slot.attach(_kb!);
     } else {
       final overlay = Overlay.of(context, rootOverlay: true);
-      // A bare OverlayEntry inherits nothing local — and this keyboard opens
-      // from INCLUDED and FROZEN surfaces alike. Snapshot the field's ambient
-      // themes so the panel renders what its field renders (the legacy freeze
-      // included when the field sits inside a LegacyThemeBoundary). Inside the
-      // Positioned: CapturedThemes.wrap inserts plain widgets, and Positioned
-      // must stay the overlay Stack's direct child.
-      final capturedThemes = captureAppThemes(context);
-      _overlay = OverlayEntry(
-        builder: (_) => Positioned(
-          left: 0,
-          right: 0,
-          bottom: 16,
-          child: capturedThemes.wrap(
-            SafeArea(
-              child: Center(
-                child: TvKeyboardPanel(
-                  controller: _kb!,
-                  // The bottom-anchored panel can cover the very field it
-                  // edits; the preview keeps what's typed in sight. Only this
-                  // overlay path passes it — the onboarding slot's field band
-                  // is already visible directly above its keyboard.
-                  previewController: widget.controller,
-                  previewObscure: widget.obscureText,
-                  previewHint:
-                      widget.hintText ??
-                      widget.labelText ??
-                      widget.decoration?.hintText ??
-                      widget.decoration?.labelText,
-                  // The panel's own defaults are these same literals, so a token
-                  // left null lands on exactly what shipped either way.
-                  accent: widget.accent,
-                  ground: widget.keyboardGround,
-                  ink: widget.keyboardInk,
-                  inkOnAccent: widget.keyboardInkOnAccent,
-                ),
-              ),
-            ),
-          ),
-        ),
+      _overlay = tvKeyboardOverlayEntry(
+        themes: captureAppThemes(context),
+        controller: _kb!,
+        preview: widget.controller,
+        previewObscure: widget.obscureText,
+        previewHint:
+            widget.hintText ??
+            widget.labelText ??
+            widget.decoration?.hintText ??
+            widget.decoration?.labelText,
+        accent: widget.accent,
+        ground: widget.keyboardGround,
+        ink: widget.keyboardInk,
+        inkOnAccent: widget.keyboardInkOnAccent,
       );
       overlay.insert(_overlay!);
     }
