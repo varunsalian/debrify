@@ -30,9 +30,8 @@ class TorrentFilterMatcher {
     if (f.languages.isNotEmpty) {
       if (t.audioLanguages != null) {
         if (!matchesAudioMetadata(t.audioLanguages!, f.languages)) return false;
-      } else {
-        final l = detectAudioLanguage(t.name);
-        if (l == null || !f.languages.contains(l)) return false;
+      } else if (!_textMatchesLanguages(languageText(t), f.languages)) {
+        return false;
       }
     }
     if (f.sizes.isNotEmpty) {
@@ -47,6 +46,30 @@ class TorrentFilterMatcher {
       return false;
     }
     return true;
+  }
+
+  /// The text language detection reads for [t]: the release name plus, for
+  /// add-on streams, the stream label and description. Torrentio-style add-ons
+  /// put the torrent title and language flags in the description, while
+  /// [Torrent.name] is often just the bare file name ("Filme.2024.mkv").
+  static String languageText(Torrent t) {
+    final description = t.badgeDescription;
+    return description == null ? t.name : '${t.name}\n$description';
+  }
+
+  /// Browse-filter language test: the single detected language must be
+  /// selected. A multi-audio release also passes for any selected language
+  /// it names ("Multi Audio … ENG" stays visible under an English filter).
+  static bool _textMatchesLanguages(String text, Set<AudioLanguage> selected) {
+    final detected = detectAudioLanguage(text);
+    if (detected == null) return false;
+    if (selected.contains(detected)) return true;
+    return detected == AudioLanguage.multiAudio &&
+        selected.any(
+          (language) =>
+              language != AudioLanguage.multiAudio &&
+              nameHasLanguage(text, language),
+        );
   }
 
   /// Match server track metadata without guessing English or treating every
@@ -182,10 +205,39 @@ class TorrentFilterMatcher {
     AudioLanguage.japanese: RegExp(r'\b(japanese|jap|jpn)\b'),
     AudioLanguage.korean: RegExp(r'\b(korean|kor)\b'),
     AudioLanguage.italian: RegExp(r'\b(italian|ita)\b'),
-    AudioLanguage.portuguese: RegExp(r'\b(portuguese|por|pt-br)\b'),
+    // Brazilian releases name the audio in Portuguese: DUBLADO / NACIONAL /
+    // "Dual Áudio". See [_hasPortuguese] for the flags and LEGENDADO rule.
+    AudioLanguage.portuguese: RegExp(
+      r'\b(portugu[eê]se?|por|pt-br|ptbr|pt-pt|dublad[oa]s?|dublagem|nacional)\b'
+      r'|\bdual[ ._-]?áudio\b',
+    ),
     AudioLanguage.arabic: RegExp(r'\b(arabic|ara)\b'),
     AudioLanguage.english: RegExp(r'\b(english|eng)\b'),
   };
+
+  static const List<String> _portugueseFlags = ['🇧🇷', '🇵🇹'];
+
+  /// LEGENDADO means Portuguese subtitles over the original audio, so a
+  /// "PT-BR" or 🇧🇷 next to it names the subtitles, not the audio — unless the
+  /// release also says it carries a Portuguese track.
+  static final RegExp _subtitledOnly = RegExp(r'\blegendad[oa]s?\b');
+  static final RegExp _portugueseAudioMarker = RegExp(
+    r'\b(dublad[oa]s?|dublagem|nacional|dual)\b',
+  );
+
+  static bool _hasPortuguese(String lower) {
+    final named =
+        _languagePatterns[AudioLanguage.portuguese]!.hasMatch(lower) ||
+        _portugueseFlags.any(lower.contains);
+    if (!named) return false;
+    return !_subtitledOnly.hasMatch(lower) ||
+        _portugueseAudioMarker.hasMatch(lower);
+  }
+
+  static bool _hasLanguage(String lower, AudioLanguage language) =>
+      language == AudioLanguage.portuguese
+      ? _hasPortuguese(lower)
+      : _languagePatterns[language]!.hasMatch(lower);
 
   /// Detection order for the single-badge classifier — must stay exactly the
   /// historical if-chain order (english LAST) so badges don't change.
@@ -212,7 +264,7 @@ class TorrentFilterMatcher {
   /// [detectAudioLanguage] would pick first.
   static bool nameHasLanguage(String rawName, AudioLanguage language) {
     if (language == AudioLanguage.multiAudio) return hasMultiAudioTag(rawName);
-    return _languagePatterns[language]!.hasMatch(rawName.toLowerCase());
+    return _hasLanguage(rawName.toLowerCase(), language);
   }
 
   static AudioLanguage? detectAudioLanguage(String rawName) {
@@ -221,7 +273,7 @@ class TorrentFilterMatcher {
       return AudioLanguage.multiAudio;
     }
     for (final language in _languageDetectionOrder) {
-      if (_languagePatterns[language]!.hasMatch(lower)) return language;
+      if (_hasLanguage(lower, language)) return language;
     }
     return null;
   }
