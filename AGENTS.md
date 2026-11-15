@@ -282,3 +282,24 @@ blank lines, for handwritten application code in Dart and native languages.
   application builds/tests are unnecessary unless execution is affected.
 - Report what changed, checks actually performed, remaining failures, and material
   limitations. Preserve unrelated user work and keep diffs reviewable.
+
+## Command output
+
+Keep tool output short so it doesn't crowd out the task context. Write any raw
+log you might need to disk, and read it only when the summary isn't enough.
+
+- Flutter tests: `dev/tool/test_summary.sh <paths>` prints result counts plus
+  each failure, and the path of the full JSON report. For plain text, use
+  `flutter test --no-pub -r failures-only <paths>`. Full-suite comparisons still
+  use `dev/tool/test_baseline.py`.
+- Analyzer: `flutter analyze --no-pub`. Keep info-level diagnostics; baseline
+  comparisons depend on them.
+- Gradle (run from `android/`): `set -o pipefail; ./gradlew <task> -q --console=plain --warning-mode=none 2>&1 | tail -60`.
+- Xcode: `set -o pipefail && xcodebuild … 2>&1 | xcbeautify -qq --is-ci --disable-logging`.
+- Do not read or search `build/`, `.dart_tool/` or `Pods/`.
+
+## Compact instructions
+
+When compacting, keep the task and its agreed scope, the files changed, the
+check commands with their results, any failures not yet explained, and the
+user's decisions. Drop raw tool output and file dumps.
