@@ -1,7 +1,6 @@
 import 'package:flutter/widgets.dart';
 
 import '../../../models/mdblist_list_choice.dart';
-import '../../../models/media_server.dart';
 import '../../../models/metadata_preferences.dart';
 import '../../../models/stremio_addon.dart';
 import '../../../screens/media_server_library_panel.dart';
@@ -79,9 +78,7 @@ Widget buildDiscoverPanels({
     selected: selected,
     mediaServer: (selected) => MediaServerLibraryPanel(
       key: ValueKey(selected),
-      kind: selected == DiscoverSources.jellyfin
-          ? MediaServerKind.jellyfin
-          : MediaServerKind.emby,
+      kind: DiscoverSources.mediaServerKind(selected)!,
       leading: source(16), // MediaServerLibraryPanel pads 16
       isTelevision: isTelevision,
     ),

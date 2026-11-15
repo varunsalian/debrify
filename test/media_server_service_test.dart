@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:debrify/features/media_servers/data/media_server_connection_store.dart';
 import 'package:debrify/features/sources/application/source_candidate_ranking.dart';
 import 'package:debrify/features/sources/data/source_movie_fetcher.dart';
 import 'package:debrify/features/sources/data/source_series_fetcher.dart';
@@ -267,7 +268,7 @@ void main() {
   Future<ConnectionResource> connect([
     MediaServerKind kind = MediaServerKind.jellyfin,
   ]) async {
-    await MediaServerService.connect(
+    await MediaServerConnectionStore.connect(
       kind: kind,
       label: 'My ${kind.label}',
       baseUrl: 'https://server.example/base/',
@@ -285,7 +286,7 @@ void main() {
     return (await registry.getResource(resource.id))!;
   }
 
-  for (final kind in MediaServerKind.values) {
+  for (final kind in const [MediaServerKind.jellyfin, MediaServerKind.emby]) {
     test(
       '${kind.label} exact library recording plays without catalog binding',
       () async {
@@ -374,7 +375,7 @@ void main() {
     },
   );
 
-  for (final kind in MediaServerKind.values) {
+  for (final kind in const [MediaServerKind.jellyfin, MediaServerKind.emby]) {
     for (final movie in [true, false]) {
       test(
         '${kind.label} played history preserves a partial ${movie ? 'movie' : 'episode'} rewatch',
@@ -857,7 +858,7 @@ void main() {
           );
           expect(await MediaServerWatchSync.enabled(), false);
         case 'disconnect':
-          await MediaServerService.remove(resource);
+          await MediaServerConnectionStore.remove(resource);
       }
       controller.observe(
         source,
@@ -873,7 +874,10 @@ void main() {
   test(
     'both servers store encrypted tokens and expose multiple direct versions',
     () async {
-      for (final kind in MediaServerKind.values) {
+      for (final kind in const [
+        MediaServerKind.jellyfin,
+        MediaServerKind.emby,
+      ]) {
         await connect(kind);
       }
       final connections = await MediaServerService.connections();
@@ -1105,7 +1109,9 @@ void main() {
       await ProviderAcceptedActions.downloadDirectStream(pageContext, source);
       await tester.pump();
       expect(
-        find.text('Jellyfin and Emby downloads are not supported yet.'),
+        find.text(
+          'Media server downloads (Jellyfin, Emby, Plex) are not supported yet.',
+        ),
         findsOneWidget,
       );
       expect(requestCount, requestsBefore);
@@ -1462,7 +1468,7 @@ void main() {
               feature: ProfileFeature.cloud,
             );
           case 'reconnected':
-            await MediaServerService.connect(
+            await MediaServerConnectionStore.connect(
               kind: MediaServerKind.jellyfin,
               label: resource.label,
               baseUrl: 'https://server.example/base/',
@@ -1573,7 +1579,7 @@ void main() {
     final resource = await connect();
     final source = (await search()).first;
     final pin = MediaServerService.bindingFor(source)!;
-    await MediaServerService.remove(resource);
+    await MediaServerConnectionStore.remove(resource);
     await expectLater(
       DirectSourceAuthorization.authorize(source),
       throwsStateError,
@@ -1617,7 +1623,7 @@ void main() {
       );
       expect(await search(), hasLength(2));
       await expectLater(
-        MediaServerService.connect(
+        MediaServerConnectionStore.connect(
           kind: MediaServerKind.jellyfin,
           label: 'Hijack',
           baseUrl: 'https://server.example',

@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:debrify/features/media_servers/data/media_server_connection_store.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/models/media_server.dart';
 import 'package:debrify/models/profiles/profile_policy.dart';
-import 'package:debrify/services/media_server_service.dart';
 import 'package:debrify/services/profiles/profile_bootstrap.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
@@ -475,7 +475,7 @@ class StremioTvFixture {
     await RealDebridStorage.saveApiKey('original-rd');
     await RealDebridStorage.setRealDebridIntegrationEnabled(true);
     await StremioTvStorage.setStremioTvDebridProvider('realdebrid');
-    await MediaServerService.connect(
+    await MediaServerConnectionStore.connect(
       kind: MediaServerKind.jellyfin,
       label: 'Original media',
       baseUrl: 'https://media-original.test/',

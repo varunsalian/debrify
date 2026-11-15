@@ -48,6 +48,7 @@ void main() {
           'simkl',
           'jellyfin',
           'emby',
+          'plex',
           ...optional,
           'a:z',
           'a:a',
@@ -57,7 +58,7 @@ void main() {
           picker.options
               .map((option) => option.label)
               .toList()
-              .sublist(5 + optional.length),
+              .sublist(6 + optional.length),
           ['My library', 'Alpha'],
         );
       }

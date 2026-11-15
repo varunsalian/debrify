@@ -110,6 +110,7 @@ class DiscoverSourceController extends Notifier<DiscoverSourceState> {
       DiscoverSources.tmdb,
       DiscoverSources.jellyfin,
       DiscoverSources.emby,
+      DiscoverSources.plex,
       if (mdblistEnabled) DiscoverSources.mdblist,
     }.contains(landing);
     if (fixed && ownsLanding()) {

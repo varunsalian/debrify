@@ -1,0 +1,181 @@
+{
+ "MediaContainer": {
+  "Metadata": [
+   {
+    "Guid": [
+     {
+      "id": "imdb://tt1254207"
+     },
+     {
+      "id": "tmdb://10378"
+     },
+     {
+      "id": "tvdb://12352"
+     }
+    ],
+    "Media": [
+     {
+      "Part": [
+       {
+        "container": "mkv",
+        "duration": 6023,
+        "file": "/data/redacted.mkv",
+        "id": 1,
+        "key": "/library/parts/1/1794750177/file.mkv",
+        "size": 222259,
+        "videoProfile": "high 4:4:4 predictive"
+       }
+      ],
+      "aspectRatio": 1.78,
+      "audioChannels": 1,
+      "audioCodec": "aac",
+      "bitrate": 295,
+      "container": "mkv",
+      "duration": 6023,
+      "height": 720,
+      "id": 1,
+      "videoCodec": "h264",
+      "videoFrameRate": "24p",
+      "videoProfile": "high 4:4:4 predictive",
+      "videoResolution": "720",
+      "width": 1280
+     }
+    ],
+    "addedAt": 1794750177,
+    "duration": 6023,
+    "guid": "plex://movie/5d7768352e80df001ebde4c9",
+    "hasPremiumPrimaryExtra": "1",
+    "key": "/library/metadata/1",
+    "ratingKey": "1",
+    "slug": "big-buck-bunny-2008",
+    "thumb": "/library/metadata/1/thumb/1794750222",
+    "title": "Big Buck Bunny",
+    "type": "movie",
+    "updatedAt": 1794750222,
+    "year": 2008
+   },
+   {
+    "Guid": [
+     {
+      "id": "imdb://tt0063350"
+     },
+     {
+      "id": "tmdb://10331"
+     },
+     {
+      "id": "tvdb://1831"
+     }
+    ],
+    "Media": [
+     {
+      "Part": [
+       {
+        "container": "mkv",
+        "duration": 6023,
+        "file": "/data/redacted.mkv",
+        "id": 2,
+        "key": "/library/parts/2/1794750176/file.mkv",
+        "size": 240555,
+        "videoProfile": "high 4:4:4 predictive"
+       }
+      ],
+      "aspectRatio": 1.78,
+      "audioChannels": 1,
+      "audioCodec": "aac",
+      "bitrate": 320,
+      "container": "mkv",
+      "duration": 6023,
+      "height": 1080,
+      "id": 2,
+      "videoCodec": "h264",
+      "videoFrameRate": "24p",
+      "videoProfile": "high 4:4:4 predictive",
+      "videoResolution": "1080",
+      "width": 1920
+     }
+    ],
+    "addedAt": 1794750176,
+    "contentRatingAge": 17,
+    "duration": 6023,
+    "guid": "plex://movie/5d77683585719b001f3a3946",
+    "hasPremiumPrimaryExtra": "1",
+    "key": "/library/metadata/2",
+    "ratingKey": "2",
+    "slug": "night-of-the-living-dead-1968",
+    "thumb": "/library/metadata/2/thumb/1794750225",
+    "title": "Night of the Living Dead",
+    "type": "movie",
+    "updatedAt": 1794750225,
+    "year": 1968
+   },
+   {
+    "Guid": [
+     {
+      "id": "imdb://tt0013442"
+     },
+     {
+      "id": "tmdb://653"
+     },
+     {
+      "id": "tvdb://5097"
+     }
+    ],
+    "Media": [
+     {
+      "Part": [
+       {
+        "container": "mkv",
+        "duration": 600023,
+        "file": "/data/redacted.mkv",
+        "id": 23,
+        "key": "/library/parts/23/1794750322/file.mkv",
+        "size": 5340304,
+        "videoProfile": "high 4:4:4 predictive"
+       }
+      ],
+      "aspectRatio": 1.78,
+      "audioChannels": 1,
+      "audioCodec": "aac",
+      "bitrate": 71,
+      "container": "mkv",
+      "duration": 600023,
+      "height": 360,
+      "id": 23,
+      "videoCodec": "h264",
+      "videoProfile": "high 4:4:4 predictive",
+      "videoResolution": "sd",
+      "width": 640
+     }
+    ],
+    "addedAt": 1794750322,
+    "contentRatingAge": 13,
+    "duration": 600023,
+    "guid": "plex://movie/5d7768278718ba001e311d5d",
+    "hasPremiumPrimaryExtra": "1",
+    "key": "/library/metadata/16",
+    "lastViewedAt": 1794750454,
+    "originalTitle": "Nosferatu, eine Symphonie des Grauens",
+    "ratingKey": "16",
+    "slug": "nosferatu-1922",
+    "thumb": "/library/metadata/16/thumb/1794750325",
+    "title": "Nosferatu",
+    "type": "movie",
+    "updatedAt": 1794750325,
+    "viewOffset": 91000,
+    "year": 1922
+   }
+  ],
+  "allowSync": true,
+  "identifier": "com.plexapp.plugins.library",
+  "librarySectionID": 1,
+  "librarySectionTitle": "Movies",
+  "mediaTagPrefix": "/system/bundle/media/flags/",
+  "mediaTagVersion": 1792751779,
+  "size": 3,
+  "thumb": "/:/resources/movie.png",
+  "title1": "Movies",
+  "title2": "All Movies",
+  "viewGroup": "movie",
+  "viewMode": 65592
+ }
+}

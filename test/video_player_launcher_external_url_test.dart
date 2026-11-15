@@ -11,7 +11,12 @@ void main() {
   test(
     'media-server authentication forces internal playback for any default',
     () {
-      for (final key in ['X-Emby-Token', 'x-emby-token']) {
+      for (final key in [
+        'X-Emby-Token',
+        'x-emby-token',
+        'X-Plex-Token',
+        'x-plex-token',
+      ]) {
         final args = SourcePlayerArgs.playerArgsForTesting(
           null,
           httpHeaders: {key: 'private-token'},

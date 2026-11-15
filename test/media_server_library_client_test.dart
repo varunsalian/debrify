@@ -7,7 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
-  for (final kind in MediaServerKind.values) {
+  for (final kind in const [MediaServerKind.jellyfin, MediaServerKind.emby]) {
     final account = MediaServerAccount(
       kind: kind,
       baseUrl: 'https://server.example/base/',

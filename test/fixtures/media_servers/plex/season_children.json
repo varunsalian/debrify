@@ -1,0 +1,138 @@
+{
+ "MediaContainer": {
+  "Metadata": [
+   {
+    "Media": [
+     {
+      "Part": [
+       {
+        "container": "mkv",
+        "duration": 6023,
+        "file": "/data/redacted.mkv",
+        "id": 3,
+        "key": "/library/parts/3/1794750177/file.mkv",
+        "size": 240555,
+        "videoProfile": "high 4:4:4 predictive"
+       }
+      ],
+      "aspectRatio": 1.78,
+      "audioChannels": 1,
+      "audioCodec": "aac",
+      "bitrate": 320,
+      "container": "mkv",
+      "duration": 6023,
+      "height": 1080,
+      "id": 3,
+      "videoCodec": "h264",
+      "videoFrameRate": "24p",
+      "videoProfile": "high 4:4:4 predictive",
+      "videoResolution": "1080",
+      "width": 1920
+     }
+    ],
+    "addedAt": 1794750177,
+    "duration": 6023,
+    "grandparentArt": "/library/metadata/3/art/1794750227",
+    "grandparentGuid": "plex://show/5d9c083402391c001f583d09",
+    "grandparentKey": "/library/metadata/3",
+    "grandparentRatingKey": "3",
+    "grandparentSlug": "breaking-bad",
+    "grandparentTheme": "/library/metadata/3/theme/1794750227",
+    "grandparentThumb": "/library/metadata/3/thumb/1794750227",
+    "grandparentTitle": "Breaking Bad",
+    "guid": "plex://episode/5d9c0fc37b5c2e001e6a7045",
+    "index": 1,
+    "key": "/library/metadata/5",
+    "parentGuid": "plex://season/602e61de66dfdb002c096b16",
+    "parentIndex": 1,
+    "parentKey": "/library/metadata/4",
+    "parentRatingKey": "4",
+    "parentThumb": "/library/metadata/4/thumb/1794750227",
+    "parentTitle": "Season 1",
+    "ratingKey": "5",
+    "thumb": "/library/metadata/5/thumb/1794750227",
+    "title": "Pilot",
+    "type": "episode",
+    "updatedAt": 1794750227,
+    "year": 2008
+   },
+   {
+    "Media": [
+     {
+      "Part": [
+       {
+        "container": "mkv",
+        "duration": 6023,
+        "file": "/data/redacted.mkv",
+        "id": 4,
+        "key": "/library/parts/4/1794750177/file.mkv",
+        "size": 222259,
+        "videoProfile": "high 4:4:4 predictive"
+       }
+      ],
+      "aspectRatio": 1.78,
+      "audioChannels": 1,
+      "audioCodec": "aac",
+      "bitrate": 295,
+      "container": "mkv",
+      "duration": 6023,
+      "height": 720,
+      "id": 4,
+      "videoCodec": "h264",
+      "videoFrameRate": "24p",
+      "videoProfile": "high 4:4:4 predictive",
+      "videoResolution": "720",
+      "width": 1280
+     }
+    ],
+    "addedAt": 1794750177,
+    "duration": 6023,
+    "grandparentArt": "/library/metadata/3/art/1794750227",
+    "grandparentGuid": "plex://show/5d9c083402391c001f583d09",
+    "grandparentKey": "/library/metadata/3",
+    "grandparentRatingKey": "3",
+    "grandparentSlug": "breaking-bad",
+    "grandparentTheme": "/library/metadata/3/theme/1794750227",
+    "grandparentThumb": "/library/metadata/3/thumb/1794750227",
+    "grandparentTitle": "Breaking Bad",
+    "guid": "plex://episode/5d9c0fc37b5c2e001e6a703e",
+    "index": 2,
+    "key": "/library/metadata/6",
+    "parentGuid": "plex://season/602e61de66dfdb002c096b16",
+    "parentIndex": 1,
+    "parentKey": "/library/metadata/4",
+    "parentRatingKey": "4",
+    "parentThumb": "/library/metadata/4/thumb/1794750227",
+    "parentTitle": "Season 1",
+    "ratingKey": "6",
+    "thumb": "/library/metadata/6/thumb/1794750227",
+    "title": "Cat's in the Bag...",
+    "type": "episode",
+    "updatedAt": 1794750227,
+    "year": 2008
+   }
+  ],
+  "allowSync": true,
+  "grandparentContentRating": "TV-MA",
+  "grandparentRatingKey": 3,
+  "grandparentStudio": "Sony Pictures Television",
+  "grandparentTheme": "/library/metadata/3/theme/1794750227",
+  "grandparentThumb": "/library/metadata/3/thumb/1794750227",
+  "grandparentTitle": "Breaking Bad",
+  "identifier": "com.plexapp.plugins.library",
+  "key": "4",
+  "librarySectionID": 2,
+  "librarySectionTitle": "TV Shows",
+  "mediaTagPrefix": "/system/bundle/media/flags/",
+  "mediaTagVersion": 1792751779,
+  "nocache": true,
+  "parentIndex": 1,
+  "parentTitle": "",
+  "size": 2,
+  "thumb": "/library/metadata/4/thumb/1794750227",
+  "title1": "Breaking Bad",
+  "title2": "Season 1",
+  "viewGroup": "episode",
+  "viewMode": 65592
+ }
+}

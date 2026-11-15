@@ -70,6 +70,7 @@ extension SettingsIndexSlice02 on SettingsIndexBuilder {
       conn(deps.mediaServersInfo(), const [
         'jellyfin',
         'emby',
+        'plex',
         'media server',
         'nas',
         'server',

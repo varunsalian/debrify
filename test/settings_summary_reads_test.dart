@@ -254,7 +254,7 @@ void main() {
       // The desktop/Spotlight grid has its own provider list. Supplying the
       // connection to ConnectionsSummary alone must not hide it here.
       expect(
-        infos.where((info) => info.title == 'Jellyfin & Emby'),
+        infos.where((info) => info.title == 'Jellyfin, Emby & Plex'),
         hasLength(1),
       );
       final torbox = infos.singleWhere((info) => info.title == 'Torbox');

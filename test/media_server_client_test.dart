@@ -49,7 +49,7 @@ void main() {
     },
   );
 
-  for (final kind in MediaServerKind.values) {
+  for (final kind in const [MediaServerKind.jellyfin, MediaServerKind.emby]) {
     test(
       '${kind.label} API and playback headers support modern and legacy auth',
       () {
@@ -459,9 +459,9 @@ void main() {
             ],
           });
         }
-          final start = int.parse(request.url.queryParameters['StartIndex']!);
-          return jsonResponse({
-            'TotalRecordCount': 1100,
+        final start = int.parse(request.url.queryParameters['StartIndex']!);
+        return jsonResponse({
+          'TotalRecordCount': 1100,
           'Items': List.generate(
             start == 1000 ? 100 : 500,
             (i) => {

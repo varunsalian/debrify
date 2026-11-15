@@ -1,0 +1,126 @@
+{
+ "MediaContainer": {
+  "Metadata": [
+   {
+    "CommonSenseMedia": [
+     {
+      "AgeRating": [
+       {
+        "age": 13,
+        "type": "official"
+       }
+      ],
+      "id": 97,
+      "oneLiner": "Few scares but strong visuals in silent horror classic."
+     }
+    ],
+    "Guid": [
+     {
+      "id": "imdb://tt0013442"
+     },
+     {
+      "id": "tmdb://653"
+     },
+     {
+      "id": "tvdb://5097"
+     }
+    ],
+    "Media": [
+     {
+      "Part": [
+       {
+        "Stream": [
+         {
+          "bitDepth": 8,
+          "bitrate": 71,
+          "chromaLocation": "left",
+          "chromaSubsampling": "4:4:4",
+          "codec": "h264",
+          "codedHeight": 368,
+          "codedWidth": 640,
+          "colorRange": "tv",
+          "displayTitle": "SD",
+          "extendedDisplayTitle": "SD (H.264 High 4:4:4 Predictive)",
+          "frameRate": 1.0,
+          "hasScalingMatrix": false,
+          "height": 360,
+          "id": 45,
+          "index": 0,
+          "language": "English",
+          "languageCode": "eng",
+          "languageTag": "en",
+          "level": 22,
+          "profile": "high 4:4:4 predictive",
+          "refFrames": 1,
+          "scanType": "progressive",
+          "streamType": 1,
+          "width": 640
+         },
+         {
+          "channels": 1,
+          "codec": "aac",
+          "displayTitle": "English (AAC Mono)",
+          "extendedDisplayTitle": "English (AAC Mono)",
+          "id": 46,
+          "index": 1,
+          "language": "English",
+          "languageCode": "eng",
+          "languageTag": "en",
+          "samplingRate": 44100,
+          "selected": true,
+          "streamType": 2
+         }
+        ],
+        "container": "mkv",
+        "duration": 600023,
+        "file": "/data/redacted.mkv",
+        "id": 23,
+        "key": "/library/parts/23/1794750322/file.mkv",
+        "size": 5340304,
+        "videoProfile": "high 4:4:4 predictive"
+       }
+      ],
+      "aspectRatio": 1.78,
+      "audioChannels": 1,
+      "audioCodec": "aac",
+      "bitrate": 71,
+      "container": "mkv",
+      "duration": 600023,
+      "height": 360,
+      "id": 23,
+      "videoCodec": "h264",
+      "videoProfile": "high 4:4:4 predictive",
+      "videoResolution": "sd",
+      "width": 640
+     }
+    ],
+    "addedAt": 1794750322,
+    "contentRatingAge": 13,
+    "duration": 600023,
+    "guid": "plex://movie/5d7768278718ba001e311d5d",
+    "hasPremiumPrimaryExtra": "1",
+    "key": "/library/metadata/16",
+    "lastViewedAt": 1794750454,
+    "librarySectionID": 1,
+    "librarySectionKey": "/library/sections/1",
+    "librarySectionTitle": "Movies",
+    "originalTitle": "Nosferatu, eine Symphonie des Grauens",
+    "ratingKey": "16",
+    "slug": "nosferatu-1922",
+    "thumb": "/library/metadata/16/thumb/1794750325",
+    "title": "Nosferatu",
+    "type": "movie",
+    "updatedAt": 1794750325,
+    "viewOffset": 91000,
+    "year": 1922
+   }
+  ],
+  "allowSync": true,
+  "identifier": "com.plexapp.plugins.library",
+  "librarySectionID": 1,
+  "librarySectionTitle": "Movies",
+  "mediaTagPrefix": "/system/bundle/media/flags/",
+  "mediaTagVersion": 1792751779,
+  "size": 1
+ }
+}

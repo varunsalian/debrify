@@ -144,7 +144,7 @@ void main() {
         realDebrid: connection('Real Debrid'), torbox: connection('Torbox'),
         premiumize: connection('Premiumize'), allDebrid: connection('AllDebrid'),
         pikpak: connection('PikPak'), webDav: connection('WebDAV'),
-        mediaServers: connection('Jellyfin & Emby'),
+        mediaServers: connection('Jellyfin, Emby & Plex'),
         indexerManagers: connection('Indexer Managers'), iptv: connection('IPTV'),
         tracking: connection('Tracking'), trakt: connection('Trakt'), simkl: connection('Simkl'),
       ),

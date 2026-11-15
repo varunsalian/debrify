@@ -1,0 +1,62 @@
+{
+ "MediaContainer": {
+  "SearchResult": [
+   {
+    "SearchResult": [
+     {
+      "guid": "plex://season/602e61dd66dfdb002c096afd",
+      "index": 0,
+      "lifespanEnded": false,
+      "name": "Specials",
+      "type": "season"
+     },
+     {
+      "guid": "plex://season/602e61de66dfdb002c096b16",
+      "index": 1,
+      "lifespanEnded": false,
+      "name": "Season 1",
+      "type": "season"
+     },
+     {
+      "guid": "plex://season/602e61df66dfdb002c096b48",
+      "index": 2,
+      "lifespanEnded": false,
+      "name": "Season 2",
+      "type": "season"
+     },
+     {
+      "guid": "plex://season/602e61e266dfdb002c096ba3",
+      "index": 3,
+      "lifespanEnded": false,
+      "name": "Season 3",
+      "type": "season"
+     },
+     {
+      "guid": "plex://season/602e61e266dfdb002c096bd2",
+      "index": 4,
+      "lifespanEnded": false,
+      "name": "Season 4",
+      "type": "season"
+     },
+     {
+      "guid": "plex://season/602e61e366dfdb002c096c00",
+      "index": 5,
+      "lifespanEnded": false,
+      "name": "Season 5",
+      "type": "season"
+     }
+    ],
+    "guid": "plex://show/5d9c083402391c001f583d09",
+    "lifespanEnded": false,
+    "name": "Breaking Bad",
+    "thumb": "https://images.plex.tv/photo?height=336&width=225&minSize=1&upscale=1&url=https%3A%2F%2Fimage%2Etmdb%2Eorg%2Ft%2Fp%2Foriginal%2FanFx9aTOOYqgS3v7x3R84Kz67ly%2Ejpg",
+    "type": "show",
+    "year": 2008
+   }
+  ],
+  "identifier": "com.plexapp.plugins.library",
+  "mediaTagPrefix": "/system/bundle/media/flags/",
+  "mediaTagVersion": 1792751779,
+  "size": 1
+ }
+}

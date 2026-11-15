@@ -224,6 +224,7 @@ class MediaServerWatchSession {
         action: action,
         positionMs: value.positionMs,
         paused: value.paused,
+        durationMs: value.durationMs,
         authorize: authorize,
       );
 

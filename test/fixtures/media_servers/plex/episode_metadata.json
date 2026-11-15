@@ -1,0 +1,124 @@
+{
+ "MediaContainer": {
+  "Metadata": [
+   {
+    "Guid": [
+     {
+      "id": "imdb://tt0959621"
+     },
+     {
+      "id": "tmdb://62085"
+     },
+     {
+      "id": "tvdb://349232"
+     }
+    ],
+    "Media": [
+     {
+      "Part": [
+       {
+        "Stream": [
+         {
+          "bitDepth": 8,
+          "bitrate": 320,
+          "chromaLocation": "left",
+          "chromaSubsampling": "4:4:4",
+          "codec": "h264",
+          "codedHeight": 1088,
+          "codedWidth": 1920,
+          "colorRange": "tv",
+          "displayTitle": "1080p",
+          "extendedDisplayTitle": "1080p (H.264 High 4:4:4 Predictive)",
+          "frameRate": 24.0,
+          "hasScalingMatrix": false,
+          "height": 1080,
+          "id": 5,
+          "index": 0,
+          "language": "English",
+          "languageCode": "eng",
+          "languageTag": "en",
+          "level": 40,
+          "profile": "high 4:4:4 predictive",
+          "refFrames": 1,
+          "scanType": "progressive",
+          "streamType": 1,
+          "width": 1920
+         },
+         {
+          "channels": 1,
+          "codec": "aac",
+          "displayTitle": "English (AAC Mono)",
+          "extendedDisplayTitle": "English (AAC Mono)",
+          "id": 6,
+          "index": 1,
+          "language": "English",
+          "languageCode": "eng",
+          "languageTag": "en",
+          "samplingRate": 44100,
+          "selected": true,
+          "streamType": 2
+         }
+        ],
+        "container": "mkv",
+        "duration": 6023,
+        "file": "/data/redacted.mkv",
+        "id": 3,
+        "key": "/library/parts/3/1794750177/file.mkv",
+        "size": 240555,
+        "videoProfile": "high 4:4:4 predictive"
+       }
+      ],
+      "aspectRatio": 1.78,
+      "audioChannels": 1,
+      "audioCodec": "aac",
+      "bitrate": 320,
+      "container": "mkv",
+      "duration": 6023,
+      "height": 1080,
+      "id": 3,
+      "videoCodec": "h264",
+      "videoFrameRate": "24p",
+      "videoProfile": "high 4:4:4 predictive",
+      "videoResolution": "1080",
+      "width": 1920
+     }
+    ],
+    "addedAt": 1794750177,
+    "duration": 6023,
+    "grandparentArt": "/library/metadata/3/art/1794750227",
+    "grandparentGuid": "plex://show/5d9c083402391c001f583d09",
+    "grandparentKey": "/library/metadata/3",
+    "grandparentRatingKey": "3",
+    "grandparentSlug": "breaking-bad",
+    "grandparentTheme": "/library/metadata/3/theme/1794750227",
+    "grandparentThumb": "/library/metadata/3/thumb/1794750227",
+    "grandparentTitle": "Breaking Bad",
+    "guid": "plex://episode/5d9c0fc37b5c2e001e6a7045",
+    "index": 1,
+    "key": "/library/metadata/5",
+    "librarySectionID": 2,
+    "librarySectionKey": "/library/sections/2",
+    "librarySectionTitle": "TV Shows",
+    "parentGuid": "plex://season/602e61de66dfdb002c096b16",
+    "parentIndex": 1,
+    "parentKey": "/library/metadata/4",
+    "parentRatingKey": "4",
+    "parentThumb": "/library/metadata/4/thumb/1794750227",
+    "parentTitle": "Season 1",
+    "ratingKey": "5",
+    "thumb": "/library/metadata/5/thumb/1794750227",
+    "title": "Pilot",
+    "type": "episode",
+    "updatedAt": 1794750227,
+    "year": 2008
+   }
+  ],
+  "allowSync": true,
+  "identifier": "com.plexapp.plugins.library",
+  "librarySectionID": 2,
+  "librarySectionTitle": "TV Shows",
+  "mediaTagPrefix": "/system/bundle/media/flags/",
+  "mediaTagVersion": 1792751779,
+  "size": 1
+ }
+}

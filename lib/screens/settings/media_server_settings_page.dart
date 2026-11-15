@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../features/media_servers/data/media_server_connection_store.dart';
+import '../../features/media_servers/presentation/plex_sign_in_panel.dart';
 import '../../models/media_server.dart';
 import '../../models/profiles/connection_resource.dart';
 import '../../models/profiles/profile_policy.dart';
@@ -81,7 +83,7 @@ class _MediaServerSettingsPageState extends State<MediaServerSettingsPage> {
   Future<void> _test(ConnectionResource resource) async {
     setState(() => _busy = true);
     try {
-      await MediaServerService.test(resource);
+      await MediaServerConnectionStore.test(resource);
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -153,7 +155,10 @@ class _MediaServerSettingsPageState extends State<MediaServerSettingsPage> {
     }
     setState(() => _busy = true);
     try {
-      await MediaServerService.remove(resource, revokeBorrowers: borrowers > 0);
+      await MediaServerConnectionStore.remove(
+        resource,
+        revokeBorrowers: borrowers > 0,
+      );
       await _load();
     } catch (_) {
       if (mounted) {
@@ -172,7 +177,7 @@ class _MediaServerSettingsPageState extends State<MediaServerSettingsPage> {
 
   @override
   Widget build(BuildContext context) => SettingsPageScaffold(
-    title: 'Jellyfin & Emby',
+    title: 'Jellyfin, Emby & Plex',
     body: _loading
         ? const Center(child: CircularProgressIndicator())
         : ListView(
@@ -184,6 +189,10 @@ class _MediaServerSettingsPageState extends State<MediaServerSettingsPage> {
               const SizedBox(height: 12),
               const Text(
                 'Matching uses the server’s IMDb, TMDB or TVDB IDs and season/episode numbers. Missing IDs or different anime numbering may produce no match. Server transcoding is not included.',
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Plex servers are added by signing in at plex.tv/link. Debrify keeps the server’s access token, which for your own servers can act for your Plex account, encrypted on this device.',
               ),
               if (ProfileCollectionResourceFacade.active)
                 SettingsToggleTile(
@@ -272,6 +281,13 @@ class _MediaServerConnectPageState extends State<_MediaServerConnectPage> {
   final _user = TextEditingController();
   final _password = TextEditingController();
   MediaServerKind _kind = MediaServerKind.jellyfin;
+
+  /// Reconnecting a connection whose type is recorded.
+  bool get _declaredKind =>
+      widget.resource != null &&
+      MediaServerKind.values.any(
+        (kind) => kind.label == widget.resource!.publicConfig['accountLabel'],
+      );
   bool _busy = false;
   String? _error;
 
@@ -279,8 +295,10 @@ class _MediaServerConnectPageState extends State<_MediaServerConnectPage> {
   void initState() {
     super.initState();
     _label.text = widget.resource?.label ?? '';
-    if (widget.resource?.publicConfig['accountLabel'] == 'Emby') {
-      _kind = MediaServerKind.emby;
+    // Reconnect keeps the connection's declared kind.
+    final label = widget.resource?.publicConfig['accountLabel'];
+    for (final kind in MediaServerKind.values) {
+      if (kind.label == label) _kind = kind;
     }
   }
 
@@ -304,7 +322,7 @@ class _MediaServerConnectPageState extends State<_MediaServerConnectPage> {
       _error = null;
     });
     try {
-      await MediaServerService.connect(
+      await MediaServerConnectionStore.connect(
         kind: _kind,
         label: _label.text,
         baseUrl: _url.text,
@@ -339,9 +357,14 @@ class _MediaServerConnectPageState extends State<_MediaServerConnectPage> {
           decoration: const InputDecoration(labelText: 'Server type'),
           items: [
             for (final kind in MediaServerKind.values)
-              DropdownMenuItem(value: kind, child: Text(kind.label)),
+              // A connection of unknown type can only become Jellyfin/Emby.
+              if (widget.resource == null ||
+                  _declaredKind ||
+                  kind != MediaServerKind.plex)
+                DropdownMenuItem(value: kind, child: Text(kind.label)),
           ],
-          onChanged: _busy
+          // A reconnect keeps its declared server type.
+          onChanged: _busy || _declaredKind
               ? null
               : (kind) {
                   if (kind != null) setState(() => _kind = kind);
@@ -356,39 +379,53 @@ class _MediaServerConnectPageState extends State<_MediaServerConnectPage> {
           ),
           const SizedBox(height: 16),
         ],
-        TvTextField(
-          controller: _url,
-          enabled: !_busy,
-          labelText: 'Server URL',
-          hintText: 'https://media.example.com',
-          keyboardType: TextInputType.url,
-        ),
-        const SizedBox(height: 16),
-        TvTextField(controller: _user, enabled: !_busy, labelText: 'Username'),
-        const SizedBox(height: 16),
-        TvTextField(
-          controller: _password,
-          enabled: !_busy,
-          labelText: 'Password',
-          obscureText: true,
-        ),
-        const SizedBox(height: 16),
-        const Text(
-          'Use a server user with access to the libraries you want to play. HTTPS is recommended outside your home network. Only the sign-in token is saved, not your password.',
-        ),
-        if (_error != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 16),
-            child: Text(
-              _error!,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
+        if (_kind == MediaServerKind.plex)
+          PlexSignInPanel(
+            label: _label,
+            replaceId: widget.resource?.id,
+            onDone: () {
+              if (mounted) Navigator.pop(context);
+            },
+          )
+        else ...[
+          TvTextField(
+            controller: _url,
+            enabled: !_busy,
+            labelText: 'Server URL',
+            hintText: 'https://media.example.com',
+            keyboardType: TextInputType.url,
           ),
-        const SizedBox(height: 24),
-        FilledButton(
-          onPressed: _busy ? null : _connect,
-          child: Text(_busy ? 'Connecting…' : 'Connect'),
-        ),
+          const SizedBox(height: 16),
+          TvTextField(
+            controller: _user,
+            enabled: !_busy,
+            labelText: 'Username',
+          ),
+          const SizedBox(height: 16),
+          TvTextField(
+            controller: _password,
+            enabled: !_busy,
+            labelText: 'Password',
+            obscureText: true,
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Use a server user with access to the libraries you want to play. HTTPS is recommended outside your home network. Only the sign-in token is saved, not your password.',
+          ),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: Text(
+                _error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
+          const SizedBox(height: 24),
+          FilledButton(
+            onPressed: _busy ? null : _connect,
+            child: Text(_busy ? 'Connecting…' : 'Connect'),
+          ),
+        ],
       ],
     ),
   );

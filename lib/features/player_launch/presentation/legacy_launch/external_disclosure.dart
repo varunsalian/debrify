@@ -15,7 +15,11 @@ final class ExternalDisclosure {
         defaultPlayerMode == 'external' || (defaultPlayerMode == 'deovr' && Platform.isAndroid);
     final carriesAuthorization =
         args.httpHeaders?.keys.any(
-          (key) => key.toLowerCase() == 'authorization' || key.toLowerCase() == 'x-emby-token',
+          (key) => const {
+            'authorization',
+            'x-emby-token',
+            'x-plex-token',
+          }.contains(key.toLowerCase()),
         ) ??
         false;
     return wantsExternal && args.disableExternalPlayer && carriesAuthorization;

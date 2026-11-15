@@ -191,7 +191,6 @@
 836 lib/widgets/file_selection_dialog.dart
 833 lib/screens/settings/theme_tokens_page.dart
 # 2026-10-30 search sources: media-server search honours the profile's opt-out (+3).
-833 lib/services/media_server_service.dart
 829 lib/screens/settings/widgets/manual_order_list.dart
 829 lib/services/main_page_bridge.dart
 828 lib/services/webdav_sync/webdav_sync_circle_merge.dart

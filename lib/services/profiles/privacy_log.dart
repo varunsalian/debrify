@@ -47,6 +47,7 @@ abstract final class PrivacyLog {
     result = result.replaceAll(
       RegExp(
         r'\b(?:api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|'
+        r'x-(?:plex|emby)-token|'
         r'password|authorization|bearer|secret|payload|headers?|body)\b'
         r'\s*[:=]\s*[^,;\s)]+',
         caseSensitive: false,

@@ -94,7 +94,7 @@ class SettingsConnections {
     onTap: _deps.openPikPakSettings,
   );
   ConnectionInfo get mediaServersInfo => ConnectionInfo(
-    title: 'Jellyfin & Emby',
+    title: 'Jellyfin, Emby & Plex',
     connected:
         !_summaries.summaryFailures.contains('Media servers') &&
         _summaries.mediaServerCount > 0,

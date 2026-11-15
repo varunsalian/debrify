@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
@@ -12,6 +11,7 @@ import '../models/profiles/connection_resource.dart';
 import '../models/profiles/profile_policy.dart';
 import '../models/torrent.dart';
 import '../utils/torrent_filter_matcher.dart';
+import '../features/media_servers/data/media_server_stream_tags.dart';
 import 'media_server_client.dart';
 import 'diagnostic_log.dart';
 import 'profiles/connection_resource_service.dart';
@@ -28,6 +28,9 @@ import 'source_search_preferences.dart';
 class MediaServerService {
   @visibleForTesting
   static MediaServerClient Function() clientFactory = MediaServerClient.new;
+
+  /// A client from [clientFactory], for callers outside this file.
+  static MediaServerClient createClient() => clientFactory();
   static const types = {ConnectionResourceType.mediaServer};
   static final _tickets = Expando<Future<void> Function()>();
   static final _bindings = Expando<String>();
@@ -75,44 +78,6 @@ class MediaServerService {
   );
 
   static bool owns(Torrent source) => source.source.startsWith('mediaserver:');
-
-  // Map cropped originals onto the tiers understood by the shared filters.
-  // Both dimensions matter: a 1920x800 movie is still a Full HD source.
-  static String _quality(Map video) {
-    final width = (video['Width'] as num?)?.toInt() ?? 0;
-    final height = (video['Height'] as num?)?.toInt() ?? 0;
-    if (width <= 0 && height <= 0) return 'Original';
-    if (width > 2560 || height > 1440) return '2160p';
-    if (width > 1280 || height > 962) return '1080p';
-    if (width > 1024 || height > 576) return '720p';
-    return height > 480 ? '576p' : '480p';
-  }
-
-  static List<String> _dynamicRangeTags(Map video) {
-    final range = [
-      video['VideoRangeType'],
-      video['VideoRange'],
-      video['ExtendedVideoType'],
-    ].whereType<String>().join(' ').toUpperCase();
-    final transfer = (video['ColorTransfer'] as String? ?? '').toLowerCase();
-    final tags = <String>[];
-    if (range.contains('DOVI') ||
-        range.contains('DOLBY') ||
-        RegExp(r'\bDV\b').hasMatch(range) ||
-        ((video['DvProfile'] as num?) ?? 0) > 0) {
-      tags.add('DV');
-    }
-    if (range.contains('HDR10PLUS') ||
-        range.contains('HDR10+') ||
-        video['Hdr10PlusPresentFlag'] == true) {
-      tags.add('HDR10+');
-    } else if (range.contains('HDR10') || transfer == 'smpte2084') {
-      tags.add('HDR10');
-    }
-    if (range.contains('HLG') || transfer == 'arib-std-b67') tags.add('HLG');
-    if (tags.isEmpty && range.contains('HDR')) tags.add('HDR');
-    return tags;
-  }
 
   static Future<void> authorize(Torrent source) async {
     if (!owns(source)) return;
@@ -206,138 +171,6 @@ class MediaServerService {
     return session;
   }
 
-  static Future<void> connect({
-    required MediaServerKind kind,
-    required String label,
-    required String baseUrl,
-    required String username,
-    required String password,
-    String? replaceId,
-  }) async {
-    if (!ProfileCollectionResourceFacade.active) {
-      throw const MediaServerException(
-        'Media servers require an active Debrify profile.',
-      );
-    }
-    final context = await ProfileAuthorizationContext.capture(
-      ProfileBootstrap.registry,
-    );
-    final profile = await context.validate(ProfileBootstrap.registry);
-    if (!profile.allows(ProfileFeature.manageConnections) ||
-        !profile.allows(ProfileFeature.cloud)) {
-      throw const MediaServerException(
-        'This profile cannot manage media server connections.',
-      );
-    }
-    Future<void> check() async {
-      await context.validate(ProfileBootstrap.registry);
-    }
-
-    if (replaceId != null) {
-      final existing = await _resources.authorize(
-        context: context,
-        resourceId: replaceId,
-        permission: ResourcePermission.manage,
-        feature: ProfileFeature.manageConnections,
-      );
-      if (existing.type != ConnectionResourceType.mediaServer) {
-        throw const MediaServerException('Invalid media server connection.');
-      }
-    }
-
-    final client = clientFactory();
-    try {
-      final account = await client.login(
-        kind: kind,
-        baseUrl: baseUrl,
-        username: username,
-        password: password,
-        deviceId: List.generate(
-          24,
-          (_) => Random.secure().nextInt(256).toRadixString(16).padLeft(2, '0'),
-        ).join(),
-        authorize: check,
-      );
-      await client.testConnection(account, authorize: check);
-      await check();
-      if (replaceId != null) {
-        final existing = await _resources.authorize(
-          context: context,
-          resourceId: replaceId,
-          permission: ResourcePermission.manage,
-          feature: ProfileFeature.manageConnections,
-        );
-        if (existing.type != ConnectionResourceType.mediaServer) {
-          throw const MediaServerException('Invalid media server connection.');
-        }
-        await _resources.updateSecret(
-          context: context,
-          resourceId: replaceId,
-          secretConfig: account.toJson(),
-        );
-      } else {
-        await _resources.create(
-          context: context,
-          type: ConnectionResourceType.mediaServer,
-          label: label.trim().isEmpty ? kind.label : label.trim(),
-          publicConfig: {'accountLabel': kind.label},
-          secretConfig: account.toJson(),
-        );
-      }
-    } finally {
-      client.close();
-    }
-  }
-
-  static Future<void> test(ConnectionResource resource) async {
-    final context = await ProfileAuthorizationContext.capture(
-      ProfileBootstrap.registry,
-    );
-    final capability = await ProfileAsyncAuthorization.capture(
-      ProfileFeature.cloud,
-      resourceId: resource.id,
-      resourceAuthorizationRevision: resource.authorizationRevision,
-    );
-    final secret = await _resources.resolveSecretForUse(
-      context: context,
-      resourceId: resource.id,
-      feature: ProfileFeature.cloud,
-    );
-    final client = clientFactory();
-    try {
-      await client.testConnection(
-        MediaServerAccount.fromJson(secret),
-        authorize: () async {
-          await capability?.runIfCurrent(() async {});
-        },
-      );
-    } finally {
-      client.close();
-    }
-  }
-
-  static Future<void> remove(
-    ConnectionResource resource, {
-    bool revokeBorrowers = false,
-  }) async {
-    final registry = ProfileBootstrap.registry;
-    final context = await ProfileAuthorizationContext.capture(registry);
-    if (resource.ownerProfileId != context.profileId) {
-      await registry.detachBorrowedResource(
-        profileId: context.profileId,
-        authorizationRevision: context.authorizationRevision,
-        resourceId: resource.id,
-        expectedResourceAuthorizationRevision: resource.authorizationRevision,
-      );
-    } else {
-      // Shared-resource deletion follows the existing explicit-impact guard.
-      await ProfileCollectionResourceFacade.deleteOwned(
-        resourceId: resource.id,
-        revokeBorrowers: revokeBorrowers,
-      );
-    }
-  }
-
   static List<Torrent> _librarySources({
     required MediaServerAccount account,
     required String resourceId,
@@ -365,8 +198,8 @@ class MediaServerService {
           : video.first;
       final codec = videoStream['Codec'];
       final title = item['Name'] as String? ?? 'Untitled';
-      final quality = _quality(videoStream);
-      final rangeTags = _dynamicRangeTags(videoStream);
+      final quality = MediaServerStreamTags.quality(videoStream);
+      final rangeTags = MediaServerStreamTags.dynamicRange(videoStream);
       final audioLanguages = (media['MediaStreams'] as List? ?? [])
           .whereType<Map>()
           .where(
@@ -396,6 +229,7 @@ class MediaServerService {
         if (codec is String) codec.toUpperCase(),
         if (media['Container'] is String)
           (media['Container'] as String).toUpperCase(),
+        if (account.usesRelay) 'Relay (limited speed)',
       ].join(' · ');
       final torrent = Torrent(
         rowid: 0,
@@ -548,7 +382,20 @@ class MediaServerService {
             }
           }
 
-          final account = MediaServerAccount.fromJson(record);
+          // An id no server can match needs no address lookup.
+          final stored = MediaServerAccount.fromJson(record);
+          final account = !MediaServerClient.canMatch(id)
+              ? stored
+              : await client.resolve(
+                  stored,
+                  authorize: check,
+                  cacheScope: (
+                    scope,
+                    resourceId,
+                    record['_connectionResourceRevision'],
+                  ),
+                  deadline: deadline,
+                );
           var lookupIncomplete = false;
           final items = await client.findItems(
             account,
@@ -712,11 +559,24 @@ class MediaServerLibrarySession implements MediaServerLibraryAccess {
     }
   });
 
-  Future<T> _withClient<T>(Future<T> Function(MediaServerClient) action) async {
+  /// Resolves the address on every call (cached), so Retry recovers after a
+  /// network change.
+  Future<T> _withClient<T>(
+    Future<T> Function(MediaServerClient, MediaServerAccount) action,
+  ) async {
     await authorize();
     final client = MediaServerService.clientFactory();
     try {
-      final result = await action(client);
+      final account = await client.resolve(
+        _account,
+        authorize: authorize,
+        cacheScope: (
+          _capability.authorization.profileId,
+          resource.id,
+          resource.authorizationRevision,
+        ),
+      );
+      final result = await action(client, account);
       await authorize();
       return result;
     } finally {
@@ -734,8 +594,8 @@ class MediaServerLibrarySession implements MediaServerLibraryAccess {
     String mode = 'browse',
     bool episodeOrder = false,
   }) => _withClient(
-    (client) => client.library(
-      _account,
+    (client, account) => client.library(
+      account,
       parentId: parentId,
       views: views,
       offset: offset,
@@ -749,21 +609,22 @@ class MediaServerLibrarySession implements MediaServerLibraryAccess {
 
   @override
   Future<MediaServerLibraryItem> item(String id) => _withClient(
-    (client) => client.libraryItem(_account, id, authorize: authorize),
+    (client, account) => client.libraryItem(account, id, authorize: authorize),
   );
 
   @override
   Future<Uint8List?> image(String id) => _withClient(
-    (client) => client.libraryImage(_account, id, authorize: authorize),
+    (client, account) => client.libraryImage(account, id, authorize: authorize),
   );
 
   @override
   Future<List<Torrent>> sources(MediaServerLibraryItem item) => _withClient((
     client,
+    account,
   ) async {
     // Refresh the exact item before playback; never trust a stale browse row.
     final fresh = await client.libraryItem(
-      _account,
+      account,
       item.id,
       authorize: authorize,
     );
@@ -773,19 +634,19 @@ class MediaServerLibrarySession implements MediaServerLibraryAccess {
       );
     }
     final media = await client.mediaSources(
-      _account,
+      account,
       fresh.id,
       authorize: authorize,
     );
     final sources = MediaServerService._librarySources(
-      account: _account,
+      account: account,
       resourceId: resource.id,
       name: resource.label,
       item: fresh.data,
       sources: media,
       id: fresh.progressId(
         sha256
-            .convert(utf8.encode('${_account.serverId}:${_account.userId}'))
+            .convert(utf8.encode('${account.serverId}:${account.userId}'))
             .toString(),
       ),
       isMovie: !fresh.numberedEpisode,
