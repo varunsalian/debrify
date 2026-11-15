@@ -69,6 +69,11 @@ class VideoPlayerLaunchArgs {
 
   final bool disableExternalPlayer;
 
+  /// One launch's player ('debrify' / 'external'), chosen from a source row's
+  /// "Play in …" action; null uses the profile's default player setting.
+  /// [disableExternalPlayer] still wins over an 'external' choice.
+  final String? playerModeOverride;
+
   final bool Function()? isAndroidTvOverride;
 
   final bool disableAutoResume;
@@ -232,6 +237,7 @@ class VideoPlayerLaunchArgs {
     this.hideBackButton = false,
     this.httpHeaders,
     this.disableExternalPlayer = false,
+    this.playerModeOverride,
     this.isAndroidTvOverride,
     this.disableAutoResume = false,
     this.viewMode,
@@ -320,6 +326,7 @@ class VideoPlayerLaunchArgs {
     hideBackButton: hideBackButton,
     httpHeaders: httpHeaders,
     disableExternalPlayer: disableExternalPlayer,
+    playerModeOverride: playerModeOverride,
     isAndroidTvOverride: isAndroidTvOverride,
     disableAutoResume: disableAutoResume,
     viewMode: viewMode,

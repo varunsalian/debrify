@@ -42,7 +42,9 @@ final class SourcePlayerArgs {
     int? torboxTorrentId,
     PlaylistViewMode? viewMode,
     Map<String, String>? httpHeaders,
+    String? playerModeOverride,
   }) => VideoPlayerLaunchArgs(
+    playerModeOverride: playerModeOverride,
     // External apps receive only the URL, not media-server session headers.
     // Continuous shuffle also needs the in-app episode-fetch/EOF callbacks.
     disableExternalPlayer:

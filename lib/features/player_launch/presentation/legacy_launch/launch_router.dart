@@ -22,7 +22,6 @@ import 'package:debrify/services/profiles/profile_playback_preparation.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';
 import 'package:debrify/services/simkl/simkl_service.dart';
 import 'package:debrify/services/storage/continue_watching_storage.dart';
-import 'package:debrify/services/storage/external_player_storage.dart';
 import 'package:debrify/services/storage/watchlist_storage.dart';
 import 'package:debrify/services/tracking_source_policy.dart';
 import 'package:debrify/services/trakt/trakt_service.dart';
@@ -125,7 +124,7 @@ final class LaunchRouter {
       args.contentImdbId,
     );
     if (!active()) return;
-    final defaultPlayerMode = await ExternalPlayerStorage.getDefaultPlayerMode();
+    final defaultPlayerMode = await ExternalPlayerLaunch.playerModeFor(args);
     if (!context.mounted || !active()) return;
     if (ExternalDisclosure.shouldExplainExternalPlayerFallback(args, defaultPlayerMode)) {
       final useDebrifyPlayer = await WebdavPlayerNotice.showAuthenticatedWebDavPlayerNotice(

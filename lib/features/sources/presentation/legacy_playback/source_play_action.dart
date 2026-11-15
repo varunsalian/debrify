@@ -24,6 +24,7 @@ final class SourcePlayAction {
     List<Torrent>? sources,
     int sourceIndex = 0,
     required AutomaticSourceBindings sourceBindings,
+    String? playerModeOverride,
   }) async {
     if (r.playUrl == null || r.playUrl!.isEmpty) {
       SourceLoadingOverlays.snack(context, 'No playable link for this source.');
@@ -63,7 +64,7 @@ final class SourcePlayAction {
       meta: meta,
       sources: sources ?? [torrent],
       sourceIndex: sourceIndex,
-
+      playerModeOverride: playerModeOverride,
       sourceBindings: sourceBindings,
     );
   }

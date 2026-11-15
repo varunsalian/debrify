@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:debrify/features/sources/application/sources_providers.dart';
 import 'package:debrify/features/sources/data/saved_sources_repository.dart';
+import 'package:debrify/features/sources/data/source_player_preference.dart';
 import 'package:debrify/features/sources/data/source_settings_repository.dart';
 import 'package:debrify/features/sources/models/saved_sources_state.dart';
 import 'package:debrify/features/sources/models/source_presentation_settings.dart';
@@ -59,6 +60,7 @@ class Playback extends SourcePlaybackBridge {
           List<Torrent> sources,
           int index,
           String keyword,
+          String? player,
         })
       >[];
   final downloads = <Torrent>[];
@@ -73,6 +75,7 @@ class Playback extends SourcePlaybackBridge {
     required List<Torrent> sources,
     required int sourceIndex,
     required String searchKeyword,
+    String? playerModeOverride,
   }) {
     expect(context.mounted, isTrue);
     requests.add((
@@ -82,6 +85,7 @@ class Playback extends SourcePlaybackBridge {
       sources: sources,
       index: sourceIndex,
       keyword: searchKeyword,
+      player: playerModeOverride,
     ));
     return completion.future;
   }
@@ -116,6 +120,7 @@ void main() {
     'row',
     'force',
     'menu',
+    'other_player',
     'filtered',
     'disposed',
     'download',
@@ -148,6 +153,12 @@ void main() {
         ProviderScope(
           overrides: [
             sourcePlaybackBridgeProvider.overrideWithValue(playback),
+            sourcePlayerPreferenceProvider.overrideWithValue(
+              SourcePlayerPreference(
+                defaultMode: () async => 'debrify',
+                externalAllowed: () => true,
+              ),
+            ),
             sourceSettingsRepositoryProvider.overrideWith(
               (ref, key) => Settings(),
             ),
@@ -204,6 +215,11 @@ void main() {
           await tester.pumpAndSettle();
           await tester.tap(find.text('Play now'));
           await tester.pumpAndSettle();
+        } else if (scenario == 'other_player') {
+          selectedRow.onLongPress!();
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Play in external player'));
+          await tester.pumpAndSettle();
         } else {
           selectedRow.onTap();
           await tester.pump();
@@ -211,7 +227,15 @@ void main() {
         expect(playback.requests, hasLength(1));
         final request = playback.requests.single;
         expect(request.torrent, same(second));
-        expect(request.force, scenario == 'force');
+        // A one-off player choice always plays, skipping the after-add menu.
+        expect(
+          request.force,
+          scenario == 'force' || scenario == 'other_player',
+        );
+        expect(
+          request.player,
+          scenario == 'other_player' ? 'external' : isNull,
+        );
         expect(request.meta, same(meta));
         expect(request.keyword, 'Search fixture');
         expect(

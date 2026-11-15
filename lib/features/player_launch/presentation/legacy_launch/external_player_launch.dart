@@ -50,6 +50,11 @@ final class ExternalPlayerLaunch {
     return args.videoUrl;
   }
 
+  /// The player for one launch: a source row's one-off choice
+  /// ([VideoPlayerLaunchArgs.playerModeOverride]), else the default setting.
+  static Future<String> playerModeFor(VideoPlayerLaunchArgs args) async =>
+      args.playerModeOverride ?? await ExternalPlayerStorage.getDefaultPlayerMode();
+
   /// Whether playback should leave the app entirely, per the user's default
   /// player setting. Screens that build their own player route ask this before
   /// spending work on in-app-only setup.

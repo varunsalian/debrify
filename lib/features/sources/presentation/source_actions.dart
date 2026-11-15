@@ -13,6 +13,7 @@ import '../application/saved_sources_controller.dart';
 import '../application/source_binding_controller.dart';
 import '../application/sources_providers.dart';
 import '../data/source_link_copier.dart';
+import '../models/source_player_choice.dart';
 import '../models/sources_session.dart';
 import 'source_binding_bridge.dart';
 import 'source_playback_bridge.dart';
@@ -63,7 +64,7 @@ class SourceActions {
     _playNow(t, i);
   }
 
-  void _playNow(Torrent t, int i) {
+  void _playNow(Torrent t, int i, {SourcePlayerChoice? player}) {
     if (!isActive()) return;
     freezeStreaming();
     unawaited(
@@ -72,7 +73,9 @@ class SourceActions {
           .play(
             context,
             t,
-            forcePlay: details().forcePlayOnTap,
+            // A chosen player means "play", not the after-add action menu.
+            forcePlay: player != null || details().forcePlayOnTap,
+            playerModeOverride: player?.mode,
             meta: details().meta,
             // Use the rendered list so the index and in-player Sources switcher
             // stay in sync with the filter/sort order the user sees.
@@ -182,9 +185,28 @@ class SourceActions {
     }
   }
 
+  /// Set while the default player is read, so a second long-press in that
+  /// short gap can't stack a second menu.
+  bool _menuOpening = false;
+
   void showMenu(Torrent t, int i) {
-    if (!isActive()) return;
+    if (!isActive() || _menuOpening) return;
     freezeStreaming();
+    _menuOpening = true;
+    unawaited(_showMenu(t, i).whenComplete(() => _menuOpening = false));
+  }
+
+  Future<void> _showMenu(Torrent t, int i) async {
+    final preference = ref.read(sourcePlayerPreferenceProvider);
+    String defaultMode;
+    try {
+      defaultMode = await preference.defaultMode();
+    } catch (_) {
+      // A profile switch mid-read: the menu still opens, offering what the
+      // built-in default would.
+      defaultMode = 'debrify';
+    }
+    if (!context.mounted || !isMounted() || !isActive()) return;
     final app = AppThemeScope.of(context);
     final binding = bindingFor(t);
     final playback = ref.read(sourcePlaybackBridgeProvider);
@@ -199,11 +221,24 @@ class SourceActions {
           canCopy: copier.canCopy,
           supportsDownload: playback.supportsDownload,
         );
+        final otherPlayer = SourcePlayerChoice.alternateTo(
+          defaultMode,
+          kind: actions.kind,
+          // Continuous shuffle needs the in-app player (it is never handed
+          // to an external app), so don't offer one.
+          externalAllowed:
+              preference.externalAllowed() &&
+              !details().meta.initialContinuousShuffle,
+        );
         return SourceRowActionsSheet(
           app: app,
           kind: actions.kind,
           bound: binding != null,
           onPlay: () => _playNow(t, i),
+          otherPlayer: otherPlayer,
+          onPlayWithOther: otherPlayer == null
+              ? null
+              : () => _playNow(t, i, player: otherPlayer),
           onTogglePin: actions.canPin
               ? () => unawaited(binding != null ? _unpin(binding) : pin(t))
               : null,
