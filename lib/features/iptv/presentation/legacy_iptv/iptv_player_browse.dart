@@ -313,7 +313,12 @@ class IptvPlayerBrowse {
             'channelNotFound': true,
           };
         }
-        effectiveCategory = jumpChannel.group;
+        // A provider jump lands in the channel's category. Favourites and
+        // custom lists mix providers' categories and zap through the whole
+        // list, so a jump there stays on the full list.
+        effectiveCategory = source.isFavorites || source.isCustomList
+            ? null
+            : jumpChannel.group;
       }
       // A list shelf is a curated mix — whatever the user put in it — so it
       // is never narrowed by the requested content type. Without this a list

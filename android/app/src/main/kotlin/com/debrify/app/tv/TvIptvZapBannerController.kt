@@ -605,14 +605,12 @@ internal class TvIptvZapBannerController(
             if (parts.isEmpty()) "" else "·  " + parts.joinToString("  ·  ")
 
         // Only teach a key that actually does something on this channel: with a
-        // single channel and no paging there is nothing to zap to, and the jump
-        // dialog refuses a favourites source outright.
+        // single channel and no paging there is nothing to zap to or jump to.
         val canZap = host.iptvChannels.size > 1 || host.iptvZapPagingActive
         iptvZapBannerHintChannel?.visibility =
             if (canZap) View.VISIBLE else View.GONE
-        val activeSource = host.iptvSources.firstOrNull { it.id == host.iptvZapSourceId }
         iptvZapBannerHintJump?.visibility =
-            if (canZap && activeSource?.isFavorites != true) View.VISIBLE else View.GONE
+            if (canZap) View.VISIBLE else View.GONE
     }
 
     /** Paint the banner's now/next lines from [entry]'s EPG fields. */

@@ -23,26 +23,27 @@ import java.time.Duration
 @LooperMode(LooperMode.Mode.PAUSED)
 internal class TvIptvJumpDialogCharacterizationTest : TvPhase12OriginalTest() {
 
-    @Test fun jumpFavoritesShowsExactProviderToastWithoutDialog() {
-        set("iptvSources",mutableListOf(IptvSourceEntry("provider","Favorites",true,false,false)))
-        set("iptvZapSourceId","provider")
-        val prior=org.robolectric.shadows.ShadowDialog.getLatestDialog()
-        call("showIptvChannelJumpDialog",emptyArray())
-        assertSame(prior,org.robolectric.shadows.ShadowDialog.getLatestDialog())
-        assertEquals("Select a provider before jumping by channel number",ShadowToast.getTextOfLatestToast())
-        assertEquals(android.widget.Toast.LENGTH_SHORT,ShadowToast.getLatestToast().duration)
-        assertTrue(requests("requestIptvBrowse").isEmpty())
+    @Test fun jumpFavoritesAsksTheFavoritesSource() {
+        set("iptvSources",mutableListOf(IptvSourceEntry("favorites","Favorites",true,false,false)))
+        set("iptvZapSourceId","favorites")
+        assertJumpAsks("favorites")
     }
 
-    @Test fun jumpCustomListShowsExactProviderToastWithoutDialog() {
-        set("iptvSources",mutableListOf(IptvSourceEntry("provider","Custom",false,false,false,true,"custom")))
-        set("iptvZapSourceId","provider")
-        val prior=org.robolectric.shadows.ShadowDialog.getLatestDialog()
+    @Test fun jumpCustomListAsksTheListSource() {
+        set("iptvSources",mutableListOf(IptvSourceEntry("list","Custom",false,false,false,true,"custom")))
+        set("iptvZapSourceId","list")
+        assertJumpAsks("list")
+    }
+
+    private fun assertJumpAsks(sourceId: String) {
         call("showIptvChannelJumpDialog",emptyArray())
-        assertSame(prior,org.robolectric.shadows.ShadowDialog.getLatestDialog())
-        assertEquals("Select a provider before jumping by channel number",ShadowToast.getTextOfLatestToast())
-        assertEquals(android.widget.Toast.LENGTH_SHORT,ShadowToast.getLatestToast().duration)
-        assertTrue(requests("requestIptvBrowse").isEmpty())
+        val input=dialogInput()
+        input.setText("101")
+        clearTransport()
+        assertTrue(editor(input,EditorInfo.IME_ACTION_GO))
+        assertEquals(1,requests("requestIptvBrowse").size)
+        assertEquals(sourceId,args("requestIptvBrowse")["sourceId"])
+        assertEquals(101,args("requestIptvBrowse")["channelNumber"])
     }
 
     @Test fun jumpVodContextDoesNotOpenDialog() {

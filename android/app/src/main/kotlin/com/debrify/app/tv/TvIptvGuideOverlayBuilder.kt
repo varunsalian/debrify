@@ -416,15 +416,8 @@ internal class TvIptvGuideOverlayBuilder(
     fun showIptvChannelJumpDialog() {
         val current = host.iptvChannels.getOrNull(host.currentIptvIndex)
         if (current?.isLive != true) return
-        val activeSource = host.iptvSources.firstOrNull { it.id == host.iptvGuideController.iptvZapSourceId }
-        if (activeSource?.isFavorites == true || activeSource?.isList == true) {
-            Toast.makeText(
-                activity,
-                "Select a provider before jumping by channel number",
-                Toast.LENGTH_SHORT,
-            ).show()
-            return
-        }
+        // Favourites and custom lists jump too: their rows show each channel's
+        // provider number, and Flutter resolves the number within the list.
         val input = EditText(activity).apply {
             inputType = InputType.TYPE_CLASS_NUMBER
             hint = "Channel number"
