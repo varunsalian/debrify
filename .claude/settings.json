@@ -1,0 +1,10 @@
+{
+  "bashOutputMaxChars": 12000,
+  "permissions": {
+    "deny": [
+      "Read(./build/**)",
+      "Read(./.dart_tool/**)",
+      "Read(**/Pods/**)"
+    ]
+  }
+}

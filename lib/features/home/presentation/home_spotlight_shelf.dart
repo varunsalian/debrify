@@ -5,6 +5,7 @@ import '../../../models/stremio_addon.dart';
 import '../../../utils/continue_watching_presentation.dart';
 import '../../../widgets/home/spotlight_board.dart';
 import '../application/home_stage_metadata.dart';
+import '../data/home_board_services.dart';
 import '../models/home_favorite_row_ref.dart';
 import 'home_stage_rows.dart';
 
@@ -25,6 +26,7 @@ SpotlightShelf buildHomeSpotlightShelf(
   required SpotlightShelf Function(HomeFavoriteRowRef, {String? id})
   favoriteShelf,
   required SpotlightCard Function(StremioMeta, StremioAddon) catalogCard,
+  required void Function(CatalogSection, StremioMeta) onSectionOpen,
 }) {
   // Rail identity — the same key Canvas/Atrium key their rails by — so the
   // board reuses shelf subtrees when tracker rows front-insert.
@@ -90,6 +92,31 @@ SpotlightShelf buildHomeSpotlightShelf(
                 : SpotlightCardShape.poster,
             showCaption: !(section.folderOf(m)?.hideTitle ?? false),
             onOpen: () => onCollectionOpen(section, m),
+          ),
+      ],
+    );
+  }
+  if (HomeBoardServices.listOf(section)?.isAiring ?? false) {
+    // "Airing soon": each card names its next episode, opens at it, and the
+    // row has no See-All (the Calendar tab is its full view).
+    return SpotlightShelf(
+      id: railKey,
+      title: section.title,
+      tag: catalogTag(section),
+      nodes: i < rowNodes.length ? rowNodes[i] : const [],
+      captions: true,
+      items: [
+        for (final m in section.items)
+          SpotlightCard(
+            metadata: m,
+            image: landscape ? homeStageWideArtwork(m) : m.poster,
+            fallbackImage: landscape ? m.poster : null,
+            title: m.name,
+            subtitle: HomeBoardServices.episodeBadge(section, m),
+            shape: landscape
+                ? SpotlightCardShape.wide
+                : SpotlightCardShape.poster,
+            onOpen: () => onSectionOpen(section, m),
           ),
       ],
     );

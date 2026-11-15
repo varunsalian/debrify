@@ -43,6 +43,7 @@ class SourcePlaybackBridge {
     required List<Torrent> sources,
     required int sourceIndex,
     required String searchKeyword,
+    String? playerModeOverride,
   }) => TorrentPlaybackService.activateTorrent(
     context,
     torrent,
@@ -52,6 +53,7 @@ class SourcePlaybackBridge {
     sourceIndex: sourceIndex,
     searchKeyword: searchKeyword,
     sourceBindings: _bindings(),
+    playerModeOverride: playerModeOverride,
   );
 
   bool supportsDownload(Torrent torrent) => SourceDownload.supports(torrent);

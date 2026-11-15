@@ -9,6 +9,7 @@ import 'package:debrify/models/metadata_preferences.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/services/imdb_enrichment_service.dart';
 import 'package:debrify/services/metadata_details_service.dart';
+import 'package:debrify/widgets/detail/rotten_tomatoes_badge.dart';
 import 'package:flutter/material.dart';
 
 class MergedDetailHeroLayout {
@@ -185,6 +186,10 @@ class MergedDetailHeroLayout {
           ],
         ),
       );
+    }
+    final tomatoes = extra?.rottenTomatoes;
+    if (tomatoes != null) {
+      add(RottenTomatoesBadge(score: tomatoes, fontSize: 10));
     }
     return Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: parts);
   }

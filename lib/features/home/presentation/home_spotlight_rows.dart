@@ -69,5 +69,6 @@ class HomeSpotlightRows {
           addon,
           landscape: _displaySection.homeLandscapeCards,
         ),
+        onSectionOpen: (section, item) => _deps.items.open(section, item),
       );
 }

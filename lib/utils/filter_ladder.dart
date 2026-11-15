@@ -132,6 +132,7 @@ class FilterLadder {
     TorrentFilterState tier,
     DynamicRange? range,
     List<String>? audioLanguages,
+    String languageText,
   ) {
     if (tier.qualities.isNotEmpty &&
         !tier.qualities.contains(qualityTierForName(name))) {
@@ -143,7 +144,7 @@ class FilterLadder {
       return false;
     }
     final languageMatches = audioLanguages == null
-        ? langMatches(name, tier.languages)
+        ? langMatches(languageText, tier.languages)
         : TorrentFilterMatcher.matchesAudioMetadata(audioLanguages, tier.languages);
     if (!languageMatches) {
       return false;
@@ -172,6 +173,7 @@ class FilterLadder {
     bool allowCamFloor = true,
     int sizeBytes = 0,
     List<String>? audioLanguages,
+    String? languageText,
   }) {
     if (!isActive) return 0;
     if (allowCamFloor &&
@@ -187,8 +189,11 @@ class FilterLadder {
     final range = filters.dynamicRanges.isEmpty
         ? null
         : TorrentFilterMatcher.detectDynamicRange(name);
+    final text = languageText ?? name;
     for (var i = 0; i < _tiers.length; i++) {
-      if (_matchesTier(name, sizeBytes, _tiers[i], range, audioLanguages)) return i;
+      if (_matchesTier(name, sizeBytes, _tiers[i], range, audioLanguages, text)) {
+        return i;
+      }
     }
     // Unreachable — the last tier is unrestricted — but stay total.
     return tierCount - 1;
@@ -202,6 +207,9 @@ class FilterLadder {
         allowCamFloor: t.streamType == StreamType.torrent,
         sizeBytes: t.sizeBytes,
         audioLanguages: t.audioLanguages,
+        // Language also reads the add-on description; quality, rip source
+        // and the cam floor stay on the release name.
+        languageText: TorrentFilterMatcher.languageText(t),
       );
 
   /// Stable tier sort: in-tier order (relevance/seeders from curation) is

@@ -38,6 +38,7 @@ class TorrentPlaybackService {
     int sourceIndex = 0,
     String searchKeyword = '',
     AutomaticSourceBindings? sourceBindings,
+    String? playerModeOverride,
   }) => ManualSourceActivation.activateTorrent(
     context,
     torrent,
@@ -47,6 +48,7 @@ class TorrentPlaybackService {
     sourceIndex: sourceIndex,
     searchKeyword: searchKeyword,
     sourceBindings: sourceBindings,
+    playerModeOverride: playerModeOverride,
   );
 
   static Future<void> playFromSelection(

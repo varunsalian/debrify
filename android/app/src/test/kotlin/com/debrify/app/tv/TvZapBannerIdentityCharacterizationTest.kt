@@ -54,13 +54,13 @@ internal class TvZapBannerIdentityCharacterizationTest : TvPhase6OriginalTest() 
             assertEquals("", text("iptvZapBannerMeta").text.toString())
         } finally { Locale.setDefault(previous) }
     }
-    @Test fun hintVisibilityRequiresZapAndRejectsFavoriteSourceForJumpOnly() {
+    @Test fun hintVisibilityRequiresZapAndShowsJumpForFavoriteSource() {
         setup(); build(); val e = entry(); channels(e, 1); position(e)
         assertEquals(View.GONE, view("iptvZapBannerHintChannel").visibility); assertEquals(View.GONE, view("iptvZapBannerHintJump").visibility)
         set("iptvZapPagingActive", true); position(e)
         assertEquals(View.VISIBLE, view("iptvZapBannerHintChannel").visibility); assertEquals(View.VISIBLE, view("iptvZapBannerHintJump").visibility)
         set("iptvSources", listOf(IptvSourceEntry("fav", "Saved", true, false, false))); set("iptvZapSourceId", "fav"); position(e)
-        assertEquals(View.VISIBLE, view("iptvZapBannerHintChannel").visibility); assertEquals(View.GONE, view("iptvZapBannerHintJump").visibility)
+        assertEquals(View.VISIBLE, view("iptvZapBannerHintChannel").visibility); assertEquals(View.VISIBLE, view("iptvZapBannerHintJump").visibility)
         set("iptvZapSourceId", "other"); position(e); assertEquals(View.VISIBLE, view("iptvZapBannerHintJump").visibility)
     }
     @Test fun sameChannelRepaintPreservesLogoRequestButUpdatesPosition() {

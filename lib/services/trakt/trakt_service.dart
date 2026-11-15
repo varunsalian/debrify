@@ -1761,14 +1761,14 @@ class TraktService {
   /// Fetch upcoming episodes from the user's Trakt calendar for the given window.
   ///
   /// Wraps GET `/calendars/my/shows/{startDate}/{days}`. Returns raw JSON
-  /// entries, or `[]` on error / when unauthenticated. Trakt caps `days` at
+  /// entries, or null on error / when unauthenticated. Trakt caps `days` at
   /// 33 — callers must not exceed this.
   ///
   /// Note: intentionally NOT using `?extended=full` — Trakt's calendar
   /// endpoints routinely time out with that flag, and the basic response
   /// already includes the fields we need (show title, ids, episode
   /// season/number, first_aired).
-  Future<List<dynamic>> fetchCalendarMyShows({
+  Future<List<dynamic>?> fetchCalendarMyShows({
     required DateTime startDate,
     required int days,
   }) async {
@@ -1783,7 +1783,7 @@ class TraktService {
       debugPrint(
         'Trakt: fetchCalendarMyShows failed (${response?.statusCode})',
       );
-      return [];
+      return null;
     }
     try {
       return jsonDecode(response.body) as List<dynamic>;
@@ -1791,7 +1791,7 @@ class TraktService {
       debugPrint(
         'Trakt: fetchCalendarMyShows parse error (${error.runtimeType})',
       );
-      return [];
+      return null;
     }
   }
 

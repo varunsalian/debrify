@@ -73,6 +73,11 @@ class ImdbEnrichment {
   final String? productionCompany;
   final String? boxOffice;
   final int? metacriticScore;
+
+  /// Rotten Tomatoes Tomatometer (0–100). Not from IMDb: the detail pages
+  /// join it from MDBList when the profile has a key (see
+  /// [withRottenTomatoes]).
+  final int? rottenTomatoes;
   final int? runtimeMinutes;
 
   /// IMDb Top 250 position, or null when unranked.
@@ -111,6 +116,7 @@ class ImdbEnrichment {
     this.productionCompany,
     this.boxOffice,
     this.metacriticScore,
+    this.rottenTomatoes,
     this.runtimeMinutes,
     this.top250Rank,
     this.meterRank,
@@ -121,6 +127,37 @@ class ImdbEnrichment {
     this.quotesTotal = 0,
     this.universe = const [],
   });
+
+  ImdbEnrichment withRottenTomatoes(int? score) => ImdbEnrichment(
+    plot: plot,
+    runtime: runtime,
+    certificate: certificate,
+    rating: rating,
+    voteCount: voteCount,
+    director: director,
+    stars: stars,
+    cast: cast,
+    genres: genres,
+    awardWins: awardWins,
+    awardNominations: awardNominations,
+    tagline: tagline,
+    year: year,
+    countries: countries,
+    languages: languages,
+    productionCompany: productionCompany,
+    boxOffice: boxOffice,
+    metacriticScore: metacriticScore,
+    rottenTomatoes: score,
+    runtimeMinutes: runtimeMinutes,
+    top250Rank: top250Rank,
+    meterRank: meterRank,
+    meterDelta: meterDelta,
+    didYouKnow: didYouKnow,
+    triviaTotal: triviaTotal,
+    goofsTotal: goofsTotal,
+    quotesTotal: quotesTotal,
+    universe: universe,
+  );
 
   ImdbEnrichment withCredits({
     required List<CastMember> cast,
@@ -147,6 +184,7 @@ class ImdbEnrichment {
     productionCompany: productionCompany,
     boxOffice: boxOffice,
     metacriticScore: metacriticScore,
+    rottenTomatoes: rottenTomatoes,
     runtimeMinutes: retainRuntimeAndGenres ? runtimeMinutes : null,
     top250Rank: top250Rank,
     meterRank: meterRank,

@@ -58,6 +58,7 @@ class _Playback extends SourcePlaybackBridge {
     required List<Torrent> sources,
     required int sourceIndex,
     required String searchKeyword,
+    String? playerModeOverride,
   }) async => calls.add('play');
   @override
   Future<void> download(BuildContext context, Torrent torrent) async =>

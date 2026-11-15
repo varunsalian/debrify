@@ -8,6 +8,7 @@ import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/services/imdb_enrichment_service.dart';
 import 'package:debrify/services/imdb_parents_guide_service.dart';
+import 'package:debrify/services/mdblist/mdblist_rotten_tomatoes.dart';
 import 'package:debrify/services/metadata_details_service.dart';
 import 'package:debrify/services/metadata_preferences_service.dart';
 import 'package:debrify/services/metadata_provider_service.dart';
@@ -142,6 +143,8 @@ class MergedDetailMetadataLoading {
         scope == ProfileRuntime.scope.value &&
         revision == MetadataPreferencesService.revision.value;
     final imdbId = _item.effectiveImdbId;
+    // In parallel, so a slow MDBList never holds back the IMDb readouts.
+    final tomatoes = MdblistRottenTomatoes.fetch(imdbId, _item.type);
     try {
       final extra = await MetadataDetailsService.instance.enrich(
         _item,
@@ -149,7 +152,22 @@ class MergedDetailMetadataLoading {
             imdbId == null ? null : ImdbEnrichmentService.fetch(imdbId),
       );
       if (mounted && valid()) setState(() => _m.imdbExtra = extra);
+      // Not awaited: Showcase's opening waits on this loader, and the score
+      // must never hold it back.
+      unawaited(_joinRottenTomatoes(tomatoes, extra, valid));
     } catch (_) {}
+  }
+
+  Future<void> _joinRottenTomatoes(
+    Future<int?> tomatoes,
+    ImdbEnrichment? extra,
+    bool Function() valid,
+  ) async {
+    final score = await tomatoes;
+    if (score == null || extra == null || !mounted || !valid()) return;
+    // A newer load replaced the readouts: the score belongs to the old one.
+    if (!identical(_m.imdbExtra, extra)) return;
+    setState(() => _m.imdbExtra = extra.withRottenTomatoes(score));
   }
 
   Future<void> loadParentsGuide() async {

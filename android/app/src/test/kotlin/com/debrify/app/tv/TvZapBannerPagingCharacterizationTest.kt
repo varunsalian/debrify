@@ -49,7 +49,7 @@ internal class TvZapBannerPagingCharacterizationTest : TvPhase6OriginalTest() {
             set("iptvZapSourceId", "fav")
             position(e)
             assertEquals(View.VISIBLE, view("iptvZapBannerHintChannel").visibility)
-            assertEquals(View.GONE, view("iptvZapBannerHintJump").visibility)
+            assertEquals(View.VISIBLE, view("iptvZapBannerHintJump").visibility)
 
             set("iptvSources", emptyList<IptvSourceEntry>())
             set("iptvZapPagingActive", false)

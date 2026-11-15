@@ -6,6 +6,7 @@ import '../../../services/media_server_service.dart';
 import '../../../services/profiles/profile_policy_guard.dart';
 import '../../../services/profiles/profile_runtime.dart';
 import '../../../services/profiles/profile_session_memory.dart';
+import '../../../services/storage/external_player_storage.dart';
 import '../data/automatic_source_bindings.dart';
 import '../data/debrid_source_cache_repository.dart';
 import '../data/manual_source_preparation.dart';
@@ -16,6 +17,7 @@ import '../data/source_binding_matcher.dart';
 import '../data/source_cache_repository.dart';
 import '../data/source_download.dart';
 import '../data/source_link_copier.dart';
+import '../data/source_player_preference.dart';
 import '../data/source_row_action_policy.dart';
 import '../data/source_search_repository.dart';
 import '../data/source_seasons_repository.dart';
@@ -76,6 +78,15 @@ final automaticSourceBindingsFactoryProvider =
 
 final sourceDownloadProvider = Provider<SourceDownload>(
   (ref) => const SourceDownload(),
+);
+
+final sourcePlayerPreferenceProvider = Provider<SourcePlayerPreference>(
+  (ref) => SourcePlayerPreference(
+    defaultMode: ExternalPlayerStorage.getDefaultPlayerMode,
+    externalAllowed: () =>
+        ProfilePolicyGuard.allowsSync(ProfileFeature.externalPlayers),
+  ),
+  dependencies: const [],
 );
 
 final sourceRowActionPolicyProvider = Provider<SourceRowActionPolicy>(

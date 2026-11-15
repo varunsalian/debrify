@@ -49,6 +49,9 @@ final class ManualSourceActivation {
     int sourceIndex = 0,
     String searchKeyword = '',
     AutomaticSourceBindings? sourceBindings,
+    // One-off player choice from the row menu; see
+    // [VideoPlayerLaunchArgs.playerModeOverride].
+    String? playerModeOverride,
   }) async {
     final bindingOwner = sourceBindings ?? AutomaticSourceBindings.capture();
     if (!context.mounted || !bindingOwner.isCurrent) return;
@@ -136,6 +139,7 @@ final class ManualSourceActivation {
         await VideoPlayerLauncher.push(
           context,
           SourcePlayerArgs.playerArgs(
+            playerModeOverride: playerModeOverride,
             videoUrl: torrent.directUrl!,
             httpHeaders: torrent.httpHeaders,
             title: torrent.displayTitle,
@@ -386,7 +390,7 @@ final class ManualSourceActivation {
           meta: meta,
           sources: sources,
           sourceIndex: sourceIndex,
-
+          playerModeOverride: playerModeOverride,
           sourceBindings: bindingOwner,
         );
         break;

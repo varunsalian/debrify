@@ -16,6 +16,7 @@ CatalogSection copyHomeRowForReturn(CatalogSection row) {
       traktChoice: row.traktChoice,
       simklList: row.simklList,
       mdblistList: row.mdblistList,
+      airing: row.airing,
     );
   }
   return CatalogSection(

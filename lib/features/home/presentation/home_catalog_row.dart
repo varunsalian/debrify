@@ -3,6 +3,7 @@ import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 
 import '../../../models/home_collection_rows.dart';
 import '../../../models/stremio_addon.dart';
+import '../data/home_board_services.dart';
 import 'home_board_cell.dart';
 
 /// When a row's horizontal scroll gets within this many pixels of the end, the
@@ -116,6 +117,7 @@ Widget buildHomeCatalogItems({
               column: col,
               rowNodes: nodes,
               hasBoundSource: isBound(item),
+              episodeLabel: HomeBoardServices.episodeBadge(section, item),
               aspectRatio: itemAspect,
               artUrl: collection != null ? item.poster : artOf(item),
               focusArtUrl: collection?.focusArtOf(item),

@@ -64,6 +64,9 @@ final class SourcePlayerLaunch {
     Future<void> Function()? onStartupSourcesExhausted,
     bool startupHasRemainingSavedSources = false,
     required AutomaticSourceBindings sourceBindings,
+    // A source row's one-off "Play in …" choice; see
+    // [VideoPlayerLaunchArgs.playerModeOverride].
+    String? playerModeOverride,
   }) async {
     // Once push() takes the handoff callback the LAUNCHER owns the dismissal
     // (player-visible time, or its own always-fires safety net); the finally
@@ -112,7 +115,9 @@ final class SourcePlayerLaunch {
       // so, play in DeoVR instead of the in-app player. Scoped to keyword so this
       // shared launcher doesn't newly divert catalog board plays. Packs keep the
       // normal player (DeoVR takes one video).
+      // An explicit player choice outranks the VR redirect.
       if (meta == null &&
+          playerModeOverride == null &&
           !r.hasPlaylist &&
           await DeovrLaunch.shouldUseDeoVR(title)) {
         // DeoVR runs its own dialog flow — drop the loader before it.
@@ -150,6 +155,7 @@ final class SourcePlayerLaunch {
               sourceBindings: sourceBindings,
             );
       final args = SourcePlayerArgs.playerArgs(
+        playerModeOverride: playerModeOverride,
         videoUrl: r.playUrl!,
         httpHeaders: r.httpHeaders,
         title: title,

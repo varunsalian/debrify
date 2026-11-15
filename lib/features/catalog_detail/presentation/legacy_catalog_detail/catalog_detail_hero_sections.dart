@@ -7,6 +7,7 @@ import 'package:debrify/features/catalog_detail/presentation/legacy_catalog_deta
 import 'package:debrify/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_metadata.dart';
 import 'package:debrify/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_root_layout.dart';
 import 'package:debrify/services/metadata_details_service.dart';
+import 'package:debrify/widgets/detail/rotten_tomatoes_badge.dart';
 import 'package:debrify/widgets/detail/theme/detail_theme.dart';
 import 'package:debrify/widgets/shimmer.dart';
 import 'package:flutter/material.dart';
@@ -154,6 +155,10 @@ class CatalogDetailHeroSections {
             if (extra?.metacriticScore != null) ...[
               _a.dot(),
               CatalogMetacriticBadge(score: extra!.metacriticScore!),
+            ],
+            if (extra?.rottenTomatoes != null) ...[
+              _a.dot(),
+              RottenTomatoesBadge(score: extra!.rottenTomatoes!),
             ],
           ],
         ),
