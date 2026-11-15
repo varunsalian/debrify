@@ -35,6 +35,7 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.media.audiofx.LoudnessEnhancer;
+import com.debrify.app.RemoteBackKey;
 import com.debrify.app.audio.NativeAudioRouting;
 import com.debrify.app.audio.NativeAudioRenderersFactory;
 import com.debrify.app.audio.AudioEffectSession;
@@ -5960,7 +5961,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     }
 
     @Override
-    public boolean dispatchKeyEvent(KeyEvent event) {
+    public boolean dispatchKeyEvent(KeyEvent rawEvent) {
+        KeyEvent event = RemoteBackKey.normalize(rawEvent); // Escape/gamepad B = Back.
         int keyCode = event.getKeyCode();
 
         // Unified Channel Guide is visible - handle keys
