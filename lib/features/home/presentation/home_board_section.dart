@@ -167,23 +167,16 @@ class HomeBoardSection {
       _catalogSection.catalogQuery.isEmpty &&
       !_catalogSection.catalogSearching;
 
-  /// Saved Home orders created before MDBList was exposed do not contain its
-  /// CW ids. Seed those new ids after the Simkl CW family instead of allowing
-  /// the generic ordering projection to append them at the bottom. Any MDBList
-  /// id already saved keeps its chosen position untouched.
-  List<String> get effectiveHomeRowOrder => HomeRowOrder.seedCollections(
-    HomeRowOrder.insertMissingAfter(
-      homeRowOrder,
-      additions: const ['mdblist:movies', 'mdblist:shows'],
-      anchors: const ['simkl:movies', 'simkl:shows'],
-    ),
-    [
-      for (final c in homeCollections)
-        if (c.pinToTop) HomeCollectionRowIds.collection(c.id),
-      for (final c in homeCollections)
-        if (!c.pinToTop) HomeCollectionRowIds.collection(c.id),
-    ],
-  );
+  /// Saved Home orders predating a row family (MDBList CW, Airing soon) get
+  /// it seeded beside its family instead of appended at the bottom; see
+  /// [HomeRowOrder.seedNewRows].
+  List<String> get effectiveHomeRowOrder =>
+      HomeRowOrder.seedCollections(HomeRowOrder.seedNewRows(homeRowOrder), [
+        for (final c in homeCollections)
+          if (c.pinToTop) HomeCollectionRowIds.collection(c.id),
+        for (final c in homeCollections)
+          if (!c.pinToTop) HomeCollectionRowIds.collection(c.id),
+      ]);
   void commitBoardSnapshot() {
     homeCatalogController.commit(addonsById);
   }

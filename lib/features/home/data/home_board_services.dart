@@ -63,6 +63,14 @@ class HomeBoardServices {
 
   static bool isList(CatalogSection row) => row is HomeListSection;
 
+  /// The "Fri · S2E5" badge for an "Airing soon" card; null on other rows.
+  static String? episodeBadge(CatalogSection row, StremioMeta item) =>
+      listOf(row)?.airing?.episodes[item.id]?.label;
+
+  /// Whether the row has a See-All screen. "Airing soon" has none: the
+  /// Calendar tab is its full view.
+  static bool hasSeeAll(CatalogSection row) => listOf(row)?.isAiring != true;
+
   static List<CatalogSection> replaceLists(
     List<CatalogSection> rows,
     List<HomeListSection> lists,

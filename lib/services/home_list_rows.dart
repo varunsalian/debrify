@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../models/stremio_addon.dart';
+import 'home_airing_rows.dart';
 import 'trakt/trakt_list_source.dart';
 import 'watched_filter.dart';
 import 'simkl/simkl_list_source.dart';
@@ -22,6 +23,10 @@ class HomeExtraRowIds {
   static const String mdblistLikedPrefix = 'mdblistlist:liked:';
   static const String mdblistTopPrefix = 'mdblistlist:top:';
   static const String iptvPrefix = 'iptvlist:';
+
+  /// The "Airing soon" row: next episodes of followed shows from whichever
+  /// tracker calendar is connected (see [HomeAiringSoon]).
+  static const String airingSoon = 'airing:soon';
 
   /// `traktlist:watchlist` … — built-ins key off the API slug, which is
   /// stable across enum reorderings.
@@ -46,6 +51,7 @@ class HomeExtraRowIds {
   static String iptvList(String listId) => '$iptvPrefix$listId';
 
   static bool isTracker(String id) =>
+      id == airingSoon ||
       id.startsWith(traktPrefix) ||
       id.startsWith(simklPrefix) ||
       id.startsWith(mdblistPrefix);
@@ -82,7 +88,11 @@ class HomeListSection extends CatalogSection {
   final SimklSeeAllList? simklList;
   final MdblistListChoice? mdblistList;
 
+  /// Set for the "Airing soon" row — each card's next episode.
+  final HomeAiringRow? airing;
+
   bool get isTrakt => traktChoice != null;
+  bool get isAiring => airing != null;
   bool get isMdblist => mdblistList != null;
 
   static final StremioAddon traktPlaceholderAddon = StremioAddon(
@@ -95,6 +105,12 @@ class HomeListSection extends CatalogSection {
   static final StremioAddon simklPlaceholderAddon = StremioAddon(
     id: 'debrify.home.simkl',
     name: 'Simkl',
+    manifestUrl: '',
+    baseUrl: '',
+  );
+  static final StremioAddon calendarPlaceholderAddon = StremioAddon(
+    id: 'debrify.home.calendar',
+    name: 'Calendar',
     manifestUrl: '',
     baseUrl: '',
   );
@@ -115,14 +131,22 @@ class HomeListSection extends CatalogSection {
     this.traktChoice,
     this.simklList,
     this.mdblistList,
+    this.airing,
   }) : assert(
-         [traktChoice, simklList, mdblistList].where((v) => v != null).length ==
+         [
+               traktChoice,
+               simklList,
+               mdblistList,
+               airing,
+             ].where((v) => v != null).length ==
              1,
        ),
        super(
          title: title,
          addon: traktChoice != null
              ? traktPlaceholderAddon
+             : airing != null
+             ? calendarPlaceholderAddon
              : mdblistList != null
              ? mdblistPlaceholderAddon
              : simklPlaceholderAddon,
@@ -151,7 +175,11 @@ class HomeListRowsService {
     Future<List<MdblistListChoice>> Function()? mdblistMine,
     Future<List<MdblistListChoice>> Function()? mdblistLiked,
     Future<List<MdblistListChoice>> Function()? mdblistTop,
-  }) : _traktLoad =
+    Future<({List<StremioMeta> items, HomeAiringRow? row, bool failed})>
+    Function()?
+    airingLoad,
+  }) : _airingLoad = airingLoad ?? (() => HomeAiringSoon.load()),
+       _traktLoad =
            traktLoad ??
            ((c) => TraktListSource.instance.loadList(c, preview: true)),
        _traktUserLists =
@@ -170,6 +198,10 @@ class HomeListRowsService {
            (() => MdblistListSource.instance.loadTopLists(strict: true));
 
   static final HomeListRowsService instance = HomeListRowsService();
+
+  final Future<({List<StremioMeta> items, HomeAiringRow? row, bool failed})>
+  Function()
+  _airingLoad;
 
   final Future<({List<StremioMeta> items, bool failed})> Function(
     TraktListChoice,
@@ -282,8 +314,27 @@ class HomeListRowsService {
       isCurrent: isCurrent,
     );
 
-    // Trakt built-ins, enum order.
+    // "Airing soon" leads the tracker rows; it extends Continue Watching.
     var rank = 0;
+    if (byId.containsKey(HomeExtraRowIds.airingSoon)) {
+      const id = HomeExtraRowIds.airingSoon;
+      final slot = _Slot(rank++, 0);
+      slots.add(slot);
+      traktPool.add(() async {
+        final r = await _airingLoad();
+        if (!r.failed) completed.add(id);
+        final row = r.row;
+        if (row == null || r.items.isEmpty) return;
+        slot.section = HomeListSection(
+          rowId: id,
+          title: byId[id]!.title.isNotEmpty ? byId[id]!.title : 'Airing soon',
+          items: List.of(r.items),
+          airing: row,
+        );
+      });
+    }
+
+    // Trakt built-ins, enum order.
     for (final list in TraktSeeAllList.values) {
       if (list == TraktSeeAllList.continueWatching) continue;
       final id = HomeExtraRowIds.traktBuiltin(list);

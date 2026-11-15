@@ -20,8 +20,8 @@ import 'simkl_service.dart';
 ///
 /// The public file is a single rolling window (not per-range), so ONE fetch
 /// serves any month; the intersected result is cached in memory with a 15-min
-/// TTL and reused for every [getRange] call. Never throws — logs and returns
-/// empty on failure.
+/// TTL and reused for every [getRange] call. Returns empty on failure, or
+/// throws when asked to be strict (see [getRange]).
 class SimklCalendarService {
   SimklCalendarService._();
   static final SimklCalendarService instance = SimklCalendarService._();
@@ -40,13 +40,17 @@ class SimklCalendarService {
   /// midnight. Empty buckets are omitted. Returned map keys are
   /// `DateTime(year, month, day)` in local time — matching
   /// [TraktCalendarService.getRange] so the screen can consume either.
+  ///
+  /// With [strict], a failed read throws instead of looking like an empty
+  /// calendar.
   Future<Map<DateTime, List<TraktCalendarEntry>>> getRange(
     DateTime start,
-    DateTime end,
-  ) async {
+    DateTime end, {
+    bool strict = false,
+  }) async {
     if (end.isBefore(start)) return <DateTime, List<TraktCalendarEntry>>{};
 
-    final entries = await _loadEntries();
+    final entries = await _loadEntries(strict: strict);
     final startDay = DateTime(start.year, start.month, start.day);
     final endDay = DateTime(end.year, end.month, end.day);
 
@@ -72,7 +76,14 @@ class SimklCalendarService {
 
   /// The intersected, parsed calendar entries — cached with a TTL and
   /// in-flight-coalesced so concurrent month loads share one network fetch.
-  Future<List<TraktCalendarEntry>> _loadEntries() async {
+  Future<List<TraktCalendarEntry>> _loadEntries({bool strict = false}) async {
+    List<TraktCalendarEntry> settle(List<TraktCalendarEntry>? result) {
+      if (result == null && strict) {
+        throw StateError('Simkl calendar read failed');
+      }
+      return result ?? const <TraktCalendarEntry>[];
+    }
+
     final cache = _cache;
     final at = _cachedAt;
     if (cache != null &&
@@ -81,7 +92,7 @@ class SimklCalendarService {
       return cache;
     }
     final inFlight = _inFlight;
-    if (inFlight != null) return (await inFlight) ?? const <TraktCalendarEntry>[];
+    if (inFlight != null) return settle(await inFlight);
 
     final gen = _generation;
     final future = _fetchAndIntersect();
@@ -96,7 +107,7 @@ class SimklCalendarService {
         _cache = result;
         _cachedAt = DateTime.now();
       }
-      return result ?? const <TraktCalendarEntry>[];
+      return settle(result);
     } finally {
       if (identical(_inFlight, future)) _inFlight = null;
     }

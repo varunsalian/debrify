@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../models/home_collection_rows.dart';
 import '../../../models/stremio_addon.dart';
+import '../data/home_board_services.dart';
 import 'home_board_cell.dart';
 import 'home_catalog_item_actions.dart';
 import 'home_stage_rows.dart';
@@ -75,7 +76,14 @@ class HomeStageCards {
       showTitleOverlay: !(collection?.folderOf(item)?.hideTitle ?? false),
       restVeil: restVeil,
       progress: rail.cw?.progressOf(item),
-      episodeLabel: rail.cw?.episodeOf(item),
+      episodeLabel:
+          rail.cw?.episodeOf(item) ??
+          (rail.sectionIndex == null
+              ? null
+              : HomeBoardServices.episodeBadge(
+                  sectionAt(rail.sectionIndex!),
+                  item,
+                )),
       onQuickPlay: rail.cw != null || items.pikpakOnly
           ? null
           : () => items.quickPlay(sectionAt(rail.sectionIndex!), actionItem()),

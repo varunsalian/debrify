@@ -34,14 +34,21 @@ class TraktCalendarService {
   final _ChunkFetcher _fetcher;
   final Map<String, _CachedChunk> _chunkCache = {};
 
+  /// Bumped by [invalidate]: a fetch that started before it (an old profile
+  /// or account) must not refill the cleared cache.
+  int _generation = 0;
+
   /// Fetch or return-cached a single 33-day chunk aligned to Monday boundaries.
   ///
   /// - [chunkStart] is auto-aligned to the Monday on or before the given date.
   /// - [force] skips the cache and always refetches.
-  /// - Returns `[]` and logs on error (never throws).
+  /// - Returns `[]` and logs on error; with [strict] the error is rethrown so
+  ///   the caller can tell a failed read from an empty calendar. A failed read
+  ///   is never cached.
   Future<List<TraktCalendarEntry>> getChunk(
     DateTime chunkStart, {
     bool force = false,
+    bool strict = false,
   }) async {
     final aligned = _chunkStartFor(chunkStart);
     final key = _cacheKey(aligned);
@@ -53,11 +60,15 @@ class TraktCalendarService {
       }
     }
 
+    final generation = _generation;
     try {
       final entries = await _fetcher(aligned, _chunkDays);
-      _chunkCache[key] = _CachedChunk(entries, DateTime.now());
+      if (generation == _generation) {
+        _chunkCache[key] = _CachedChunk(entries, DateTime.now());
+      }
       return entries;
     } catch (e) {
+      if (strict) rethrow;
       debugPrint('TraktCalendarService: chunk fetch failed: $e');
       return [];
     }
@@ -71,8 +82,9 @@ class TraktCalendarService {
   /// Empty buckets are not included.
   Future<Map<DateTime, List<TraktCalendarEntry>>> getRange(
     DateTime start,
-    DateTime end,
-  ) async {
+    DateTime end, {
+    bool strict = false,
+  }) async {
     if (end.isBefore(start)) {
       return <DateTime, List<TraktCalendarEntry>>{};
     }
@@ -85,9 +97,9 @@ class TraktCalendarService {
       cursor = cursor.add(const Duration(days: _chunkDays));
     }
 
-    // Fetch in parallel; getChunk handles cache + errors internally
+    // Fetch in parallel; getChunk handles cache + errors (rethrown if strict)
     final chunkResults = await Future.wait(
-      chunkStarts.map((s) => getChunk(s)),
+      chunkStarts.map((s) => getChunk(s, strict: strict)),
     );
 
     // Flatten, de-dupe, filter to [start, end]
@@ -121,6 +133,7 @@ class TraktCalendarService {
   /// Drop all cached chunks. Call on Trakt logout or user-triggered refresh.
   void invalidate() {
     _chunkCache.clear();
+    _generation++;
   }
 
   /// Walk back to the Monday on or before [date]. Strips any time component.
@@ -155,6 +168,8 @@ class TraktCalendarService {
       startDate: start,
       days: days,
     );
+    // A failed read must not be cached as "nothing airing".
+    if (raw == null) throw StateError('Trakt calendar read failed');
     return raw
         .whereType<Map<String, dynamic>>()
         .map(TraktCalendarEntry.fromTraktJson)

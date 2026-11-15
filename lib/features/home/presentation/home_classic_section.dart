@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../models/home_collection_rows.dart';
 import '../../../widgets/home/home_theme.dart';
+import '../data/home_board_services.dart';
 import '../models/home_catalog_search_status.dart';
 import 'home_board_deferred.dart';
 import 'home_board_focus.dart';
@@ -208,7 +209,9 @@ class HomeClassicSection {
           ? _geometry.railHeader(
               title: section.title,
               tag: _deps.items.sourceTag(section),
-              onSeeAll: () => _deps.items.openSeeAll(section),
+              onSeeAll: HomeBoardServices.hasSeeAll(section)
+                  ? () => _deps.items.openSeeAll(section)
+                  : null,
             )
           : const SizedBox(height: 8),
       cellH: cellH,

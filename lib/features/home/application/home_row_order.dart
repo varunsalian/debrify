@@ -70,7 +70,22 @@ class HomeRowOrder {
     'mdblist:shows',
     'iptv:movies',
     'iptv:series',
+    // Opt-in; extends the Continue Watching family with upcoming episodes.
+    'airing:soon',
   ];
+
+  /// Rows added after users had saved an order, each seeded into the slot
+  /// after its family rather than appended at the bottom. Ids already saved
+  /// keep the position the user chose.
+  static List<String> seedNewRows(Iterable<String> saved) => insertMissingAfter(
+    insertMissingAfter(
+      saved,
+      additions: const ['mdblist:movies', 'mdblist:shows'],
+      anchors: const ['simkl:movies', 'simkl:shows'],
+    ),
+    additions: const ['airing:soon'],
+    anchors: continueWatchingIds.where((id) => id != 'airing:soon'),
+  );
 
   /// Keep the existing order within each family. Callers may put imported
   /// pinned collections first within the collection family.
@@ -98,6 +113,9 @@ class HomeRowOrder {
     final missing = normalize(collections).where((id) => !known.contains(id));
     var insertion = 0;
     for (var i = 0; i < order.length; i++) {
+      // Airing soon is opt-in and can be dragged anywhere; it must not drag
+      // newly imported collections along with it.
+      if (order[i] == 'airing:soon') continue;
       if (continueWatchingIds.contains(order[i])) insertion = i + 1;
     }
     order.insertAll(insertion, missing);

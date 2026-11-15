@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:debrify/models/trakt/trakt_calendar_entry.dart';
 import 'package:debrify/services/mdblist/mdblist_calendar_service.dart';
 import 'package:debrify/services/mdblist/mdblist_models.dart';
@@ -67,6 +69,64 @@ void main() {
       expect(retained.values.expand((e) => e), hasLength(2));
     },
   );
+
+  group('strict reads and profile switches', () {
+    MdblistCalendarService service({
+      required Future<MdblistResult<List<Map<String, dynamic>>>> Function()
+      fetch,
+    }) => MdblistCalendarService.forTesting(
+      fetcher: (_, _) => fetch(),
+      resolver: (_) async => const MdblistResult.success({
+        'year': 1999,
+        'ids': {'imdb': 'tt0388629'},
+      }),
+    );
+    final start = DateTime(2026, 8, 1);
+    final end = DateTime(2026, 8, 31);
+
+    test('a failed read throws when strict and is empty otherwise', () async {
+      final calendar = service(
+        fetch: () async =>
+            const MdblistResult.failure(MdblistResultKind.transientFailure),
+      );
+      await expectLater(
+        calendar.getRange(start, end, strict: true),
+        throwsStateError,
+      );
+      expect(await calendar.getRange(start, end), isEmpty);
+    });
+
+    test('a strict and a plain caller sharing one read each get their own '
+        'answer', () async {
+      final gate = Completer<MdblistResult<List<Map<String, dynamic>>>>();
+      final calendar = service(fetch: () => gate.future);
+      final strict = calendar.getRange(start, end, strict: true);
+      final plain = calendar.getRange(start, end);
+      gate.complete(
+        const MdblistResult.failure(MdblistResultKind.transientFailure),
+      );
+      await expectLater(strict, throwsStateError);
+      expect(await plain, isEmpty);
+    });
+
+    test('a read that started before a profile switch is not cached', () async {
+      var calls = 0;
+      final gate = Completer<void>();
+      final calendar = service(
+        fetch: () async {
+          calls++;
+          if (calls == 1) await gate.future;
+          return MdblistResult.success([_episodeEvent()]);
+        },
+      );
+      final stale = calendar.getRange(start, end);
+      calendar.resetProfileScope();
+      gate.complete();
+      await stale;
+      await calendar.getRange(start, end);
+      expect(calls, 2);
+    });
+  });
 }
 
 Map<String, dynamic> _episodeEvent() => {

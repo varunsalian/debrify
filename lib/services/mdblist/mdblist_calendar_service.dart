@@ -37,28 +37,43 @@ class MdblistCalendarService {
   final MdblistShowResolver _resolver;
   final Map<String, _CalendarCache> _cache = {};
   final Map<int, Map<String, dynamic>> _showCache = {};
-  final Map<String, Future<Map<DateTime, List<TraktCalendarEntry>>>> _inFlight =
-      {};
+  // A null result is a failed read with nothing cached to fall back on.
+  final Map<String, Future<Map<DateTime, List<TraktCalendarEntry>>?>>
+  _inFlight = {};
 
+  /// Bumped when the cache is cleared: a fetch that started before then (an
+  /// old profile or account) must not refill it.
+  int _generation = 0;
+
+  /// With [strict], a failed read with nothing cached throws instead of
+  /// looking like an empty calendar.
   Future<Map<DateTime, List<TraktCalendarEntry>>> getRange(
     DateTime start,
-    DateTime end,
-  ) async {
+    DateTime end, {
+    bool strict = false,
+  }) async {
     if (end.isBefore(start) || !kMdblistEnabled) return {};
     final startDay = DateTime(start.year, start.month, start.day);
     final endDay = DateTime(end.year, end.month, end.day);
     final key = '${startDay.toIso8601String()}/${endDay.toIso8601String()}';
     final cached = _cache[key];
     if (cached != null && cached.fresh) return cached.entries;
-    final pending = _inFlight[key];
-    if (pending != null) return pending;
+    Map<DateTime, List<TraktCalendarEntry>> settle(
+      Map<DateTime, List<TraktCalendarEntry>>? result,
+    ) {
+      if (result == null && strict) {
+        throw StateError('MDBList calendar read failed');
+      }
+      return result ?? {};
+    }
 
-    final future = _load(startDay, endDay, cached?.entries);
+    final pending = _inFlight[key];
+    if (pending != null) return settle(await pending);
+
+    final future = _load(startDay, endDay, cached?.entries, _generation);
     _inFlight[key] = future;
     try {
-      final result = await future;
-      if (!identical(_inFlight[key], future)) return result;
-      return result;
+      return settle(await future);
     } finally {
       if (identical(_inFlight[key], future)) _inFlight.remove(key);
     }
@@ -75,16 +90,17 @@ class MdblistCalendarService {
     final key = '${startDay.toIso8601String()}/${endDay.toIso8601String()}';
     final cached = _cache[key];
     if (!force && cached != null && cached.fresh) return cached.entries;
-    return _load(startDay, endDay, cached?.entries);
+    return await _load(startDay, endDay, cached?.entries, _generation) ?? {};
   }
 
-  Future<Map<DateTime, List<TraktCalendarEntry>>> _load(
+  Future<Map<DateTime, List<TraktCalendarEntry>>?> _load(
     DateTime start,
     DateTime end,
     Map<DateTime, List<TraktCalendarEntry>>? lastGood,
+    int generation,
   ) async {
     final raw = await _fetcher(start, end);
-    if (!raw.isSuccess) return lastGood ?? {};
+    if (!raw.isSuccess) return lastGood;
 
     final showIds = raw.data!
         .where((row) => row['type'] == 'episode')
@@ -114,16 +130,22 @@ class MdblistCalendarService {
       (grouped[DateTime(day.year, day.month, day.day)] ??= []).add(entry);
     }
     final key = '${start.toIso8601String()}/${end.toIso8601String()}';
-    _cache[key] = _CalendarCache(grouped, DateTime.now());
+    if (generation == _generation) {
+      _cache[key] = _CalendarCache(grouped, DateTime.now());
+    }
     return grouped;
   }
 
-  void invalidate() => _cache.clear();
+  void invalidate() {
+    _cache.clear();
+    _generation++;
+  }
 
   void resetProfileScope() {
     _cache.clear();
     _showCache.clear();
     _inFlight.clear();
+    _generation++;
   }
 
   static int? _integer(Object? value) => value is num

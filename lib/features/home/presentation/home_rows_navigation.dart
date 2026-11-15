@@ -111,6 +111,20 @@ class HomeRowsNavigation {
     }
     final list = HomeBoardServices.listOf(section);
     if (list != null) {
+      final airing = list.airing;
+      if (airing != null) {
+        // Open at the upcoming episode, the way the Calendar does.
+        final next = airing.episodes[item.id];
+        _itemActions.openItem(
+          item,
+          addonForContinue(null),
+          isTraktSource: airing.fromTrakt,
+          heroTag: heroTag,
+          initialSeason: next?.season,
+          initialEpisode: next?.episode,
+        );
+        return;
+      }
       if (list.simklList != null) {
         _continuationPlayback.openSimklItem(item, heroTag: heroTag);
         return;
@@ -138,7 +152,10 @@ class HomeRowsNavigation {
     }
     final list = HomeBoardServices.listOf(section);
     if (list != null) {
-      if (list.isTrakt) {
+      if (list.isAiring) {
+        // Its episode hasn't aired yet: there is nothing to play.
+        sectionOpenItem(section, item);
+      } else if (list.isTrakt) {
         _continuationPlayback.playTraktItem(item);
       } else if (list.isMdblist) {
         _catalogActions.onCatalogPlay(
@@ -246,7 +263,9 @@ class HomeRowsNavigation {
     if (section is HomeCollectionSection) return 'Collection';
     final list = HomeBoardServices.listOf(section);
     if (list != null) {
-      return list.isTrakt
+      return list.isAiring
+          ? 'Calendar'
+          : list.isTrakt
           ? 'Trakt'
           : list.isMdblist
           ? 'MDBList'
@@ -313,6 +332,7 @@ class HomeRowsNavigation {
     // Synthetic list/collection rows must never enter catalog pagination.
     final list = HomeBoardServices.listOf(section);
     if (list != null) {
+      if (list.isAiring) return; // No See-All; see HomeBoardServices.hasSeeAll.
       seeAllNavigation.openList(context, list);
     } else if (section is HomeCollectionSection) {
       openCollectionScreen(section.collection, 0);
