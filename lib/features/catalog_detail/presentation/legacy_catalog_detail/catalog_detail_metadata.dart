@@ -5,6 +5,7 @@ import 'package:debrify/models/play_loader_art.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/services/imdb_enrichment_service.dart';
 import 'package:debrify/services/imdb_parents_guide_service.dart';
+import 'package:debrify/services/mdblist/mdblist_rotten_tomatoes.dart';
 import 'package:debrify/services/metadata_details_service.dart';
 import 'package:debrify/services/metadata_preferences_service.dart';
 import 'package:debrify/services/metadata_provider_service.dart';
@@ -150,6 +151,11 @@ class CatalogDetailMetadata {
         scope == ProfileRuntime.scope.value &&
         revision == MetadataPreferencesService.revision.value;
     final imdbId = _deps.presentedItem().effectiveImdbId;
+    // In parallel, so a slow MDBList never holds back the IMDb readouts.
+    final tomatoes = MdblistRottenTomatoes.fetch(
+      imdbId,
+      _deps.presentedItem().type,
+    );
     try {
       final extra = await MetadataDetailsService.instance.enrich(
         _deps.presentedItem(),
@@ -164,9 +170,23 @@ class CatalogDetailMetadata {
         // Adds the certificate to the loader's meta line.
         emitLoaderArt();
       }
+      // Not awaited: callers waiting on this loader never wait on MDBList.
+      unawaited(_joinRottenTomatoes(tomatoes, extra, valid));
     } catch (_) {
       if (mounted && valid()) setState(() => imdbLoaded = true);
     }
+  }
+
+  Future<void> _joinRottenTomatoes(
+    Future<int?> tomatoes,
+    ImdbEnrichment? extra,
+    bool Function() valid,
+  ) async {
+    final score = await tomatoes;
+    if (score == null || extra == null || !mounted || !valid()) return;
+    // A newer load replaced the readouts: the score belongs to the old one.
+    if (!identical(imdbExtra, extra)) return;
+    setState(() => imdbExtra = extra.withRottenTomatoes(score));
   }
 
   Future<void> loadParentsGuide() async {

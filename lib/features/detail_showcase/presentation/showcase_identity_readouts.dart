@@ -177,7 +177,12 @@ class _MetaLine extends StatelessWidget {
         Text(bits.join(' · '), style: st(10.5 * scale, a: 0.86)),
         if (m.rating != null) ...[
           const SizedBox(width: 7),
-          _RatingBox(value: m.rating!),
+          _RatingBox(label: '★ ${m.rating!.toStringAsFixed(1)}'),
+        ],
+        if (m.imdbExtra?.rottenTomatoes case final tomatoes?) ...[
+          const SizedBox(width: 5),
+          // Monochrome like the IMDb box: the hero's readouts stay one ink.
+          _RatingBox(label: 'RT $tomatoes%'),
         ],
         if (m.hasTrakt) ...[
           const SizedBox(width: 8),
@@ -245,9 +250,9 @@ class _TrackerMark extends StatelessWidget {
 }
 
 class _RatingBox extends StatelessWidget {
-  final double value;
+  final String label;
 
-  const _RatingBox({required this.value});
+  const _RatingBox({required this.label});
 
   @override
   Widget build(BuildContext context) {
@@ -258,7 +263,7 @@ class _RatingBox extends StatelessWidget {
         border: Border.all(color: sInk.withValues(alpha: 0.45), width: 0.75),
         borderRadius: BorderRadius.circular(2.5 * k),
       ),
-      child: Text('★ ${value.toStringAsFixed(1)}', style: st(7.5 * k, a: 0.9)),
+      child: Text(label, style: st(7.5 * k, a: 0.9)),
     );
   }
 }
