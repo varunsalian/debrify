@@ -5,8 +5,6 @@ import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail
 import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_resume_actions.dart';
 import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_resume_state.dart';
 import 'package:debrify/features/merged_detail/presentation/merged_detail_palette.dart';
-import 'package:debrify/screens/episodes_screen.dart'
-    show kCatalogDetailRouteName;
 import 'package:debrify/widgets/episodes_panel.dart';
 import 'package:flutter/material.dart';
 
@@ -43,18 +41,11 @@ class MergedDetailEpisodesLayout {
       showQuickPlay: true,
       isTraktSource: _deps.isTraktSource(),
       isMdblistSource: _deps.isMdblistSource(),
-      // Sources / fallback-search render in-tab on the Search host, so tear
-      // down every merged/detail route first — popUntil the route name because
-      // a single pop would leave a *parent* merged screen (series A →
-      // recommended series B → pick episode) underneath instead of returning
-      // to Search (every merged/detail route shares kCatalogDetailRouteName).
-      // Mirrors the standalone EpisodesScreen._popToHost.
-      onItemSelected: _deps.onItemSelected() == null
-          ? null
-          : (selection) {
-              popToHost();
-              _deps.onItemSelected()!(selection);
-            },
+      // The host pushes Sources on top of this page, like the hero's own
+      // "browse sources", so Back from Sources returns to this season's
+      // episodes; didPopNext then refreshes the ticks. Closing the page first
+      // sent Back all the way to Home.
+      onItemSelected: _deps.onItemSelected(),
       // Quick-play deliberately does NOT pop: the host pushes the player on
       // top of this screen (same as the hero Resume), so playback pops back to
       // the episode list here — didPopNext then refreshes the ticks.
@@ -83,14 +74,6 @@ class MergedDetailEpisodesLayout {
         }
       },
     );
-  }
-
-  /// Tear every merged/detail route (any drill-down depth) back down to the
-  /// Search host, so a selection it renders in-tab isn't hidden behind them.
-  void popToHost() {
-    Navigator.of(
-      _deps.context(),
-    ).popUntil((r) => r.settings.name != kCatalogDetailRouteName);
   }
 
   void openDetailsSheet() {

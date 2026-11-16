@@ -146,7 +146,7 @@ void main() {
       ]);
     });
   });
-  testWidgets('selection pops two merged routes before invoking the host', (
+  testWidgets('selection keeps the merged routes so Back returns to them', (
     t,
   ) async {
     await mergedDetailCase(t, (f) async {
@@ -183,18 +183,19 @@ void main() {
         season: 1,
         episode: 2,
       );
+      final before = [...f.observer.events];
       panel.onItemSelected!(selection);
       await t.pump();
       expect(f.selections, [same(selection)]);
-      expect(callbackEvents.single.sublist(callbackEvents.single.length - 2), [
-        'pop:$kCatalogDetailRouteName',
-        'pop:$kCatalogDetailRouteName',
-      ]);
+      // The host pushes Sources on top; nothing is popped first, so Back from
+      // Sources lands on this series page (and season), not on Home.
+      expect(callbackEvents.single, before);
+      expect(f.observer.events, before);
       for (var frame = 0; frame < 12; frame++) {
         await t.pump(const Duration(milliseconds: 100));
       }
-      expect(find.text('Host'), findsOneWidget);
-      expect(find.byType(MergedDetailScreen), findsNothing);
+      expect(find.text('Host'), findsNothing);
+      expect(find.byType(MergedDetailScreen), findsOneWidget);
     });
   });
 }

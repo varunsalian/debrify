@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:debrify/models/advanced_search_selection.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/screens/episodes_screen.dart';
+import 'package:debrify/services/app_route_observer.dart';
 import 'package:debrify/services/mdblist/mdblist_service.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/secret_vault.dart';
@@ -79,6 +80,10 @@ class EpisodesPanelFixture {
   Map<String, double> traktPlayback = {}, simklPlayback = {};
   Map<String, double> mdblistPlayback = {};
   Future<Map<String, double>> Function()? progressLoader;
+
+  /// When set, the standalone screen's quick-play stays in flight until it
+  /// completes.
+  Completer<void>? heldQuickPlay;
   Future<List<TraktSeason>> Function()? injectedSeasons;
   Future<void> Function(StremioMeta)? sourcePicker;
   Future<http.Response?> Function(http.Request)? onRequest;
@@ -391,6 +396,7 @@ class EpisodesPanelFixture {
     key: const ValueKey('episodes-application-canvas'),
     child: MaterialApp(
       navigatorKey: navigator,
+      navigatorObservers: [appRouteObserver],
       locale: const Locale('en', 'US'),
       builder: (context, child) => AppThemeScope(
         theme: AppThemes.legacy,
@@ -436,9 +442,10 @@ class EpisodesPanelFixture {
         calls.add('item:${navigator.currentState!.canPop()}');
         selections.add(s);
       },
-      onQuickPlay: (s) {
-        calls.add('quick');
+      onQuickPlay: (s) async {
+        calls.add('quick:${navigator.currentState!.canPop()}');
         quickSelections.add(s);
+        await heldQuickPlay?.future;
       },
       boundSourceCount: (_) => sourceCount,
       onSelectSource: hasSourcePicker ? sourcePicker ?? (_) async {} : null,
