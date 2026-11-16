@@ -9,6 +9,7 @@ import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/utils/app_storage.dart';
 import 'package:debrify/utils/platform_util.dart';
+import 'package:debrify/widgets/tv_text_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -319,6 +320,81 @@ void main() {
     expect(find.byType(ProfileSetupFlow), findsNothing);
     expect(result, isFalse);
     expect(await io(tester, registry.listProfiles), hasLength(1));
+    expect(tester.takeException(), isNull);
+  });
+
+  // Reddit report: on Android TV the remote could move between the role
+  // cards but never reach Next. Next survives step changes, so its focus
+  // node must rejoin the DPAD grid on every step, even one that puts it on
+  // the same row as the step before (identity → role, sources → abilities).
+  testWidgets('TV remote alone walks every step to Review', (tester) async {
+    await openFlow(tester, onClosed: (_) {});
+    await tester.enterText(find.byType(TextField).first, 'Maya');
+    PlatformUtil.debugSetAndroidTvCached(true);
+    addTearDown(() => PlatformUtil.debugSetAndroidTvCached(null));
+    await tester.pump();
+
+    FocusNode nodeOf(String text) => Focus.of(tester.element(find.text(text)));
+    Future<void> press(LogicalKeyboardKey key) async {
+      await tester.sendKeyEvent(key);
+      await tester.pump();
+    }
+
+    // Each step opens on its first card; DOWN walks to the footer and
+    // Select on it advances.
+    Future<void> walkTo(String footer) async {
+      for (var i = 0; i < 8 && !nodeOf(footer).hasFocus; i++) {
+        await press(LogicalKeyboardKey.arrowDown);
+      }
+      expect(nodeOf(footer).hasFocus, isTrue, reason: '$footer unreachable');
+      await press(LogicalKeyboardKey.select);
+      await pumpFrames(tester);
+    }
+
+    nodeOf('Next').requestFocus();
+    await tester.pump();
+    await press(LogicalKeyboardKey.select);
+    await pumpFrames(tester);
+
+    // Role: the remote lands on Admin and can pick Kid.
+    expect(find.text('Who is this for?'), findsOneWidget);
+    expect(nodeOf('Admin').hasFocus, isTrue);
+    await press(LogicalKeyboardKey.arrowDown);
+    await press(LogicalKeyboardKey.arrowDown);
+    expect(nodeOf('Kid').hasFocus, isTrue);
+    await press(LogicalKeyboardKey.select);
+    await walkTo('Next'); // → search
+    expect(find.text('How can Maya search?'), findsOneWidget);
+    expect(find.textContaining('the Kid preset'), findsOneWidget);
+    await walkTo('Next'); // → sources
+    await walkTo('Next'); // → abilities
+    expect(find.text('Beyond watching?'), findsOneWidget);
+    await walkTo('Review');
+    expect(find.text("Maya's corner of Debrify"), findsOneWidget);
+    expect(nodeOf('Create Maya').hasFocus, isTrue);
+
+    // Going back lands on each step's first row and Next stays reachable,
+    // including abilities → sources and role → identity (same footer row).
+    await press(LogicalKeyboardKey.escape); // → abilities
+    await press(LogicalKeyboardKey.escape); // → sources
+    await pumpFrames(tester);
+    expect(nodeOf('Debrify TV').hasFocus, isTrue);
+    await walkTo('Next'); // → abilities
+    expect(find.text('Beyond watching?'), findsOneWidget);
+    for (var i = 0; i < 3; i++) {
+      await press(LogicalKeyboardKey.escape); // → sources, search, role
+    }
+    await pumpFrames(tester);
+    expect(nodeOf('Admin').hasFocus, isTrue);
+    await press(LogicalKeyboardKey.escape); // → identity
+    await pumpFrames(tester);
+    final name = tester.widget<TvTextField>(find.byType(TvTextField));
+    expect(name.focusNode!.hasFocus, isTrue);
+    nodeOf('Next').requestFocus();
+    await tester.pump();
+    await press(LogicalKeyboardKey.arrowUp);
+    await walkTo('Next'); // → role, from the identity grid
+    expect(find.text('Who is this for?'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

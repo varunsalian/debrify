@@ -47,9 +47,12 @@ class OnboardFocusController {
 
   void setLandingOverride(OnboardCell? cell) => _landingOverride = cell;
 
-  void focusLanding(OnboardStep step) {
-    final requested = _landingOverride ?? onboardLandingCells[step];
-    final target = requested == null ? null : _nodes[requested];
+  void focusLanding(OnboardStep step) =>
+      focusCell(_landingOverride ?? onboardLandingCells[step]);
+
+  /// Focuses [cell], or the first registered node when it isn't registered.
+  void focusCell(OnboardCell? cell) {
+    final target = cell == null ? null : _nodes[cell];
     (target ?? (_nodes.isEmpty ? null : _nodes.values.first))?.requestFocus();
   }
 

@@ -109,7 +109,8 @@
 # 2026-10-31 DPAD: the airing schedule row carries a focus label the sheet can find (+3).
 1379 lib/widgets/iptv/iptv_epg_panel.dart
 1347 lib/screens/video_player/widgets/stremio_tv_guide_sheet.dart
-1325 lib/screens/profiles/profile_setup_flow.dart
+# 2026-11-16: TV remote reaches Next on every profile setup step (+13); exit: move the steps out of this file.
+1338 lib/screens/profiles/profile_setup_flow.dart
 # 2026-11-01: the in-player Sources sheet never titles a group with an addon's configuration hash (+1).
 1314 lib/screens/video_player/widgets/source_sheet.dart
 1307 lib/services/external_player_service.dart
