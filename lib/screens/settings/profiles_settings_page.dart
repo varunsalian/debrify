@@ -18,6 +18,7 @@ import '../../utils/platform_util.dart';
 import '../../widgets/profiles/profile_avatar_view.dart';
 import '../../widgets/remote/remote_control_screen.dart';
 import '../profiles/edit_profile_screen.dart';
+import '../profiles/profile_gate.dart' show shouldAutoEnterSoleProfile;
 import '../profiles/profile_wall_screen.dart';
 import '../profiles/profile_row_actions.dart';
 import '../profiles/profile_setup_flow.dart';
@@ -361,13 +362,15 @@ class _ProfilesSettingsPageState extends State<ProfilesSettingsPage> {
                           final right = Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              _behaviorSection(),
-                              if (_mayManage) ...[
+                              if (_hasBehavior) _behaviorSection(),
+                              if (_hasBehavior && _mayManage)
                                 const SizedBox(height: 18),
-                                _householdSection(),
-                              ],
+                              if (_mayManage) _householdSection(),
                             ],
                           );
+                          // Nothing for the right column (a non-admin with
+                          // several profiles): the profiles take the width.
+                          if (!_hasBehavior && !_mayManage) return left;
                           if (!wide) {
                             return Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -458,10 +461,23 @@ class _ProfilesSettingsPageState extends State<ProfilesSettingsPage> {
     );
   }
 
+  bool get _linuxAutoUnlock => _mayManage && DeviceKeyProvider.isLinux;
+
+  List<UserProfile> get _enabledProfiles => (_profiles ?? const <UserProfile>[])
+      .where((profile) => profile.isEnabled)
+      .toList(growable: false);
+
+  /// The startup toggle only ever skips the picker for a lone profile without
+  /// a PIN (the gate's shouldAutoEnterSoleProfile), so with more profiles it
+  /// would do nothing: hide it rather than offer a switch with no effect.
+  bool get _showAlwaysAsk => _enabledProfiles.length <= 1;
+
+  bool get _hasBehavior => _linuxAutoUnlock || _showAlwaysAsk;
+
   Widget _behaviorSection() => SettingsSection(
     title: 'Profile behavior',
     children: [
-      if (_mayManage && DeviceKeyProvider.isLinux)
+      if (_linuxAutoUnlock)
         SettingsToggleTile(
           key: const ValueKey('profiles-linux-auto-unlock'),
           icon: Icons.lock_open_rounded,
@@ -471,19 +487,32 @@ class _ProfilesSettingsPageState extends State<ProfilesSettingsPage> {
           value: DeviceKeyProvider.linuxAutoUnlockEnabled,
           onChanged: _setVaultAutoUnlock,
         ),
-      SettingsToggleTile(
-        key: const ValueKey('profiles-always-ask'),
-        icon: Icons.login_rounded,
-        title: 'Ask who\'s watching at startup',
-        subtitle: 'Show the profile picker when Debrify opens',
-        value: ProfileGateAlwaysAsk.cached,
-        onChanged: (value) async {
-          await ProfileGateAlwaysAsk.set(value);
-          if (mounted) setState(() {});
-        },
-      ),
+      if (_showAlwaysAsk)
+        SettingsToggleTile(
+          key: const ValueKey('profiles-always-ask'),
+          icon: Icons.login_rounded,
+          title: 'Ask who\'s watching at startup',
+          subtitle: _alwaysAskSubtitle(),
+          value: ProfileGateAlwaysAsk.cached,
+          onChanged: (value) async {
+            await ProfileGateAlwaysAsk.set(value);
+            if (mounted) setState(() {});
+          },
+        ),
     ],
   );
+
+  /// Shown with at most one profile; say when a PIN stops Off skipping it.
+  String _alwaysAskSubtitle() {
+    if (ProfileGateAlwaysAsk.cached) return 'Even with a single profile';
+    final roster = _enabledProfiles;
+    if (shouldAutoEnterSoleProfile(roster, allowSingleProfileAutoEnter: true)) {
+      return 'Your only profile opens on its own';
+    }
+    return roster.length == 1
+        ? 'No effect while this profile needs a PIN'
+        : 'Skipped when there is one profile without a PIN';
+  }
 
   Widget _householdSection() => SettingsSection(
     title: 'Household',

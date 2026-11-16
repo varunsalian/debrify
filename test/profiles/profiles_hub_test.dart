@@ -140,8 +140,34 @@ void main() {
 
     expect(find.byKey(const ValueKey('profiles-switch')), findsOneWidget);
     expect(find.byKey(const ValueKey('profiles-create')), findsOneWidget);
-    expect(find.byKey(const ValueKey('profiles-always-ask')), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  // Reddit report: with the toggle off, the picker still showed. Off only
+  // ever skips it for a lone enabled profile without a PIN, so the toggle is
+  // offered only while there is at most one profile.
+  testWidgets('the startup toggle appears only with a single profile', (
+    tester,
+  ) async {
+    final toggle = find.byKey(const ValueKey('profiles-always-ask'));
+    Finder subtitle(String text) =>
+        find.descendant(of: toggle, matching: find.text(text));
+    await pumpHub(tester);
+    expect(toggle, findsNothing);
+    expect(find.text('Send profiles to TV'), findsOneWidget);
+
+    // A disabled profile never reaches the picker, so it doesn't count; the
+    // hub reloads after the disable and offers the switch.
+    await tester.tap(find.text('Maya'));
+    await settle(tester);
+    await tester.tap(find.text('Disable profile'));
+    await settle(tester);
+    expect(find.text('Kid · disabled'), findsOneWidget);
+    expect(subtitle('Even with a single profile'), findsOneWidget);
+    await tester.ensureVisible(toggle);
+    await tester.tap(toggle);
+    await settle(tester);
+    expect(subtitle('Your only profile opens on its own'), findsOneWidget);
   });
 
   testWidgets('a non-admin can open only the active-profile self editor', (
