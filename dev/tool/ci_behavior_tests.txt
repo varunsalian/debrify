@@ -777,6 +777,7 @@ test/features/video_player/video_player_source_playlist_request_test.dart
 test/features/video_player/video_player_source_sheet_lifetime_test.dart
 test/features/video_player/video_player_startup_diagnostics_test.dart
 test/features/video_player/video_player_startup_error_policy_test.dart
+test/features/video_player/video_player_startup_budget_test.dart
 test/features/video_player/video_player_startup_failure_test.dart
 test/features/video_player/video_player_startup_gate_test.dart
 test/features/video_player/video_player_startup_ladder_test.dart
