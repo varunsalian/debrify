@@ -117,8 +117,7 @@ class DiscoverSection {
     cardSettings: discCardSettings,
     showPreview:
         _deps.isTelevision() &&
-        discSource != DiscoverSources.jellyfin &&
-        discSource != DiscoverSources.emby,
+        DiscoverSources.mediaServerKind(discSource) == null,
     stage: discStage,
     focused: discFocused,
     preview: discPreview,
@@ -135,8 +134,7 @@ class DiscoverSection {
       beforeChange: () {
         discFocused.value = null;
         discPreview.shown.value = null;
-        if (source == DiscoverSources.jellyfin ||
-            source == DiscoverSources.emby) {
+        if (DiscoverSources.mediaServerKind(source) != null) {
           discPreview.resetPlayback();
         }
       },

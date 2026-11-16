@@ -980,6 +980,10 @@ class MainActivity : FlutterActivity() {
         )
     }
 
+    // A keyboard-style remote's Back (Escape) or gamepad B acts as Back.
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean =
+        super.dispatchKeyEvent(RemoteBackKey.normalize(event))
+
     override fun onCreate(savedInstanceState: Bundle?) {
         DiagnosticFileLog.initialize(this)
         val alwaysFinish = runCatching {

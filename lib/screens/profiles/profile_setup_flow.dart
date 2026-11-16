@@ -222,6 +222,15 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
       _step = step;
       _error = null;
     });
+    // The control that moved here is gone or stays in the header, so place
+    // the remote on the new step: Review's main button, else its first row.
+    if (PlatformUtil.isTelevision) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _step != step) return;
+        final row = step == _QStep.review ? _footerRow : 0;
+        _focus.focusCell(OnboardCell(row, 0));
+      });
+    }
   }
 
   void _next() {
@@ -620,23 +629,24 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
           ),
         ],
         const SizedBox(height: 12),
-        // The DPAD grid has no gap-bridging: the footer must sit on the row
-        // right after each step's last focusable row or a remote can never
-        // reach it.
-        _footer(switch (_step) {
-          // Create shows the copy-defaults card at row 2; edit doesn't.
-          _QStep.identity => _isEdit ? 2 : 3,
-          _QStep.role => 3,
-          _QStep.search => 2,
-          _QStep.sources => 4,
-          _QStep.abilities => 4,
-          _QStep.review => _isEdit ? 2 : 1,
-        }),
+        _footer(_footerRow),
         const SizedBox(height: 6),
         _dots(),
       ],
     );
   }
+
+  // The DPAD grid has no gap-bridging: the footer must sit on the row right
+  // after each step's last focusable row or a remote can never reach it.
+  int get _footerRow => switch (_step) {
+    // Create shows the copy-defaults card at row 2; edit doesn't.
+    _QStep.identity => _isEdit ? 2 : 3,
+    _QStep.role => 3,
+    _QStep.search => 2,
+    _QStep.sources => 4,
+    _QStep.abilities => 4,
+    _QStep.review => _isEdit ? 2 : 1,
+  };
 
   Widget _navigation() {
     final style = TextButton.styleFrom(
@@ -725,6 +735,9 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
       _ => 'Next',
     };
     return OnboardFocusable(
+      // A new footer per step: _go() clears the DPAD grid, and one kept on
+      // the same row would never rejoin it, so the remote couldn't reach it.
+      key: ValueKey(_step),
       controller: _focus,
       cell: OnboardCell(row, 0),
       autofocus: PlatformUtil.isTelevision && _step == _QStep.review,

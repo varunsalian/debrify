@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:debrify/features/media_servers/data/media_server_connection_store.dart';
 import 'package:debrify/models/media_server.dart';
 import 'package:debrify/models/media_server_library.dart';
 import 'package:debrify/models/playback_resume_policy.dart';
@@ -118,7 +119,7 @@ class ResumeServerDriver {
     await f.finish(t, MediaServerWatchSync.setEnabled(true));
     await f.finish(
       t,
-      MediaServerService.connect(
+      MediaServerConnectionStore.connect(
         kind: MediaServerKind.jellyfin,
         label: 'P14 synthetic library',
         baseUrl: 'https://server.test/base/',

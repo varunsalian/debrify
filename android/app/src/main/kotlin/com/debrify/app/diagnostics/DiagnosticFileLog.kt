@@ -352,6 +352,7 @@ object DiagnosticFileLog {
             .replace(
                 Regex(
                     "(?i)\\b(?:api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|" +
+                        "x-(?:plex|emby)-token|" +
                         "password|authorization|bearer|secret|payload|headers?|body)" +
                         "\\b\\s*[:=]\\s*[^,;\\s)]+",
                 ),

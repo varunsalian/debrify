@@ -5,6 +5,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:debrify/features/media_servers/data/media_server_connection_store.dart';
 import 'package:debrify/models/media_server.dart';
 import 'package:debrify/models/profiles/profile_policy.dart';
 import 'package:debrify/models/torrent.dart';
@@ -172,7 +173,7 @@ void main() {
           'Debrify Test ${kind.label}',
           reason: 'Never modify watch state on a personal/production server',
         );
-        await MediaServerService.connect(
+        await MediaServerConnectionStore.connect(
           kind: kind,
           label: 'Live ${kind.label}',
           baseUrl: base,
@@ -239,7 +240,10 @@ void main() {
         }
       }
 
-      for (final kind in MediaServerKind.values) {
+      for (final kind in const [
+        MediaServerKind.jellyfin,
+        MediaServerKind.emby,
+      ]) {
         test(
           '${kind.label} Discover libraries, hierarchy and exact playback',
           () async {
@@ -492,7 +496,7 @@ void main() {
             addTearDown(controller.close);
             await controller.prepare(source);
             controller.commit(source);
-            await MediaServerService.remove(
+            await MediaServerConnectionStore.remove(
               (await MediaServerService.connections()).single,
             );
             await expectLater(

@@ -1,0 +1,18 @@
+{
+ "MediaContainer": {
+  "SearchResult": [
+   {
+    "guid": "plex://movie/5d77683585719b001f3a3946",
+    "lifespanEnded": false,
+    "name": "Night of the Living Dead",
+    "thumb": "https://images.plex.tv/photo?height=336&width=225&minSize=1&upscale=1&url=https%3A%2F%2Fmetadata-static%2Eplex%2Etv%2F0%2Fgracenote%2F0369b3f2cab51684b04d52828268d08f%2Ejpg",
+    "type": "movie",
+    "year": 1968
+   }
+  ],
+  "identifier": "com.plexapp.plugins.library",
+  "mediaTagPrefix": "/system/bundle/media/flags/",
+  "mediaTagVersion": 1792751779,
+  "size": 1
+ }
+}

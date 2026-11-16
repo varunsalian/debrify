@@ -28,7 +28,8 @@ import 'profile_picker_screen.dart';
 import 'profile_wall_screen.dart';
 import 'profile_pin_screen.dart';
 
-@visibleForTesting
+/// Whether launch may skip the picker. Settings → Profiles reads the same
+/// rule to say when its startup toggle has no effect.
 bool shouldAutoEnterSoleProfile(
   List<UserProfile> profiles, {
   required bool allowSingleProfileAutoEnter,

@@ -24,7 +24,7 @@ Map<String, dynamic> movie(String id) => {
 http.Response response(Object data) => http.Response(jsonEncode(data), 200);
 
 void main() {
-  for (final kind in MediaServerKind.values) {
+  for (final kind in const [MediaServerKind.jellyfin, MediaServerKind.emby]) {
     test(
       '${kind.name} combined episode boundaries and invalid ranges',
       () async {

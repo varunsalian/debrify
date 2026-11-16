@@ -49,7 +49,12 @@ final class SourcePlayerArgs {
     // Continuous shuffle also needs the in-app episode-fetch/EOF callbacks.
     disableExternalPlayer:
         (meta?.initialContinuousShuffle ?? false) ||
-        (httpHeaders?.keys.any((key) => key.toLowerCase() == 'x-emby-token') ??
+        (httpHeaders?.keys.any(
+              (key) => const {
+                'x-emby-token',
+                'x-plex-token',
+              }.contains(key.toLowerCase()),
+            ) ??
             false),
     initialContinuousShuffle: meta?.initialContinuousShuffle ?? false,
     videoUrl: videoUrl,

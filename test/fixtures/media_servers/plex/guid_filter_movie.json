@@ -1,0 +1,72 @@
+{
+ "MediaContainer": {
+  "Metadata": [
+   {
+    "Guid": [
+     {
+      "id": "imdb://tt0063350"
+     },
+     {
+      "id": "tmdb://10331"
+     },
+     {
+      "id": "tvdb://1831"
+     }
+    ],
+    "Media": [
+     {
+      "Part": [
+       {
+        "container": "mkv",
+        "duration": 6023,
+        "file": "/data/redacted.mkv",
+        "id": 2,
+        "key": "/library/parts/2/1794750176/file.mkv",
+        "size": 240555,
+        "videoProfile": "high 4:4:4 predictive"
+       }
+      ],
+      "aspectRatio": 1.78,
+      "audioChannels": 1,
+      "audioCodec": "aac",
+      "bitrate": 320,
+      "container": "mkv",
+      "duration": 6023,
+      "height": 1080,
+      "id": 2,
+      "videoCodec": "h264",
+      "videoFrameRate": "24p",
+      "videoProfile": "high 4:4:4 predictive",
+      "videoResolution": "1080",
+      "width": 1920
+     }
+    ],
+    "addedAt": 1794750176,
+    "contentRatingAge": 17,
+    "duration": 6023,
+    "guid": "plex://movie/5d77683585719b001f3a3946",
+    "hasPremiumPrimaryExtra": "1",
+    "key": "/library/metadata/2",
+    "ratingKey": "2",
+    "slug": "night-of-the-living-dead-1968",
+    "thumb": "/library/metadata/2/thumb/1794750225",
+    "title": "Night of the Living Dead",
+    "type": "movie",
+    "updatedAt": 1794750225,
+    "year": 1968
+   }
+  ],
+  "allowSync": true,
+  "identifier": "com.plexapp.plugins.library",
+  "librarySectionID": 1,
+  "librarySectionTitle": "Movies",
+  "mediaTagPrefix": "/system/bundle/media/flags/",
+  "mediaTagVersion": 1792751779,
+  "size": 1,
+  "thumb": "/:/resources/movie.png",
+  "title1": "Movies",
+  "title2": "All Movies",
+  "viewGroup": "movie",
+  "viewMode": 65592
+ }
+}

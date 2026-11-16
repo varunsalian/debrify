@@ -17,8 +17,7 @@ Widget buildDiscoverSourcePanel({
   catalog,
   required Widget Function() continueWatching,
 }) {
-  if (selected == DiscoverSources.jellyfin ||
-      selected == DiscoverSources.emby) {
+  if (DiscoverSources.mediaServerKind(selected) != null) {
     return mediaServer(selected);
   }
   if (selected == DiscoverSources.tmdb && tmdb != null) return tmdb();

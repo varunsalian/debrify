@@ -28,6 +28,7 @@ StremioDropdown<String> buildDiscoverSourcePicker({
     const StremioDropdownOption(DiscoverSources.simkl, 'Simkl'),
     const StremioDropdownOption(DiscoverSources.jellyfin, 'Jellyfin'),
     const StremioDropdownOption(DiscoverSources.emby, 'Emby'),
+    const StremioDropdownOption(DiscoverSources.plex, 'Plex'),
     if (discoveryEnabled)
       const StremioDropdownOption(DiscoverSources.tmdb, 'TMDB'),
     // The release gate wins even for an active source. When enabled, retain an

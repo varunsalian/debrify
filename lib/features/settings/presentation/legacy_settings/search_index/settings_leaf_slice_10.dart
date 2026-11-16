@@ -101,7 +101,7 @@ extension SettingsLeafSlice10 on SettingsLeafBuilder {
         leaf(
           'Profiles',
           'Ask who\'s watching at startup',
-          'Show the profile picker whenever Debrify opens',
+          'With a single profile, open it without the picker',
           const [
             'always ask',
             'profile behavior',

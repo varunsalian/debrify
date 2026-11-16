@@ -1,9 +1,11 @@
-# Jellyfin and Emby sources
+# Jellyfin, Emby and Plex sources
 
-Open **Settings → Jellyfin & Emby → Connect server**. Choose the server type,
+Open **Settings → Jellyfin, Emby & Plex → Connect server**. Choose the server type,
 enter its URL (including a reverse-proxy base path, if any), and sign in with
 a server user that can play the desired library. Multiple servers are supported.
 Use **Test connection**, **Reconnect**, or **Disconnect** on an existing connection.
+**Reconnect** keeps the connection's server type; to change type, disconnect
+and connect again.
 
 Open a movie or an individual episode and select **Sources**. Matching versions
 appear under the server's display name, with resolution/container/codec labels.
@@ -29,7 +31,7 @@ file's formats and have enough bandwidth; transcoding/remux negotiation and
 external server subtitle fetching are not implemented. Embedded audio/subtitle
 tracks and Debrify's existing progress
 and subtitle features continue to use the normal player.
-Downloading Jellyfin/Emby sources to the device is currently disabled; the
+Downloading media-server sources to the device is currently disabled; the
 background downloader does not yet support their authenticated stream lifecycle.
 
 Pinned movies retain their selected server version. Pinned series retain the
@@ -44,9 +46,115 @@ switch, credential change, disabled connection, or grant revocation. Disconnecti
 an owned shared connection requires confirming its impact on other profiles.
 Legacy installs without a committed profile cannot add media servers.
 
+## Plex
+
+Choose **Plex** as the server type, optionally type a display name, then
+**Sign in with Plex**. Debrify shows a 4-character code: enter it at
+plex.tv/link on any phone or computer (touch devices also get an
+**Open plex.tv/link** button). The page updates by itself; codes last 15
+minutes and **Get a new code** replaces an expired one. Pick one of the
+account's servers, including servers shared with you; an account with a
+single server that answers on an encrypted address is connected straight
+away. Reconnect keeps the connection's
+type and Debrify's device id, so the server does not list Debrify twice.
+Disconnecting does not remove Debrify from the account's devices on plex.tv.
+Saving or refreshing another connection's credentials in the same profile
+while a Plex code is waiting changes the profile's authorization, so the Plex
+connection is then not saved; sign in again.
+
+Debrify stores the server's own access token (for servers you own this is
+your account token and can act for your Plex account) in the encrypted
+profile registry. The plex.tv account token is used only during sign-in to
+list servers and is not kept. Tokens travel only in `X-Plex-Token` headers,
+never in URLs or logs.
+
+Addresses: only encrypted addresses are stored by default, in order local
+`plex.direct` HTTPS, remote HTTPS, then Plex relay (shown as "Relay (limited
+speed)" on its sources). Unencrypted http is used only for the server's local
+address and only when **Allow an unencrypted connection to this server's
+local address** is ticked at sign-in (for routers that block `plex.direct`
+names). Remote http is never used. Before any token is sent to an address,
+its `/identity` must answer with the chosen server's id; the verified address
+is cached for 10 minutes per profile and replaced after a network failure, so
+moving between home and away networks recovers automatically.
+
+Matching is exact, like Jellyfin/Emby. Plex cannot filter a library by an
+IMDb/TMDB/TVDB id, so for libraries using the current Plex Movie / Plex TV
+Series agents Debrify asks the server's agent to translate the id into Plex's
+own `plex://` id (two small requests), filters each library by it and checks the
+returned item's id list. Plex gives an empty answer for an id it does not
+know, and may give the same answer when its online metadata service cannot
+be reached, so these libraries need that service for matching (a library scan on every search
+for a title you do not own would be too slow). Libraries using legacy
+agents, or servers that refuse the agent request (some shared users), are
+scanned page by page
+within the same time budget as Jellyfin; very large legacy libraries can
+return "Search incomplete". Episodes are fetched in one filtered request.
+Libraries without an id agent ("Personal Media") are skipped. Items made of
+several files (stacked parts) and files the server reports missing are not
+offered.
+
+Watch sync uses Plex's timeline (with the item's duration, which Plex
+requires) and scrobble endpoints. Discover browses Plex movie and TV
+libraries: sorting, search by title, Recently Added and Continue Watching
+(items in progress) work as for Jellyfin/Emby. Search covers a library's
+movies or shows by title; searching episodes, or within an open show or
+season, is not included for Plex.
+
+Not included for Plex: transcoding, Plex Home / managed-user switching (the
+signed-in account is used), Live TV, music and photo libraries, and plex.tv
+watchlists.
+
+### Known limitations shared by all media servers
+
+The media_kit/mpv player used on desktop, iOS and tvOS does not verify TLS
+certificates by default, so on those platforms the token header can reach an
+intercepting proxy; Android's ExoPlayer and all of Debrify's own API requests
+verify certificates. Enabling verification for server streams is a separate
+player change.
+
+Older Debrify versions that receive a synced Plex connection do not know the
+type: their source search shows "Server unavailable" for it, Discover hides
+it, and their **Reconnect** would open the Jellyfin form, which can overwrite
+the Plex sign-in. Update every device before connecting Plex on one of them.
+
+### Code layout and recorded exception
+
+The clients live in `lib/features/media_servers/` (`data/jellyfin_emby_*`,
+`data/plex/`), behind `MediaServerApi`; `lib/services/media_server_client.dart`
+routes by server kind. Search results and media sources still cross that
+interface as maps with the Jellyfin field names the legacy service reads
+(documented in `data/plex/plex_item_mapping.dart`). This is a temporary
+exception to typed component boundaries: it ends when
+`lib/services/media_server_service.dart` moves into the feature and typed
+item/media-source records replace the maps.
+
+### Plex validation
+
+Automated tests replay responses recorded from Plex Media Server 1.43.5
+(`test/fixtures/media_servers/plex/`) and cover matching through the agent,
+the legacy scan, episodes, refused redirects, token placement, id validation,
+timeline/scrobble requests, address policy and fallback, sign-in polling,
+expiry, cancellation and profile switches, saving, and the settings panel.
+The plex.tv server list (`resources`) and user calls are tested against a
+documented shape only; they need one check with a real Plex account.
+
+The opt-in live suite runs the real client against a local Plex Media
+Server container (no account needed); see the header of
+`test/features/media_servers/plex_live_test.dart`. It passed on
+November 15, 2026 against Plex Media Server 1.43.5:
+
+```sh
+DEBRIFY_PLEX_LIVE=1 flutter test --no-pub test/features/media_servers/plex_live_test.dart
+```
+
+Before release, also sign in with a real Plex account (own and shared
+server, home and away networks) and play a movie and an episode on each
+supported platform, with and without watch sync.
+
 ## Watch-state sync
 
-Enable **Settings → Jellyfin & Emby → Sync server watch progress** for the
+Enable **Settings → Jellyfin, Emby & Plex → Sync server watch progress** for the
 current Debrify profile. It is off by default. Shared connections use the same
 server account: enabling this also updates that account's progress in other apps.
 
@@ -78,8 +186,8 @@ write progress back to the server.
 
 ## Discover browsing
 
-Choose **Jellyfin** or **Emby** in Discover's Source selector, then select a
-connected server and video library. Both can also be saved as the default
+Choose **Jellyfin**, **Emby** or **Plex** in Discover's Source selector, then select a
+connected server and video library. Each can also be saved as the default
 Discover source in Settings. Browse folders, series, seasons and episodes, or
 search within the current library/folder. Results are paged; library browsing
 supports name, date-added and year sorting. Recently Added and Continue Watching

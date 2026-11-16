@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:debrify/features/media_servers/data/media_server_connection_store.dart';
 import 'package:debrify/models/android_video_renderer_mode.dart';
 import 'package:debrify/screens/video_player/widgets/player_menu_panel.dart';
 import 'package:debrify/screens/video_player_screen.dart';
@@ -206,7 +207,7 @@ void main() {
         await d.f.until(t, () => d.prearmEntered);
         await d.f.finish(
           t,
-          MediaServerService.remove(resource, revokeBorrowers: true),
+          MediaServerConnectionStore.remove(resource, revokeBorrowers: true),
         );
         d.prearm!.complete();
         await d.f.until(t, () => _failureSnack().evaluate().isNotEmpty);

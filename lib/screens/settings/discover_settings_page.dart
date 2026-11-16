@@ -81,6 +81,7 @@ class _DiscoverSettingsPageState extends State<DiscoverSettingsPage> {
       ),
       const SettingsSelectOption('jellyfin', 'Jellyfin', 'Always open your Jellyfin libraries'),
       const SettingsSelectOption('emby', 'Emby', 'Always open your Emby libraries'),
+      const SettingsSelectOption('plex', 'Plex', 'Always open your Plex libraries'),
     ];
 
     var tmdbEnabled = false;

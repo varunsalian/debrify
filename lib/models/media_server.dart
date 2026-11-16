@@ -1,6 +1,7 @@
 enum MediaServerKind {
   jellyfin('Jellyfin'),
-  emby('Emby');
+  emby('Emby'),
+  plex('Plex');
 
   const MediaServerKind(this.label);
   final String label;
@@ -15,6 +16,7 @@ class MediaServerAccount {
     required this.token,
     required this.serverId,
     required this.deviceId,
+    this.connections = const [],
   });
 
   final MediaServerKind kind;
@@ -24,6 +26,24 @@ class MediaServerAccount {
   final String serverId;
   final String deviceId;
 
+  /// Plex only: the addresses this connection may use, in priority order.
+  /// Only addresses allowed at sign-in are stored, so whatever is listed
+  /// may be used. Empty for Jellyfin/Emby, whose JSON is unchanged.
+  final List<MediaServerConnection> connections;
+
+  /// Whether [baseUrl] is a Plex relay, which Plex limits in speed.
+  bool get usesRelay => connections.any((c) => c.relay && c.uri == baseUrl);
+
+  MediaServerAccount withBaseUrl(String value) => MediaServerAccount(
+    kind: kind,
+    baseUrl: value,
+    userId: userId,
+    token: token,
+    serverId: serverId,
+    deviceId: deviceId,
+    connections: connections,
+  );
+
   Map<String, dynamic> toJson() => {
     'kind': kind.name,
     'baseUrl': baseUrl,
@@ -31,6 +51,8 @@ class MediaServerAccount {
     'token': token,
     'serverId': serverId,
     'deviceId': deviceId,
+    if (connections.isNotEmpty)
+      'connections': [for (final c in connections) c.toJson()],
   };
 
   factory MediaServerAccount.fromJson(Map<String, dynamic> value) =>
@@ -41,6 +63,26 @@ class MediaServerAccount {
         token: value['token'] as String,
         serverId: value['serverId'] as String,
         deviceId: value['deviceId'] as String,
+        connections: [
+          for (final c in value['connections'] as List? ?? const [])
+            MediaServerConnection.fromJson((c as Map).cast<String, dynamic>()),
+        ],
+      );
+}
+
+/// One stored Plex address. Never contains credentials.
+class MediaServerConnection {
+  const MediaServerConnection({required this.uri, this.relay = false});
+
+  final String uri;
+  final bool relay;
+
+  Map<String, dynamic> toJson() => {'uri': uri, if (relay) 'relay': true};
+
+  factory MediaServerConnection.fromJson(Map<String, dynamic> value) =>
+      MediaServerConnection(
+        uri: value['uri'] as String,
+        relay: value['relay'] == true,
       );
 }
 

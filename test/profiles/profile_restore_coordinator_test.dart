@@ -268,6 +268,47 @@ void main() {
     }
   });
 
+  test('profile backup restores a Plex connection with its addresses', () async {
+    final resources = ConnectionResourceService(registry: registry, cipher: cipher);
+    final secret = {
+      'kind': 'plex',
+      'baseUrl': 'https://home.plex.direct:32400/',
+      'userId': 'user-uuid-1',
+      'token': 'server-token-0001',
+      'serverId': 'server-1',
+      'deviceId': 'debrifyclient0123456789',
+      'connections': [
+        {'uri': 'https://home.plex.direct:32400/'},
+        {'uri': 'https://relay.plex.direct:8443/', 'relay': true},
+      ],
+    };
+    await resources.create(
+      context: await ProfileAuthorizationContext.capture(registry),
+      type: ConnectionResourceType.mediaServer, label: 'Den',
+      publicConfig: {'accountLabel': 'Plex'},
+      secretConfig: secret,
+    );
+    final package = await ProfilePackageService(registry: registry, resources: resources).exportAllProfiles(
+      context: await ProfileAuthorizationContext.capture(registry), includeSecrets: true, includeDatabases: false,
+    );
+    final report = await ProfileRestoreCoordinator(registry: registry, cipher: cipher).restoreDeviceGraph(
+      package: package, authorization: await ProfileAuthorizationContext.capture(registry),
+    );
+    final lifecycle = ProfileLifecycleCoordinator(registry: registry);
+    addTearDown(lifecycle.dispose);
+    await lifecycle.switchTo(report.importedProfileIds.single);
+    final restored = (await registry.listGrantedResources(report.importedProfileIds.single))
+        .singleWhere((value) => value.type == ConnectionResourceType.mediaServer &&
+            value.ownerProfileId == report.importedProfileIds.single);
+    expect(restored.publicConfig['accountLabel'], 'Plex');
+    final restoredSecret = await resources.resolveSecretForUse(
+      context: await ProfileAuthorizationContext.capture(registry),
+      resourceId: restored.id,
+      feature: ProfileFeature.cloud,
+    );
+    expect(jsonEncode(restoredSecret), jsonEncode(secret));
+  });
+
   test(
     'sync bootstrap excludes appearance but explicit backup restores it',
     () async {

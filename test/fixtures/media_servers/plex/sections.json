@@ -1,0 +1,49 @@
+{
+ "MediaContainer": {
+  "Directory": [
+   {
+    "agent": "tv.plex.agents.movie",
+    "allowSync": false,
+    "content": true,
+    "contentChangedAt": 59,
+    "createdAt": 1794750218,
+    "directory": true,
+    "filters": true,
+    "hidden": 0,
+    "key": "1",
+    "language": "en-US",
+    "metadataAgentProviderGroupId": 1,
+    "refreshing": false,
+    "scannedAt": 1794750322,
+    "scanner": "Plex Movie",
+    "title": "Movies",
+    "type": "movie",
+    "updatedAt": 1794750218,
+    "uuid": "6b1fd853-1e3b-430a-a1c7-b63953595e64"
+   },
+   {
+    "agent": "tv.plex.agents.series",
+    "allowSync": false,
+    "content": true,
+    "contentChangedAt": 18,
+    "createdAt": 1794750218,
+    "directory": true,
+    "filters": true,
+    "hidden": 0,
+    "key": "2",
+    "language": "en-US",
+    "metadataAgentProviderGroupId": 2,
+    "refreshing": false,
+    "scannedAt": 1794750220,
+    "scanner": "Plex TV Series",
+    "title": "TV Shows",
+    "type": "show",
+    "updatedAt": 1794750218,
+    "uuid": "9b86a625-4cf4-4721-835b-f38755eb08ae"
+   }
+  ],
+  "allowSync": false,
+  "size": 2,
+  "title1": "Plex Library"
+ }
+}

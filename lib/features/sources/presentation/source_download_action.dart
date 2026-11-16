@@ -15,7 +15,7 @@ Future<void> downloadSource(
       SourceDownloadStatus.findingEpisode => 'Finding this IPTV episode…',
       SourceDownloadStatus.resolving => 'Resolving download URL…',
       SourceDownloadStatus.unsupported =>
-        'Jellyfin and Emby downloads are not supported yet.',
+        'Media server downloads (Jellyfin, Emby, Plex) are not supported yet.',
       SourceDownloadStatus.episodeMissing =>
         "${source.episodeIdentifier ?? 'This episode'} is not available in this IPTV series.",
       SourceDownloadStatus.episodeUnavailable =>

@@ -1,0 +1,36 @@
+{
+ "MediaContainer": {
+  "Metadata": [
+   {
+    "addedAt": 1794750219,
+    "childCount": 1,
+    "contentRatingAge": 17,
+    "duration": 2880000,
+    "guid": "plex://show/5d9c083402391c001f583d09",
+    "hasPremiumPrimaryExtra": "1",
+    "index": 1,
+    "key": "/library/metadata/3/children",
+    "leafCount": 2,
+    "ratingKey": "3",
+    "slug": "breaking-bad",
+    "thumb": "/library/metadata/3/thumb/1794750227",
+    "title": "Breaking Bad",
+    "type": "show",
+    "updatedAt": 1794750227,
+    "viewedLeafCount": 0,
+    "year": 2008
+   }
+  ],
+  "allowSync": false,
+  "identifier": "com.plexapp.plugins.library",
+  "mediaTagPrefix": "/system/bundle/media/flags/",
+  "mediaTagVersion": 1792751779,
+  "nocache": true,
+  "size": 1,
+  "thumb": "/:/resources/show.png",
+  "title1": "TV Shows",
+  "title2": "Search for 'bad'",
+  "viewGroup": "show",
+  "viewMode": 65592
+ }
+}

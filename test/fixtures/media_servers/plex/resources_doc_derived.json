@@ -1,0 +1,36 @@
+[
+ {
+  "name": "Living Room",
+  "product": "Plex Media Server",
+  "provides": "server",
+  "clientIdentifier": "cff3c0ac2368b3b2930ab860ccc476244cc38b71",
+  "owned": true,
+  "accessToken": "server-token-0001",
+  "httpsRequired": false,
+  "publicAddressMatches": true,
+  "presence": true,
+  "connections": [
+   {"protocol": "https", "address": "192.168.1.5", "port": 32400, "uri": "https://192-168-1-5.0123abcd.plex.direct:32400", "local": true, "relay": false, "IPv6": false},
+   {"protocol": "http", "address": "192.168.1.5", "port": 32400, "uri": "http://192.168.1.5:32400", "local": true, "relay": false, "IPv6": false},
+   {"protocol": "https", "address": "81.2.3.4", "port": 32400, "uri": "https://81-2-3-4.0123abcd.plex.direct:32400", "local": false, "relay": false, "IPv6": false},
+   {"protocol": "https", "address": "1.2.3.4", "port": 8443, "uri": "https://1-2-3-4.0123abcd.plex.direct:8443", "local": false, "relay": true, "IPv6": false}
+  ]
+ },
+ {
+  "name": "Friend's server",
+  "provides": "server",
+  "clientIdentifier": "feedfacefeedfacefeedfacefeedfacefeedface",
+  "owned": false,
+  "accessToken": "shared-token-0002",
+  "connections": [
+   {"protocol": "https", "uri": "https://5-6-7-8.89abcdef.plex.direct:32400", "local": false, "relay": false}
+  ]
+ },
+ {
+  "name": "Phone",
+  "provides": "client,player",
+  "clientIdentifier": "phone-1",
+  "accessToken": "client-token",
+  "connections": []
+ }
+]

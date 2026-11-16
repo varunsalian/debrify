@@ -106,6 +106,7 @@ import android.net.Uri
 import com.debrify.app.ActivityTracker
 import com.debrify.app.MainActivity
 import com.debrify.app.R
+import com.debrify.app.RemoteBackKey
 import com.debrify.app.subtitle.AddonSubtitleResult
 import com.debrify.app.subtitle.AddonSubtitleStatus
 import com.debrify.app.subtitle.StremioAddon
@@ -2120,7 +2121,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     // D-pad navigation
-    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+    override fun dispatchKeyEvent(rawEvent: KeyEvent): Boolean {
+        val event = RemoteBackKey.normalize(rawEvent) // Escape/gamepad B = Back.
         val keyCode = event.keyCode
         if (::startupGateView.isInitialized && startupGateView.visibility == View.VISIBLE &&
             keyCode in listOf(KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN,

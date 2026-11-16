@@ -1,0 +1,46 @@
+{
+ "MediaContainer": {
+  "Metadata": [
+   {
+    "addedAt": 1794750219,
+    "guid": "plex://season/602e61de66dfdb002c096b16",
+    "index": 1,
+    "key": "/library/metadata/4/children",
+    "leafCount": 2,
+    "parentGuid": "plex://show/5d9c083402391c001f583d09",
+    "parentIndex": 1,
+    "parentKey": "/library/metadata/3",
+    "parentRatingKey": "3",
+    "parentSlug": "breaking-bad",
+    "parentStudio": "Sony Pictures Television",
+    "parentTheme": "/library/metadata/3/theme/1794750227",
+    "parentThumb": "/library/metadata/3/thumb/1794750227",
+    "parentTitle": "Breaking Bad",
+    "parentYear": 2008,
+    "ratingKey": "4",
+    "thumb": "/library/metadata/4/thumb/1794750227",
+    "title": "Season 1",
+    "type": "season",
+    "updatedAt": 1794750227,
+    "viewedLeafCount": 0
+   }
+  ],
+  "allowSync": true,
+  "identifier": "com.plexapp.plugins.library",
+  "key": "3",
+  "librarySectionID": 2,
+  "librarySectionTitle": "TV Shows",
+  "mediaTagPrefix": "/system/bundle/media/flags/",
+  "mediaTagVersion": 1792751779,
+  "nocache": true,
+  "parentIndex": 1,
+  "parentTitle": "Breaking Bad",
+  "parentYear": 2008,
+  "size": 1,
+  "thumb": "/library/metadata/3/thumb/1794750227",
+  "title1": "TV Shows",
+  "title2": "Breaking Bad",
+  "viewGroup": "season",
+  "viewMode": 65593
+ }
+}

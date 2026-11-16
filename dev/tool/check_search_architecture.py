@@ -21,6 +21,7 @@ FEATURES += ("stremio_tv_catalogs",)
 FEATURES += ("recordings",)
 FEATURES += ("recording_output",)
 FEATURES += ("sports",)
+FEATURES += ("media_servers",)
 RECORDINGS_COMPLETE = True
 RECORDINGS_FACADE = "lib/screens/settings/recordings_page.dart"
 RECORDINGS_BRIDGE = "lib/features/recordings/presentation/legacy_recordings/"
@@ -716,6 +717,8 @@ def violations(path: Path) -> list[str]:
             problems.append("Recordings temporary cross-call outside its exact legacy bridge")
         if re.search(r"\b(?:KeepAlive|AutomaticKeepAliveClientMixin)\b", source):
             problems.append("Recordings adds keep-alive ownership")
+    if relative.startswith("lib/features/media_servers/") and lines > 500:
+        problems.append(f"{lines} lines exceeds the 500-line media servers limit")
     if RECORDINGS_COMPLETE and relative == RECORDINGS_FACADE:
         if lines > RECORDINGS_FACADE_CAP:
             problems.append(f"{lines} lines exceeds the {RECORDINGS_FACADE_CAP}-line recordings facade limit")

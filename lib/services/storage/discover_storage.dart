@@ -20,6 +20,7 @@ final class DiscoverStorage {
       value == 'mdblist' ||
       value == 'jellyfin' ||
       value == 'emby' ||
+      value == 'plex' ||
       (value.startsWith('a:') && value.length > 2 && value.length <= 514);
 
   /// What Discover should show when opened. Unset defaults to remembering the
