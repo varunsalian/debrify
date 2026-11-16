@@ -920,6 +920,9 @@ test/features/video_player/video_player_p21_tracker_paths_test.dart
 test/features/video_player/video_player_p21_press_routing_test.dart
 # 2026-11-01: regression coverage for user-reported fixes (all pass on Linux).
 test/core/platform/preferences_file_recovery_test.dart
+test/core/network/response_text_test.dart
+test/indexer_manager_service_test.dart
+test/skip_segment_service_test.dart
 test/custom_series_progress_test.dart
 test/dock_layout_test.dart
 test/features/sports/presentation/sports_event_card_test.dart

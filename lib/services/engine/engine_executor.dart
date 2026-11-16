@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../../core/network/response_text.dart';
 import '../../models/engine_config/engine_config.dart';
 import '../../models/torrent.dart';
 import 'response_parser.dart';
@@ -123,14 +124,14 @@ class EngineExecutor {
           dynamic unwrappedJson;
           if (config.response.format == 'rss') {
             rawResults = _responseParser.parseRss(
-              response.body,
+              responseText(response),
               config.response,
               searchType: searchType,
             );
           } else {
             dynamic responseJson;
             try {
-              responseJson = json.decode(response.body);
+              responseJson = json.decode(responseText(response));
               unwrappedJson = _unwrapJinaIfNeeded(
                 responseJson,
                 config.response.format,

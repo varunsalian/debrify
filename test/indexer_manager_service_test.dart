@@ -388,6 +388,65 @@ void main() {
     );
 
     test(
+      'reads Prowlarr Torznab titles as UTF-8 when no charset is sent',
+      () async {
+        final server = await _TestServer.start((request) async {
+          if (request.uri.path == '/api/v1/indexer') {
+            request.response
+              ..headers.contentType = ContentType.json
+              ..write(
+                jsonEncode([
+                  {'id': 1, 'enable': true, 'protocol': 'torrent'},
+                ]),
+              );
+            await request.response.close();
+            return;
+          }
+
+          // Prowlarr's real header (checked live): no charset.
+          request.response.headers.set(
+            HttpHeaders.contentTypeHeader,
+            'application/rss+xml',
+          );
+          request.response.add(
+            utf8.encode('''
+<?xml version="1.0" encoding="UTF-8"?>
+<rss xmlns:torznab="http://torznab.com/schemas/2015/feed">
+  <channel>
+    <item>
+      <title>Матрица / The Matrix (1999) UHD WEB-DL 2160p</title>
+      <link>magnet:?xt=urn:btih:3333333333333333333333333333333333333333&amp;dn=Matrix</link>
+      <size>1000</size>
+    </item>
+  </channel>
+</rss>
+'''),
+          );
+          await request.response.close();
+        });
+
+        addTearDown(server.close);
+
+        final results = await IndexerManagerService.searchByImdb(
+          IndexerManagerConfig(
+            id: 'test',
+            name: 'Local Prowlarr',
+            type: IndexerManagerType.prowlarr,
+            baseUrl: server.baseUrl,
+            apiKey: 'prowlarr-key',
+          ),
+          'tt0133093',
+          isMovie: true,
+        );
+
+        expect(
+          results.single.name,
+          'Матрица / The Matrix (1999) UHD WEB-DL 2160p',
+        );
+      },
+    );
+
+    test(
       'surfaces an error when every Prowlarr Torznab indexer fails',
       () async {
         final server = await _TestServer.start((request) async {
