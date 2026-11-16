@@ -350,7 +350,7 @@ class IntroDbSegmentProvider extends _HttpSkipSegmentProvider {
 
 class TheIntroDbSegmentProvider extends _HttpSkipSegmentProvider {
   static final Uri _defaultEndpoint = Uri.parse(
-    'https://api.theintrodb.org/v3/media',
+    'https://api.theintrodb.org/v4/media',
   );
 
   TheIntroDbSegmentProvider({
