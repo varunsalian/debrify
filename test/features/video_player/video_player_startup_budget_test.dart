@@ -8,6 +8,8 @@ void main() {
   // A media-server source asks its server for watch state before the file
   // opens. On a slow or remote server that took most of the 12 s budget, and
   // the player then gave up on episodes an external player plays fine (#103).
+  // Holding an earlier setup step stands in for that wait: both run before
+  // the candidate is armed at the open.
   testWidgets('slow setup before the open does not spend the startup budget', (
     t,
   ) async {

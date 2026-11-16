@@ -34,7 +34,12 @@ void main() {
     );
   });
 
-  test('does not throw on bytes that are not UTF-8', () {
-    expect(responseText(response([0x41, 0xff, 0x42], 'text/xml')), 'A�B');
+  test('keeps the Latin-1 reading for bodies that are not UTF-8', () {
+    // An engine site serving ISO-8859-1 without a charset read correctly
+    // before; strict UTF-8 must not turn its accents into U+FFFD.
+    expect(
+      responseText(response(latin1.encode('Amélie'), 'application/rss+xml')),
+      'Amélie',
+    );
   });
 }
