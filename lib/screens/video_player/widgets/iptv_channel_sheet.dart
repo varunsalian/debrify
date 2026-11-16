@@ -841,6 +841,8 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.arrowUp) {
+      // A held UP stops on the filters; only a fresh press moves to search.
+      if (event is KeyRepeatEvent) return KeyEventResult.handled;
       _searchFocusNode.requestFocus();
       setState(() => _focusZone = _FocusZone.search);
       return KeyEventResult.handled;
@@ -875,7 +877,9 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
           _scheduleChannel = _filteredChannels[_focusedIndex];
         });
         _scrollToFocused();
-      } else {
+      } else if (event is! KeyRepeatEvent) {
+        // Only a fresh press leaves the list: a held UP stops on channel 1
+        // rather than overshooting into the filters.
         setState(() => _focusZone = _FocusZone.filters);
       }
       return KeyEventResult.handled;

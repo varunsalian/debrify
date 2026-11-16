@@ -43,6 +43,8 @@ test/services/webdav_sync/webdav_sync_tombstone_audit_test.dart
 test/android_tv_mdblist_progress_source_test.dart
 test/features/sources/presentation/automatic_playback_retirement_test.dart
 test/iptv_channel_sheet_responsive_test.dart
+test/iptv_channel_sheet_held_up_test.dart
+test/channel_guides_held_up_test.dart
 test/media_server_watch_player_wiring_test.dart
 test/movie_resume_source_independence_test.dart
 test/native_player_settings_wiring_test.dart

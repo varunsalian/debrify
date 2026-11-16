@@ -1021,7 +1021,7 @@ A5c (iptvGuideVisible) sub-branches:
 - BACK: hideIptvEpgPane@11293 and list focus, or hideIptvGuide (O).
 - LEFT in the EPG panel (isFocusInIptvEpgPanel@11539): hideIptvEpgPane and refocus the channel row. LEFT in the channel list: consumed.
 - RIGHT in the channel list (first press): showIptvSchedulePane@11153 for focusedIptvGuideEntry@11140.
-- UP long-press (repeat≥3) in the list: focus iptvGuideSearch.
+- Held UP (repeat>0) in the list: scrolls it and stops on the first row (`TvGuideHeldUp`); only a fresh press leaves the list. Until 0.10.6_alpha, repeat≥3 focused iptvGuideSearch. The Stremio TV guide matches, and ignores the rest of the hold that opened it.
 
 A12 (UP) sub-branches:
 1. Progress bar focused, Stremio sources present: badge focus.
