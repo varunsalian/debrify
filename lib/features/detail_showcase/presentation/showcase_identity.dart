@@ -2,6 +2,7 @@ import 'package:debrify/features/detail_showcase/presentation/showcase_identity_
 import 'package:debrify/features/detail_showcase/presentation/showcase_identity_readouts.dart';
 import 'package:debrify/features/detail_showcase/presentation/showcase_metrics.dart';
 import 'package:debrify/features/detail_showcase/presentation/showcase_style.dart';
+import 'package:debrify/features/detail_showcase/presentation/showcase_synopsis.dart';
 import 'package:debrify/widgets/detail/detail_model.dart';
 import 'package:debrify/widgets/tracker_brand_marks.dart';
 import 'package:flutter/material.dart';
@@ -26,6 +27,11 @@ class ShowcaseIdentity extends StatelessWidget {
   /// inside — so both are the wrong number.
   final double height;
 
+  /// The wide synopsis's MORE, entered by UP from the button row (see
+  /// [ShowcaseSynopsis]); UP from it goes on to the back button.
+  final FocusNode? synopsisNode;
+  final VoidCallback? onSynopsisExitUp;
+
   const ShowcaseIdentity({
     super.key,
     required this.model,
@@ -33,6 +39,8 @@ class ShowcaseIdentity extends StatelessWidget {
     required this.actionNodes,
     required this.onFocused,
     required this.height,
+    this.synopsisNode,
+    this.onSynopsisExitUp,
   });
 
   @override
@@ -258,11 +266,20 @@ class ShowcaseIdentity extends StatelessWidget {
           if ((m.synopsis ?? '').isNotEmpty)
             SizedBox(
               width: 410 * metrics.k,
-              child: Text(
-                m.synopsis!,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
+              child: ShowcaseSynopsis(
+                text: m.synopsis!,
                 style: st(10.5 * metrics.k, a: 0.74).copyWith(height: 1.42),
+                node: synopsisNode,
+                onExitUp: onSynopsisExitUp,
+                onExitDown: () {
+                  // Back to the row it was entered from.
+                  if (m.showPrimary) {
+                    primaryNode.requestFocus();
+                  } else if (actionNodes.isNotEmpty) {
+                    actionNodes.first.requestFocus();
+                  }
+                },
+                onFocused: onFocused,
               ),
             ),
           const SizedBox(height: 11),

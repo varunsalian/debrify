@@ -4,12 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 /// Opens one trivia, goof or quote in full. The rail's cards cut long entries
-/// off, and on a TV there was no way to read the rest.
+/// off, and on a TV there was no way to read the rest. The wide identity's
+/// cut synopsis opens here too.
 ///
 /// UP/DOWN scroll a long entry, OK or Back closes, and focus returns to the
 /// card that opened it.
 ///
-/// [kind] is the card's eyebrow ('Trivia', 'Goof' or 'Quote').
+/// [kind] is the eyebrow ('Trivia', 'Goof', 'Quote' or 'Synopsis').
 Future<void> showDidYouKnowReader(
   BuildContext context, {
   required String kind,

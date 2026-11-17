@@ -8,6 +8,7 @@ import 'package:debrify/features/catalog_detail/presentation/legacy_catalog_deta
 import 'package:debrify/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_resources.dart';
 import 'package:debrify/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_root_layout.dart';
 import 'package:debrify/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_watchlist.dart';
+import 'package:debrify/utils/synopsis_text.dart';
 import 'package:flutter/material.dart';
 
 class CatalogDetailActionLayout {
@@ -29,7 +30,9 @@ class CatalogDetailActionLayout {
 
   Widget? secDescription(double start) {
     var description = _deps.presentedItem().description ?? '';
-    if (description.isEmpty || description.length < 40) {
+    if (description.isEmpty ||
+        description.length < 40 ||
+        synopsisLooksCut(description)) {
       description = _m.imdbExtra?.plot ?? description;
     }
     if (description.isEmpty) return null;

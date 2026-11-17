@@ -324,6 +324,7 @@ class _DetailShowcaseState extends State<DetailShowcase> {
   static const _openingTimeout = Duration(milliseconds: 1200);
 
   final List<FocusNode> _actionNodes = [];
+  final FocusNode _synopsisNode = FocusNode(debugLabel: 'showcase-synopsis');
   final List<FocusNode> _seasonNodes = [];
   final List<FocusNode> _castNodes = [];
   final List<FocusNode> _guideNodes = [];
@@ -601,6 +602,7 @@ class _DetailShowcaseState extends State<DetailShowcase> {
     for (final n in [
       ..._extraNodes.values.expand((nodes) => nodes),
       ..._actionNodes,
+      _synopsisNode,
       ..._seasonNodes,
       ..._castNodes,
       ..._guideNodes,
@@ -906,6 +908,12 @@ class _DetailShowcaseState extends State<DetailShowcase> {
       case LogicalKeyboardKey.arrowUp:
         if (verticalBand && _liveCol(band) > 0) {
           _walk(band, -1);
+        } else if (band.key == 'identity' &&
+            detailNodeMounted(_synopsisNode) &&
+            band.nodes.any((n) => n.hasFocus)) {
+          // The synopsis's MORE sits between the buttons and the back
+          // button; it is mounted only when the text is cut.
+          _go(_synopsisNode, const Offset(0, -1));
         } else {
           _step(bands, -1);
         }
@@ -1268,6 +1276,9 @@ class _DetailShowcaseState extends State<DetailShowcase> {
                     ),
                     onFocused: () => _setBand('identity'),
                     height: _heroHeight(view, viewport),
+                    synopsisNode: _synopsisNode,
+                    onSynopsisExitUp: () =>
+                        _go(widget.model.focus.backNode, const Offset(0, -1)),
                   ),
                   if (view != null && view.seasons.length > 1)
                     _band(

@@ -83,13 +83,14 @@ class ShowcaseFixture {
     ImdbEnrichment? extra,
     List<SeriesSource> sources = const [],
     List<StremioMeta> recs = const [],
+    String description = 'A fixed original-code synopsis.',
   }) => DetailModel(
     item: StremioMeta(
       id: 'tt0903747',
       imdbId: 'tt0903747',
       type: movie ? 'movie' : 'series',
       name: movie ? 'Original Movie' : 'Original Series',
-      description: 'A fixed original-code synopsis.',
+      description: description,
       year: '2026',
       genres: const ['Crime', 'Drama'],
     ),
