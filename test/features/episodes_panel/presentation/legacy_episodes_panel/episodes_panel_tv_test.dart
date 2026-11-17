@@ -40,7 +40,7 @@ Future<void> dismiss(WidgetTester t, EpisodesPanelFixture f) async {
 
 void main() {
   testWidgets(
-    'Classic EpisodesScreen back, dropdown, source keys and terminal pop order',
+    'Classic EpisodesScreen back, dropdown, source keys and Sources on top',
     (t) async {
       await episodesPanelCase(t, 'classic-screen-keys', 300, (f) async {
         f.television = true;
@@ -93,11 +93,23 @@ void main() {
         expect(tile.onMenuAction, isNull);
         expect(tile.onTrackerOptions, isNull);
         tile.onSources();
-        expect(f.calls, ['item:false']);
-        expect(f.navigator.currentState!.canPop(), isFalse);
+        // Sources open on top of the episode list, so Back from them must
+        // return to the same season, not to the host.
+        expect(f.calls, ['item:true']);
+        await t.pump();
+        f.navigator.currentState!.push(
+          MaterialPageRoute<void>(
+            builder: (_) => const Scaffold(body: Text('Sources page')),
+          ),
+        );
         await t.pump();
         await t.pump(const Duration(milliseconds: 400));
-        expect(find.text('Host'), findsOneWidget);
+        expect(find.text('Sources page'), findsOneWidget);
+        f.navigator.currentState!.pop();
+        await t.pump();
+        await t.pump(const Duration(milliseconds: 400));
+        expect(find.text('Host'), findsNothing);
+        expect(find.byType(EpisodeTile), findsNWidgets(2));
       });
     },
   );

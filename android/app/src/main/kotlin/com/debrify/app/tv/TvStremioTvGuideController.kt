@@ -1,6 +1,7 @@
 package com.debrify.app.tv
 
 import android.os.Handler
+import android.view.KeyEvent
 import android.view.View
 import android.widget.TextView
 import android.widget.Toast
@@ -196,7 +197,17 @@ internal class TvStremioTvGuideController(
         }
     }
 
+    /**
+     * Opened by an UP press: the rest of that hold must not start scrolling
+     * the list it just opened on.
+     */
+    fun showStremioTvGuideFromUp(openingUp: KeyEvent) {
+        showStremioTvGuide()
+        openingUpDownTime = openingUp.downTime
+    }
+
     fun showStremioTvGuide() {
+        openingUpDownTime = null
         stremioTvGuideVisible = true
         stremioTvGuideOverlay?.animate()?.cancel()
         stremioTvGuideOverlay?.visibility = View.VISIBLE
@@ -223,6 +234,7 @@ internal class TvStremioTvGuideController(
 
     fun hideStremioTvGuide() {
         stremioTvGuideVisible = false
+        openingUpDownTime = null
         cancelGuideWait()
         stremioTvGuideOverlay?.animate()?.cancel()
         stremioTvGuideOverlay?.animate()?.alpha(0f)?.setDuration(150)?.withEndAction {
@@ -290,6 +302,17 @@ internal class TvStremioTvGuideController(
             stremioTvGuideNowLetter?.visibility = View.VISIBLE
         }
     }
+
+    /** downTime of the UP press that opened the guide; null when none did. */
+    private var openingUpDownTime: Long? = null
+
+    /**
+     * See [TvGuideHeldUp]: a held UP stays on this guide's first row, and the
+     * repeats of the press that opened the guide do nothing.
+     */
+    fun holdsHeldUpInList(event: KeyEvent): Boolean =
+        (event.repeatCount > 0 && event.downTime == openingUpDownTime) ||
+            TvGuideHeldUp.holdsInList(stremioTvGuideList, event)
 
     fun isFocusInStremioTvGuideList(): Boolean {
         val list = stremioTvGuideList ?: return false

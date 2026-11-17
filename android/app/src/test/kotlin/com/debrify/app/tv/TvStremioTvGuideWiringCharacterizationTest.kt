@@ -28,15 +28,29 @@ internal class TvStremioTvGuideWiringCharacterizationTest : TvPhase7OriginalTest
         assertEquals("automatic Next failure dispatches finish override", true, field("finishProgressAttempted"))
     }
 
-    @Test fun guideKeyRoutingConsumesLeftOffersSearchOnHeldUpAndClosesOnBack() {
+    @Test fun guideKeyRoutingConsumesLeftKeepsHeldUpOnTheFirstRowAndClosesOnBack() {
         standard(); invoke("showStremioTvGuide"); layout(); pump(); layout()
         val row = list().findViewHolderForAdapterPosition(0)!!.itemView
         row.requestFocus(); shadowOf(activity).setCurrentFocus(row)
         assertTrue(activity.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_LEFT)))
         assertTrue(activity.dispatchKeyEvent(KeyEvent(0, 0, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_UP, 3)))
-        assertTrue("held Up offers search focus", view("stremioTvGuideSearch").hasFocus())
+        assertTrue("held Up stays on the first row", row.hasFocus())
+        assertFalse("held Up no longer jumps to search", view("stremioTvGuideSearch").hasFocus())
         assertTrue(activity.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BACK)))
         assertFalse("Back closes the guide through its production caller", visible())
+    }
+
+    @Test fun theHoldThatOpensTheGuideDoesNotScrollIt() {
+        standard(); layout(); pump()
+        assertTrue(activity.dispatchKeyEvent(KeyEvent(500, 500, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_UP, 0)))
+        assertTrue("UP opens the guide", visible())
+        layout(); pump(); layout()
+        // Below the first row, so only the opening-hold rule can consume it.
+        val row = list().findViewHolderForAdapterPosition(1)!!.itemView
+        row.requestFocus(); shadowOf(activity).setCurrentFocus(row)
+        assertTrue("its repeats are consumed", activity.dispatchKeyEvent(KeyEvent(500, 800, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_UP, 3)))
+        assertTrue("focus stays on the row", row.hasFocus())
+        assertFalse("a later hold is left to the list", activity.dispatchKeyEvent(KeyEvent(900, 1200, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_UP, 3)))
     }
 
     @Test fun guideVisibilityBlocksCleanPlaybackStateWithoutOtherOverlays() {

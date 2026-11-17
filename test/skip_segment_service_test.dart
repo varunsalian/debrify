@@ -251,8 +251,13 @@ void main() {
         final provider = TheIntroDbSegmentProvider(
           client: MockClient((request) async {
             requested = request.url;
+            // The v4 body: keyed by tvdb_id, no tmdb_id.
             return http.Response('''
             {
+              "tvdb_id": 81189,
+              "type": "tv",
+              "season": 1,
+              "episode": 1,
               "intro": [
                 {"start_ms": null, "end_ms": 31000},
                 {"start_ms": 50000, "end_ms": 60000},
@@ -274,6 +279,8 @@ void main() {
         );
 
         expect(requested.host, 'api.theintrodb.org');
+        // v2/v3 are frozen and being shut down.
+        expect(requested.path, '/v4/media');
         expect(requested.queryParameters['duration_ms'], '3500000');
         expect(result.intros, hasLength(2));
         expect(result.intro?.start, Duration.zero);

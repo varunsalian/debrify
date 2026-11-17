@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../models/stremio_addon.dart';
 import '../models/advanced_search_selection.dart';
 import '../widgets/episodes_panel.dart';
 import '../services/analytics_service.dart';
+import '../services/app_route_observer.dart';
+import '../services/main_page_bridge.dart';
 
 /// Route name for [EpisodesScreen]'s pushed route (a `MaterialPageRoute`,
 /// or a zero-duration `PageRouteBuilder` on TV).
@@ -12,11 +16,8 @@ const String kEpisodesRouteName = 'episodes';
 /// Route name the catalog host gives the pushed `CatalogItemDetailScreen`.
 ///
 /// The detail screen no longer self-pops when "Browse" is tapped (so the
-/// drill-down lands *on top of* it and back returns there). When a terminal
-/// selection is made (Sources/Play/fallback) the drill-down + detail routes
-/// must be torn back down to the host or the host's inline result (search
-/// results / player) would be hidden behind them. These names let
-/// [EpisodesScreen] and the host `popUntil` exactly those routes.
+/// drill-down lands *on top of* it and back returns there). Sources and
+/// playback started from the drill-down land on top of it too.
 const String kCatalogDetailRouteName = 'catalog_item_detail';
 
 /// A pushable route that presents the episode drill-down for a single series.
@@ -26,9 +27,10 @@ const String kCatalogDetailRouteName = 'catalog_item_detail';
 /// screen naturally instead of toggling host-screen state.
 ///
 /// The screen is a thin route wrapper around [EpisodesPanel] (which holds the
-/// drill-down engine + UI): it owns the [Scaffold], the route tear-down to the
-/// host on a terminal selection ([_popToHost]), and the
-/// [onExitedWithoutSelection] signal for a plain back-out.
+/// drill-down engine + UI): it owns the [Scaffold], the watch-progress refresh
+/// when Sources or playback return here, and the [onExitedWithoutSelection]
+/// signal for a plain back-out. Sources and playback open on top of this
+/// route, so Back from them returns to the same season's episodes.
 ///
 /// Source-binding (the Select Source button + bound-source count) is owned by
 /// the host and surfaced through the [boundSourceCount] / [onSelectSource]
@@ -61,16 +63,18 @@ class EpisodesScreen extends StatefulWidget {
   final bool isMdblistSource;
 
   /// Callback when user selects an episode (Sources) or the series falls back
-  /// to a direct search.
+  /// to a direct search. The host pushes its result on top of this route.
   final void Function(AdvancedSearchSelection selection)? onItemSelected;
 
-  /// Callback when user quick-plays an episode.
-  final void Function(AdvancedSearchSelection selection)? onQuickPlay;
+  /// Callback when user quick-plays an episode. The host plays on top of this
+  /// route (or opens Sources there); one launch runs at a time.
+  final Future<void> Function(AdvancedSearchSelection selection)? onQuickPlay;
 
   /// Fired exactly once when this route is dismissed *without* a terminal
   /// selection (back button / system back / gesture). Not called when the
   /// user picks an episode or falls back to direct search — those dispatch
-  /// [onItemSelected]/[onQuickPlay] and pop straight to the host.
+  /// [onItemSelected]/[onQuickPlay] instead, even if the user then comes back
+  /// here before leaving.
   final VoidCallback? onExitedWithoutSelection;
 
   /// Returns the number of bound sources for [show] (host-owned state).
@@ -102,20 +106,65 @@ class EpisodesScreen extends StatefulWidget {
   State<EpisodesScreen> createState() => _EpisodesScreenState();
 }
 
-class _EpisodesScreenState extends State<EpisodesScreen> {
-  /// Set before any terminal pop (episode chosen / quick-play / fallback) so
+class _EpisodesScreenState extends State<EpisodesScreen> with RouteAware {
+  final _panelKey = GlobalKey<EpisodesPanelState>();
+
+  /// Set on any terminal dispatch (episode chosen / quick-play / fallback) so
   /// [dispose] can tell a real selection apart from a plain back-out and only
   /// fire [EpisodesScreen.onExitedWithoutSelection] for the latter.
   bool _selectionDispatched = false;
+
+  /// A quick-play launch is resolving; a second press must not start another.
+  bool _quickPlaying = false;
 
   @override
   void initState() {
     super.initState();
     AnalyticsService.screenView('episodes');
+    MainPageBridge.addPlaybackReturnListener(_onPlaybackReturned);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is PageRoute) appRouteObserver.subscribe(this, route);
+  }
+
+  /// Sources (and the in-app player they start) pop back here; refresh the
+  /// episode ticks, as the merged series page does.
+  @override
+  void didPopNext() => _refreshWatchProgress();
+
+  /// The Android TV native player and external players run in their own
+  /// activity and push no Flutter route, so [didPopNext] never fires for
+  /// them. Only the current route refreshes; a covered one re-reads on its own
+  /// [didPopNext] (same rule as the series detail pages).
+  void _onPlaybackReturned() {
+    if (!mounted) return;
+    if (!(ModalRoute.of(context)?.isCurrent ?? false)) return;
+    _refreshWatchProgress();
+  }
+
+  void _refreshWatchProgress() {
+    unawaited(_panelKey.currentState?.refreshWatchProgress());
+  }
+
+  Future<void> _quickPlay(AdvancedSearchSelection selection) async {
+    final play = widget.onQuickPlay;
+    if (play == null || _quickPlaying) return;
+    _quickPlaying = true;
+    try {
+      await play(selection);
+    } finally {
+      _quickPlaying = false;
+    }
   }
 
   @override
   void dispose() {
+    appRouteObserver.unsubscribe(this);
+    MainPageBridge.removePlaybackReturnListener(_onPlaybackReturned);
     // Plain back-out (no episode picked): tell the host to undo the source
     // switch it made on entry. Deferred a frame so the host's setState runs
     // after this route is fully torn down, never during it.
@@ -128,23 +177,13 @@ class _EpisodesScreenState extends State<EpisodesScreen> {
     super.dispose();
   }
 
-  /// Tear the drill-down stack (this route + the detail route, if the host
-  /// pushed one) back down to the host before a terminal dispatch, so the
-  /// host's inline result isn't hidden behind these routes.
-  void _popToHost() {
-    Navigator.of(context).popUntil(
-      (r) =>
-          r.settings.name != kEpisodesRouteName &&
-          r.settings.name != kCatalogDetailRouteName,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0E0E14),
       body: SafeArea(
         child: EpisodesPanel(
+          key: _panelKey,
           show: widget.show,
           addon: widget.addon,
           initialSeason: widget.initialSeason,
@@ -154,16 +193,15 @@ class _EpisodesScreenState extends State<EpisodesScreen> {
           isTraktSource: widget.isTraktSource,
           isMdblistSource: widget.isMdblistSource,
           onItemSelected: widget.onItemSelected,
-          onQuickPlay: widget.onQuickPlay,
+          onQuickPlay: widget.onQuickPlay == null
+              ? null
+              : (selection) => unawaited(_quickPlay(selection)),
           boundSourceCount: widget.boundSourceCount,
           onSelectSource: widget.onSelectSource,
           onBack: () => Navigator.of(context).pop(),
-          // Mark the selection and tear the drill-down routes down to the host
-          // before the panel dispatches — same order the inline flow used.
-          onBeforeTerminalDispatch: () {
-            _selectionDispatched = true;
-            _popToHost();
-          },
+          // Sources and playback open on top of this route, so Back returns
+          // to these episodes rather than to the host.
+          onBeforeTerminalDispatch: () => _selectionDispatched = true,
         ),
       ),
     );

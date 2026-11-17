@@ -90,10 +90,18 @@ internal class TvIptvKeyCharacterizationTest : TvPhase11OriginalTest() {
         neutral();key(KeyEvent.KEYCODE_DPAD_UP,repeat=3);assertFalse(field("iptvUpLongPressHandled") as Boolean);key(KeyEvent.KEYCODE_DPAD_UP,action=KeyEvent.ACTION_UP);assertFalse(field("iptvGuideVisible") as Boolean)
 
     }
-    @Test fun realGuideLongUpMovesRowFocusToSearch() {
+    @Test fun realGuideHeldUpStaysOnTheFirstRow() {
         neutral();show();advance(180);val holder=guideList().findViewHolderForAdapterPosition(0)
         assertNotNull("real attached guide row",holder);assertTrue(holder!!.itemView.requestFocus())
-        syncFocus();assertTrue("row ancestry: current=${activity.currentFocus}, decor=${activity.window.decorView.findFocus()}, target=${holder.itemView}",call("isFocusInIptvChannelList",emptyArray()) as Boolean);key(KeyEvent.KEYCODE_DPAD_UP,repeat=3);assertTrue("UP transfers focus to search",search().hasFocus());assertTrue(field("iptvAllCategorySearchActive") as Boolean)
+        syncFocus();assertTrue("row ancestry: current=${activity.currentFocus}, decor=${activity.window.decorView.findFocus()}, target=${holder.itemView}",call("isFocusInIptvChannelList",emptyArray()) as Boolean)
+        // A held UP scrolls the list and stops on channel 1; it no longer jumps to search.
+        for (repeat in listOf(1,3,12)) {assertTrue("held UP consumed on the first row",key(KeyEvent.KEYCODE_DPAD_UP,repeat=repeat));assertTrue("first row keeps focus",holder.itemView.hasFocus());assertFalse("search not focused",search().hasFocus())}
+    }
+    @Test fun realGuideHeldUpBelowTheFirstRowIsLeftToTheList() {
+        neutral();show();advance(180);assertTrue("guide has a second row",adapter().itemCount>1);val holder=guideList().findViewHolderForAdapterPosition(1)
+        assertNotNull("real attached guide row",holder);assertTrue(holder!!.itemView.requestFocus());syncFocus()
+        // Not consumed: the list's own focus search moves the held UP one row.
+        assertFalse("held UP below the first row is not consumed",key(KeyEvent.KEYCODE_DPAD_UP,repeat=3));assertFalse("search not focused",search().hasFocus())
 
     }
 }

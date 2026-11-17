@@ -2220,9 +2220,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         }
                     }
                     KeyEvent.KEYCODE_DPAD_UP -> {
-                        // Long-press up in channel list: jump to search bar
-                        if (isFocusInIptvChannelList() && event.repeatCount >= SEEK_LONG_PRESS_THRESHOLD) {
-                            iptvGuideController.iptvGuideSearch?.requestFocus()
+                        // A held UP scrolls the list and stops on channel 1.
+                        if (TvGuideHeldUp.holdsInList(iptvGuideController.iptvGuideList, event)) {
                             return true
                         }
                     }
@@ -2246,8 +2245,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         }
                     }
                     KeyEvent.KEYCODE_DPAD_UP -> {
-                        if (stremioTvGuideController.isFocusInStremioTvGuideList() && event.repeatCount >= SEEK_LONG_PRESS_THRESHOLD) {
-                            stremioTvGuideController.stremioTvGuideSearch?.requestFocus()
+                        // A held UP scrolls the list and stops on its first row.
+                        if (stremioTvGuideController.holdsHeldUpInList(event)) {
                             return true
                         }
                     }
@@ -2421,7 +2420,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             // Stremio TV mode: UP opens the channel guide
             if (isStremioTvMode && stremioTvGuideController.stremioTvChannels.isNotEmpty()) {
                 if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
-                    stremioTvGuideController.showStremioTvGuide()
+                    stremioTvGuideController.showStremioTvGuideFromUp(event)
                 }
                 return true
             }

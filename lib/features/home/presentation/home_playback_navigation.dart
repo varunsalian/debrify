@@ -82,8 +82,8 @@ class HomePlaybackNavigation {
               isTelevision: _deps.isTelevision(),
               isTraktSource: isTraktSource,
               isMdblistSource: isMdblistSource,
-              // EpisodesScreen pops itself (and the detail route) before firing
-              // these, so we're back on the Search screen when they run.
+              // Both land on top of EpisodesScreen (and the detail route under
+              // it), so Back from Sources or the player returns to the episodes.
               onQuickPlay: (selection) => playSelection(
                 selection,
                 metadataAddonId: addon.id,

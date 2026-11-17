@@ -161,8 +161,8 @@ class _ChannelGuideState extends State<ChannelGuide>
       if (_focusedIndex > 0) {
         setState(() => _focusedIndex--);
         _scrollToFocused();
-      } else {
-        // At top, move to search
+      } else if (event is! KeyRepeatEvent) {
+        // At top, a fresh press moves to search; a held UP stops here.
         _searchFocusNode.requestFocus();
       }
     } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {

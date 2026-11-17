@@ -6,6 +6,7 @@ import '../../services/metadata_details_service.dart';
 import '../../services/imdb_enrichment_service.dart';
 import '../../services/imdb_parents_guide_service.dart';
 import '../../services/series_source_service.dart';
+import '../../utils/synopsis_text.dart';
 import 'detail_style.dart';
 
 /// Screen-owned focus anchors, handed to whichever body is drawing.
@@ -279,8 +280,15 @@ class DetailModel {
 
   String? get synopsis {
     final own = item.description;
-    if (own != null && own.isNotEmpty) return own;
-    return imdbExtra?.plot;
+    final plot = imdbExtra?.plot;
+    if (own == null || own.isEmpty) return plot;
+    if (plot != null &&
+        plot.isNotEmpty &&
+        synopsisLooksCut(own) &&
+        !synopsisLooksCut(plot)) {
+      return plot;
+    }
+    return own;
   }
 
   String? get awards =>

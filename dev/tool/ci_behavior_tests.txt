@@ -43,6 +43,8 @@ test/services/webdav_sync/webdav_sync_tombstone_audit_test.dart
 test/android_tv_mdblist_progress_source_test.dart
 test/features/sources/presentation/automatic_playback_retirement_test.dart
 test/iptv_channel_sheet_responsive_test.dart
+test/iptv_channel_sheet_held_up_test.dart
+test/channel_guides_held_up_test.dart
 test/media_server_watch_player_wiring_test.dart
 test/movie_resume_source_independence_test.dart
 test/native_player_settings_wiring_test.dart
@@ -242,6 +244,7 @@ test/features/detail_showcase/presentation/showcase_guide_update_test.dart
 test/features/detail_showcase/presentation/showcase_hover_focus_test.dart
 test/features/detail_showcase/presentation/showcase_primary_hold_test.dart
 test/features/detail_showcase/presentation/showcase_identity_actions_test.dart
+test/features/detail_showcase/presentation/showcase_synopsis_test.dart
 
 # Spotlight board original-code characterization and unchanged facade importers.
 test/collection_editorial_header_test.dart
@@ -273,8 +276,10 @@ test/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_l
 test/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_profiles_test.dart
 test/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_ratings_test.dart
 test/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_tv_test.dart
+test/features/episodes_panel/presentation/legacy_episodes_panel/episodes_screen_return_test.dart
 test/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_watched_test.dart
 test/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_review_test.dart
+test/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_episode_options_test.dart
 test/catalog_detail_play_hold_test.dart
 test/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_actions_test.dart
 test/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_lifecycle_test.dart
@@ -777,6 +782,7 @@ test/features/video_player/video_player_source_playlist_request_test.dart
 test/features/video_player/video_player_source_sheet_lifetime_test.dart
 test/features/video_player/video_player_startup_diagnostics_test.dart
 test/features/video_player/video_player_startup_error_policy_test.dart
+test/features/video_player/video_player_startup_budget_test.dart
 test/features/video_player/video_player_startup_failure_test.dart
 test/features/video_player/video_player_startup_gate_test.dart
 test/features/video_player/video_player_startup_ladder_test.dart
@@ -919,6 +925,9 @@ test/features/video_player/video_player_p21_tracker_paths_test.dart
 test/features/video_player/video_player_p21_press_routing_test.dart
 # 2026-11-01: regression coverage for user-reported fixes (all pass on Linux).
 test/core/platform/preferences_file_recovery_test.dart
+test/core/network/response_text_test.dart
+test/indexer_manager_service_test.dart
+test/skip_segment_service_test.dart
 test/custom_series_progress_test.dart
 test/dock_layout_test.dart
 test/features/sports/presentation/sports_event_card_test.dart

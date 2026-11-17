@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:xml/xml.dart';
 
+import '../core/network/response_text.dart';
 import '../models/indexer_manager_config.dart';
 import '../models/profiles/connection_resource.dart';
 import '../models/profiles/profile_policy.dart';
@@ -197,7 +198,7 @@ class IndexerManagerService {
       throw Exception('Jackett returned HTTP ${response.statusCode}');
     }
 
-    final document = XmlDocument.parse(response.body);
+    final document = XmlDocument.parse(responseText(response));
     final items = document.descendants
         .whereType<XmlElement>()
         .where((element) => element.name.local == 'item')
@@ -430,7 +431,7 @@ class IndexerManagerService {
       );
     }
 
-    final document = XmlDocument.parse(response.body);
+    final document = XmlDocument.parse(responseText(response));
     final items = document.descendants
         .whereType<XmlElement>()
         .where((element) => element.name.local == 'item')

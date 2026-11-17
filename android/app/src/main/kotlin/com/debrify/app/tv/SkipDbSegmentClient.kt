@@ -174,7 +174,7 @@ internal object IntroDbSegmentClient {
 }
 
 internal object TheIntroDbSegmentClient {
-    private const val ENDPOINT = "https://api.theintrodb.org/v3/media"
+    private const val ENDPOINT = "https://api.theintrodb.org/v4/media"
 
     fun fetch(
         imdbId: String,

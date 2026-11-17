@@ -400,7 +400,8 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
         setState(() => _focusedIndex--);
         _scrollToFocused();
         _loadGuideDataForRange(_focusedIndex);
-      } else {
+      } else if (event is! KeyRepeatEvent) {
+        // Only a fresh press leaves the list: a held UP stops on the top row.
         _searchFocusNode.requestFocus();
         setState(() => _focusZone = _FocusZone.search);
       }

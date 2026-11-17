@@ -20,7 +20,8 @@ class EpisodesPanelEpisodeOptions {
   EpisodesPanelNavigation get _n => _deps.parts.navigation;
   EpisodesPanelViewState get _s => _deps.parts.viewState;
 
-  /// Per-episode options menu (opened with Right / the ⋮ button): Play, Sources,
+  /// Per-episode options menu (opened with Right / the ⋮ button): the full
+  /// episode description, then Play, Sources,
   /// a single Mark Watched/Unwatched that acts on local storage plus every
   /// connected tracker, and supported per-tracker Rate rows. Simkl ratings are
   /// title-only, so its episode menu deliberately has no rating action.
@@ -90,7 +91,25 @@ class EpisodesPanelEpisodeOptions {
               )
             : const <EpisodeRef>[];
 
+        final overview = episode.overview?.trim() ?? '';
         final tiles = <Widget>[
+          // The whole description: episode cards clamp it to a few lines and
+          // offer no other way to read the rest. It scrolls with the rows, so
+          // a long one can never squeeze them off the sheet.
+          if (overview.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+              child: Text(
+                overview,
+                style: TextStyle(
+                  color: Theme.of(
+                    sheetCtx,
+                  ).colorScheme.onSurface.withValues(alpha: 0.72),
+                  fontSize: 13.5,
+                  height: 1.45,
+                ),
+              ),
+            ),
           // Autofocus Play on TV so the sheet opens with a live target.
           tile(
             Icons.play_arrow_rounded,
