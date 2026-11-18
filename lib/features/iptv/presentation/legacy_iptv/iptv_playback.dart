@@ -56,14 +56,22 @@ class IptvPlayback {
 
   String? get _effectiveCategory => _deps.effectiveCategory();
 
+  /// [sportsLineup] is every channel the Sports shelf offered for the match,
+  /// [channel] among them: the player's guide lists them, so another one can
+  /// be tried without leaving playback.
   Future<void> playChannel(
     IptvChannel channel, {
     bool Function()? shouldCancel,
+    List<IptvChannel>? sportsLineup,
   }) async {
     if (_playerState.launchingChannel) return;
     _playerState.launchingChannel = true;
     try {
-      await playChannelInner(channel, shouldCancel: shouldCancel);
+      await playChannelInner(
+        channel,
+        shouldCancel: shouldCancel,
+        sportsLineup: sportsLineup,
+      );
     } finally {
       _playerState.launchingChannel = false;
     }
@@ -121,6 +129,7 @@ class IptvPlayback {
   Future<void> playChannelInner(
     IptvChannel channel, {
     bool Function()? shouldCancel,
+    List<IptvChannel>? sportsLineup,
   }) async {
     // Series entries aren't playable — their sentinel URL routes to the
     // merged series page, whose episode list does the actual playing.
@@ -178,15 +187,17 @@ class IptvPlayback {
     // The in-player guide mirrors what the user was browsing: the current
     // category/search filter, not the whole playlist. (Also what keeps the
     // launch payload small when a filter is active.)
-    // Sports has no catalog of its own: the matched channel plays alone, as
-    // part of the playlist it came from.
+    // Sports has no catalog of its own: the matched channel plays as part of
+    // the playlist it came from, with the match's other channels beside it.
     final selected = _settingsState.selectedPlaylist;
     final sportsOrigin = (selected?.isSports ?? false)
         ? _sportsOrigin(channel)
         : null;
     final playSource = sportsOrigin ?? selected;
     var channels = (selected?.isSports ?? false)
-        ? <IptvChannel>[channel]
+        ? (sportsLineup != null && sportsLineup.contains(channel)
+              ? sportsLineup
+              : <IptvChannel>[channel])
         : _catalogState.filteredChannels.contains(channel)
         ? _catalogState.filteredChannels
         : _catalogState.allChannels;
@@ -231,6 +242,9 @@ class IptvPlayback {
       channels = channels.sublist(lo, lo + IptvPlayerState.kMaxPlayerChannels);
       channelIndex -= lo;
     }
+    // A match's lineup stays the player's channel list (see
+    // [keepPlayerLineup]); one channel alone still gets its category.
+    final fixedLineup = (selected?.isSports ?? false) && channels.length > 1;
     final launchSource = selected;
     final playerChannels = launchSource == null
         ? channels
@@ -265,7 +279,9 @@ class IptvPlayback {
             : (channel.isLive ? 'live' : 'vod'),
         iptvSources: _deps.playerSourcePayload(),
         iptvLists: _deps.playerListsPayload(),
-        iptvBrowseProvider: _deps.providePlayerIptvBrowse,
+        iptvBrowseProvider: fixedLineup
+            ? keepPlayerLineup(_deps.providePlayerIptvBrowse)
+            : _deps.providePlayerIptvBrowse,
         // Opening headers for the launch channel (later zaps read them off the
         // channel they switch to). Stremio-addon links are already-resolved CDN
         // URLs, so they keep the addon's own defaults.
@@ -311,3 +327,17 @@ class IptvPlayback {
     return null;
   }
 }
+
+/// Wraps the player's browse callback so the list it was launched with stays
+/// its channel list. Both players otherwise ask for a page of the playing
+/// channel's category right after launch and adopt it, which would swap a
+/// Sports match's channels for one provider's category. Declining that page
+/// is what both players already handle as "keep the list you have"; browsing
+/// the guide is unaffected.
+Future<Map<String, dynamic>?> Function(Map<String, dynamic> request)
+keepPlayerLineup(
+  Future<Map<String, dynamic>?> Function(Map<String, dynamic> request) browse,
+) =>
+    (request) => request['action'] == 'zapPage'
+    ? Future<Map<String, dynamic>?>.value()
+    : browse(request);

@@ -181,7 +181,21 @@ class SportsBoardHarness {
   /// League choices (the Sports & leagues sheet's storage).
   final FakeSportsPrefs leaguePrefs = FakeSportsPrefs();
   final List<SportsChannelRef> played = [];
+
+  /// The lineup handed over with each entry in [played].
+  final List<List<SportsChannelRef>> lineups = [];
+
+  /// The playback in progress: the board waits on it as on a real player,
+  /// until the test completes it ("the player closed").
+  Completer<void>? playing;
+
   final List<SportsLeague> leagues;
+
+  Future<void> _play(SportsChannelRef channel, List<SportsChannelRef> lineup) {
+    played.add(channel);
+    lineups.add(lineup);
+    return (playing = Completer<void>()).future;
+  }
 
   /// The board's fixed "now".
   final DateTime clock;
@@ -202,7 +216,7 @@ class SportsBoardHarness {
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: theme,
-        home: Scaffold(body: SportsBoardView(onPlay: played.add)),
+        home: Scaffold(body: SportsBoardView(onPlay: _play)),
       ),
     ),
   );

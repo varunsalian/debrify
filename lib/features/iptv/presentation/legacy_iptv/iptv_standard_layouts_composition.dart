@@ -280,8 +280,16 @@ class IptvStandardLayoutsComposition {
         _external.rowProjection().onRowDetached(channel),
     openListPicker: (IptvChannel channel) =>
         _external.favorites().openListPicker(channel),
-    playChannel: (IptvChannel channel, {bool Function()? shouldCancel}) =>
-        _external.playback().playChannel(channel, shouldCancel: shouldCancel),
+    playChannel:
+        (
+          IptvChannel channel, {
+          bool Function()? shouldCancel,
+          List<IptvChannel>? sportsLineup,
+        }) => _external.playback().playChannel(
+          channel,
+          shouldCancel: shouldCancel,
+          sportsLineup: sportsLineup,
+        ),
     retryLoad: () => _external.settingsLoading().retryLoad(),
     scheduleActionFor: (IptvChannel channel, {bool inPlace = false}) =>
         _external.scheduleActions().scheduleActionFor(
