@@ -959,3 +959,6 @@ test/media_server_library_client_test.dart
 test/media_server_lookup_continuation_test.dart
 test/media_server_watch_sync_test.dart
 test/media_server_diagnostics_test.dart
+# 2026-11-18: Sports hands the player every channel for a match and returns to the match after playback.
+test/features/sports/presentation/sports_board_play_return_test.dart
+test/features/iptv/presentation/legacy_iptv/iptv_keep_player_lineup_test.dart

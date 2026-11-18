@@ -35,7 +35,11 @@ typedef IptvContentLayoutDeps = ({
   void Function(IptvChannel channel, {bool fromPointer}) onChannelFocused,
   void Function(IptvChannel channel) onRowDetached,
   Future<void> Function(IptvChannel channel) openListPicker,
-  Future<void> Function(IptvChannel channel, {bool Function()? shouldCancel})
+  Future<void> Function(
+    IptvChannel channel, {
+    bool Function()? shouldCancel,
+    List<IptvChannel>? sportsLineup,
+  })
   playChannel,
   Future<void> Function() retryLoad,
   VoidCallback? Function(IptvChannel channel, {bool inPlace}) scheduleActionFor,
@@ -86,7 +90,10 @@ class IptvContentLayout {
 
     // The Sports shelf renders its own board instead of a channel list.
     if (_settingsState.selectedPlaylist!.isSports) {
-      return SportsIptvBoard(onPlay: (channel) => _deps.playChannel(channel));
+      return SportsIptvBoard(
+        onPlay: (channel, lineup) =>
+            _deps.playChannel(channel, sportsLineup: lineup),
+      );
     }
 
     // Loading

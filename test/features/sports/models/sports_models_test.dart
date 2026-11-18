@@ -413,6 +413,31 @@ void main() {
         ),
       );
     });
+
+    test('lineup lists guide then possible, variants after each, once', () {
+      const c = SportsChannelRef(name: 'Sky Sports', url: 'http://c');
+      const d = SportsChannelRef(name: 'beIN 1', url: 'http://d');
+      const options = SportsWatchOptions(
+        guide: [
+          SportsWatchOption(
+            channel: channelB,
+            kind: SportsMatchKind.guide,
+            variants: [channelA],
+          ),
+          SportsWatchOption(channel: c, kind: SportsMatchKind.channelName),
+        ],
+        possible: [
+          // Already offered above: listed once, where it first appears.
+          SportsWatchOption(
+            channel: channelA,
+            kind: SportsMatchKind.broadcaster,
+          ),
+          SportsWatchOption(channel: d, kind: SportsMatchKind.broadcaster),
+        ],
+      );
+      expect(options.lineup, [channelB, channelA, c, d]);
+      expect(SportsWatchOptions.empty.lineup, isEmpty);
+    });
   });
 
   group('league catalog', () {

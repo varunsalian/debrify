@@ -5,6 +5,8 @@
 // is gone, so a long guide list can never stay open behind the player. Follow
 // labels toggle locally on tap and report the same intent upward, because the
 // board's follow state reaches this route as a snapshot it cannot re-read.
+import 'dart:async';
+
 import 'package:debrify/features/sports/data/sports_follow_store.dart';
 import 'package:debrify/features/sports/models/sports_leagues.dart';
 import 'package:debrify/features/sports/models/sports_models.dart';
@@ -34,19 +36,26 @@ const possibleChannelCopy = 'Listed broadcaster — not confirmed in your guide'
 /// Subtitle on a channel whose own name is this match (an event stream).
 const namedChannelCopy = 'Named for this match';
 
+/// Marks the channel played the last time the panel was open.
+const playedLastCopy = 'Played last';
+
 /// Opens the details for [event]: a 420 px panel docked right on wide screens,
 /// a bottom sheet capped at 88 % of the height on narrow ones.
 ///
-/// [onPlay] runs after the panel has closed, never underneath it.
+/// [onPlay] runs after the panel has closed, never underneath it, and the
+/// returned future waits for it. [lastPlayed] is the channel chosen the last
+/// time this panel was open: its row takes focus and is marked, so after a
+/// channel fails the next one is a single step away.
 Future<void> showSportsEventDetails(
   BuildContext context, {
   required SportsEvent event,
   required SportsWatchOptions watch,
   required SportsFollows follows,
-  required void Function(SportsChannelRef) onPlay,
+  required FutureOr<void> Function(SportsChannelRef) onPlay,
   required void Function(String teamKey) onToggleTeam,
   required void Function(String leagueId) onToggleLeague,
   SportsReminderControl? reminder,
+  SportsChannelRef? lastPlayed,
 }) async {
   final surface = _DetailsSurface(
     event: event,
@@ -55,12 +64,13 @@ Future<void> showSportsEventDetails(
     onToggleTeam: onToggleTeam,
     onToggleLeague: onToggleLeague,
     reminder: reminder,
+    lastPlayed: lastPlayed,
   );
   final wide = MediaQuery.sizeOf(context).width >= _wideLayoutMinWidth;
   final chosen = wide
       ? await _showPanel(context, surface)
       : await _showSheet(context, surface);
-  if (chosen != null) onPlay(chosen);
+  if (chosen != null) await onPlay(chosen);
 }
 
 Future<SportsChannelRef?> _showPanel(BuildContext context, Widget surface) =>
@@ -114,6 +124,7 @@ class _DetailsSurface extends StatefulWidget {
     required this.onToggleTeam,
     required this.onToggleLeague,
     this.reminder,
+    this.lastPlayed,
   });
 
   final SportsEvent event;
@@ -124,6 +135,9 @@ class _DetailsSurface extends StatefulWidget {
 
   /// Null where reminders are unavailable: TVs, or kick-off too close.
   final SportsReminderControl? reminder;
+
+  /// See [showSportsEventDetails].
+  final SportsChannelRef? lastPlayed;
 
   @override
   State<_DetailsSurface> createState() => _DetailsSurfaceState();
@@ -152,6 +166,16 @@ class _DetailsSurfaceState extends State<_DetailsSurface> {
     _focusClaimed = true;
     return true;
   }
+
+  /// Set per build: the row holding the channel played the last time the
+  /// panel was open, while it is still listed.
+  SportsWatchOption? _playedOption;
+
+  bool _playedLast(SportsWatchOption option) =>
+      identical(option, _playedOption);
+
+  bool _rowFocus(SportsWatchOption option) =>
+      _playedOption != null ? _playedLast(option) : _claimFocus();
 
   void _play(SportsChannelRef channel) => Navigator.of(context).pop(channel);
 
@@ -184,9 +208,16 @@ class _DetailsSurfaceState extends State<_DetailsSurface> {
 
   @override
   Widget build(BuildContext context) {
-    _focusClaimed = false;
     final guide = widget.watch.guide;
     final possible = widget.watch.possible;
+    // Back from a channel: its row keeps the focus rather than the first.
+    final played = widget.lastPlayed;
+    _playedOption = played == null
+        ? null
+        : [...guide, ...possible]
+              .where((o) => o.channel == played || o.variants.contains(played))
+              .firstOrNull;
+    _focusClaimed = _playedOption != null;
     final rows = <Widget>[_header(), const SizedBox(height: 16), _matchup()];
     // Guide listings first, then event streams found by their own name:
     // on the user's channels, but not in their guide.
@@ -201,13 +232,13 @@ class _DetailsSurfaceState extends State<_DetailsSurface> {
       if (options.isEmpty) continue;
       rows.add(_sectionTitle(title, tick: true));
       for (final option in options) {
-        rows.add(_channelRow(option, autofocus: _claimFocus()));
+        rows.add(_channelRow(option, autofocus: _rowFocus(option)));
       }
     }
     if (possible.isNotEmpty) {
       rows.add(_sectionTitle('Possible channels'));
       for (final option in possible) {
-        rows.add(_channelRow(option, autofocus: _claimFocus()));
+        rows.add(_channelRow(option, autofocus: _rowFocus(option)));
       }
     }
     if (guide.isEmpty && possible.isEmpty) {
@@ -386,6 +417,7 @@ class _DetailsSurfaceState extends State<_DetailsSurface> {
     final listing = option.listing;
     final confirmed = option.kind != SportsMatchKind.broadcaster;
     final action = confirmed ? 'Watch' : 'Open';
+    final playedLast = _playedLast(option);
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: SportsFocusPill.row(
@@ -393,6 +425,7 @@ class _DetailsSurfaceState extends State<_DetailsSurface> {
         label: [
           channel.name,
           if (listing != null) listing.title,
+          if (playedLast) playedLastCopy,
           action,
         ].join(', '),
         height: _rowHeight,
@@ -432,10 +465,13 @@ class _DetailsSurfaceState extends State<_DetailsSurface> {
                     ],
                   ),
                   sportsLabelText(
-                    listing?.title ??
-                        (option.kind == SportsMatchKind.channelName
-                            ? namedChannelCopy
-                            : possibleChannelCopy),
+                    [
+                      if (playedLast) playedLastCopy,
+                      listing?.title ??
+                          (option.kind == SportsMatchKind.channelName
+                              ? namedChannelCopy
+                              : possibleChannelCopy),
+                    ].join(' · '),
                     subtle,
                     size: 11.5,
                     ellipsize: true,

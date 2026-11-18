@@ -418,6 +418,19 @@ class SportsWatchOptions {
 
   int get count => guide.length + possible.length;
 
+  /// Every channel offered for the match, in the order the details panel
+  /// lists them (guide, then possible), each option's other copies right
+  /// after it. The player gets this list, so a channel that does not work can
+  /// be switched for the next one without leaving playback.
+  List<SportsChannelRef> get lineup {
+    final seen = <SportsChannelRef>{};
+    return [
+      for (final option in [...guide, ...possible])
+        for (final channel in [option.channel, ...option.variants])
+          if (seen.add(channel)) channel,
+    ];
+  }
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||

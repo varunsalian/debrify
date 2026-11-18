@@ -127,7 +127,11 @@ void main() {
     );
     expect(play, contains('source.effectiveSnapshot.page('));
     expect(play, contains('VideoPlayerLauncher.push('));
-    expect(play, contains('iptvBrowseProvider: _deps.providePlayerIptvBrowse'));
+    // The browse provider always reaches the player; a Sports lineup gets it
+    // wrapped so the launch list stays (see keepPlayerLineup).
+    expect(play, contains('iptvBrowseProvider: fixedLineup'));
+    expect(play, contains('? keepPlayerLineup(_deps.providePlayerIptvBrowse)'));
+    expect(play, contains(': _deps.providePlayerIptvBrowse,'));
     final catchup = _at('iptv_catchup.dart', 'IptvCatchup', 'playCatchup');
     expect(catchup, contains('IptvChannel('));
     expect(catchup, contains('VideoPlayerLauncher.push('));

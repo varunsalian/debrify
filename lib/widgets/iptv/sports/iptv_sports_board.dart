@@ -58,7 +58,9 @@ class SportsIptvBoard extends StatelessWidget {
   const SportsIptvBoard({super.key, required this.onPlay});
 
   /// Plays a live channel through the IPTV screen's normal playback path.
-  final Future<void> Function(IptvChannel channel) onPlay;
+  /// [lineup] is every channel offered for the match, [channel] among them.
+  final Future<void> Function(IptvChannel channel, List<IptvChannel> lineup)
+  onPlay;
 
   @override
   Widget build(BuildContext context) {
@@ -67,8 +69,18 @@ class SportsIptvBoard extends StatelessWidget {
         sportsFollowStoreProvider.overrideWithValue(_followStore),
         sportsGuideSourceProvider.overrideWithValue(_guideSource),
       ],
-      child: SportsBoardView(onPlay: (ref) => onPlay(sportsChannelToIptv(ref))),
+      child: SportsBoardView(onPlay: _play),
     );
+  }
+
+  /// Converted once, so the channel to start is the very instance in the
+  /// lineup: the player finds its start by identity.
+  Future<void> _play(SportsChannelRef channel, List<SportsChannelRef> lineup) {
+    final channels = [for (final ref in lineup) sportsChannelToIptv(ref)];
+    final start = lineup.indexOf(channel);
+    return start < 0
+        ? onPlay(sportsChannelToIptv(channel), const [])
+        : onPlay(channels[start], channels);
   }
 }
 

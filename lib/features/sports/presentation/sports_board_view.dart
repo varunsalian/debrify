@@ -39,11 +39,20 @@ const _tokens = IptvStyleTokens.spotlight;
 /// only thing on screen, and there is nothing to row.
 const _noFixturesCopy = 'No fixtures in this view.';
 
+/// Plays [channel]. [lineup] holds it and every other channel offered for the
+/// same match, for the player to switch between. Completes once playback hands
+/// the screen back.
+typedef SportsPlay =
+    Future<void> Function(
+      SportsChannelRef channel,
+      List<SportsChannelRef> lineup,
+    );
+
 class SportsBoardView extends ConsumerStatefulWidget {
   const SportsBoardView({super.key, required this.onPlay});
 
   /// Plays a channel the user picked — on the board or in the details panel.
-  final void Function(SportsChannelRef channel) onPlay;
+  final SportsPlay onPlay;
 
   @override
   ConsumerState<SportsBoardView> createState() => _SportsBoardViewState();
@@ -97,18 +106,71 @@ class _SportsBoardViewState extends ConsumerState<SportsBoardView>
   SportsBoardController get _controller =>
       ref.read(sportsBoardProvider(_session).notifier);
 
-  void _openDetails(SportsEvent event) {
+  /// Opens [event]'s details; a channel played from them hands the player the
+  /// match's whole lineup, and coming back from the player reopens the same
+  /// match with that channel marked, so another channel is one step away
+  /// rather than a fresh walk through the board.
+  Future<void> _openDetails(
+    SportsEvent event, {
+    SportsChannelRef? lastPlayed,
+  }) async {
     final state = ref.read(sportsBoardProvider(_session));
-    showSportsEventDetails(
+    final watch = state.watchFor(event);
+    SportsChannelRef? played;
+    await showSportsEventDetails(
       context,
       event: event,
-      watch: state.watchFor(event),
+      watch: watch,
       follows: state.follows,
-      onPlay: widget.onPlay,
+      onPlay: (channel) async {
+        played = channel;
+        final lineup = watch.lineup;
+        try {
+          await widget.onPlay(
+            channel,
+            lineup.contains(channel) ? lineup : [channel, ...lineup],
+          );
+        } catch (error) {
+          // A failed launch still comes back to the match, where the
+          // next channel is a step away.
+          // The type only: a launch error can quote a stream URL with
+          // credentials in it.
+          debugPrint(
+            'Sports: playing ${channel.name} failed: ${error.runtimeType}',
+          );
+        }
+      },
       onToggleTeam: (teamKey) => _controller.toggleTeam(teamKey),
       onToggleLeague: (leagueId) => _controller.toggleLeague(leagueId),
       reminder: _reminderFor(event),
+      lastPlayed: lastPlayed,
     );
+    final channel = played;
+    if (channel == null || !mounted) return;
+    await _sizeSettled();
+    // Not when something else now covers the board (or it has gone).
+    if (!mounted || ModalRoute.of(context)?.isCurrent == false) return;
+    final events = ref.read(sportsBoardProvider(_session)).events;
+    final latest = events.where(
+      (e) => e.leagueId == event.leagueId && e.id == event.id,
+    );
+    await _openDetails(latest.firstOrNull ?? event, lastPlayed: channel);
+  }
+
+  /// The player hands back while a phone may still be turning upright from
+  /// landscape, and the details pick panel or sheet from the width they open
+  /// at: wait until the size has held still a moment, at most about a second.
+  Future<void> _sizeSettled() async {
+    const step = Duration(milliseconds: 150);
+    var last = MediaQuery.sizeOf(context);
+    var steady = 0;
+    for (var i = 0; i < 8 && steady < 3; i++) {
+      await Future<void>.delayed(step);
+      if (!mounted) return;
+      final size = MediaQuery.sizeOf(context);
+      steady = size == last ? steady + 1 : 0;
+      last = size;
+    }
   }
 
   /// Offered while a reminder can still fire before kick-off, or to remove
@@ -236,7 +298,8 @@ class _SportsBoardViewState extends ConsumerState<SportsBoardView>
                       child: SportsBoardLiveChannelsRow(
                         listings: state.liveSportsListings,
                         now: now,
-                        onPlay: widget.onPlay,
+                        onPlay: (channel) =>
+                            unawaited(widget.onPlay(channel, [channel])),
                       ),
                     ),
                   ),
@@ -287,7 +350,7 @@ class _SportsBoardViewState extends ConsumerState<SportsBoardView>
           isReminded: _remindedTest(),
           watchFor: state.watchFor,
           checkingChannels: !state.watchResolved,
-          onCardPressed: _openDetails,
+          onCardPressed: (event) => unawaited(_openDetails(event)),
           autofocusFirst: focusOnMount && index == 0,
           now: now,
         ),
