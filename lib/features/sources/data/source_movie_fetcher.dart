@@ -67,6 +67,7 @@ final class SourceMovieFetcher {
       },
       listAddons: () async => [
         ...await SourceEngineFetchers.mediaServerSourceRefs(),
+        ...await SourceEngineFetchers.webDavSourceRefs(),
         for (final addon
             in await StremioService.instance.applicableStreamingAddons(
               type: 'movie',
@@ -95,6 +96,15 @@ final class SourceMovieFetcher {
               true,
               null,
               null,
+            );
+          }
+          if (addonId.startsWith('webdav:')) {
+            return SourceEngineFetchers.fetchWebDavSources(
+              addonId,
+              title: label,
+              imdbId: imdbId,
+              year: meta.year,
+              isMovie: true,
             );
           }
           return await StremioService.instance.retryAddonStreams(

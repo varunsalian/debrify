@@ -1,6 +1,7 @@
 import '../models/torrent.dart';
 import 'iptv_source_search.dart';
 import 'media_server_service.dart';
+import 'webdav_source_tickets.dart';
 
 /// Validate provider capabilities immediately before a direct source is used.
 class DirectSourceAuthorization {
@@ -17,5 +18,6 @@ class DirectSourceAuthorization {
   static Future<void> authorize(Torrent source) async {
     await IptvSourceSearch.authorize(source);
     await MediaServerService.authorize(source);
+    await WebDavSourceTickets.authorize(source);
   }
 }

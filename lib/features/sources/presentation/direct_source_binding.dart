@@ -29,6 +29,10 @@ Future<bool> presentDirectSourceBinding(
     _snack(context, 'No IMDb match — can\'t pin a source.');
     return false;
   }
+  if (torrent.isWebDavSource) {
+    _snack(context, 'WebDAV files cannot be pinned. Pick them from Sources.');
+    return false;
+  }
   final source = describe(torrent);
   if (source == null || (!source.isAddonDirect && !source.isMediaServer)) {
     _snack(context, 'This direct stream cannot be refreshed by its addon.');

@@ -691,6 +691,8 @@ final class AutomaticPlaySelection {
             cancel.cancelled || !context.mounted || !bindingOwner.isCurrent,
         onResults: (n) =>
             overlay.setStage(PlayLoadStage.searching, sourceCount: n),
+        // A slow WebDAV server says so on the loader instead of looking stuck.
+        onNote: overlay.setNote,
       );
     } catch (e) {
       if (cancel.cancelled) return; // overlay already dismissed by Cancel

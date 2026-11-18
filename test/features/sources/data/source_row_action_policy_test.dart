@@ -127,4 +127,31 @@ void main() {
     expect(result.canCopy, isTrue);
     expect(result.canPin, isTrue);
   });
+
+  test('a WebDAV row only plays: no pin, copied link or download', () {
+    media = iptv = true;
+    final webDav = Torrent(
+      rowid: 1,
+      infohash: 'fixture',
+      name: 'Dune.mkv',
+      source: 'webdav:nas',
+      sizeBytes: 0,
+      createdUnix: 0,
+      seeders: 0,
+      leechers: 0,
+      completed: 0,
+      scrapedDate: 0,
+      streamType: StreamType.directUrl,
+      directUrl: 'https://dav.example.com/Dune.mkv',
+    );
+    final result = policy.project(
+      webDav,
+      canCopy: (_) => true,
+      supportsDownload: (_) => true,
+    );
+    expect(result.kind, SourceRowActionKind.webDav);
+    expect(result.canPin, isFalse);
+    expect(result.canCopy, isFalse);
+    expect(result.canDownload, isFalse);
+  });
 }

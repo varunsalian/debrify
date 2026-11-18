@@ -1,6 +1,7 @@
 import '../../../models/advanced_search_selection.dart';
 import '../../../models/iptv_source_result.dart';
 import '../../../models/torrent.dart';
+import '../models/webdav_source_status.dart';
 import 'source_search_repository.dart';
 
 // Legacy service maps are confined to this integration boundary.
@@ -37,6 +38,13 @@ typedef SourceIptvSearch =
       required void Function(IptvSourceResult) onResult,
       required bool Function() shouldContinue,
       required bool deferXtreamSeriesEpisodes,
+    });
+typedef SourceWebDavSearch =
+    Future<List<WebDavSourceStatus>> Function(
+      AdvancedSearchSelection selection, {
+      required void Function(WebDavSourceStatus status) onStatus,
+      required void Function(String key, List<Torrent> rows) onRows,
+      required bool Function() shouldContinue,
     });
 typedef LegacySourceSearchOverride =
     Future<Map<String, dynamic>> Function(SourceSearchBatch onBatch);

@@ -45,12 +45,14 @@ final class SourcePlayerArgs {
     String? playerModeOverride,
   }) => VideoPlayerLaunchArgs(
     playerModeOverride: playerModeOverride,
-    // External apps receive only the URL, not media-server session headers.
-    // Continuous shuffle also needs the in-app episode-fetch/EOF callbacks.
+    // External apps receive only the URL, not media-server session headers
+    // or a WebDAV sign-in. Continuous shuffle also needs the in-app
+    // episode-fetch/EOF callbacks.
     disableExternalPlayer:
         (meta?.initialContinuousShuffle ?? false) ||
         (httpHeaders?.keys.any(
               (key) => const {
+                'authorization',
                 'x-emby-token',
                 'x-plex-token',
               }.contains(key.toLowerCase()),

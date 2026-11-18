@@ -1,4 +1,4 @@
-enum SourceRowActionKind { torrent, addon, iptv, mediaServer, external }
+enum SourceRowActionKind { torrent, addon, iptv, mediaServer, webDav, external }
 
 class SourceRowActions {
   const SourceRowActions({

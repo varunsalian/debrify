@@ -11,6 +11,7 @@ import 'package:debrify/features/sources/data/curated_source_search.dart';
 import 'package:debrify/features/sources/data/iptv_quick_play_search.dart';
 import 'package:debrify/features/sources/data/source_movie_fetcher.dart';
 import 'package:debrify/features/sources/data/source_series_fetcher.dart';
+import 'package:debrify/features/sources/data/webdav_quick_play_search.dart';
 import 'package:debrify/features/sources/models/playback_cancel_token.dart';
 import 'package:debrify/features/sources/models/resolved_source.dart';
 import 'package:debrify/features/sources/presentation/legacy_playback/automatic_play_best.dart';
@@ -194,6 +195,18 @@ final class AddonStreamPlayback {
               rules,
               () => cancel.cancelled,
             );
+      final webDav = meta.hasStremioEpisodeIdentity
+          ? null
+          : WebDavQuickPlaySearch.start(
+              id,
+              meta.title ?? label,
+              meta.year,
+              isMovie,
+              season,
+              episode,
+              rules,
+              () => cancel.cancelled,
+            );
       final torrents = <Torrent>[];
       final engineErrors = <String, String>{};
       final addonErrors = <String, String>{};
@@ -230,8 +243,16 @@ final class AddonStreamPlayback {
         );
         if (foundUsable) break;
       }
+      final iptvRows = await iptv;
+      // Once anything usable is in hand, WebDAV gets only a short grace.
+      final webDavRows = webDav == null
+          ? const <Torrent>[]
+          : await WebDavQuickPlaySearch.settle(
+              webDav,
+              haveOthers: torrents.isNotEmpty || iptvRows.isNotEmpty,
+            );
       return {
-        'torrents': [...torrents, ...await iptv],
+        'torrents': [...torrents, ...iptvRows, ...webDavRows],
         'engineErrors': engineErrors,
         'addonErrors': addonErrors,
         'addonStatuses': addonStatuses,

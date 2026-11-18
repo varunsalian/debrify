@@ -83,6 +83,24 @@ void main() {
     expect(tester.widget<Switch>(find.byType(Switch).first).value, isTrue);
   });
 
+  testWidgets('WebDAV search has its own switch, on by default', (
+    tester,
+  ) async {
+    final source = _FakeSource(playlists: twoPlaylists);
+    await _mount(tester, source: source);
+    await tester.ensureVisible(toggleOf('Search WebDAV servers'));
+    expect(
+      tester
+          .widget<SettingsToggleTile>(toggleOf('Search WebDAV servers'))
+          .value,
+      isTrue,
+    );
+    await flip(tester, 'Search WebDAV servers');
+    await tester.pumpAndSettle();
+    expect(source.written.single.webDav, isFalse);
+    expect(source.written.single.mediaServers, isTrue);
+  });
+
   testWidgets('playlist rows stay hidden while IPTV is off', (tester) async {
     await _mount(
       tester,

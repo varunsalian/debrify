@@ -198,7 +198,10 @@ final class SourceCuration {
     // This shortcut sees only Stremio batches, not native-library/IPTV batches.
     // A saved native priority therefore requires the complete ordered search.
     if (priority.any(
-      (key) => key.startsWith('iptv:') || key.startsWith('mediaserver:'),
+      (key) =>
+          key.startsWith('iptv:') ||
+          key.startsWith('mediaserver:') ||
+          key.startsWith('webdav:'),
     )) {
       return null;
     }

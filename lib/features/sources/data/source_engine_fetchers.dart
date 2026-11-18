@@ -1,5 +1,9 @@
 import 'dart:async';
 
+import 'package:debrify/features/sources/data/webdav_quick_play_search.dart';
+import 'package:debrify/features/sources/data/webdav_source_search.dart';
+import 'package:debrify/features/sources/models/webdav_source_status.dart';
+import 'package:debrify/models/advanced_search_selection.dart';
 import 'package:debrify/models/indexer_manager_config.dart';
 import 'package:debrify/models/torrent.dart';
 import 'package:debrify/services/media_server_service.dart';
@@ -41,6 +45,58 @@ final class SourceEngineFetchers {
     );
     if ((result['addonErrors'] as Map).isNotEmpty) return null;
     return result['torrents'] as List<Torrent>;
+  }
+
+  /// Media-server and WebDAV sources: whole libraries, never season packs.
+  static bool isLibrary(String sourceKey) =>
+      sourceKey.startsWith('mediaserver:') || sourceKey.startsWith('webdav:');
+
+  /// One entry per WebDAV server the profile may search, so the player's
+  /// source sheet can fetch each separately.
+  static Future<List<SourceAddonRef>> webDavSourceRefs() async => [
+    for (final (key, name) in await WebDavSourceSearch().serverRefs())
+      SourceAddonRef(
+        key,
+        'WebDAV · $name',
+        addonKey: key,
+        resultSourceKey: key,
+      ),
+  ];
+
+  /// One server's title matches, for the player's source sheet. Null when the
+  /// server could not be searched, so the sheet keeps a retry row.
+  static Future<List<Torrent>?> fetchWebDavSources(
+    String sourceKey, {
+    required String title,
+    String? imdbId,
+    String? year,
+    required bool isMovie,
+    int? season,
+    int? episode,
+  }) async {
+    final rows = <Torrent>[];
+    // The sheet's own budget: the player may close before a full walk ends.
+    final statuses =
+        await WebDavSourceSearch(limits: WebDavQuickPlaySearch.limits).search(
+          AdvancedSearchSelection(
+            imdbId: imdbId ?? '',
+            title: title,
+            year: year,
+            isSeries: !isMovie,
+            season: isMovie ? null : season,
+            episode: isMovie ? null : episode,
+          ),
+          onlyServerKey: sourceKey,
+          shouldContinue: () => true,
+          onStatus: (_) {},
+          onRows: (_, found) => rows.addAll(found),
+        );
+    final failed = statuses.any(
+      (status) =>
+          status.phase == WebDavSearchPhase.failed ||
+          status.phase == WebDavSearchPhase.timedOut,
+    );
+    return rows.isEmpty && failed ? null : rows;
   }
 
   static Future<List<SourceEngineRef>> sourceEngineListing() async {

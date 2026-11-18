@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:debrify/models/torrent.dart';
 import 'package:debrify/features/sources/data/service_source_search_repository.dart';
 import 'package:debrify/features/sources/data/source_search_repository.dart';
+import 'package:debrify/features/sources/models/webdav_source_status.dart';
 import 'package:debrify/services/iptv_source_search.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';
 
@@ -15,6 +16,12 @@ class FakeSourceSearchServices {
   SourceSearchBatch? batch;
   void Function(IptvSourceResult)? iptvResult;
   bool Function()? shouldContinue;
+
+  /// WebDAV answers at once with nothing unless a test sets [webDav].
+  Completer<List<WebDavSourceStatus>>? webDav;
+  final webDavCalls = <String>[];
+  void Function(WebDavSourceStatus)? webDavStatus;
+  void Function(String, List<Torrent>)? webDavRows;
   late final ServiceSourceSearchRepository
   repository = ServiceSourceSearchRepository(
     owner: ProfileSessionMemory.captureOwner(),
@@ -64,6 +71,18 @@ class FakeSourceSearchServices {
           iptvResult = onResult;
           this.shouldContinue = shouldContinue;
           return iptv.future;
+        },
+    webDavSearch:
+        (
+          selection, {
+          required onStatus,
+          required onRows,
+          required shouldContinue,
+        }) {
+          webDavCalls.add(selection.title);
+          webDavStatus = onStatus;
+          webDavRows = onRows;
+          return webDav?.future ?? Future.value(const <WebDavSourceStatus>[]);
         },
     retryAddon:
         ({

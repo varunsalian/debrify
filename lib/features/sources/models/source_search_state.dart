@@ -1,5 +1,6 @@
 import '../../../models/addon_search_status.dart';
 import '../../../models/iptv_source_result.dart';
+import 'webdav_source_status.dart';
 
 /// Request state for one Sources view. Rendered/frozen rows have a separate
 /// presentation lifetime; a final response does not imply immediate adoption.
@@ -9,11 +10,19 @@ class SourceSearchState {
   final List<AddonSearchStatus> addonStatuses;
   final List<IptvSourceResult> iptv;
 
+  /// One entry per WebDAV server searched. WebDAV may still be searching
+  /// after [searching] ends; see [webDavSearching].
+  final List<WebDavSourceStatus> webDav;
+
+  bool get webDavSearching => webDav.any((server) => server.searching);
+
   SourceSearchState({
     this.searching = false,
     this.error,
     List<AddonSearchStatus> addonStatuses = const [],
     List<IptvSourceResult> iptv = const [],
+    List<WebDavSourceStatus> webDav = const [],
   }) : addonStatuses = List.unmodifiable(addonStatuses),
-       iptv = List.unmodifiable(iptv);
+       iptv = List.unmodifiable(iptv),
+       webDav = List.unmodifiable(webDav);
 }

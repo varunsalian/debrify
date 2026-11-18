@@ -10,6 +10,7 @@ final class SourceSearchChoices {
     this.iptv = true,
     this.excludedPlaylistIds = const <String>{},
     this.mediaServers = true,
+    this.webDav = true,
   });
 
   /// false: no IPTV playlist is searched.
@@ -20,6 +21,9 @@ final class SourceSearchChoices {
 
   /// false: Jellyfin/Emby/Plex are not searched.
   final bool mediaServers;
+
+  /// false: connected WebDAV servers are not searched.
+  final bool webDav;
 
   bool includesPlaylist(String playlistId) =>
       iptv && !excludedPlaylistIds.contains(playlistId);
@@ -40,21 +44,27 @@ final class SourceSearchChoices {
       iptv: iptv,
       excludedPlaylistIds: excluded,
       mediaServers: mediaServers,
+      webDav: webDav,
     );
   }
 
-  SourceSearchChoices copyWith({bool? iptv, bool? mediaServers}) =>
-      SourceSearchChoices(
-        iptv: iptv ?? this.iptv,
-        excludedPlaylistIds: excludedPlaylistIds,
-        mediaServers: mediaServers ?? this.mediaServers,
-      );
+  SourceSearchChoices copyWith({
+    bool? iptv,
+    bool? mediaServers,
+    bool? webDav,
+  }) => SourceSearchChoices(
+    iptv: iptv ?? this.iptv,
+    excludedPlaylistIds: excludedPlaylistIds,
+    mediaServers: mediaServers ?? this.mediaServers,
+    webDav: webDav ?? this.webDav,
+  );
 
   @override
   bool operator ==(Object other) =>
       other is SourceSearchChoices &&
       iptv == other.iptv &&
       mediaServers == other.mediaServers &&
+      webDav == other.webDav &&
       const SetEquality<String>().equals(
         excludedPlaylistIds,
         other.excludedPlaylistIds,
@@ -64,6 +74,7 @@ final class SourceSearchChoices {
   int get hashCode => Object.hash(
     iptv,
     mediaServers,
+    webDav,
     Object.hashAllUnordered(excludedPlaylistIds),
   );
 }
@@ -74,6 +85,7 @@ final class SourceSearchPreferences {
   static const iptvKey = 'source_search_iptv_v1';
   static const excludedKey = 'source_search_iptv_excluded_v1';
   static const mediaServersKey = 'source_search_media_servers_v1';
+  static const webDavKey = 'source_search_webdav_v1';
 
   /// Missing keys read as the defaults (everything searched).
   static Future<SourceSearchChoices> read() async {
@@ -82,6 +94,7 @@ final class SourceSearchPreferences {
       iptv: prefs.getBool(iptvKey) ?? true,
       excludedPlaylistIds: {...?prefs.getStringList(excludedKey)},
       mediaServers: prefs.getBool(mediaServersKey) ?? true,
+      webDav: prefs.getBool(webDavKey) ?? true,
     );
   }
 
@@ -101,6 +114,7 @@ final class SourceSearchPreferences {
     final prefs = await ProfilePreferences.instance();
     await prefs.setBool(iptvKey, choices.iptv);
     await prefs.setBool(mediaServersKey, choices.mediaServers);
+    await prefs.setBool(webDavKey, choices.webDav);
     if (choices.excludedPlaylistIds.isEmpty) {
       await prefs.remove(excludedKey);
     } else {

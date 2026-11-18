@@ -8,7 +8,7 @@ import 'package:debrify/features/sources/application/source_provider_config.dart
 import 'package:debrify/features/sources/application/source_search_plans.dart';
 import 'package:debrify/features/sources/data/automatic_source_bindings.dart';
 import 'package:debrify/features/sources/data/curated_source_search.dart';
-import 'package:debrify/features/sources/data/iptv_quick_play_search.dart';
+import 'package:debrify/features/sources/data/direct_only_source_search.dart';
 import 'package:debrify/features/sources/data/series_pack_search.dart';
 import 'package:debrify/models/playback_meta.dart';
 import 'package:debrify/models/playlist_entry.dart';
@@ -20,7 +20,6 @@ import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';
 import 'package:debrify/services/series_source_fetcher.dart';
 import 'package:debrify/services/storage/quick_play_storage.dart';
-import 'package:debrify/services/torrent_service.dart';
 import 'package:debrify/utils/filter_ladder.dart';
 
 final class RecoverySourceResolution {
@@ -76,50 +75,15 @@ final class RecoverySourceResolution {
         !rules.allowDirectLinks) {
       return [];
     }
-    final originVideoId = await CuratedSourceSearch.originEpisodeVideoId(
-      meta,
-      season,
-      episode,
-    );
-    if (meta.hasStremioEpisodeIdentity && originVideoId == null) return null;
-    final result = await TorrentService.searchStremioAddonsOnly(
-      imdbId: contentId,
+    return DirectOnlySourceSearch.search(
+      meta: meta,
+      contentId: contentId,
+      title: meta.title ?? '',
       isMovie: isMovie,
-      season: isMovie ? null : season,
-      episode: isMovie ? null : episode,
-      timeout: rules.addonTimeoutSeconds == 15
-          ? null
-          : Duration(seconds: rules.addonTimeoutSeconds),
-      preserveOrder: rules.ranking == QuickPlayRanking.exactOrder,
-      originAddonKey: meta.stremioAddonKey,
-      originVideoId: originVideoId,
+      season: season,
+      episode: episode,
+      rules: rules,
     );
-    final list = (result['torrents'] as List)
-        .cast<Torrent>()
-        .where(
-          (t) =>
-              t.streamType == StreamType.directUrl &&
-              (t.directUrl?.isNotEmpty ?? false),
-        )
-        .toList();
-    if (!meta.hasStremioEpisodeIdentity) {
-      list.addAll(
-        await IptvQuickPlaySearch.searchIptvForQuickPlay(
-          contentId,
-          meta.title ?? '',
-          meta.year,
-          isMovie,
-          season,
-          episode,
-          rules,
-          null,
-        ),
-      );
-    }
-    return list.isEmpty &&
-            ((result['addonErrors'] as Map?)?.isNotEmpty ?? false)
-        ? null
-        : list;
   };
 
   /// Shared automatic preparation: strict eligibility BEFORE dedupe, then the

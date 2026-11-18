@@ -10,6 +10,7 @@ Widget buildSourceResultsBody({
   required bool loading,
   required String? error,
   required bool showProgress,
+  String? progressDetail,
   required int visibleCount,
   required ValueGetter<bool> hasResults,
   required ScrollController scrollController,
@@ -26,7 +27,7 @@ Widget buildSourceResultsBody({
     if (keywordField != null) keywordField,
     Expanded(
       child: loading
-          ? const Center(child: CircularProgressIndicator())
+          ? SourceLoadingIndicator(detail: progressDetail)
           : error != null
           ? SourceStatusMessage(
               color: scheme.onSurfaceVariant,
@@ -36,7 +37,7 @@ Widget buildSourceResultsBody({
               children: [
                 if (titleBuilder != null) titleBuilder(),
                 if (toolbarBuilder != null) toolbarBuilder(),
-                if (showProgress) const SourceSearchProgress(),
+                if (showProgress) SourceSearchProgress(detail: progressDetail),
                 Expanded(
                   child: SourceResultsPane(
                     count: visibleCount,
@@ -46,9 +47,12 @@ Widget buildSourceResultsBody({
                     onUserScroll: onUserScroll,
                     emptyBuilder: (_) => SourceStatusMessage(
                       color: scheme.onSurfaceVariant,
-                      text: !hasResults()
-                          ? 'No sources found.'
-                          : 'No matches for your filters.',
+                      text: hasResults()
+                          ? 'No matches for your filters.'
+                          : progressDetail != null
+                          ? 'Nothing found yet. Still looking through '
+                                'WebDAV…'
+                          : 'No sources found.',
                     ),
                     pendingResults: pendingResultsBuilder?.call(),
                     itemBuilder: itemBuilder,

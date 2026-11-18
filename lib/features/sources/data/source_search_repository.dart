@@ -3,6 +3,7 @@ import '../../../models/iptv_source_result.dart';
 import '../../../models/torrent.dart';
 import '../models/source_search_request.dart';
 import '../models/source_search_result.dart';
+import '../models/webdav_source_status.dart';
 
 typedef SourceSearchBatch = void Function(String source, List<Torrent> batch);
 
@@ -18,5 +19,6 @@ abstract interface class SourceSearchRepository {
     required SourceSearchBatch onBatch,
     required void Function(IptvSourceResult) onIptvResult,
     required bool Function() shouldContinue,
+    void Function(WebDavSourceStatus)? onWebDavStatus,
   });
 }

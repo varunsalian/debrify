@@ -35,6 +35,7 @@ import '../models/source_search_request.dart';
 import '../models/source_search_state.dart';
 import '../models/source_seasons_state.dart';
 import '../models/sources_session.dart';
+import '../models/webdav_source_status.dart';
 import 'source_actions.dart';
 import 'source_binding_bridge.dart';
 import 'source_keyword_field.dart';
@@ -92,6 +93,9 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
   String? get _error => _searchSubscription.read().error;
   List<Torrent> get _torrents => _resultsSubscription.read().displayed;
   List<IptvSourceResult> get _iptvSources => _searchSubscription.read().iptv;
+  List<WebDavSourceStatus> get _webDavStatuses =>
+      _searchSubscription.read().webDav;
+  bool get _webDavSearching => _searchSubscription.read().webDavSearching;
 
   /// The rows actually rendered — [_torrents] after the redesign toolbar's
   /// source-group filter, quality/rip/language filter, and sort are applied.
@@ -393,6 +397,11 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
       shouldContinue: () => mounted && token == _searchToken,
       onRows: (rows, complete) {
         if (!mounted || token != _searchToken) return;
+        // Rows after completion come only from WebDAV. Over an existing list
+        // they wait behind the "new sources" pill instead of moving focus.
+        if (!complete && !_searching && _torrents.isNotEmpty) {
+          _resultsPresentation.freeze();
+        }
         _resultsPresentation.present(rows, token);
         if (complete) _resultsPresentation.complete(token);
       },
@@ -465,6 +474,7 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
         priority: _sourcePriority,
         aliases: _sourceAliases,
         retrying: _retryingAddons,
+        webDav: _webDavStatuses,
       );
 
   void _selectCinemaProvider(String? key) {
@@ -513,10 +523,13 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
             (_torrents.isNotEmpty ||
                 _seasonChipVisible ||
                 _iptvSources.isNotEmpty ||
-                _hasRetryableAddon)
+                _hasRetryableAddon ||
+                _webDavStatuses.any((server) => server.hasIssue))
         ? () => _toolbarPresentation.build(scheme, showProviders: !cinema)
         : null,
-    showProgress: _searching && !cinema,
+    // WebDAV can keep looking after the other sources have finished.
+    showProgress: (_searching || _webDavSearching) && !cinema,
+    progressDetail: sourceWebDavProgress(_webDavStatuses),
     visibleCount: _visible.length,
     scrollController: _resultsScroll,
     isTelevision: widget.isTelevision,

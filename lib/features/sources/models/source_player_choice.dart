@@ -13,8 +13,8 @@ enum SourcePlayerChoice {
   final String label;
 
   /// The other player for a row of [kind], or null when there is none to
-  /// offer: browser links have no player, media-server streams always play in
-  /// Debrify (an external app never receives their session headers), and a
+  /// offer: browser links have no player, media-server and WebDAV streams always
+  /// play in Debrify (an external app never receives their sign-in headers), and a
   /// profile without external players gets no external offer. [defaultMode] is the stored setting
   /// ('debrify', 'external' or 'deovr').
   static SourcePlayerChoice? alternateTo(
@@ -23,7 +23,8 @@ enum SourcePlayerChoice {
     required bool externalAllowed,
   }) {
     if (kind == SourceRowActionKind.external ||
-        kind == SourceRowActionKind.mediaServer) {
+        kind == SourceRowActionKind.mediaServer ||
+        kind == SourceRowActionKind.webDav) {
       return null;
     }
     if (defaultMode != 'debrify') return SourcePlayerChoice.debrify;
