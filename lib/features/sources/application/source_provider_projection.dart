@@ -4,6 +4,7 @@ import '../../../models/iptv_source_result.dart';
 import '../../../models/torrent.dart';
 import '../../../services/source_ordering.dart';
 import '../models/source_provider_option.dart';
+import '../models/webdav_source_status.dart';
 
 class SourceProviderProjection {
   SourceProviderProjection({
@@ -23,11 +24,13 @@ class SourceProviderProjection {
 bool sourceStatusActionable(AddonSearchStatus status) =>
     status.failed || status.count == 0;
 
-/// Compact-toolbar warnings, in their original server-then-IPTV display order.
+/// Compact-toolbar warnings, in their original server-then-IPTV display order,
+/// followed by WebDAV servers whose search stopped early or failed.
 List<String> sourceToolbarMessages({
   required List<AddonSearchStatus> statuses,
   required List<IptvSourceResult> iptv,
   required String? selectedKey,
+  List<WebDavSourceStatus> webDav = const [],
 }) => List.unmodifiable([
   for (final entry in sourceMediaServerMessages(statuses).entries)
     if (selectedKey == null || selectedKey == entry.key) entry.value,
@@ -35,7 +38,19 @@ List<String> sourceToolbarMessages({
     if (source.retryableFailure &&
         (selectedKey == null || selectedKey == source.key))
       'IPTV · ${source.name}: ${source.message}',
+  for (final server in webDav)
+    if (server.hasIssue && (selectedKey == null || selectedKey == server.key))
+      server.resultMessage!,
 ]);
+
+/// The live WebDAV progress line, or null when no server is still searching.
+String? sourceWebDavProgress(List<WebDavSourceStatus> webDav) {
+  final searching = [
+    for (final server in webDav)
+      if (server.searching) server.progressMessage,
+  ];
+  return searching.isEmpty ? null : searching.join('\n');
+}
 
 String sourceProviderLabel(
   String source, {
@@ -142,6 +157,7 @@ List<CinemaSourceProvider> projectCinemaSourceProviders({
   required List<String> priority,
   required Map<String, String> aliases,
   required Set<String> retrying,
+  List<WebDavSourceStatus> webDav = const [],
 }) {
   final messages = sourceMediaServerMessages(statuses);
   final counts = <String, int>{};
@@ -160,9 +176,18 @@ List<CinemaSourceProvider> projectCinemaSourceProviders({
   for (final source in iptv) {
     names[source.key] = 'IPTV · ${source.name}';
   }
+  for (final server in webDav) {
+    names[server.key] = server.label;
+  }
   final iptvMessages = {
     for (final source in iptv)
       if (source.retryableFailure) source.key: source.message,
+  };
+  final webDavMessages = {
+    for (final server in webDav)
+      server.key:
+          server.summary(withLabel: false) ??
+          (server.found == 0 ? 'No files named after this title.' : null),
   };
   final keys = SourceOrdering.orderBy(
     names.keys.toList()..sort(),
@@ -181,11 +206,15 @@ List<CinemaSourceProvider> projectCinemaSourceProviders({
         id: key,
         label: names[key]!.isEmpty ? 'Other sources' : names[key]!,
         count: counts[key] ?? 0,
-        message: iptvMessages[key] ?? messages[key],
+        message: iptvMessages[key] ?? messages[key] ?? webDavMessages[key],
+        // A failed WebDAV server explains itself in [message]; its retry is
+        // the next search, so it does not show the addon retry affordance.
         failed: statuses.any((s) => s.sourceKey == key && s.failed),
-        loading: statuses.any(
-          (s) => s.sourceKey == key && retrying.contains(s.requestKey),
-        ),
+        loading:
+            statuses.any(
+              (s) => s.sourceKey == key && retrying.contains(s.requestKey),
+            ) ||
+            webDav.any((s) => s.key == key && s.searching),
       ),
   ]);
 }

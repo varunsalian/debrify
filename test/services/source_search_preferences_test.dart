@@ -18,6 +18,7 @@ void main() {
     expect(choices, const SourceSearchChoices());
     expect(choices.iptv, isTrue);
     expect(choices.mediaServers, isTrue);
+    expect(choices.webDav, isTrue);
     expect(choices.excludedPlaylistIds, isEmpty);
     expect(choices.includesPlaylist('any'), isTrue);
   });
@@ -92,5 +93,17 @@ void main() {
       const SourceSearchChoices(excludedPlaylistIds: {'x'}).hashCode,
       SourceSearchChoices(excludedPlaylistIds: {'x'}).hashCode,
     );
+  });
+
+  test('WebDAV search can be turned off on its own', () async {
+    await SourceSearchPreferences.write(
+      const SourceSearchChoices(webDav: false),
+    );
+    final read = await SourceSearchPreferences.read();
+    expect(read.webDav, isFalse);
+    expect(read.mediaServers, isTrue);
+    expect(read, const SourceSearchChoices().copyWith(webDav: false));
+    final prefs = await ProfilePreferences.instance();
+    expect(prefs.getBool(SourceSearchPreferences.webDavKey), isFalse);
   });
 }

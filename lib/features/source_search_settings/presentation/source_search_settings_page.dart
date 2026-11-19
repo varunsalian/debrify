@@ -196,6 +196,21 @@ class _SourceSearchSettingsPageState extends State<SourceSearchSettingsPage> {
                   ),
                 ],
               ),
+              const SizedBox(height: 20),
+              SettingsSection(
+                title: 'WebDAV',
+                children: [
+                  SettingsToggleTile(
+                    icon: Icons.folder_shared_outlined,
+                    title: 'Search WebDAV servers',
+                    subtitle:
+                        'Finds files named after the title in your connected '
+                        'WebDAV folders',
+                    value: choices.webDav,
+                    onChanged: (on) => _commit(choices.copyWith(webDav: on)),
+                  ),
+                ],
+              ),
             ],
           ),
         ),

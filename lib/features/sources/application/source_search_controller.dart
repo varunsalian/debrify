@@ -9,6 +9,7 @@ import '../data/source_search_repository.dart';
 import '../models/source_search_request.dart';
 import '../models/source_search_state.dart';
 import '../models/sources_session.dart';
+import '../models/webdav_source_status.dart';
 import 'source_cache_controller.dart';
 import 'source_results_controller.dart';
 import 'source_retry_controller.dart';
@@ -34,6 +35,10 @@ class SourceSearchController extends Notifier<SourceSearchState> {
   final SourcesSession session;
   late SourceSearchRepository _repository;
   final List<List<Torrent>> _batches = [];
+
+  /// The completed result plus WebDAV rows that arrived after it, in that
+  /// order, so late rows append instead of reshuffling the finished list.
+  List<Torrent> _completed = const [];
   int _generation = 0;
 
   @override
@@ -115,16 +120,29 @@ class SourceSearchController extends Notifier<SourceSearchState> {
     bool active() => _accept(generation) && (shouldContinue?.call() ?? true);
     if (!active()) return;
     _batches.clear();
+    _completed = const [];
     state = SourceSearchState(searching: true);
     try {
       final result = await _repository.search(
         request,
-        shouldContinue: () => active() && state.searching,
+        // WebDAV outlives the main result, so this tracks the generation only.
+        shouldContinue: active,
         onBatch: (source, batch) {
-          if (!active() || !state.searching || batch.isEmpty) return;
+          if (!active() || batch.isEmpty) return;
+          if (state.searching) {
+            _batches.add(List.unmodifiable(batch));
+            onRows(_merge(), false);
+            if (active() && state.searching) onBatchAccepted(batch);
+            return;
+          }
+          // Only WebDAV keeps searching after completion. Its late rows are
+          // appended to the finished list; the batch union keeps them for a
+          // later addon retry too.
+          if (!source.startsWith('webdav:')) return;
           _batches.add(List.unmodifiable(batch));
-          onRows(_merge(), false);
-          if (active() && state.searching) onBatchAccepted(batch);
+          _completed = _appendCompleted(batch);
+          onRows(_completed, false);
+          if (active()) onBatchAccepted(batch);
         },
         onIptvResult: (result) {
           if (!active() || !state.searching) return;
@@ -132,12 +150,26 @@ class SourceSearchController extends Notifier<SourceSearchState> {
             searching: true,
             addonStatuses: state.addonStatuses,
             iptv: [...state.iptv, result],
+            webDav: state.webDav,
+          );
+        },
+        onWebDavStatus: (status) {
+          if (!active()) return;
+          state = SourceSearchState(
+            searching: state.searching,
+            error: state.error,
+            addonStatuses: state.addonStatuses,
+            iptv: state.iptv,
+            webDav: _withWebDav(state.webDav, status),
           );
         },
       );
       if (result == null || !active()) return;
+      _completed = result.torrents;
       state = SourceSearchState(
         iptv: result.iptv,
+        // Live statuses are at least as new as the result's snapshot.
+        webDav: state.webDav.isEmpty ? result.webDav : state.webDav,
         addonStatuses: SourceOrdering.orderBy(
           result.addonStatuses
               .where(
@@ -157,6 +189,7 @@ class SourceSearchController extends Notifier<SourceSearchState> {
         error: error.toString(),
         addonStatuses: state.addonStatuses,
         iptv: state.iptv,
+        webDav: state.webDav,
       );
     }
   }
@@ -169,6 +202,7 @@ class SourceSearchController extends Notifier<SourceSearchState> {
       searching: state.searching,
       error: state.error,
       iptv: state.iptv,
+      webDav: state.webDav,
       addonStatuses: [
         for (final current in state.addonStatuses)
           current.requestKey == status.requestKey
@@ -178,6 +212,22 @@ class SourceSearchController extends Notifier<SourceSearchState> {
     );
     if (batch.isEmpty) return null;
     _batches.add(List.unmodifiable(batch));
+    // Late WebDAV rows build on the completed list; keep retried rows in it.
+    if (!state.searching) _completed = _appendCompleted(batch);
     return _merge();
   }
+
+  List<Torrent> _appendCompleted(List<Torrent> batch) => List.unmodifiable(
+    mergeTorrentResults([_completed, batch], preserveSourceOrder: true),
+  );
+}
+
+/// Replaces [status]'s server entry in place, keeping first-seen order.
+List<WebDavSourceStatus> _withWebDav(
+  List<WebDavSourceStatus> current,
+  WebDavSourceStatus status,
+) {
+  final index = current.indexWhere((entry) => entry.key == status.key);
+  if (index < 0) return [...current, status];
+  return [...current]..[index] = status;
 }

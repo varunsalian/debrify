@@ -1,5 +1,6 @@
 import '../../../models/iptv_source_result.dart';
 import '../../../models/torrent.dart';
+import '../../../services/webdav_source_tickets.dart';
 
 enum SourceLinkCopyResult {
   copied,
@@ -30,8 +31,10 @@ class SourceLinkCopier {
         caseSensitive: false,
       ).hasMatch(torrent.episodeIdentifier ?? '');
 
+  /// A WebDAV row's link needs its sign-in header, so a copied URL would
+  /// not play anywhere else.
   bool canCopy(Torrent torrent) =>
-      torrent.copyLink != null ||
+      (!WebDavSourceTickets.owns(torrent) && torrent.copyLink != null) ||
       (isDeferredEpisode(torrent) && _hasEpisodeTarget(torrent));
 
   Future<SourceLinkCopyResult> copy(

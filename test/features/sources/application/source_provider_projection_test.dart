@@ -1,4 +1,6 @@
 import 'package:debrify/features/sources/application/source_provider_projection.dart';
+import 'package:debrify/features/sources/models/webdav_source_status.dart';
+import 'package:debrify/models/cinema_source_provider.dart';
 import 'package:debrify/models/torrent.dart';
 import 'package:debrify/services/iptv_source_search.dart';
 import 'package:debrify/services/stremio_service.dart';
@@ -254,4 +256,74 @@ void main() {
       expect(result[2].message, isNull);
     },
   );
+
+  group('WebDAV', () {
+    const searching = WebDavSourceStatus(
+      key: 'webdav:nas',
+      name: 'NAS',
+      phase: WebDavSearchPhase.searching,
+      foldersChecked: 4,
+    );
+    final failed = searching.copyWith(
+      phase: WebDavSearchPhase.failed,
+      failure: WebDavFailure.signIn,
+    );
+    final quiet = searching.copyWith(phase: WebDavSearchPhase.done, found: 2);
+
+    test('progress names each server still searching, and why it is slow', () {
+      expect(sourceWebDavProgress([quiet]), isNull);
+      expect(
+        sourceWebDavProgress([searching]),
+        'Looking through WebDAV · NAS… 4 folders checked',
+      );
+      expect(
+        sourceWebDavProgress([searching.copyWith(slow: true)]),
+        contains('list one folder at a time'),
+      );
+    });
+
+    test('toolbar shows only problems, scoped to the selected server', () {
+      List<String> messages(List<WebDavSourceStatus> webDav, String? key) =>
+          sourceToolbarMessages(
+            statuses: const [],
+            iptv: const [],
+            webDav: webDav,
+            selectedKey: key,
+          );
+      expect(messages([quiet], null), isEmpty);
+      expect(messages([failed], null), [
+        'WebDAV · NAS rejected its sign-in. Check the username and password '
+            'in WebDAV settings.',
+      ]);
+      expect(messages([failed], 'webdav:nas'), hasLength(1));
+      expect(messages([failed], 'stremio:other'), isEmpty);
+    });
+
+    test('Cinema lists each server with its state', () {
+      List<CinemaSourceProvider> project(WebDavSourceStatus server) =>
+          projectCinemaSourceProviders(
+            torrents: const [],
+            statuses: const [],
+            iptv: const [],
+            priority: const [],
+            aliases: const {},
+            retrying: const {},
+            webDav: [server],
+          );
+      final live = project(searching).last;
+      expect(
+        (live.id, live.label, live.loading),
+        ('webdav:nas', 'WebDAV · NAS', true),
+      );
+      final broken = project(failed).last;
+      // No retry affordance: the next search is the retry.
+      expect(broken.failed, isFalse);
+      // The rail already shows the server name.
+      expect(broken.message, startsWith('The server rejected its sign-in.'));
+      expect(
+        project(searching.copyWith(phase: WebDavSearchPhase.done)).last.message,
+        'No files named after this title.',
+      );
+    });
+  });
 }

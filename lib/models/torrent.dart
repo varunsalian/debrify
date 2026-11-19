@@ -136,6 +136,10 @@ class Torrent {
     return (name: heading, description: detail == heading ? null : detail);
   }
 
+  /// A file found on one of the profile's WebDAV servers. Its link needs
+  /// the server's sign-in, so it plays only in Debrify and is never pinned.
+  bool get isWebDavSource => source.startsWith('webdav:');
+
   /// Whether this is a direct playable stream (not torrent)
   bool get isDirectStream => streamType == StreamType.directUrl;
 

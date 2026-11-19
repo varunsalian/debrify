@@ -1,8 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
+import 'dart:typed_data';
 
 import 'package:debrify/services/storage/webdav_server_storage.dart';
 import 'package:xml/xml.dart';
+import 'package:xml/xml_events.dart';
 
 import '../models/webdav_item.dart';
 import '../models/profiles/connection_resource.dart';
@@ -41,18 +44,33 @@ class WebDavService {
     return items.isNotEmpty || config.baseUrl.isNotEmpty;
   }
 
+  /// [maxBytes] bounds the listing document; very large folders (a debrid
+  /// server's flat torrent list) may need more than the default.
   static Future<List<WebDavItem>> listDirectory({
     required WebDavConfig config,
     required String path,
     ProfileFeature feature = ProfileFeature.cloud,
+    int maxBytes = WebDavProtocolClient.defaultSmallDocumentLimit,
   }) async {
     await _authorize(config, feature: feature);
-    return _listDirectoryRaw(config: config, path: path);
+    return _listDirectoryRaw(config: config, path: path, maxBytes: maxBytes);
   }
+
+  /// Rechecks that the active profile may still use [config], without any
+  /// network request. Throws when access was revoked or the server changed.
+  static Future<void> authorizeUse(
+    WebDavConfig config, {
+    ProfileFeature feature = ProfileFeature.cloud,
+  }) => _authorize(config, feature: feature);
+
+  /// Listings above this size are parsed on a background isolate so a huge
+  /// folder cannot stall the UI thread.
+  static const backgroundParseBytes = 64 * 1024;
 
   static Future<List<WebDavItem>> _listDirectoryRaw({
     required WebDavConfig config,
     required String path,
+    int maxBytes = WebDavProtocolClient.defaultSmallDocumentLimit,
   }) async {
     final client = _protocolClient(config);
     late final WebDavBytesResult response;
@@ -61,58 +79,130 @@ class WebDavService {
         path: path,
         depth: 1,
         collection: true,
+        maxBytes: maxBytes,
         body:
             '''<?xml version="1.0" encoding="utf-8" ?><D:propfind xmlns:D="DAV:"><D:prop><D:displayname/><D:getcontentlength/><D:getlastmodified/><D:getcontenttype/><D:resourcetype/></D:prop></D:propfind>''',
       );
     } finally {
       client.close();
     }
-    late final XmlDocument document;
+    final basePath = _normalizeDirPath(_pathFromUri(_baseUri(config)));
+    final currentPath = _normalizeDirPath(path);
+    final bytes = response.bytes;
+    if (bytes.length < backgroundParseBytes) {
+      return _parseListing(bytes, basePath, currentPath);
+    }
+    return Isolate.run(() {
+      try {
+        return _parseListing(bytes, basePath, currentPath);
+      } on WebDavException catch (error) {
+        // The parser's cause is not needed across the isolate boundary.
+        throw WebDavException.malformed(error.message);
+      }
+    });
+  }
+
+  static const _listingFields = {
+    'href',
+    'displayname',
+    'getcontentlength',
+    'getlastmodified',
+    'getcontenttype',
+  };
+
+  /// Reads the multistatus document as a stream of events rather than a
+  /// whole tree, so a folder with thousands of entries stays light on memory.
+  /// Each `response` keeps the first value of each property, as before.
+  static List<WebDavItem> _parseListing(
+    Uint8List bytes,
+    String basePath,
+    String currentPath,
+  ) {
+    late final String text;
     try {
-      document = XmlDocument.parse(utf8.decode(response.bytes));
-    } on XmlException catch (error) {
-      throw WebDavException.malformed(
-        'WebDAV returned an invalid directory listing',
-        cause: error,
-      );
+      text = utf8.decode(bytes);
     } on FormatException catch (error) {
       throw WebDavException.malformed(
         'WebDAV returned a non-UTF-8 directory listing',
         cause: error,
       );
     }
-    final basePath = _normalizeDirPath(_pathFromUri(_baseUri(config)));
-    final currentPath = _normalizeDirPath(path);
     final results = <WebDavItem>[];
+    var responseDepth = 0;
+    var depth = 0;
+    final fields = <String, String>{};
+    var isDirectory = false;
+    String? field;
+    var fieldDepth = 0;
+    final value = StringBuffer();
 
-    for (final node in document.descendants.whereType<XmlElement>()) {
-      if (node.name.local != 'response') continue;
-      final href = _childText(node, 'href');
-      if (href == null || href.trim().isEmpty) continue;
-
+    void addResponse() {
+      final href = fields['href'];
+      if (href == null || href.trim().isEmpty) return;
       final itemPath = _relativePathFromHref(href, basePath);
-      if (_samePath(itemPath, currentPath)) continue;
-
-      final displayName = _childText(node, 'displayname');
-      final isDirectory = node.descendants.whereType<XmlElement>().any(
-        (element) => element.name.local == 'collection',
-      );
-      final name = _cleanName(displayName, itemPath, isDirectory);
-      if (name.isEmpty) continue;
-
-      final size = int.tryParse(_childText(node, 'getcontentlength') ?? '');
-      final modified = _parseHttpDate(_childText(node, 'getlastmodified'));
-      final contentType = _childText(node, 'getcontenttype');
-
+      if (_samePath(itemPath, currentPath)) return;
+      final name = _cleanName(fields['displayname'], itemPath, isDirectory);
+      if (name.isEmpty) return;
       results.add(
         WebDavItem(
           name: name,
           path: _normalizePath(itemPath, directory: isDirectory),
           isDirectory: isDirectory,
-          sizeBytes: size,
-          modifiedAt: modified,
-          contentType: contentType,
+          sizeBytes: int.tryParse(fields['getcontentlength'] ?? ''),
+          modifiedAt: _parseHttpDate(fields['getlastmodified']),
+          contentType: fields['getcontenttype'],
         ),
+      );
+    }
+
+    try {
+      for (final event in parseEvents(
+        text,
+        validateNesting: true,
+        validateDocument: true,
+      )) {
+        if (event is XmlStartElementEvent) {
+          final local = event.localName;
+          if (!event.isSelfClosing) depth++;
+          if (responseDepth == 0) {
+            if (local == 'response' && !event.isSelfClosing) {
+              responseDepth = depth;
+              fields.clear();
+              isDirectory = false;
+            }
+            continue;
+          }
+          if (local == 'collection') isDirectory = true;
+          if (field == null &&
+              _listingFields.contains(local) &&
+              !fields.containsKey(local)) {
+            if (event.isSelfClosing) {
+              fields[local] = '';
+            } else {
+              field = local;
+              fieldDepth = depth;
+              value.clear();
+            }
+          }
+        } else if (event is XmlEndElementEvent) {
+          if (field != null && depth == fieldDepth) {
+            fields[field] = value.toString().trim();
+            field = null;
+          }
+          if (responseDepth != 0 && depth == responseDepth) {
+            addResponse();
+            responseDepth = 0;
+          }
+          depth--;
+        } else if (field != null) {
+          if (event is XmlTextEvent) value.write(event.value);
+          if (event is XmlCDATAEvent) value.write(event.value);
+        }
+      }
+    } on XmlException catch (error) {
+      throw WebDavException.malformed(
+        'WebDAV returned an invalid directory listing',
+        cause: error,
       );
     }
 
@@ -351,13 +441,6 @@ class WebDavService {
   static WebDavCredentials _credentials(WebDavConfig config) =>
       WebDavCredentials(username: config.username, password: config.password);
 
-  static String? _childText(XmlElement element, String localName) {
-    for (final child in element.descendants.whereType<XmlElement>()) {
-      if (child.name.local == localName) return child.innerText.trim();
-    }
-    return null;
-  }
-
   static String _pathFromUri(Uri uri) {
     return Uri.decodeFull(uri.path);
   }
@@ -405,8 +488,14 @@ class WebDavService {
     return normalized.split('/').last;
   }
 
+  /// A date the server formats oddly is left out rather than failing the
+  /// whole listing.
   static DateTime? _parseHttpDate(String? value) {
     if (value == null || value.isEmpty) return null;
-    return HttpDate.parse(value);
+    try {
+      return HttpDate.parse(value);
+    } on Object {
+      return null;
+    }
   }
 }

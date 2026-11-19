@@ -962,3 +962,7 @@ test/media_server_diagnostics_test.dart
 # 2026-11-18: Sports hands the player every channel for a match and returns to the match after playback.
 test/features/sports/presentation/sports_board_play_return_test.dart
 test/features/iptv/presentation/legacy_iptv/iptv_keep_player_lineup_test.dart
+# 2026-11-18: Sources searches connected WebDAV servers by title (bounded folder walk, background parsing).
+test/services/webdav_service_listing_test.dart
+test/services/source_search_preferences_test.dart
+test/features/source_search_settings

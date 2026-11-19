@@ -104,7 +104,8 @@ class SourceOrdering {
     if (s.isEmpty) return '';
     if (s.startsWith('stremio:') ||
         s.startsWith('iptv:') ||
-        s.startsWith('mediaserver:')) {
+        s.startsWith('mediaserver:') ||
+        s.startsWith('webdav:')) {
       return s;
     }
     return aliases?[s] ?? 'engine:$s';

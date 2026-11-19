@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:debrify/features/sources/data/service_source_search_repository.dart';
 import 'package:debrify/features/sources/models/source_search_request.dart';
 import 'package:debrify/features/sources/models/source_search_result.dart';
+import 'package:debrify/features/sources/models/webdav_source_status.dart';
 import 'package:debrify/models/advanced_search_selection.dart';
 import 'package:debrify/models/torrent.dart';
 import 'package:debrify/services/iptv_source_search.dart';
@@ -42,12 +45,14 @@ void main() {
   late List<String> events;
   late List<List<Torrent>> batches;
   late List<IptvSourceResult> statuses;
+  late List<WebDavSourceStatus> webDavStatuses;
   late bool active;
   setUp(() {
     fake = FakeSourceSearchServices();
     events = [];
     batches = [];
     statuses = [];
+    webDavStatuses = [];
     active = true;
   });
   Future<SourceSearchResult?> run({
@@ -69,7 +74,79 @@ void main() {
       events.add('iptv:${result.key}');
       statuses.add(result);
     },
+    onWebDavStatus: (status) {
+      events.add('webdav:${status.phase.name}');
+      webDavStatuses.add(status);
+    },
   );
+
+  test(
+    'WebDAV never holds up completion and keeps streaming until retired',
+    () async {
+      fake.webDav = Completer<List<WebDavSourceStatus>>();
+      final pending = run();
+      expect(fake.webDavCalls, ['Fixture']);
+      const looking = WebDavSourceStatus(
+        key: 'webdav:nas',
+        name: 'NAS',
+        phase: WebDavSearchPhase.searching,
+      );
+      fake.webDavStatus!(looking);
+      fake.webDavRows!('webdav:nas', [row('S01E02.mkv')]);
+      expect(events, ['webdav:searching', 'batch:webdav:nas']);
+      fake.main.complete({
+        'torrents': [row('main')],
+      });
+      fake.iptv.complete([]);
+      // Completes while WebDAV is still searching, with what it has so far.
+      final result = (await pending)!;
+      expect(result.torrents.map((r) => r.name), ['main', 'S01E02.mkv']);
+      expect(result.webDav, [same(looking)]);
+
+      // Later progress and rows still reach the view.
+      final finished = looking.copyWith(
+        phase: WebDavSearchPhase.done,
+        found: 2,
+      );
+      fake.webDavRows!('webdav:nas', [row('late.mkv')]);
+      fake.webDavStatus!(finished);
+      expect(events, [
+        'webdav:searching',
+        'batch:webdav:nas',
+        'batch:webdav:nas',
+        'webdav:done',
+      ]);
+      expect(batches.last.single.name, 'late.mkv');
+
+      // Once the view no longer wants this search, nothing more arrives.
+      active = false;
+      fake.webDavRows!('webdav:nas', [row('stale.mkv')]);
+      fake.webDavStatus!(looking);
+      expect(events, hasLength(4));
+      fake.webDav!.complete([finished]);
+    },
+  );
+
+  test('a failing WebDAV search never fails the Sources search', () async {
+    fake.webDav = Completer<List<WebDavSourceStatus>>();
+    final pending = run();
+    fake.main.complete({
+      'torrents': [row('main')],
+    });
+    fake.iptv.complete([]);
+    final result = (await pending)!;
+    fake.webDav!.completeError(StateError('boom'));
+    await Future<void>.delayed(Duration.zero);
+    expect(result.torrents.map((r) => r.name), ['main']);
+    expect(result.webDav, isEmpty);
+  });
+
+  test('keyword and addon-episode searches leave WebDAV out', () async {
+    final keyword = run(keyword: 'anything');
+    fake.main.complete({'torrents': <Torrent>[]});
+    await keyword;
+    expect(fake.webDavCalls, isEmpty);
+  });
 
   test(
     'keyword keeps exact query, ordering and synthetic rows, without IPTV',

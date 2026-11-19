@@ -51,6 +51,9 @@ void main() {
     // Media-server streams always play in Debrify: no offer either way.
     expect(other('debrify', SourceRowActionKind.mediaServer), isNull);
     expect(other('external', SourceRowActionKind.mediaServer), isNull);
+    // WebDAV streams need their sign-in header, which only Debrify sends.
+    expect(other('debrify', SourceRowActionKind.webDav), isNull);
+    expect(other('external', SourceRowActionKind.webDav), isNull);
     // Browser links have no player at all.
     expect(other('debrify', SourceRowActionKind.external), isNull);
     expect(other('external', SourceRowActionKind.external), isNull);

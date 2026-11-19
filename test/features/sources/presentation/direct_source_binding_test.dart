@@ -144,4 +144,39 @@ void main() {
     await tester.pump();
     expect(find.text("No IMDb match — can't pin a source."), findsOneWidget);
   });
+
+  testWidgets('a WebDAV row explains it cannot be pinned', (tester) async {
+    final context = await mount(tester);
+    final webDav = Torrent(
+      rowid: 0,
+      infohash: 'webdav:fixture',
+      name: 'Dune.mkv',
+      source: 'webdav:nas',
+      sizeBytes: 0,
+      createdUnix: 0,
+      seeders: 0,
+      leechers: 0,
+      completed: 0,
+      scrapedDate: 0,
+      streamType: StreamType.directUrl,
+      directUrl: 'https://dav.example.com/Dune.mkv',
+    );
+    expect(
+      await presentDirectSourceBinding(
+        context,
+        webDav,
+        imdbId: 'tt1',
+        canContinue: () => true,
+        authorize: (_) async {},
+        describe: (_) => throw StateError('Unexpected descriptor'),
+        save: (_) => throw StateError('Unexpected save'),
+      ),
+      isFalse,
+    );
+    await tester.pump();
+    expect(
+      find.text('WebDAV files cannot be pinned. Pick them from Sources.'),
+      findsOneWidget,
+    );
+  });
 }

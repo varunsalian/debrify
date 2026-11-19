@@ -6,12 +6,11 @@ import 'package:debrify/features/sources/application/source_filter_ladder.dart';
 import 'package:debrify/features/sources/application/source_provider_config.dart';
 import 'package:debrify/features/sources/application/source_search_plans.dart';
 import 'package:debrify/features/sources/data/curated_source_search.dart';
-import 'package:debrify/features/sources/data/iptv_quick_play_search.dart';
+import 'package:debrify/features/sources/data/direct_only_source_search.dart';
 import 'package:debrify/features/sources/data/recovery_source_resolution.dart';
 import 'package:debrify/features/sources/data/series_pack_search.dart';
 import 'package:debrify/features/sources/data/source_engine_fetchers.dart';
 import 'package:debrify/models/playback_meta.dart';
-import 'package:debrify/models/quick_play_rules.dart';
 import 'package:debrify/models/torrent.dart';
 import 'package:debrify/services/direct_source_authorization.dart';
 import 'package:debrify/services/iptv_source_search.dart';
@@ -26,7 +25,6 @@ import 'package:debrify/services/source_selection_diagnostics.dart';
 import 'package:debrify/services/storage/quick_play_storage.dart';
 import 'package:debrify/services/stream_url_validator.dart';
 import 'package:debrify/services/stremio_service.dart';
-import 'package:debrify/services/torrent_service.dart';
 
 final class SourceSeriesFetcher {
   const SourceSeriesFetcher._();
@@ -331,48 +329,17 @@ final class SourceSeriesFetcher {
                 !rules.allowDirectLinks) {
               return const <Torrent>[];
             }
-            final addonTimeout = rules.addonTimeoutSeconds == 15
-                ? null
-                : Duration(seconds: rules.addonTimeoutSeconds);
-            final originVideoId =
-                await CuratedSourceSearch.originEpisodeVideoId(meta, s, e);
-            if (meta.hasStremioEpisodeIdentity && originVideoId == null) {
-              return null; // Retryable metadata failure; never query IMDb here.
-            }
-            final result = await TorrentService.searchStremioAddonsOnly(
-              imdbId: imdbId,
+            final direct = await DirectOnlySourceSearch.search(
+              meta: meta,
+              contentId: imdbId,
+              title: label,
               isMovie: false,
               season: s,
               episode: e,
-              timeout: addonTimeout,
-              preserveOrder: rules.ranking == QuickPlayRanking.exactOrder,
-              originAddonKey: meta.stremioAddonKey,
-              originVideoId: originVideoId,
+              rules: rules,
             );
-            list = (result['torrents'] as List).cast<Torrent>().where((t) {
-              return t.streamType == StreamType.directUrl &&
-                  (t.directUrl?.isNotEmpty ?? false);
-            }).toList();
-            if (!meta.hasStremioEpisodeIdentity) {
-              list.addAll(
-                await IptvQuickPlaySearch.searchIptvForQuickPlay(
-                  imdbId,
-                  label,
-                  meta.year,
-                  false,
-                  s,
-                  e,
-                  rules,
-                  null,
-                ),
-              );
-            }
-            if (list.isEmpty &&
-                ((result['addonErrors'] as Map?)?.isNotEmpty ?? false)) {
-              // Addon failures are reported in-band. Keep the fetch retryable
-              // when they leave this provider-free path no playable rows.
-              return null;
-            }
+            if (direct == null) return null;
+            list = direct;
           } else {
             list = await CuratedSourceSearch.searchCuratedSources(
               imdbId: imdbId,
@@ -397,8 +364,10 @@ final class SourceSeriesFetcher {
         }
       },
       listAddons: () async => [
-        if (!meta.hasStremioEpisodeIdentity)
+        if (!meta.hasStremioEpisodeIdentity) ...[
           ...await SourceEngineFetchers.mediaServerSourceRefs(),
+          ...await SourceEngineFetchers.webDavSourceRefs(),
+        ],
         for (final addon
             in await StremioService.instance.applicableStreamingAddons(
               type: 'series',
@@ -443,6 +412,18 @@ final class SourceSeriesFetcher {
               e,
             );
           }
+          if (addonId.startsWith('webdav:')) {
+            if (meta.hasStremioEpisodeIdentity) return const <Torrent>[];
+            return SourceEngineFetchers.fetchWebDavSources(
+              addonId,
+              title: label,
+              imdbId: imdbId,
+              year: meta.year,
+              isMovie: false,
+              season: s,
+              episode: e,
+            );
+          }
           final originVideoId = await CuratedSourceSearch.originEpisodeVideoId(
             meta,
             s,
@@ -466,7 +447,7 @@ final class SourceSeriesFetcher {
         }
       },
       fetchAddonPacks: (addonId, s) async {
-        if (addonId.startsWith('mediaserver:')) return const <Torrent>[];
+        if (SourceEngineFetchers.isLibrary(addonId)) return const <Torrent>[];
         if (!imdbId.startsWith('tt') || meta.hasStremioEpisodeIdentity) {
           return const <Torrent>[];
         }

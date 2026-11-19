@@ -28,6 +28,7 @@ import 'package:debrify/services/profiles/profile_policy_guard.dart';
 import 'package:debrify/services/series_source_service.dart';
 import 'package:debrify/services/source_selection_diagnostics.dart';
 import 'package:debrify/services/video_player_launcher.dart';
+import 'package:debrify/services/webdav_source_tickets.dart';
 import 'package:debrify/ui/core/source_metadata_labels.dart';
 import 'package:debrify/widgets/debrify_tv_channel_add_bridge.dart';
 import 'package:flutter/material.dart';
@@ -96,7 +97,9 @@ final class ManualSourceActivation {
       if (context.mounted && bindingOwner.isCurrent) {
         SourceLoadingOverlays.snack(
           context,
-          'IPTV connection changed. Search sources again.',
+          WebDavSourceTickets.owns(torrent)
+              ? 'WebDAV server changed. Search sources again.'
+              : 'IPTV connection changed. Search sources again.',
         );
       }
       return;

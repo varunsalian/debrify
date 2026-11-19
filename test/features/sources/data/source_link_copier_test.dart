@@ -198,4 +198,24 @@ void main() {
       );
     });
   }
+
+  test('a WebDAV row offers no copied link: it needs its sign-in', () {
+    final webDav = Torrent(
+      rowid: 1,
+      infohash: 'fixture',
+      name: 'Dune.mkv',
+      source: 'webdav:nas',
+      sizeBytes: 0,
+      createdUnix: 0,
+      seeders: 0,
+      leechers: 0,
+      completed: 0,
+      scrapedDate: 0,
+      hasRealInfoHash: false,
+      streamType: StreamType.directUrl,
+      directUrl: 'https://dav.example.com/Dune.mkv',
+    );
+    expect(copier.canCopy(webDav), isFalse);
+    expect(copier.canCopy(source(url: 'https://cdn.example/a.mkv')), isTrue);
+  });
 }

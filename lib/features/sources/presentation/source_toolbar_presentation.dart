@@ -88,6 +88,7 @@ class SourceToolbarPresentation {
       messages: () => sourceToolbarMessages(
         statuses: ref.read(sourceSearchProvider(session)).addonStatuses,
         iptv: ref.read(sourceSearchProvider(session)).iptv,
+        webDav: ref.read(sourceSearchProvider(session)).webDav,
         selectedKey: _toolbar.sourceFilter,
       ),
       controls: SourceToolbarControls(

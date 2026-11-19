@@ -10,6 +10,7 @@ import 'package:debrify/features/sources/models/source_search_request.dart';
 import 'package:debrify/features/sources/models/source_search_result.dart';
 import 'package:debrify/features/sources/models/source_search_state.dart';
 import 'package:debrify/features/sources/models/sources_session.dart';
+import 'package:debrify/features/sources/models/webdav_source_status.dart';
 import 'package:debrify/models/advanced_search_selection.dart';
 import 'package:debrify/models/torrent.dart';
 import 'package:debrify/services/iptv_source_search.dart';
@@ -45,10 +46,11 @@ AddonSearchStatus status(String key) => AddonSearchStatus(
 );
 
 class PendingSearch {
-  PendingSearch(this.batch, this.iptv, this.active);
+  PendingSearch(this.batch, this.iptv, this.active, this.webDav);
   final SourceSearchBatch batch;
   final void Function(IptvSourceResult) iptv;
   final bool Function() active;
+  final void Function(WebDavSourceStatus)? webDav;
   final result = Completer<SourceSearchResult?>();
 }
 
@@ -65,8 +67,14 @@ class SearchRepository implements SourceSearchRepository {
     required SourceSearchBatch onBatch,
     required void Function(IptvSourceResult) onIptvResult,
     required bool Function() shouldContinue,
+    void Function(WebDavSourceStatus)? onWebDavStatus,
   }) {
-    final call = PendingSearch(onBatch, onIptvResult, shouldContinue);
+    final call = PendingSearch(
+      onBatch,
+      onIptvResult,
+      shouldContinue,
+      onWebDavStatus,
+    );
     calls.add(call);
     return call.result.future;
   }
@@ -305,6 +313,10 @@ void main() {
       call.batch('engine', [early]);
       expect(rows, hasLength(2));
       expect(cacheBatches, hasLength(1));
+      // The repository may keep WebDAV going after completion; it stops once
+      // a new search or disposal retires this generation.
+      expect(call.active(), isTrue);
+      search();
       expect(call.active(), isFalse);
     },
   );
@@ -335,6 +347,71 @@ void main() {
         () => subscription.read().addonStatuses.clear(),
         throwsUnsupportedError,
       );
+    },
+  );
+
+  test(
+    'WebDAV progress replaces its server entry and continues after completion',
+    () async {
+      final pending = search();
+      final call = repository.calls.single;
+      const looking = WebDavSourceStatus(
+        key: 'webdav:nas',
+        name: 'NAS',
+        phase: WebDavSearchPhase.searching,
+      );
+      const other = WebDavSourceStatus(
+        key: 'webdav:box',
+        name: 'Box',
+        phase: WebDavSearchPhase.searching,
+      );
+      call.webDav!(looking);
+      call.webDav!(other);
+      call.webDav!(looking.copyWith(foldersChecked: 3, slow: true));
+      final live = subscription.read().webDav;
+      expect(live.map((s) => s.key), ['webdav:nas', 'webdav:box']);
+      expect(live.first.foldersChecked, 3);
+      expect(live.first.slow, isTrue);
+      expect(subscription.read().searching, isTrue);
+
+      final main = row('main');
+      call.batch('engine', [main]);
+      call.result.complete(SourceSearchResult(torrents: [main]));
+      await pending;
+      expect(subscription.read().searching, isFalse);
+      expect(subscription.read().webDavSearching, isTrue);
+
+      // Late WebDAV rows join the finished list; other late batches do not.
+      final late = row('late.mkv');
+      call.batch('webdav:nas', [late]);
+      expect(rows.last.$1, [same(main), same(late)]);
+      expect(rows.last.$2, isFalse);
+      expect(cacheBatches.last, [same(late)]);
+      call.batch('engine', [row('stale')]);
+      expect(rows.last.$1, hasLength(2));
+
+      // An addon retry after completion is kept when more WebDAV rows land.
+      final retried = row('retried');
+      controller.acceptRetry(status('stremio:a'), [retried]);
+      final later = row('later.mkv');
+      call.batch('webdav:nas', [later]);
+      expect(rows.last.$1, [
+        same(main),
+        same(late),
+        same(retried),
+        same(later),
+      ]);
+
+      final done = looking.copyWith(phase: WebDavSearchPhase.done, found: 1);
+      call.webDav!(done);
+      call.webDav!(other.copyWith(phase: WebDavSearchPhase.done));
+      expect(subscription.read().webDav.first, same(done));
+      expect(subscription.read().webDavSearching, isFalse);
+
+      search();
+      call.webDav!(looking);
+      call.batch('webdav:nas', [row('older')]);
+      expect(subscription.read().webDav, isEmpty);
     },
   );
 

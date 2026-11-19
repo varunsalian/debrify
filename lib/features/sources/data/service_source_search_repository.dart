@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../../../models/advanced_search_selection.dart';
 import '../../../models/torrent.dart';
 import '../../../services/iptv_source_search.dart';
@@ -8,8 +10,10 @@ import '../../../services/stremio_service.dart';
 import '../../../services/torrent_service.dart';
 import '../models/source_search_request.dart';
 import '../models/source_search_result.dart';
+import '../models/webdav_source_status.dart';
 import 'source_search_api.dart';
 import 'source_search_repository.dart';
+import 'webdav_source_search.dart';
 
 class ServiceSourceSearchRepository implements SourceSearchRepository {
   const ServiceSourceSearchRepository({
@@ -17,6 +21,7 @@ class ServiceSourceSearchRepository implements SourceSearchRepository {
     this.keywordSearch = TorrentService.searchAllEngines,
     this.imdbSearch = TorrentService.searchByImdbWithStremio,
     this.iptvSearch = IptvSourceSearch.search,
+    this.webDavSearch = _searchWebDav,
     this.resolveVideo = _resolveVideo,
     this.searchOverride,
     SourceAddonRetry? retryAddon,
@@ -25,6 +30,7 @@ class ServiceSourceSearchRepository implements SourceSearchRepository {
   final SourceKeywordSearch keywordSearch;
   final SourceImdbSearch imdbSearch;
   final SourceIptvSearch iptvSearch;
+  final SourceWebDavSearch webDavSearch;
   final SourceVideoResolver resolveVideo;
   final SourceAddonRetry retryAddon;
   // Compatibility for the existing sourcesScreenForTesting injection only.
@@ -47,12 +53,25 @@ class ServiceSourceSearchRepository implements SourceSearchRepository {
     episode: episode,
   );
 
+  static Future<List<WebDavSourceStatus>> _searchWebDav(
+    AdvancedSearchSelection selection, {
+    required void Function(WebDavSourceStatus status) onStatus,
+    required void Function(String key, List<Torrent> rows) onRows,
+    required bool Function() shouldContinue,
+  }) => WebDavSourceSearch().search(
+    selection,
+    onStatus: onStatus,
+    onRows: onRows,
+    shouldContinue: shouldContinue,
+  );
+
   @override
   Future<SourceSearchResult?> search(
     SourceSearchRequest request, {
     required SourceSearchBatch onBatch,
     required void Function(IptvSourceResult) onIptvResult,
     required bool Function() shouldContinue,
+    void Function(WebDavSourceStatus)? onWebDavStatus,
   }) async {
     var acceptingEvents = true;
     bool active() => acceptingEvents && isCurrent && shouldContinue();
@@ -105,6 +124,33 @@ class ServiceSourceSearchRepository implements SourceSearchRepository {
               },
             )
           : null;
+      // WebDAV starts beside the other searches but never holds up their
+      // result: it keeps streaming rows and progress after the search
+      // completes, until the view stops wanting this search. A failure only
+      // ever becomes a server status, never an error.
+      final webDavRows = <Torrent>[];
+      final webDavStatuses = <String, WebDavSourceStatus>{};
+      bool webDavActive() => isCurrent && shouldContinue();
+      if (request.keyword == null &&
+          searchOverride == null &&
+          WebDavSourceSearch.supports(selection)) {
+        unawaited(
+          webDavSearch(
+            selection,
+            shouldContinue: webDavActive,
+            onStatus: (status) {
+              if (!webDavActive()) return;
+              webDavStatuses[status.key] = status;
+              onWebDavStatus?.call(status);
+            },
+            onRows: (key, rows) {
+              if (!webDavActive()) return;
+              webDavRows.addAll(rows);
+              onBatch(key, List.unmodifiable(rows));
+            },
+          ).then((_) {}, onError: (Object _, StackTrace _) {}),
+        );
+      }
       final Map<String, dynamic> result;
       if (searchOverride != null) {
         result = await searchOverride!(batch);
@@ -149,10 +195,13 @@ class ServiceSourceSearchRepository implements SourceSearchRepository {
         torrents: [
           ...(result['torrents'] as List).cast<Torrent>(),
           for (final result in snapshots) ...result.torrents,
+          ...webDavRows,
         ],
         addonStatuses:
             result['addonStatuses'] as List<AddonSearchStatus>? ?? const [],
         iptv: snapshots,
+        // Whatever WebDAV has found and reported so far; more may follow.
+        webDav: webDavStatuses.values.toList(),
       );
     }
 

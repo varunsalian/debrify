@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:debrify/features/sources/application/source_curation.dart';
 import 'package:debrify/features/sources/data/iptv_quick_play_search.dart';
+import 'package:debrify/features/sources/data/webdav_quick_play_search.dart';
 import 'package:debrify/models/playback_meta.dart';
 import 'package:debrify/models/quick_play_rules.dart';
 import 'package:debrify/models/torrent.dart';
@@ -50,6 +51,7 @@ final class CuratedSourceSearch {
     bool Function()? isCancelled,
     void Function(int count)? onResults,
     PlaybackMeta? originMeta,
+    void Function(String? note)? onNote,
   }) async {
     final configuredRules =
         rules ?? QuickPlayRules.debrifyDefault(isMovie: isMovie);
@@ -153,24 +155,54 @@ final class CuratedSourceSearch {
       }
     }
 
-    List<Torrent> torrents;
-    switch (activeRules.sourceMode) {
-      case QuickPlaySourceMode.torrentsThenAddons:
-      case QuickPlaySourceMode.addonsThenTorrents:
-      case QuickPlaySourceMode.together:
-        final batches = await Future.wait([engines(), addons()]);
-        // Both families start together, but Future.wait preserves this fixed
-        // batch order. Provider priority and stable dedupe run afterwards.
-        torrents = [...batches[0], ...batches[1]];
-        break;
-      case QuickPlaySourceMode.torrentsOnly:
-        torrents = await engines();
-        break;
-      case QuickPlaySourceMode.addonsOnly:
-        torrents = await addons();
-        break;
+    // WebDAV is title-based, so an addon-specific episode skips it. It starts
+    // with the other families and is settled after them: once any of them
+    // found rows it gets only a short grace, then stops.
+    final webDav = originMeta?.hasStremioEpisodeIdentity == true
+        ? null
+        : WebDavQuickPlaySearch.start(
+            imdbId,
+            label,
+            year,
+            isMovie,
+            season,
+            episode,
+            activeRules,
+            isCancelled,
+            onNote: onNote,
+          );
+    try {
+      List<Torrent> torrents;
+      switch (activeRules.sourceMode) {
+        case QuickPlaySourceMode.torrentsThenAddons:
+        case QuickPlaySourceMode.addonsThenTorrents:
+        case QuickPlaySourceMode.together:
+          final batches = await Future.wait([engines(), addons()]);
+          // Both families start together, but Future.wait preserves this fixed
+          // batch order. Provider priority and stable dedupe run afterwards.
+          torrents = [...batches[0], ...batches[1]];
+          break;
+        case QuickPlaySourceMode.torrentsOnly:
+          torrents = await engines();
+          break;
+        case QuickPlaySourceMode.addonsOnly:
+          torrents = await addons();
+          break;
+      }
+      if (webDav != null) {
+        final library = await WebDavQuickPlaySearch.settle(
+          webDav,
+          haveOthers: torrents.isNotEmpty,
+        );
+        if (library.isNotEmpty) {
+          torrents = [...torrents, ...library];
+          onResults?.call(torrents.length);
+        }
+      }
+      return torrents;
+    } finally {
+      // Never leave a WebDAV walk or its loader note behind.
+      webDav?.stop();
     }
-    if (isCancelled?.call() ?? false) return torrents;
-    return torrents;
   }
 }
