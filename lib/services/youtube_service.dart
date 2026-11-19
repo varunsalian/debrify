@@ -79,6 +79,15 @@ class _StreamSelection {
         bestMuxedUrl: null,
         bestMuxedHeight: null,
       );
+
+  _StreamSelection withMuxedFallback(String url, int? height) =>
+      _StreamSelection(
+        playUrl: playUrl,
+        audioUrl: audioUrl,
+        qualities: qualities,
+        bestMuxedUrl: url,
+        bestMuxedHeight: height,
+      );
 }
 
 /// Service for searching and resolving YouTube videos fully on-device.
@@ -374,9 +383,12 @@ class YoutubeService {
       // otherwise freeze the UI isolate (blocking DPAD/focus) for ~1s per client
       // it tries. Run it in a throwaway background isolate so the main isolate
       // only awaits (the network calls are already async).
+      // Capped (ambient trailer) resolves never read the muxed fallback, so
+      // they skip the extra client request it costs.
+      final wantsMuxed = maxHeightOverride == null;
       final streams = await Isolate.run(
         () => _resolveStreamsBlocking(
-            videoId, maxHeight, withCaptions, preferVp9),
+            videoId, maxHeight, withCaptions, preferVp9, wantsMuxed),
       );
       if (streams != null) {
         // Prune expired entries so the cache stays bounded to the active window.
@@ -408,13 +420,33 @@ class YoutubeService {
     int maxHeight,
     bool withCaptions,
     bool preferVp9,
+    bool wantsMuxed,
   ) async {
     final yt = yt_explode.YoutubeExplode();
     try {
+      // visionOS serves no muxed single-file stream, which downloads, the
+      // Android TV player's never-silent base URL and single-URL players
+      // need. androidSdkless still serves one (format 18) that opens without
+      // a Range header, so ask for it alongside rather than after.
+      final muxedFallback = wantsMuxed
+          ? _muxedFallbackFrom(
+              yt,
+              videoId,
+              yt_explode.YoutubeApiClient.androidSdkless,
+            )
+          : null;
       // Client ladder — impersonations of official YouTube apps, tried in
       // order until one yields URLs that actually answer. Every rung earns
       // its place:
-      //  * androidVr first: its googlevideo URLs open directly in ffmpeg/mpv
+      //  * visionOs first: the Apple Vision Pro app. Since ~2026-08 YouTube
+      //    wants a PO token for the android-family media URLs (yt-dlp marks
+      //    them required; probed 2026-11-20: androidVr "unplayable" on most
+      //    videos, androidSdkless adaptive URLs 403 without Range). visionOS
+      //    is served without one and needs no JS player, so no deciphering.
+      //    yt-dlp (2026.08.19) and NewPipe (0.29.x) both moved to it. Same
+      //    probe: H.264 to 1080p, VP9/AV1 to 2160p, AAC, every URL 200/206
+      //    with and without Range — but no muxed stream (see above).
+      //  * androidVr: its googlevideo URLs open directly in ffmpeg/mpv
       //    and need no PO token — but YouTube A/B-kills this client by region
       //    (since ~2026-03 affected regions intermittently get only format 18
       //    or URL-less streams), so it can't be the only rung.
@@ -438,6 +470,7 @@ class YoutubeService {
       // which can pass while the adaptive streams we actually pick still 403 —
       // so a rung is accepted only after ITS chosen URLs survive the probe.
       final rungs = <(String, List<yt_explode.YoutubeApiClient>)>[
+        ('visionOs', [_visionOs]),
         ('androidVr', [yt_explode.YoutubeApiClient.androidVr]),
         ('androidSdkless', [yt_explode.YoutubeApiClient.androidSdkless]),
         ('android', [yt_explode.YoutubeApiClient.android]),
@@ -477,7 +510,7 @@ class YoutubeService {
               'YoutubeService: $videoId [$label] muxed fallback returned 403');
           continue;
         }
-        if (label != 'androidVr') {
+        if (label != 'visionOs') {
           // The line that matters in a user's log: which fallback saved this.
           debugPrint('YoutubeService: $videoId resolved via [$label]');
         }
@@ -488,6 +521,22 @@ class YoutubeService {
       if (selection == null) {
         debugPrint('YoutubeService: $videoId — every client rung failed');
         return null;
+      }
+      if (muxedFallback != null &&
+          selection.audioUrl != null &&
+          selection.bestMuxedUrl == null) {
+        // Started with the ladder, so normally already answered (~1 s, same
+        // as visionOS). Bounded so a slow or retrying reply can never hold
+        // up playback that is ready by more than this.
+        final muxed = await muxedFallback.timeout(
+          const Duration(seconds: 2),
+          onTimeout: () => null,
+        );
+        if (muxed != null) {
+          selection = selection.withMuxedFallback(muxed.url, muxed.height);
+        } else {
+          debugPrint('YoutubeService: $videoId — no muxed fallback stream');
+        }
       }
       final playUrl = selection.playUrl;
       final audioUrl = selection.audioUrl;
@@ -586,13 +635,7 @@ class YoutubeService {
     // Best muxed single-file stream (download + playback fallback). Keep the
     // stream object (not just its URL) so we can report its resolution as the
     // actual download quality to the user.
-    final muxed = manifest.muxed.toList()
-      ..sort((a, b) =>
-          b.bitrate.bitsPerSecond.compareTo(a.bitrate.bitsPerSecond));
-    final muxedMp4 = muxed.where((s) => s.container.name.toLowerCase() == 'mp4');
-    final bestMuxedStream = muxedMp4.isNotEmpty
-        ? muxedMp4.first
-        : (muxed.isNotEmpty ? muxed.first : null);
+    final bestMuxedStream = _bestMuxedOf(manifest);
     final bestMuxed = bestMuxedStream?.url.toString();
     final bestMuxedHeight = bestMuxedStream?.videoResolution.height;
 
@@ -702,29 +745,88 @@ class YoutubeService {
     String? audioUrl,
     String? muxedFallbackUrl,
   ) async {
-    Future<bool> usable(String url) async {
-      try {
-        final resp = await http
-            .head(Uri.parse(url))
-            .timeout(const Duration(seconds: 8));
-        return resp.statusCode != 403;
-      } catch (_) {
-        return true;
-      }
-    }
-
     final primaryCheck = Future.wait([
-      usable(playUrl),
-      if (audioUrl != null && audioUrl.isNotEmpty) usable(audioUrl),
+      _urlUsable(playUrl),
+      if (audioUrl != null && audioUrl.isNotEmpty) _urlUsable(audioUrl),
     ]).then((checks) => !checks.contains(false));
     final fallbackCheck = audioUrl != null &&
             audioUrl.isNotEmpty &&
             muxedFallbackUrl != null &&
             muxedFallbackUrl.isNotEmpty
-        ? usable(muxedFallbackUrl)
+        ? _urlUsable(muxedFallbackUrl)
         : Future<bool>.value(true);
     final checks = await Future.wait([primaryCheck, fallbackCheck]);
     return (primary: checks[0], muxedFallback: checks[1]);
+  }
+
+  /// False only on an explicit HTTP 403; timeouts and transport errors fail
+  /// open (see [_chosenUrlsUsable]).
+  static Future<bool> _urlUsable(String url) async {
+    try {
+      final resp =
+          await http.head(Uri.parse(url)).timeout(const Duration(seconds: 8));
+      return resp.statusCode != 403;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  /// The YouTube app for Apple Vision Pro, mirroring yt-dlp's `visionos`
+  /// InnerTube client. Not in youtube_explode 3.1.0 (upstream PRs #389/#390
+  /// are unmerged); its client constructor is public, so it lives here.
+  /// Version strings come from yt-dlp — bump them from there if YouTube
+  /// starts rejecting this identity.
+  static const _visionOs = yt_explode.YoutubeApiClient({
+    'context': {
+      'client': {
+        'clientName': 'VISIONOS',
+        'clientVersion': '1.02',
+        'deviceMake': 'Apple',
+        'deviceModel': 'RealityDevice17,1',
+        'osName': 'visionOS',
+        'osVersion': '26.5.23O471',
+        'userAgent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) '
+            'AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 '
+            'Safari/605.1.15',
+        'hl': 'en',
+        'timeZone': 'UTC',
+        'utcOffsetMinutes': 0,
+      },
+    },
+  }, 'https://www.youtube.com/youtubei/v1/player?prettyPrint=false');
+
+  /// Best muxed single-file stream in [manifest]: MP4 first, then bitrate.
+  static yt_explode.MuxedStreamInfo? _bestMuxedOf(
+    yt_explode.StreamManifest manifest,
+  ) {
+    final muxed = manifest.muxed.toList()
+      ..sort((a, b) =>
+          b.bitrate.bitsPerSecond.compareTo(a.bitrate.bitsPerSecond));
+    final muxedMp4 = muxed.where((s) => s.container.name.toLowerCase() == 'mp4');
+    return muxedMp4.isNotEmpty
+        ? muxedMp4.first
+        : (muxed.isNotEmpty ? muxed.first : null);
+  }
+
+  /// A muxed stream from [client] that does not answer 403, for a selection
+  /// whose own client served none. Never throws; null when unavailable.
+  static Future<({String url, int height})?> _muxedFallbackFrom(
+    yt_explode.YoutubeExplode yt,
+    String videoId,
+    yt_explode.YoutubeApiClient client,
+  ) async {
+    try {
+      final manifest = await yt.videos.streamsClient
+          .getManifest(videoId, ytClients: [client]);
+      final stream = _bestMuxedOf(manifest);
+      if (stream == null) return null;
+      final url = stream.url.toString();
+      if (!await _urlUsable(url)) return null;
+      return (url: url, height: stream.videoResolution.height);
+    } catch (e) {
+      debugPrint('YoutubeService: $videoId muxed fallback failed — $e');
+      return null;
+    }
   }
 
   // ============== URL helpers (shared with Lemmy) ==============
