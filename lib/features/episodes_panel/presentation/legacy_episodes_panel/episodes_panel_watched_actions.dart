@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:debrify/features/episodes_panel/application/earlier_episodes.dart';
 import 'package:debrify/features/episodes_panel/application/episodes_panel_policies.dart';
 import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_auth.dart';
@@ -6,6 +7,7 @@ import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_pan
 import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_progress.dart';
 import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_services.dart';
 import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_view_state.dart';
+import 'package:debrify/features/ledger/models/ledger_brand.dart';
 import 'package:debrify/models/media_identity.dart';
 import 'package:debrify/services/mdblist/mdblist_continue_watching_service.dart';
 import 'package:debrify/services/mdblist/mdblist_menu_helpers.dart';
@@ -154,6 +156,9 @@ class EpisodesPanelWatchedActions {
           (MediaIdentity.isImdb(imdb) || MediaIdentity.isNative(imdb)) &&
           _p.trackingPolicy.scrobbles(TrackingSource.mdblist))
         'MDBList',
+      if (_a.isLedgerAuthenticated &&
+          _p.trackingPolicy.scrobbles(TrackingSource.ledger))
+        kLedgerDisplayName,
       'this device',
     ];
     return targets;
@@ -202,7 +207,9 @@ class EpisodesPanelWatchedActions {
         (_p.trackingPolicy.progressFrom(TrackingSource.simkl) &&
             done.contains('Simkl')) ||
         (_p.trackingPolicy.progressFrom(TrackingSource.mdblist) &&
-            done.contains('MDBList'));
+            done.contains('MDBList')) ||
+        (_p.trackingPolicy.progressFrom(TrackingSource.ledger) &&
+            done.contains(kLedgerDisplayName));
     if (done.isNotEmpty && rendersHere) {
       _deps.setState(() {
         if (watched) {

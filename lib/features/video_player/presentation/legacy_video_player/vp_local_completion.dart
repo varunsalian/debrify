@@ -13,6 +13,7 @@ abstract interface class VpLocalCompletionHost {
   bool get traktScrobble;
   bool get simklScrobble;
   bool get mdblistScrobble;
+  bool get ledgerScrobble;
   List<Map<String, dynamic>>? get stremioTvChannels;
   String? get contentType;
   int? get contentSeason;
@@ -61,7 +62,8 @@ class VpLocalCompletion {
       (forceLocalCompletionTracking ||
           (!_host.traktScrobble &&
               !_host.simklScrobble &&
-              !_host.mdblistScrobble)) &&
+              !_host.mdblistScrobble &&
+              !_host.ledgerScrobble)) &&
       _host.stremioTvChannels == null &&
       _host.effectiveIptvChannels == null;
 
@@ -76,6 +78,7 @@ class VpLocalCompletion {
       traktScrobble: _host.traktScrobble,
       simklScrobble: _host.simklScrobble,
       mdblistScrobble: _host.mdblistScrobble,
+      ledgerScrobble: _host.ledgerScrobble,
     );
     // A very short item can cross its completion threshold before this async
     // profile read returns. Re-evaluate immediately so This-device mode never

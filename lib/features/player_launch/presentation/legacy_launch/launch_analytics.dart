@@ -1,7 +1,38 @@
+import 'package:debrify/features/ledger/models/ledger_brand.dart';
+import 'package:debrify/services/analytics_service.dart';
+import 'package:flutter/foundation.dart';
 import 'package:debrify/features/player_launch/models/video_player_launch_args.dart';
 import 'package:debrify/models/playlist_entry.dart';
 
 final class LaunchAnalytics {
+  /// The `playback_started` event for one accepted launch.
+  static void trackPlaybackStarted(VideoPlayerLaunchArgs args) {
+    AnalyticsService.trackInBackground('playback_started', <String, Object?>{
+      'content_type': args.contentType ?? 'unknown',
+      'provider': analyticsProviderLabel(args),
+      'has_playlist': args.playlist?.isNotEmpty ?? false,
+      'trakt_scrobble': args.traktScrobble,
+      'simkl_scrobble': args.simklScrobble,
+      'mdblist_scrobble': args.mdblistScrobble,
+      if (kLedgerEnabled) 'ledger_scrobble': args.ledgerScrobble,
+      'platform': AnalyticsService.currentPlatformLabel(),
+    });
+  }
+
+  /// Logs the first playlist entries to trace relativePath.
+  static void logPlaylistEntries(List<PlaylistEntry>? playlist) {
+    if (playlist == null || playlist.isEmpty) return;
+    debugPrint(
+      '🚀 VideoPlayerLauncher.push: Launching with ${playlist.length} entries',
+    );
+    for (int i = 0; i < playlist.length && i < 5; i++) {
+      final entry = playlist[i];
+      debugPrint(
+        '  Entry[$i]: title="${entry.title}", relativePath="${entry.relativePath}"',
+      );
+    }
+  }
+
   static String analyticsProviderLabel(VideoPlayerLaunchArgs args) {
     if (args.rdTorrentId != null && args.rdTorrentId!.isNotEmpty) {
       return 'real_debrid';

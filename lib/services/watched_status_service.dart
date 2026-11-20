@@ -1,3 +1,4 @@
+import 'package:debrify/features/ledger/models/ledger_brand.dart';
 import 'package:debrify/services/storage/local_completion_storage.dart';
 import 'package:debrify/services/storage/movie_progress_storage.dart';
 import 'package:debrify/services/storage/tracking_source_storage.dart';
@@ -14,6 +15,7 @@ import 'watched_snapshot_retry.dart';
 import 'trakt/trakt_service.dart';
 import 'mdblist/mdblist_service.dart';
 import '../models/tracking_source.dart';
+import 'package:debrify/services/ledger/ledger_service.dart';
 
 /// One asynchronous, account-wide watched snapshot for every poster card.
 ///
@@ -39,6 +41,8 @@ class WatchedStatusService extends ChangeNotifier {
   Set<String> _simklSeries = const {};
   Set<String> _mdblistMovies = const {};
   Set<String> _mdblistSeries = const {};
+  Set<String> _ledgerMovies = const {};
+  Set<String> _ledgerSeries = const {};
   int _generation = 0;
   bool _started = false;
   bool _hasSnapshot = false;
@@ -49,9 +53,7 @@ class WatchedStatusService extends ChangeNotifier {
   bool _mdblistDirty = false;
   DateTime? _mdblistDirtyAt;
   Timer? _mdblistRefreshTimer;
-  Set<TrackingSource> _tickSources = Set<TrackingSource>.of(
-    TrackingSource.values,
-  );
+  Set<TrackingSource> _tickSources = _defaultTickSources();
 
   /// True once the local snapshot has been published this profile session.
   /// The hide-watched filter hides nothing before that, so a cold start never
@@ -82,12 +84,14 @@ class WatchedStatusService extends ChangeNotifier {
       return _localSeries.contains(id) ||
           _traktSeries.contains(id) ||
           _simklSeries.contains(id) ||
-          _mdblistSeries.contains(id);
+          _mdblistSeries.contains(id) ||
+          _ledgerSeries.contains(id);
     }
     return _localMovies.contains(id) ||
         _traktMovies.contains(id) ||
         _simklMovies.contains(id) ||
-        _mdblistMovies.contains(id);
+        _mdblistMovies.contains(id) ||
+        _ledgerMovies.contains(id);
   }
 
   bool isWatchedForTicks(String imdbId, String contentType) {
@@ -106,8 +110,17 @@ class WatchedStatusService extends ChangeNotifier {
         (_tickSources.contains(TrackingSource.simkl) &&
             (series ? _simklSeries : _simklMovies).contains(id)) ||
         (_tickSources.contains(TrackingSource.mdblist) &&
-            (series ? _mdblistSeries : _mdblistMovies).contains(id));
+            (series ? _mdblistSeries : _mdblistMovies).contains(id)) ||
+        (_tickSources.contains(TrackingSource.ledger) &&
+            (series ? _ledgerSeries : _ledgerMovies).contains(id));
   }
+
+  /// Every offered source, the same set the stored default reads as (Ledger
+  /// only while its feature flag is on), so the first policy read is no change.
+  static Set<TrackingSource> _defaultTickSources() => <TrackingSource>{
+    for (final source in TrackingSource.values)
+      if (source != TrackingSource.ledger || kLedgerEnabled) source,
+  };
 
   void _refreshTickPolicy() {
     unawaited(() async {
@@ -163,7 +176,9 @@ class WatchedStatusService extends ChangeNotifier {
     _simklSeries = const {};
     _mdblistMovies = const {};
     _mdblistSeries = const {};
-    _tickSources = Set<TrackingSource>.of(TrackingSource.values);
+    _ledgerMovies = const {};
+    _ledgerSeries = const {};
+    _tickSources = _defaultTickSources();
     _refreshTickPolicy();
   }
 
@@ -285,6 +300,7 @@ class WatchedStatusService extends ChangeNotifier {
     final traktFuture = _fetchTrakt();
     final simklFuture = SimklService.instance.fetchCompletedTitleIds();
     final mdblistFuture = MdblistService.instance.fetchCompletedTitleIds();
+    final ledgerFuture = _fetchLedger();
     final calendarFuture = LocalSeriesCompletionService.instance
         .refreshCalendarIfDue();
     // Capture errors immediately, while local reads may still be retrying.
@@ -295,6 +311,7 @@ class WatchedStatusService extends ChangeNotifier {
         simklFuture,
         calendarFuture,
         mdblistFuture,
+        ledgerFuture,
       ]),
     );
     List<Set<String>>? local;
@@ -344,6 +361,12 @@ class WatchedStatusService extends ChangeNotifier {
         ...await MovieProgressStorage.getExplicitlyWatchedSeriesIds(),
       };
     }
+    final ledger = results[4] as ({Set<String> movies, Set<String> series})?;
+    // Null is a failed read: keep the previous truth.
+    if (ledger != null) {
+      _ledgerMovies = ledger.movies;
+      _ledgerSeries = ledger.series;
+    }
     final mdblist = results[3] as ({Set<String> movies, Set<String> series})?;
     if (mdblist != null) {
       _mdblistMovies = mdblist.movies;
@@ -360,6 +383,23 @@ class WatchedStatusService extends ChangeNotifier {
       _mdblistDirty = true;
     }
     notifyListeners();
+  }
+
+  /// Ledger completion, or empty sets when signed out (so a sign-out clears
+  /// its ticks) and null on a failed read.
+  Future<({Set<String> movies, Set<String> series})?> _fetchLedger() async {
+    // Never throws: a Ledger failure must not discard the other trackers'
+    // results gathered in the same pass.
+    try {
+      final ledger = LedgerService.instance;
+      if (!kLedgerEnabled || !await ledger.isAuthenticated()) {
+        return (movies: const <String>{}, series: const <String>{});
+      }
+      return await ledger.fetchCompletedTitleIds();
+    } catch (error) {
+      debugPrint('WatchedStatusService: Ledger snapshot failed ($error)');
+      return null;
+    }
   }
 
   Future<({Map<String, double>? movies, Set<String>? series})>

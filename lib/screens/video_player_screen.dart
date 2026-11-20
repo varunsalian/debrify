@@ -103,6 +103,8 @@ import '../features/video_player/presentation/legacy_video_player/vp_sleep_timer
 import '../features/video_player/presentation/legacy_video_player/vp_skip_segment_controller.dart';
 import '../features/video_player/presentation/legacy_video_player/vp_display_mode_controller.dart';
 import '../features/video_player/presentation/legacy_video_player/vp_trakt_scrobbler.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_ledger_scrobbler.dart';
+import '../features/video_player/presentation/legacy_video_player/vp_stremio_tv_next_loading_overlay.dart';
 import '../features/video_player/presentation/legacy_video_player/vp_simkl_scrobbler.dart';
 import '../features/video_player/presentation/legacy_video_player/vp_mdblist_scrobbler.dart';
 import '../features/video_player/presentation/legacy_video_player/vp_local_completion.dart';
@@ -286,6 +288,9 @@ class VideoPlayerScreen extends StatefulWidget {
   // trackers can run simultaneously; see the Simkl integration plan).
   final bool simklScrobble;
   final double? simklProgressPercent;
+  // Ledger (Debrify's own tracker) — parallel to the Trakt pair above.
+  final bool ledgerScrobble;
+  final double? ledgerProgressPercent;
   final bool mdblistScrobble;
   final double? mdblistProgressPercent;
 
@@ -356,6 +361,8 @@ class VideoPlayerScreen extends StatefulWidget {
     this.traktProgressPercent,
     this.simklScrobble = false,
     this.simklProgressPercent,
+    this.ledgerScrobble = false,
+    this.ledgerProgressPercent,
     this.mdblistScrobble = false,
     this.mdblistProgressPercent,
     this.initialSubtitles,
@@ -373,6 +380,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _display = VpDisplayModeController(_VpDisplayModeHostAdapter(this));
     _trakt = VpTraktScrobbler(_VpTraktScrobblerHostAdapter(this));
     _simkl = VpSimklScrobbler(_VpSimklScrobblerHostAdapter(this));
+    _ledger = VpLedgerScrobbler(_VpLedgerScrobblerHostAdapter(this));
     _mdblist = VpMdblistScrobbler(_VpMdblistScrobblerHostAdapter(this));
     _completion = VpLocalCompletion(_VpLocalCompletionHostAdapter(this));
     _pip = VpPipLifecycle(_VpPipLifecycleHostAdapter(this));
@@ -1224,6 +1232,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   String _dynamicTitle = '';
   late final VpTraktScrobbler _trakt;
   late final VpSimklScrobbler _simkl;
+  late final VpLedgerScrobbler _ledger;
   late final VpMdblistScrobbler _mdblist;
 
   String? _episodeTrackerProgressImdbId;
@@ -1407,6 +1416,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Check if Trakt scrobbling should be enabled for this playback
     _trakt.initTraktScrobble();
     _simkl.initSimklScrobble();
+    _ledger.initLedgerScrobble();
     _mdblist.initMdblistScrobble();
   }
 
@@ -1483,6 +1493,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _episodeTrackerProgressImdbId = imdbId;
     _trakt.traktEpisodeProgress = null;
     _simkl.simklEpisodeProgress = null;
+    _ledger.ledgerEpisodeProgress = null;
     _mdblist.mdblistEpisodeProgress = null;
   }
 
@@ -1763,6 +1774,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _trakt.traktScrobble('stop');
     _simkl.stopSimklHeartbeat();
     _simkl.simklScrobble('stop');
+    _ledger.onStopped();
     _mdblist.mdblistStop();
     unawaited(_mdblist.mdblistSession?.close() ?? Future.value());
 
@@ -2107,49 +2119,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     );
   }
 
-  Widget _buildStremioTvNextLoadingOverlay() {
-    return IgnorePointer(
-      child: AnimatedOpacity(
-        opacity: _showStremioTvNextLoading ? 1 : 0,
-        duration: const Duration(milliseconds: 160),
-        child: Container(
-          color: Colors.black.withValues(alpha: 0.55),
-          child: Center(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.72),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(
-                    width: 28,
-                    height: 28,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.6,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  ),
-                  SizedBox(width: 14),
-                  Text(
-                    'Loading next...',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  Widget _buildStremioTvNextLoadingOverlay() =>
+      VpStremioTvNextLoadingOverlay(visible: _showStremioTvNextLoading);
 
   /// The live-IPTV panel, or null when this playback has no channel identity
   /// to present. [flush] embeds it in the controls dock; otherwise it floats.
@@ -4098,6 +4069,8 @@ class _VpPlayerSubscriptionsHostAdapter implements VpPlayerSubscriptionsHost {
   _VpPlayerSubscriptionsHostAdapter(this._s);
   final _VideoPlayerScreenState _s;
   @override
+  VpLedgerScrobbler get ledgerScrobbler => _s._ledger;
+  @override
   VpSubtitleApplyAttempt? get activeSubtitleApplyAttempt =>
       _s._activeSubtitleApplyAttempt;
   @override
@@ -4850,6 +4823,8 @@ class _VpPlaylistLoadHostAdapter implements VpPlaylistLoadHost {
   _VpPlaylistLoadHostAdapter(this._s);
   final _VideoPlayerScreenState _s;
   @override
+  VpLedgerScrobbler get ledgerScrobbler => _s._ledger;
+  @override
   Map<String, String>? get activeHttpHeaders => _s._activeHttpHeaders;
   @override
   set activeHttpHeaders(Map<String, String>? v) => _s._activeHttpHeaders = v;
@@ -5455,6 +5430,8 @@ class _VpEpisodeNextHostAdapter implements VpEpisodeNextHost {
 class _VpPlaybackEndedHostAdapter implements VpPlaybackEndedHost {
   _VpPlaybackEndedHostAdapter(this._s);
   final _VideoPlayerScreenState _s;
+  @override
+  VpLedgerScrobbler get ledgerScrobbler => _s._ledger;
   @override
   set activeMediaShouldPlay(bool v) => _s._activeMediaShouldPlay = v;
   @override
@@ -6342,6 +6319,8 @@ class _VpStartupGateHostAdapter implements VpStartupGateHost {
   _VpStartupGateHostAdapter(this._s);
   final _VideoPlayerScreenState _s;
   @override
+  VpLedgerScrobbler get ledgerScrobbler => _s._ledger;
+  @override
   int get currentSourceIndex => _s._currentSourceIndex;
   @override
   int get decoderProbeGeneration => _s._decoderProbeGeneration;
@@ -7196,6 +7175,8 @@ class _VpResumeRestoreHostAdapter implements VpResumeRestoreHost {
   _VpResumeRestoreHostAdapter(this._s);
   final _VideoPlayerScreenState _s;
   @override
+  VpLedgerScrobbler get ledgerScrobbler => _s._ledger;
+  @override
   bool get allowResumeForManualSelection => _s._allowResumeForManualSelection;
   @override
   Duration get duration => _s._duration;
@@ -7228,6 +7209,8 @@ class _VpResumeRestoreHostAdapter implements VpResumeRestoreHost {
   double? get traktProgressPercent => _s.widget.traktProgressPercent;
   @override
   double? get mdblistProgressPercent => _s.widget.mdblistProgressPercent;
+  @override
+  double? get ledgerProgressPercent => _s.widget.ledgerProgressPercent;
   @override
   double? get simklProgressPercent => _s.widget.simklProgressPercent;
   @override
@@ -8184,6 +8167,8 @@ class _VpLocalCompletionHostAdapter implements VpLocalCompletionHost {
   @override
   bool get traktScrobble => _s.widget.traktScrobble;
   @override
+  bool get ledgerScrobble => _s.widget.ledgerScrobble;
+  @override
   bool get simklScrobble => _s.widget.simklScrobble;
   @override
   bool get mdblistScrobble => _s.widget.mdblistScrobble;
@@ -8306,9 +8291,20 @@ class _VpSimklScrobblerHostAdapter implements VpSimklScrobblerHost {
   int? get effectiveContentEpisode => _s._effectiveContentEpisode;
 }
 
+// Ledger's scrobbler reads the same player state as Simkl's.
+class _VpLedgerScrobblerHostAdapter extends _VpSimklScrobblerHostAdapter
+    implements VpLedgerScrobblerHost {
+  _VpLedgerScrobblerHostAdapter(super._s);
+  @override
+  bool get ledgerScrobble => _s.widget.ledgerScrobble;
+}
+
 class _VpTraktScrobblerHostAdapter implements VpTraktScrobblerHost {
   _VpTraktScrobblerHostAdapter(this._s);
   final _VideoPlayerScreenState _s;
+  @override
+  void onUserSeek(Duration seekTarget) =>
+      _s._ledger.ledgerScrobbleSeek(seekTarget);
   @override
   bool get mounted => _s.mounted;
   @override

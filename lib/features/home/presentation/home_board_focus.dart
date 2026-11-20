@@ -159,6 +159,7 @@ class HomeBoardFocus {
         anyOf(_continuationSection.simklSeriesNodes) ||
         anyOf(_continuationSection.mdblistMovieNodes) ||
         anyOf(_continuationSection.mdblistSeriesNodes) ||
+        anyOf(_continuationSection.ledgerNodes) ||
         anyOf(_savedSection.tvFavNodes) ||
         anyOf(_savedSection.stvFavNodes) ||
         anyOf(_savedSection.iptvFavNodes) ||

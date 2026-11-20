@@ -35,8 +35,13 @@ void main() {
       '// "Load more sources" for the series source tabs',
     );
 
-    expect(resolver, contains('getConnectedEpisodeMdblistProgress'));
-    expect(resolver, contains('sourceMdblistProgress[episodeKey]'));
+    // The per-tracker snapshots (MDBList's connected-only read included) are
+    // loaded and masked by EpisodeTrackerPercents; see the guard below.
+    expect(resolver, contains('EpisodeTrackerPercents.read('));
+    expect(
+      resolver,
+      contains('sourceTrackers.guide(trackingPolicy, episodeKey)'),
+    );
     expect(resolver, contains('getMergedFinishedEpisodes'));
     expect(resolver, contains('resolveEpisodeLocalWatchState'));
     expect(resolver, contains("'watched': resolvedLocal.watched"));
@@ -52,8 +57,8 @@ void main() {
         'Future<Map<String, dynamic>?> tryRange(',
       );
 
-      expect(fetcher, contains('getConnectedEpisodeMdblistProgress'));
-      expect(fetcher, contains('trackerMaps[2][episodeKey]'));
+      expect(fetcher, contains('EpisodeTrackerPercents.read('));
+      expect(fetcher, contains('trackers.guide(trackingPolicy, episodeKey)'));
       expect(fetcher, contains('getMergedFinishedEpisodes'));
       expect(fetcher, contains("row['watched']"));
       expect(fetcher, contains('effectiveContentImdbId()'));
@@ -71,9 +76,11 @@ void main() {
 
       expect(guideBuilder, contains('getMergedEpisodeProgress'));
       expect(guideBuilder, contains('getMergedFinishedEpisodes'));
-      expect(guideBuilder, contains('getEpisodeTraktProgress'));
-      expect(guideBuilder, contains('getEpisodeSimklProgress'));
-      expect(guideBuilder, contains('getConnectedEpisodeMdblistProgress'));
+      expect(guideBuilder, contains('EpisodeTrackerPercents.read('));
+      expect(
+        guideBuilder,
+        contains('trackers.guide(trackingPolicy, episodeKey)'),
+      );
       expect(
         guideBuilder,
         contains("'resumePositionMs': localState.positionMs"),
@@ -87,6 +94,25 @@ void main() {
       expect(guideBuilder, contains("'season': item.season"));
     },
   );
+
+  test('the shared tracker percents read every tracker snapshot', () {
+    final percents = File(
+      'lib/features/player_launch/data/episode_tracker_percents.dart',
+    ).readAsStringSync();
+    final load = _between(
+      percents,
+      'static Future<List<Map<String, double>>> read(',
+      '\n  ]);',
+    );
+    expect(load, contains('getEpisodeTraktProgress'));
+    expect(load, contains('getEpisodeSimklProgress'));
+    expect(load, contains('getConnectedEpisodeMdblistProgress'));
+    expect(load, contains('getConnectedEpisodeLedgerProgress'));
+    expect(
+      percents,
+      contains('policy.guideProgressFrom(source, map[episodeKey])'),
+    );
+  });
 
   test(
     'MDBList launch seed is lightweight and full history follows cached push',

@@ -1,8 +1,10 @@
 import 'dart:async';
+
 import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_deps.dart';
 import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_services.dart';
 import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_view_state.dart';
 import 'package:debrify/models/custom_series_identity.dart';
+import 'package:debrify/services/ledger/ledger_service.dart';
 import 'package:debrify/services/mdblist/mdblist_continue_watching_service.dart';
 import 'package:flutter/material.dart';
 
@@ -26,6 +28,15 @@ class EpisodesPanelAuth {
   bool simklAuthenticated = false;
 
   bool mdblistAuthenticated = false;
+
+  bool ledgerAuthenticated = false;
+
+  bool get isLedgerAuthenticated =>
+      ledgerAuthenticated &&
+      LedgerService.supportsId(
+        (_s.selectedShow ?? _deps.show()).progressId ??
+            (_s.selectedShow ?? _deps.show()).id,
+      );
 
   bool get isSimklAuthenticated =>
       simklAuthenticated &&
@@ -76,6 +87,15 @@ class EpisodesPanelAuth {
   /// playable URLs with no IMDb identity, so every IMDb-keyed pathway is off.
   bool get isDirectSource => _deps.seasonsLoader() != null;
 
+  /// Starts every tracker's connection lookup (Trakt, Simkl, MDBList,
+  /// Ledger), in that order; each publishes independently.
+  void resolveTrackerAuth() {
+    resolveTraktAuth();
+    resolveSimklAuth();
+    resolveMdblistAuth();
+    resolveLedgerAuth();
+  }
+
   /// Resolve whether a Trakt account is connected (gates the episode menu).
   Future<void> resolveTraktAuth() async {
     if (isDirectSource) return; // no IMDb id — the Trakt menu can't act
@@ -91,6 +111,14 @@ class EpisodesPanelAuth {
     final authed = await _sv.simklService.isAuthenticated();
     if (mounted && authed != isSimklAuthenticated) {
       _deps.setState(() => simklAuthenticated = authed);
+    }
+  }
+
+  Future<void> resolveLedgerAuth() async {
+    if (isDirectSource) return;
+    final authed = await LedgerService.instance.isAuthenticated();
+    if (mounted && authed != ledgerAuthenticated) {
+      _deps.setState(() => ledgerAuthenticated = authed);
     }
   }
 

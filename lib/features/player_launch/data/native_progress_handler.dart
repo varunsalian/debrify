@@ -1,3 +1,4 @@
+import 'package:debrify/features/player_launch/data/native_ledger_session.dart';
 import 'dart:async';
 import 'package:debrify/features/player_launch/data/android_tv_playback_payload.dart';
 import 'package:debrify/features/player_launch/data/native_mdblist_session.dart';
@@ -353,6 +354,8 @@ final class NativeProgressHandler {
         }
       }
 
+      NativeLedgerSession.onNativeProgress(payload, progress);
+
       if (durationMs > 0) {
         final isPlaying = progress['isPlaying'] == true || progress['isBuffering'] == true;
         final season = payload.trackingContentType == 'series' ? progress['season'] as int? : null;
@@ -545,10 +548,7 @@ final class NativeProgressHandler {
         contentType: payload.trackingContentType,
       );
     }
-    NativeScrobbleSession.traktLastScrobbleAction = null;
-    NativeScrobbleSession.traktLastKnownProgress = 0.0;
-    NativeScrobbleSession.traktLastKnownSeason = null;
-    NativeScrobbleSession.traktLastKnownEpisode = null;
+    NativeScrobbleSession.clearTraktState();
 
     // Final Simkl scrobble stop on playback exit — parallel to the Trakt
     // cleanup above, including the same skip-after-pause nuance (a pause
@@ -575,10 +575,8 @@ final class NativeProgressHandler {
         episode: NativeScrobbleSession.simklLastKnownEpisode,
       );
     }
-    NativeScrobbleSession.simklLastScrobbleAction = null;
-    NativeScrobbleSession.simklLastKnownProgress = 0.0;
-    NativeScrobbleSession.simklLastKnownSeason = null;
-    NativeScrobbleSession.simklLastKnownEpisode = null;
+    NativeScrobbleSession.clearSimklState();
+    NativeLedgerSession.onNativeExit(payload);
     await NativeMdblistSession.closeNativeMdblist(payload);
   }
 }

@@ -1,4 +1,5 @@
 import 'package:debrify/features/home/application/home_continuation_providers.dart';
+import 'package:debrify/features/ledger/models/ledger_brand.dart';
 import 'package:debrify/features/home/models/home_catalog_session.dart';
 import 'package:debrify/features/home/models/home_tracker_authentication.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
@@ -21,6 +22,7 @@ void main() {
           .millisecondsSinceEpoch,
       'simkl_access_token': 'fixture-simkl',
       'mdblist_api_key': 'fixture-mdblist',
+      'ledger_access_token': 'fixture-ledger',
     });
   });
   tearDown(() {
@@ -42,6 +44,10 @@ void main() {
 
   for (final tracker in HomeTracker.values) {
     test('$tracker uses its existing service authentication policy', () async {
+      if (tracker == HomeTracker.ledger) {
+        debugLedgerEnabled = true;
+        addTearDown(() => debugLedgerEnabled = null);
+      }
       final read = reader(tracker);
       expect(await read(), isTrue);
       final prefs = await SharedPreferences.getInstance();
@@ -49,11 +55,15 @@ void main() {
         HomeTracker.trakt => 'trakt_access_token',
         HomeTracker.simkl => 'simkl_access_token',
         HomeTracker.mdblist => 'mdblist_api_key',
+        HomeTracker.ledger => 'ledger_access_token',
       };
       await prefs.remove(key);
       expect(await read(), isFalse);
     });
   }
+  test('a stored Ledger session is unused while Ledger is off', () async {
+    expect(await reader(HomeTracker.ledger)(), isFalse);
+  });
   test(
     'expired Trakt token without refresh token remains unauthenticated',
     () async {

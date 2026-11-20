@@ -1,6 +1,6 @@
 import 'home_catalog_session.dart';
 
-enum HomeTracker { trakt, simkl, mdblist }
+enum HomeTracker { trakt, simkl, mdblist, ledger }
 
 typedef HomeTrackerAuthSession = ({
   HomeCatalogSession view,

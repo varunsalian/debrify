@@ -1,5 +1,6 @@
 import 'package:debrify/services/storage/movie_progress_storage.dart';
 import '../models/media_identity.dart';
+import 'package:debrify/services/ledger/ledger_service.dart';
 import 'tracking_source_policy.dart';
 import 'trakt/trakt_service.dart';
 import 'simkl/simkl_service.dart';
@@ -44,6 +45,10 @@ class MovieCompletionService {
         final service = MdblistService.instance;
         if (!await service.isAuthenticated()) return false;
         return (await service.fetchTitleStatus(id, 'movie'))?.watched == true;
+      case TrackingSource.ledger:
+        final service = LedgerService.instance;
+        if (!await service.isAuthenticated()) return false;
+        return (await service.titleStatus(id, 'movie'))?.watched == true;
     }
   }
 }

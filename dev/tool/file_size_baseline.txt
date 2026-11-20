@@ -91,7 +91,8 @@
 1685 lib/widgets/detail/detail_layout_premium.dart
 1602 lib/widgets/iptv/iptv_channel_row.dart
 1599 lib/widgets/remote/remote_config_export.dart
-1582 lib/screens/settings/home_sections_filter_page.dart
+# 2026-11-20 Ledger tracker: its Home layout group (+3: two imports, feature-flag line); exit: docs/ledger-tracker.md 'Size exceptions'.
+1585 lib/screens/settings/home_sections_filter_page.dart
 # 2026-11-01: TV focus lands on the first option when Send everything opens, UP and DOWN leave its radios, and the PikPak field lets DOWN reach Review (+62).
 1633 lib/widgets/remote/remote_transfer_all.dart
 1536 lib/widgets/tv_text_field.dart

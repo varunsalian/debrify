@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:debrify/features/ledger/models/ledger_brand.dart';
 import 'package:debrify/features/home/application/home_row_order.dart';
 import 'package:debrify/features/home/data/home_board_services.dart';
 import 'package:debrify/models/stremio_addon.dart';
@@ -287,6 +288,39 @@ void main() {
         ),
         ['cw:movies', 'collection:new', 'addon:x', 'airing:soon'],
       );
+    });
+
+    test('the Ledger row lands after the last saved tracker row', () {
+      debugLedgerEnabled = true;
+      addTearDown(() => debugLedgerEnabled = null);
+      expect(
+        HomeRowOrder.seedNewRows([
+          'trakt:movies',
+          'addon:x',
+          'mdblist:shows',
+          'iptv:movies',
+        ]),
+        [
+          'trakt:movies',
+          'addon:x',
+          'mdblist:shows',
+          'ledger:continue',
+          'iptv:movies',
+          'airing:soon',
+        ],
+      );
+      expect(
+        HomeRowOrder.seedNewRows(['addon:x', 'ledger:continue', 'cw:movies']),
+        ['addon:x', 'ledger:continue', 'cw:movies', 'airing:soon'],
+      );
+    });
+
+    test('the Ledger row is not seeded while Ledger is off', () {
+      expect(HomeRowOrder.seedNewRows(['trakt:movies', 'mdblist:shows']), [
+        'trakt:movies',
+        'mdblist:shows',
+        'airing:soon',
+      ]);
     });
 
     test('an empty order stays empty, so the canonical order applies', () {

@@ -331,9 +331,12 @@ void main() {
       <TrackingSource>{TrackingSource.local},
     );
     await activate(memberId, 4);
+    // Every shareable tracker; Ledger sessions are device-local and are
+    // never granted between profiles.
     expect(
       await TrackingSourceStorage.getTrackingScrobbleTargets(),
-      Set<TrackingSource>.of(TrackingSource.values),
+      Set<TrackingSource>.of(TrackingSource.values)
+        ..remove(TrackingSource.ledger),
     );
   });
 

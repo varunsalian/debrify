@@ -62,6 +62,8 @@ extension VideoPlayerLaunchArgsWidget on VideoPlayerLaunchArgs {
       traktProgressPercent: traktProgressPercent,
       simklScrobble: simklScrobble,
       simklProgressPercent: simklProgressPercent,
+      ledgerScrobble: ledgerScrobble,
+      ledgerProgressPercent: ledgerProgressPercent,
       mdblistScrobble: mdblistScrobble,
       mdblistProgressPercent: mdblistProgressPercent,
       initialSubtitles: initialSubtitles,

@@ -102,6 +102,12 @@ final class SourcePlayerArgs {
     mdblistProgressPercent: meta?.hasStremioEpisodeIdentity == true
         ? null
         : meta?.mdblistProgressPercent,
+    ledgerScrobble: meta?.hasStremioEpisodeIdentity == true
+        ? false
+        : meta?.ledgerScrobble ?? false,
+    ledgerProgressPercent: meta?.hasStremioEpisodeIdentity == true
+        ? null
+        : meta?.ledgerProgressPercent,
     resumePolicy: meta?.resumePolicy ?? PlaybackResumePolicy.sourceSpecific,
     // Debrid torrent ids let the player back-fill poster/IMDb onto a saved
     // Playlist-library entry and power the in-player "Fix Metadata" action

@@ -1,8 +1,10 @@
 /// Services that can own watched state or playback progress.
-enum TrackingSource { local, trakt, simkl, mdblist }
+/// `ledger` is Debrify's own tracker (placeholder name, see
+/// lib/features/ledger/models/ledger_brand.dart). The case NAME is persisted.
+enum TrackingSource { local, trakt, simkl, mdblist, ledger }
 
 /// The source used for resume, partial progress, and Continue Watching.
-enum WatchProgressSource { smart, local, trakt, simkl, mdblist }
+enum WatchProgressSource { smart, local, trakt, simkl, mdblist, ledger }
 
 extension TrackingSourceStorageName on TrackingSource {
   String get storageName => name;

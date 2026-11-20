@@ -60,6 +60,10 @@ class HomeIntegrationSection {
   bool get isMdblistAuthenticated =>
       trackerAuthControllers[HomeTracker.mdblist]!.current;
 
+  /// Whether Ledger is connected — gates its detail quick actions.
+  bool get isLedgerAuthenticated =>
+      trackerAuthControllers[HomeTracker.ledger]!.current;
+
   /// An integration (Trakt / a debrid provider) was connected or disconnected
   /// elsewhere while this tab stayed alive — refresh the state that gates the
   /// detail quick actions, the PikPak-only Play hiding, and the Trakt rows.
@@ -67,6 +71,7 @@ class HomeIntegrationSection {
     refreshTraktAuthState();
     refreshSimklAuthState();
     refreshMdblistAuthState();
+    refreshLedgerAuthState();
     _catalogBadges.refreshPikpakOnly();
     // Connect/disconnect can change what the local shelves should hold (the
     // single-owner rule keys off scrobbling), so re-read local CW before the
@@ -81,6 +86,7 @@ class HomeIntegrationSection {
       _continuationLoading.loadTraktContinueWatching();
       _continuationLoading.loadSimklContinueWatching();
       _continuationLoading.loadMdblistContinueWatching();
+      _continuationLoading.loadLedgerContinueWatching();
     }
     // Opted-in tracker LIST rows live in the board's section pipeline, so a
     // connect/disconnect needs a board reload to add/drop them. Home board
@@ -103,6 +109,12 @@ class HomeIntegrationSection {
 
   Future<void> refreshSimklAuthState() =>
       trackerAuthControllers[HomeTracker.simkl]!.load(
+        isCurrent: () => _deps.mounted(),
+        onChanged: (_) => _deps.setState(() {}),
+      );
+
+  Future<void> refreshLedgerAuthState() =>
+      trackerAuthControllers[HomeTracker.ledger]!.load(
         isCurrent: () => _deps.mounted(),
         onChanged: (_) => _deps.setState(() {}),
       );

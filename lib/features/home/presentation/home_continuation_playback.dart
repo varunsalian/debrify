@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../models/iptv_cw_entry.dart';
 import '../../../models/stremio_addon.dart';
 import '../data/home_catalog_origin_repository.dart';
+import '../models/home_ledger_continuation.dart';
 import 'home_catalog_actions.dart';
 import 'home_continuation_section.dart';
 import 'home_item_actions.dart';
@@ -158,6 +159,35 @@ class HomeContinuationPlayback {
     if (cw == null) {
       // Not in the CW map (a See-All grid title that fell out of the list) —
       // play it like a plain catalog title; three-way resume still applies.
+      await _catalog.onCatalogPlay(
+        item,
+        HomeCatalogOriginRepository.addonForItem(item),
+      );
+      return;
+    }
+    _playback.playSelection(cw.selection);
+  }
+
+  /// Open a Ledger Continue Watching title as a detail page, scrolled to the
+  /// paused / next episode for a series.
+  void openLedgerCwItem(StremioMeta item) {
+    final cw = _section.ledgerByKey[HomeLedgerContinuation.cardKey(item)];
+    _items.openItem(
+      item,
+      HomeCatalogOriginRepository.addonForItem(item),
+      initialSeason: (cw != null && !cw.isMovie) ? cw.season : null,
+      initialEpisode: (cw != null && !cw.isMovie) ? cw.episode : null,
+    );
+  }
+
+  /// Resume a Ledger Continue Watching title directly (quick-play) with the
+  /// paused season/episode and Ledger's percent.
+  Future<void> playLedgerCwItem(StremioMeta item) async {
+    if (!_playback.catalogNavigationCurrent()) return;
+    _playback.activeAddonId = HomeCatalogOriginRepository.addonForItem(item).id;
+    _playback.playbackArtwork.capture(item);
+    final cw = _section.ledgerByKey[HomeLedgerContinuation.cardKey(item)];
+    if (cw == null) {
       await _catalog.onCatalogPlay(
         item,
         HomeCatalogOriginRepository.addonForItem(item),

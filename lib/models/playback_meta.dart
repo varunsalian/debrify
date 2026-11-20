@@ -30,6 +30,9 @@ class PlaybackMeta {
   final bool simklScrobble;
   final double? mdblistProgressPercent;
   final bool mdblistScrobble;
+  // Ledger (Debrify's own tracker) pair.
+  final double? ledgerProgressPercent;
+  final bool ledgerScrobble;
 
   /// Catalog launches have authoritative content identity, so their local
   /// resume position follows IMDb (plus S/E for episodes) across sources.
@@ -61,6 +64,8 @@ class PlaybackMeta {
     this.simklScrobble = false,
     this.mdblistProgressPercent,
     this.mdblistScrobble = false,
+    this.ledgerProgressPercent,
+    this.ledgerScrobble = false,
     this.resumePolicy = PlaybackResumePolicy.sourceSpecific,
     this.art,
   });
@@ -86,6 +91,8 @@ class PlaybackMeta {
     this.simklScrobble = false,
     this.mdblistProgressPercent,
     this.mdblistScrobble = false,
+    this.ledgerProgressPercent,
+    this.ledgerScrobble = false,
     this.art,
   }) : resumePolicy = PlaybackResumePolicy.catalogCanonical;
 

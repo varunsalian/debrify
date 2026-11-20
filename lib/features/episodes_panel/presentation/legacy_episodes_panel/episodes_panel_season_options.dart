@@ -1,10 +1,13 @@
 import 'dart:async';
+
 import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_auth.dart';
 import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_deps.dart';
 import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_services.dart';
 import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_view_state.dart';
+import 'package:debrify/features/ledger/models/ledger_brand.dart';
 import 'package:debrify/models/custom_series_identity.dart';
 import 'package:debrify/models/media_identity.dart';
+import 'package:debrify/services/ledger/ledger_service.dart';
 import 'package:debrify/services/season_watched_service.dart';
 import 'package:debrify/services/tracking_source_policy.dart';
 import 'package:debrify/utils/tv_keys.dart';
@@ -34,6 +37,9 @@ class EpisodesPanelSeasonOptions {
           _sv.traktService.isAuthenticated(),
           _sv.simklService.isAuthenticated(),
           _sv.mdblistService.isAuthenticated(),
+          kLedgerEnabled
+              ? LedgerService.instance.isAuthenticated()
+              : Future.value(false),
         ]),
       ];
       if (CustomSeriesIdentity.isCustom(show.imdbId)) {
@@ -43,14 +49,24 @@ class EpisodesPanelSeasonOptions {
         connected[1] = false;
         connected[3] = false;
       }
+      if (!LedgerService.supportsId(show.progressId ?? show.id)) {
+        connected[4] = false;
+      }
       if (!mounted) return;
       final providers = [
         TrackingSource.local,
         TrackingSource.trakt,
         TrackingSource.simkl,
         TrackingSource.mdblist,
+        TrackingSource.ledger,
       ];
-      final names = ['locally', 'on Trakt', 'on Simkl', 'on MDBList'];
+      final names = [
+        'locally',
+        'on Trakt',
+        'on Simkl',
+        'on MDBList',
+        'on $kLedgerDisplayName',
+      ];
       var season = _s.episodeSeasons
           .where((s) => s.number == number)
           .firstOrNull;

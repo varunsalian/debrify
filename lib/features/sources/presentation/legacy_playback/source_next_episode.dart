@@ -66,6 +66,7 @@ final class SourceNextEpisode {
         traktScrobble: meta.traktScrobble,
         simklScrobble: meta.simklScrobble,
         mdblistScrobble: meta.mdblistScrobble,
+        ledgerScrobble: meta.ledgerScrobble,
         resumePolicy: meta.resumePolicy,
         // Show-level artwork, so the loader keeps its backdrop and logo for
         // every episode of a binge instead of falling back to the poster from

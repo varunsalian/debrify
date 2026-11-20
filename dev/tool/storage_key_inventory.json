@@ -25,8 +25,8 @@
   },
   {
     "name": "_allTrackingSources",
-    "expression": "<TrackingSource>{\n    TrackingSource.local,\n    TrackingSource.trakt,\n    TrackingSource.simkl,\n    TrackingSource.mdblist,\n  }",
-    "resolved_expression": "<TrackingSource>{\n    TrackingSource.local,\n    TrackingSource.trakt,\n    TrackingSource.simkl,\n    TrackingSource.mdblist,\n  }",
+    "expression": "<TrackingSource>{\n    TrackingSource.local,\n    TrackingSource.trakt,\n    TrackingSource.simkl,\n    TrackingSource.mdblist,\n    TrackingSource.ledger,\n  }",
+    "resolved_expression": "<TrackingSource>{\n    TrackingSource.local,\n    TrackingSource.trakt,\n    TrackingSource.simkl,\n    TrackingSource.mdblist,\n    TrackingSource.ledger,\n  }",
     "occurrences": 1
   },
   {
@@ -396,6 +396,12 @@
     "occurrences": 1
   },
   {
+    "name": "_episodeLedgerProgressKey",
+    "expression": "'episode_ledger_progress_v1'",
+    "resolved_expression": "'episode_ledger_progress_v1'",
+    "occurrences": 1
+  },
+  {
     "name": "_episodeMdblistProgressKey",
     "expression": "'episode_mdblist_progress_v1'",
     "resolved_expression": "'episode_mdblist_progress_v1'",
@@ -681,6 +687,30 @@
     "name": "_launchIdentPalettes",
     "expression": "{'ident', 'theme'}",
     "resolved_expression": "{'ident', 'theme'}",
+    "occurrences": 1
+  },
+  {
+    "name": "_ledgerAccessTokenKey",
+    "expression": "'ledger_access_token'",
+    "resolved_expression": "'ledger_access_token'",
+    "occurrences": 1
+  },
+  {
+    "name": "_ledgerRefreshTokenKey",
+    "expression": "'ledger_refresh_token'",
+    "resolved_expression": "'ledger_refresh_token'",
+    "occurrences": 1
+  },
+  {
+    "name": "_ledgerTokenExpiryKey",
+    "expression": "'ledger_token_expiry'",
+    "resolved_expression": "'ledger_token_expiry'",
+    "occurrences": 1
+  },
+  {
+    "name": "_ledgerUsernameKey",
+    "expression": "'ledger_username'",
+    "resolved_expression": "'ledger_username'",
     "occurrences": 1
   },
   {

@@ -114,6 +114,7 @@ class SettingsWidgetsFixture {
   ConnectionsSummary summary({
     bool media = false,
     bool mdblist = false,
+    bool ledger = false,
     FocusNode? first,
   }) => ConnectionsSummary(
     realDebrid: info('Real Debrid'),
@@ -129,6 +130,7 @@ class SettingsWidgetsFixture {
     trakt: info('Trakt'),
     simkl: info('Simkl'),
     mdblist: mdblist ? info('MDBList') : null,
+    ledger: ledger ? info('Ledger') : null,
     firstCardFocusNode: first,
   );
 

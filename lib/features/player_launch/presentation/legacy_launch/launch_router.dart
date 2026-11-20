@@ -10,10 +10,10 @@ import 'package:debrify/features/player_launch/presentation/legacy_launch/extern
 import 'package:debrify/features/player_launch/presentation/legacy_launch/external_launch_commit.dart';
 import 'package:debrify/features/player_launch/presentation/legacy_launch/external_player_launch.dart';
 import 'package:debrify/features/player_launch/presentation/legacy_launch/launch_analytics.dart';
+import 'package:debrify/features/player_launch/presentation/legacy_launch/launch_ledger_tracking.dart';
 import 'package:debrify/features/player_launch/presentation/legacy_launch/tracker_progress_seeding.dart';
 import 'package:debrify/features/player_launch/presentation/legacy_launch/video_player_launch_widget.dart';
 import 'package:debrify/features/player_launch/presentation/legacy_launch/webdav_player_notice.dart';
-import 'package:debrify/services/analytics_service.dart';
 import 'package:debrify/services/android_native_downloader.dart';
 import 'package:debrify/services/android_tv_player_bridge.dart';
 import 'package:debrify/services/main_page_bridge.dart';
@@ -211,6 +211,8 @@ final class LaunchRouter {
           simklProgressPercent: args.simklProgressPercent,
           mdblistScrobble: args.mdblistScrobble,
           mdblistProgressPercent: args.mdblistProgressPercent,
+          ledgerScrobble: args.ledgerScrobble,
+          ledgerProgressPercent: args.ledgerProgressPercent,
           contentTitle: args.contentTitle,
           posterUrl: args.posterUrl,
           contentYear: args.contentYear,
@@ -312,6 +314,8 @@ final class LaunchRouter {
           simklProgressPercent: args.simklProgressPercent,
           mdblistScrobble: args.mdblistScrobble,
           mdblistProgressPercent: args.mdblistProgressPercent,
+          ledgerScrobble: args.ledgerScrobble,
+          ledgerProgressPercent: args.ledgerProgressPercent,
           contentTitle: args.contentTitle,
           posterUrl: args.posterUrl,
           contentYear: args.contentYear,
@@ -384,6 +388,17 @@ final class LaunchRouter {
       }
     }
 
+    if (LaunchLedgerTracking.enabled) {
+      final ledgerArgs = await LaunchLedgerTracking.autoEnable(
+        args,
+        trackingPolicy,
+        active: active,
+        write: write,
+      );
+      if (ledgerArgs == null) return;
+      args = ledgerArgs;
+    }
+
     // Tracker-row launches arrive with their flag already true and skip the
     // auto-enable branches above. Normalize once on the shared path before
     // native payload construction, external seeding, or in-app playback.
@@ -401,6 +416,7 @@ final class LaunchRouter {
           traktScrobble: args.traktScrobble,
           simklScrobble: args.simklScrobble,
           mdblistScrobble: args.mdblistScrobble,
+          ledgerScrobble: args.ledgerScrobble,
         ) &&
         args.stremioTvChannels == null) {
       await write(
@@ -444,38 +460,23 @@ final class LaunchRouter {
       await Future.wait([
         TrackerProgressSeeding.refreshTraktEpisodeProgress(args.contentImdbId!),
         TrackerProgressSeeding.seedSimklEpisodeProgress(args.contentImdbId!),
+        if (LaunchLedgerTracking.enabled) LaunchLedgerTracking.seedEpisodes(args),
       ]);
       unawaited(TrackerProgressSeeding.seedMdblistEpisodeProgress(args.contentImdbId!));
     } else if (args.contentType == 'series' && args.contentImdbId != null) {
-      await TrackerProgressSeeding.seedSimklEpisodeProgress(args.contentImdbId!);
+      await LaunchLedgerTracking.alongside(
+        TrackerProgressSeeding.seedSimklEpisodeProgress(args.contentImdbId!),
+        args,
+      );
       unawaited(TrackerProgressSeeding.seedMdblistEpisodeProgress(args.contentImdbId!));
     }
 
     if (!context.mounted || !active()) return;
-    AnalyticsService.trackInBackground('playback_started', <String, Object?>{
-      'content_type': args.contentType ?? 'unknown',
-      'provider': LaunchAnalytics.analyticsProviderLabel(args),
-      'has_playlist': args.playlist?.isNotEmpty ?? false,
-      'trakt_scrobble': args.traktScrobble,
-      'simkl_scrobble': args.simklScrobble,
-      'mdblist_scrobble': args.mdblistScrobble,
-      'platform': AnalyticsService.currentPlatformLabel(),
-    });
+    LaunchAnalytics.trackPlaybackStarted(args);
 
     MainPageBridge.notifyPlayerLaunching(isTrailer: isTrailer);
 
-    // Log playlist entries to trace relativePath
-    if (args.playlist != null && args.playlist!.isNotEmpty) {
-      debugPrint(
-        '🚀 VideoPlayerLauncher.push: Launching with ${args.playlist!.length} entries',
-      );
-      for (int i = 0; i < args.playlist!.length && i < 5; i++) {
-        final entry = args.playlist![i];
-        debugPrint(
-          '  Entry[$i]: title="${entry.title}", relativePath="${entry.relativePath}"',
-        );
-      }
-    }
+    LaunchAnalytics.logPlaylistEntries(args.playlist);
 
     // Every external-activity launch below arms the playback-return signal
     // (content only): control comes straight back to Flutter without a route

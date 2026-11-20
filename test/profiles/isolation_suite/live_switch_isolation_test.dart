@@ -174,6 +174,7 @@ void main() {
       'DiscoverPrefs',
       'Engines',
       'IPTV',
+      'Ledger',
       'MDBList',
       'PikPak',
       'Simkl',

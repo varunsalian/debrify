@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../application/home_continuation_layout_controller.dart';
 import '../application/home_iptv_continuation_controller.dart';
+import '../application/home_ledger_continuation_controller.dart';
 import '../application/home_local_continuation_controller.dart';
 import '../application/home_mdblist_continuation_controller.dart';
 import '../application/home_simkl_continuation_controller.dart';
@@ -9,6 +10,7 @@ import '../application/home_trakt_continuation_controller.dart';
 import '../models/home_continuation_layout.dart';
 import '../models/home_continuation_session.dart';
 import '../models/home_iptv_continuation_state.dart';
+import '../models/home_ledger_continuation.dart';
 import '../models/home_local_continuation_state.dart';
 import '../models/home_mdblist_continuation.dart';
 import '../models/home_simkl_continuation.dart';
@@ -59,6 +61,12 @@ class HomeContinuationBindings {
     );
     mdblist = ref.read(homeMdblistContinuationProvider(session).notifier);
     mdblistProgress = HomeProgressView(() => mdblist.current.progress);
+    _ledger = ref.listenManual(
+      homeLedgerContinuationProvider(session),
+      (previous, next) {},
+    );
+    ledger = ref.read(homeLedgerContinuationProvider(session).notifier);
+    ledgerProgress = HomeProgressView(() => ledger.current.progress);
     _iptv = ref.listenManual(
       homeIptvContinuationProvider(session),
       (previous, next) {},
@@ -76,12 +84,15 @@ class HomeContinuationBindings {
   late final HomeSimklContinuationController simkl;
   late final ProviderSubscription<HomeMdblistContinuation> _mdblist;
   late final HomeMdblistContinuationController mdblist;
+  late final ProviderSubscription<HomeLedgerContinuation> _ledger;
+  late final HomeLedgerContinuationController ledger;
   late final ProviderSubscription<HomeIptvContinuationState> _iptv;
   late final HomeIptvContinuationController iptv;
   late final Map<String, double> localProgress;
   late final Map<String, double> traktProgress;
   late final Map<String, double> simklProgress;
   late final Map<String, double> mdblistProgress;
+  late final Map<String, double> ledgerProgress;
 
   // Favorites close between content and layout, preserving host teardown order.
   void closeContent() {
@@ -90,6 +101,7 @@ class HomeContinuationBindings {
     _trakt.close();
     _simkl.close();
     _mdblist.close();
+    _ledger.close();
   }
 
   void closeLayout() => _layout.close();

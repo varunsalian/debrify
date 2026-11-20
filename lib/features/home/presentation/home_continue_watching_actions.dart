@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../features/ledger/models/ledger_brand.dart';
 import '../../../models/stremio_addon.dart';
 import '../../../widgets/home/cw_card_menu.dart';
 import 'home_stage_rows.dart';
@@ -87,6 +88,14 @@ class HomeContinueWatchingActions {
             : 'Resume from the position saved on MDBList.';
         removeDescription =
             'Clears this paused playback position from MDBList.';
+      case HomeContinuationKind.ledger:
+        playDescription = isSeries
+            ? 'Jump back into the episode you stopped on, or the next one.'
+            : 'Resume from where you left off.';
+        removeDescription = isSeries
+            ? 'Clears the paused position on $kLedgerDisplayName, or hides an '
+                  'up-next show from its Continue Watching.'
+            : 'Clears this movie\'s paused position on $kLedgerDisplayName.';
       case HomeContinuationKind.iptv:
         playDescription = isSeries
             ? 'Open the series and pick up where you left off.'

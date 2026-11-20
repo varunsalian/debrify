@@ -35,6 +35,7 @@ class HomeTrackingPolicyRepository {
       WatchProgressSource.trakt => TrackingSource.trakt,
       WatchProgressSource.simkl => TrackingSource.simkl,
       WatchProgressSource.mdblist => TrackingSource.mdblist,
+      WatchProgressSource.ledger => TrackingSource.ledger,
       _ => null,
     };
     if (dedicated != null) {

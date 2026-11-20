@@ -31,6 +31,7 @@ final class LaunchTrackingPolicy {
       traktScrobble: args.traktScrobble && policy.scrobbles(TrackingSource.trakt),
       simklScrobble: args.simklScrobble && policy.scrobbles(TrackingSource.simkl),
       mdblistScrobble: args.mdblistScrobble && policy.scrobbles(TrackingSource.mdblist),
+      ledgerScrobble: args.ledgerScrobble && policy.scrobbles(TrackingSource.ledger),
     );
   }
 }

@@ -1,3 +1,4 @@
+import 'package:debrify/features/ledger/models/ledger_brand.dart';
 import 'package:debrify/models/home_preferences.dart';
 import 'package:debrify/services/storage/home_rows_storage.dart';
 import 'package:flutter/material.dart';
@@ -44,6 +45,18 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() => SharedPreferences.setMockInitialValues({}));
+
+  testWidgets('the Ledger group is listed only while Ledger is on', (
+    tester,
+  ) async {
+    await _pumpPage(tester);
+    expect(find.text(kLedgerDisplayName), findsNothing);
+    debugLedgerEnabled = true;
+    addTearDown(() => debugLedgerEnabled = null);
+    await tester.pumpWidget(const SizedBox());
+    await _pumpPage(tester);
+    expect(find.text(kLedgerDisplayName), findsWidgets);
+  });
 
   testWidgets('saving Home Rows places a new pinned collection after CW', (
     tester,

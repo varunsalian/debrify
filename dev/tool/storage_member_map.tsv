@@ -1080,3 +1080,8 @@ resetProfileCaches	reset_entry	static	resetStorageProfileCaches	lib/services/sto
 AmbientTrailerSurface	enum	type	AmbientTrailerSurface	lib/models/ambient_trailer_surface.dart	1	no
 TvRenderQuality	enum	type	TvRenderQuality	lib/models/tv_render_quality.dart	1	no
 ApiKeyValidator	class	type	ApiKeyValidator	lib/services/storage/api_key_validator.dart	1	no
+_ledgerAccessTokenKey	key	static	LedgerStorage._ledgerAccessTokenKey	lib/services/storage/ledger_storage.dart	3	no
+_ledgerRefreshTokenKey	key	static	LedgerStorage._ledgerRefreshTokenKey	lib/services/storage/ledger_storage.dart	3	no
+_ledgerUsernameKey	key	static	LedgerStorage._ledgerUsernameKey	lib/services/storage/ledger_storage.dart	3	no
+_ledgerTokenExpiryKey	key	static	LedgerStorage._ledgerTokenExpiryKey	lib/services/storage/ledger_storage.dart	3	no
+_episodeLedgerProgressKey	key	static	TrackerEpisodeProgressStorage._episodeLedgerProgressKey	lib/services/storage/tracker_episode_progress_storage.dart	7	no

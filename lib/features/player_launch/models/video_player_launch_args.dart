@@ -193,6 +193,11 @@ class VideoPlayerLaunchArgs {
 
   final double? mdblistProgressPercent;
 
+  // Ledger (Debrify's own tracker) scrobble/progress — parallel to Trakt.
+  final bool ledgerScrobble;
+
+  final double? ledgerProgressPercent;
+
   // Continue watching metadata (for home screen section)
   final String? contentTitle; // Clean display name (IMDB title)
 
@@ -282,6 +287,8 @@ class VideoPlayerLaunchArgs {
     this.simklProgressPercent,
     this.mdblistScrobble = false,
     this.mdblistProgressPercent,
+    this.ledgerScrobble = false,
+    this.ledgerProgressPercent,
     this.contentTitle,
     this.posterUrl,
     this.contentYear,
@@ -296,6 +303,8 @@ class VideoPlayerLaunchArgs {
     double? traktProgressPercent,
     double? simklProgressPercent,
     double? mdblistProgressPercent,
+    bool? ledgerScrobble,
+    double? ledgerProgressPercent,
     bool? suppressTrackerAutoSync,
   }) => VideoPlayerLaunchArgs(
     videoUrl: videoUrl,
@@ -369,6 +378,8 @@ class VideoPlayerLaunchArgs {
     simklProgressPercent: simklProgressPercent ?? this.simklProgressPercent,
     mdblistScrobble: mdblistScrobble ?? this.mdblistScrobble,
     mdblistProgressPercent: mdblistProgressPercent ?? this.mdblistProgressPercent,
+    ledgerScrobble: ledgerScrobble ?? this.ledgerScrobble,
+    ledgerProgressPercent: ledgerProgressPercent ?? this.ledgerProgressPercent,
     suppressTrackerAutoSync: suppressTrackerAutoSync ?? this.suppressTrackerAutoSync,
     contentTitle: contentTitle,
     posterUrl: posterUrl,

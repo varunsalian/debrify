@@ -70,6 +70,7 @@ HomeContinuationContent createHomeContinuationContent(
       announceTrakt: announcements.maybeAnnounceTraktRows,
       announceSimkl: announcements.maybeAnnounceSimklRows,
       announceMdblist: announcements.maybeAnnounceMdblistRows,
+      announceLedger: announcements.maybeAnnounceLedgerRows,
       refreshBound: () => deps.badges().refreshBoundSources(),
     ),
     section,

@@ -29,6 +29,15 @@ final class TrackerProgressSeeding {
     }
   }
 
+  /// Refresh the replaceable Ledger snapshot (same contract as Simkl's).
+  static Future<void> seedLedgerEpisodeProgress(String imdbId) async {
+    try {
+      await EpisodeTrackerSnapshotService.refreshLedger(imdbId);
+    } catch (e) {
+      debugPrint('VideoPlayerLauncher: Ledger snapshot refresh failed: $e');
+    }
+  }
+
   static Future<void> seedMdblistEpisodeProgress(String imdbId) async {
     if (!kMdblistEnabled) return;
     await EpisodeTrackerSnapshotService.seedMdblistPlayback(imdbId);

@@ -10,6 +10,7 @@ class HomeContinuationNodes {
     HomeContinuationKind.trakt,
     HomeContinuationKind.simkl,
     HomeContinuationKind.mdblist,
+    HomeContinuationKind.ledger,
   ];
   final _movies = {for (final kind in _order) kind: <FocusNode>[]};
   final _series = {for (final kind in _order) kind: <FocusNode>[]};
@@ -28,6 +29,7 @@ class HomeContinuationNodes {
       HomeContinuationKind.trakt => ('tmovie', 'tseries'),
       HomeContinuationKind.simkl => ('smovie', 'sseries'),
       HomeContinuationKind.mdblist => ('mdbmovie', 'mdbseries'),
+      HomeContinuationKind.ledger => ('lmovie', 'lseries'),
     };
     _resize(_movies[kind]!, movies, movieTag, requestFocus);
     _resize(_series[kind]!, series, seriesTag, requestFocus);

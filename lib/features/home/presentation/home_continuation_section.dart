@@ -10,12 +10,14 @@ import '../../../models/trakt_continue_watching_item.dart';
 import '../application/home_continuation_layout_controller.dart';
 import '../application/home_episode_artwork_controller.dart';
 import '../application/home_iptv_continuation_controller.dart';
+import '../application/home_ledger_continuation_controller.dart';
 import '../application/home_local_continuation_controller.dart';
 import '../application/home_mdblist_continuation_controller.dart';
 import '../application/home_simkl_continuation_controller.dart';
 import '../application/home_trakt_continuation_controller.dart';
 import '../models/home_episode_artwork.dart';
 import '../models/home_iptv_continuation_state.dart';
+import '../models/home_ledger_continuation.dart';
 import '../models/home_local_continuation_state.dart';
 import '../models/home_mdblist_continuation.dart';
 import '../models/home_simkl_continuation.dart';
@@ -150,6 +152,24 @@ class HomeContinuationSection {
       continuationNodes.movies(HomeContinuationKind.simkl);
   List<FocusNode> get simklSeriesNodes =>
       continuationNodes.series(HomeContinuationKind.simkl);
+  // LEDGER Continue Watching: one row (movies and episodes together, in the
+  // server's Up Next order) from Debrify's own tracker. Independent of the
+  // other trackers' blocks so none can regress another.
+  HomeLedgerContinuationController get ledgerContinuationController =>
+      _deps.bindings().ledger;
+  HomeLedgerContinuation get ledgerContinuation =>
+      ledgerContinuationController.current;
+  List<StremioMeta> get ledgerAll => ledgerContinuation.all;
+  Map<String, double> get ledgerProgress => _deps.bindings().ledgerProgress;
+  Map<String, String> get ledgerEpisode => ledgerContinuation.episode;
+  Map<String, HomeLedgerContinuationItem> get ledgerByKey =>
+      ledgerContinuation.byKey;
+  Map<String, String> get ledgerEpisodeArtwork =>
+      episodeArtworkController.current[HomeEpisodeArtworkSource.ledger] ??
+      const {};
+  List<FocusNode> get ledgerNodes =>
+      continuationNodes.movies(HomeContinuationKind.ledger);
+
   HomeMdblistContinuationController get mdblistContinuationController =>
       _deps.bindings().mdblist;
   HomeMdblistContinuation get mdblistContinuation =>
@@ -216,6 +236,7 @@ class HomeContinuationSection {
             WatchProgressSource.trakt => HomeContinuationKind.trakt,
             WatchProgressSource.simkl => HomeContinuationKind.simkl,
             WatchProgressSource.mdblist => HomeContinuationKind.mdblist,
+            WatchProgressSource.ledger => HomeContinuationKind.ledger,
           };
     return switch (effective) {
       HomeContinuationKind.local => (
@@ -236,6 +257,11 @@ class HomeContinuationSection {
       HomeContinuationKind.mdblist => (
         progress: mdblistProgress,
         episode: mdblistEpisode,
+        remaining: null,
+      ),
+      HomeContinuationKind.ledger => (
+        progress: ledgerProgress,
+        episode: ledgerEpisode,
         remaining: null,
       ),
       HomeContinuationKind.iptv => (

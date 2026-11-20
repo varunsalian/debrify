@@ -18,6 +18,8 @@ import '../../services/analytics_service.dart';
 import '../../utils/tv_keys.dart';
 import '../../widgets/home/home_theme.dart';
 import '../../models/tracking_source.dart';
+import '../../features/ledger/models/ledger_brand.dart';
+import '../../features/home/models/home_ledger_row_ids.dart';
 
 /// Full-screen DPAD-first Home-row manager — a two-pane "group → item" filter,
 /// modelled on the Stremio TV channel filter's grammar but 2 levels deep (no
@@ -272,6 +274,15 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
             opt(HomeExtraRowIds.mdblistLiked(l), l.label, badge: 'LIKED'),
           for (final l in widget.mdblistTop)
             opt(HomeExtraRowIds.mdblistTop(l), l.label, badge: 'TOP'),
+        ]),
+      if (kLedgerEnabled)
+        _Group(kLedgerDisplayName, [
+          cw(
+            HomeLedgerRowIds.continueWatching,
+            'Continue Watching',
+            TrackingSource.ledger,
+            badge: 'CW',
+          ),
         ]),
       _Group('IPTV Continue Watching', [
         _Item('iptv:movies', 'Movies', on('iptv:movies')),

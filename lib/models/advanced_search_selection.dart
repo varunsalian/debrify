@@ -40,6 +40,11 @@ class AdvancedSearchSelection {
   final double? mdblistProgressPercent;
   final bool mdblistSource;
 
+  /// Ledger (Debrify's own tracker) progress (0-100) and origin — parallel
+  /// to the Trakt pair.
+  final double? ledgerProgressPercent;
+  final bool ledgerSource;
+
   /// True only when built by [EpisodesScreen]'s episode "Browse/Sources" tap.
   /// Lets the host return to the episode list (not the catalog grid) when the
   /// user backs out of the resulting torrent search. Intrinsic to this one
@@ -74,6 +79,8 @@ class AdvancedSearchSelection {
     this.simklSource = false,
     this.mdblistProgressPercent,
     this.mdblistSource = false,
+    this.ledgerProgressPercent,
+    this.ledgerSource = false,
     this.fromCatalogEpisodeDrillDown = false,
     this.fromCatalogItemDetail = false,
   });
@@ -108,6 +115,8 @@ class AdvancedSearchSelection {
         simklSource: simklSource,
         mdblistProgressPercent: mdblistProgressPercent,
         mdblistSource: mdblistSource,
+        ledgerProgressPercent: ledgerProgressPercent,
+        ledgerSource: ledgerSource,
         fromCatalogEpisodeDrillDown: fromCatalogEpisodeDrillDown,
         fromCatalogItemDetail: fromCatalogItemDetail,
       );
@@ -139,6 +148,7 @@ class AdvancedSearchSelection {
     traktSource: false,
     simklSource: false,
     mdblistSource: false,
+    ledgerSource: false,
     fromCatalogEpisodeDrillDown: fromCatalogEpisodeDrillDown,
     fromCatalogItemDetail: fromCatalogItemDetail,
   );

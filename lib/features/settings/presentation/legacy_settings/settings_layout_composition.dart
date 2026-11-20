@@ -1,3 +1,4 @@
+import 'package:debrify/features/ledger/models/ledger_brand.dart';
 import 'package:debrify/features/settings/presentation/legacy_settings/settings_appearance_navigation.dart';
 import 'package:debrify/features/settings/presentation/legacy_settings/settings_backup.dart';
 import 'package:debrify/features/settings/presentation/legacy_settings/settings_connection_navigation.dart';
@@ -105,6 +106,7 @@ class SettingsLayoutComposition {
         _connections.simklInfo,
         // MDBList hidden for the alpha (unfinished) — see [kMdblistEnabled].
         if (kMdblistEnabled) _connections.mdblistInfo,
+        if (kLedgerEnabled) _connections.ledgerInfo,
       ],
       firstFocusNode: _firstCardFocusNode,
       onOpenSearch: _searchNavigation.openSettingsSearch,
@@ -232,6 +234,7 @@ class SettingsLayoutComposition {
         tracking: _connections.trackingInfo,
         // MDBList hidden for the alpha (unfinished) — see [kMdblistEnabled].
         mdblist: kMdblistEnabled ? _connections.mdblistInfo : null,
+        ledger: kLedgerEnabled ? _connections.ledgerInfo : null,
         indexerManagers: _connections.indexerManagersInfo,
         firstCardFocusNode: _firstCardFocusNode,
       ),

@@ -1,4 +1,6 @@
+import '../../../features/ledger/models/ledger_brand.dart';
 import '../models/home_catalog_search_status.dart';
+import '../models/home_ledger_row_ids.dart';
 import 'home_continuation_playback.dart';
 import 'home_continuation_removal.dart';
 import 'home_continuation_section.dart';
@@ -10,6 +12,7 @@ typedef HomeContinuationProjectionDeps = ({
   void Function(String) openTrakt,
   void Function(String) openSimkl,
   void Function(String) openMdblist,
+  void Function(String) openLedger,
   bool Function() searchMode,
   bool Function() discoverMode,
   bool Function() traktAuthenticated,
@@ -142,6 +145,33 @@ class HomeContinuationProjection {
           _deps.openMdblist(_section.cwMergeMdblist ? 'all' : 'movie'),
       seriesSeeAll: () => _deps.openMdblist('series'),
     ),
+    // One combined row: Ledger's Up Next already interleaves movies and
+    // episodes by recency, so there is no separate Shows row or merge toggle.
+    ...buildHomeContinuationFamily(
+      movieId: HomeLedgerRowIds.continueWatching,
+      seriesId: HomeLedgerRowIds.unusedSeries,
+      title: '$kLedgerDisplayName Continue Watching',
+      seriesTag: 'Shows',
+      kind: HomeContinuationKind.ledger,
+      enabled: true,
+      merged: true,
+      disabled: _deps.disabled(),
+      movieItems: _section.ledgerAll,
+      seriesItems: const [],
+      movieNodes: _section.ledgerNodes,
+      seriesNodes: _section.continuationNodes.series(
+        HomeContinuationKind.ledger,
+      ),
+      progress: (m) => _section.cwCardProgress(HomeContinuationKind.ledger, m),
+      episode: (m) => _section.cwCardEpisode(HomeContinuationKind.ledger, m),
+      remaining: (m) =>
+          _section.cwCardRemainingMinutes(HomeContinuationKind.ledger, m),
+      artwork: (m) => _section.ledgerEpisodeArtwork[m.progressId],
+      onOpen: _playback.openLedgerCwItem,
+      onQuickPlay: _playback.playLedgerCwItem,
+      onRemove: _removal.removeLedgerCwItem,
+      movieSeeAll: () => _deps.openLedger('all'),
+    ),
     ...buildHomeContinuationFamily(
       movieId: 'iptv:movies',
       seriesId: 'iptv:series',
@@ -197,6 +227,8 @@ class HomeContinuationProjection {
           (!_section.cwMergeMdblist &&
               _section.mdblistSeries.isNotEmpty &&
               !_deps.disabled().contains('mdblist:shows')) ||
+          (_section.ledgerAll.isNotEmpty &&
+              !_deps.disabled().contains(HomeLedgerRowIds.continueWatching)) ||
           (_section.iptvCwMovies.isNotEmpty &&
               !_deps.disabled().contains('iptv:movies')) ||
           (_section.iptvCwSeries.isNotEmpty &&

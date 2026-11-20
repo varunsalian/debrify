@@ -39,6 +39,8 @@ class HomeContinuationReturn {
     refreshSimkl: () => _loading.loadSimklContinueWatching(refreshBound: false),
     refreshMdblist: () =>
         _loading.loadMdblistContinueWatching(refreshBound: false),
+    refreshLedger: () =>
+        _loading.loadLedgerContinueWatching(refreshBound: false),
   );
 
   /// Set when a real content player launches (any path — in-app route, native
@@ -94,6 +96,7 @@ class HomeContinuationReturn {
         iptv: _loading.loadIptvContinueWatching,
         trakt: () => _loading.loadTraktContinueWatching(refreshBound: false),
         simkl: () => _loading.loadSimklContinueWatching(refreshBound: false),
+        ledger: () => _loading.loadLedgerContinueWatching(refreshBound: false),
         shouldRefreshMdblist: () => _section.mdblistContinuationController
             .shouldRefreshAfterPlayback(DateTime.now()),
         mdblist: () => _loading.loadMdblistContinueWatching(

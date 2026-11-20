@@ -7,8 +7,10 @@ import 'package:debrify/screens/video_player/services/iptv_live_recovery.dart';
 import 'package:debrify/screens/video_player/widgets/sleep_timer_sheet.dart';
 import 'package:debrify/utils/episode_playback_request.dart';
 import 'package:flutter/material.dart';
+import 'vp_ledger_scrobbler.dart';
 
 abstract interface class VpPlaybackEndedHost {
+  VpLedgerScrobbler get ledgerScrobbler;
   set activeMediaShouldPlay(bool v);
   List<PlaylistEntry>? get activePlaylist;
   bool get continuousShuffleEnabled;
@@ -80,6 +82,7 @@ class VpPlaybackEnded {
     _host.traktScrobble('stop');
     _host.stopSimklHeartbeat();
     _host.simklScrobble('stop');
+    _host.ledgerScrobbler.onStopped();
     _host.mdblistStop(complete: true);
 
     // Mark the current episode as finished if it's a series

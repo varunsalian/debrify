@@ -1,4 +1,6 @@
 import 'package:collection/collection.dart';
+import 'package:debrify/features/ledger/models/ledger_brand.dart';
+import 'package:debrify/features/player_launch/data/episode_tracker_percents.dart';
 import 'package:debrify/features/player_launch/data/android_tv_playback_payload.dart';
 import 'package:debrify/features/player_launch/data/series_poster_persistence.dart';
 import 'package:debrify/features/player_launch/models/launcher_entry.dart';
@@ -9,7 +11,6 @@ import 'package:debrify/services/android_tv_player_bridge.dart';
 import 'package:debrify/services/episode_tracker_snapshot_service.dart';
 import 'package:debrify/services/storage/merged_episode_progress_storage.dart';
 import 'package:debrify/services/storage/playlist_metadata_storage.dart';
-import 'package:debrify/services/storage/tracker_episode_progress_storage.dart';
 import 'package:debrify/services/tracking_source_policy.dart';
 import 'package:debrify/utils/episode_progress_merge.dart';
 import 'package:debrify/utils/show_shuffle.dart';
@@ -183,19 +184,9 @@ final class NativeMetadataPush {
             seriesTitle: seriesPlaylist.seriesTitle ?? payload.title,
             imdbId: discoveredImdbId,
           );
-          final trackerMaps = discoveredImdbId != null
-              ? await Future.wait([
-                  TrackerEpisodeProgressStorage.getEpisodeTraktProgress(
-                    imdbId: discoveredImdbId,
-                  ),
-                  TrackerEpisodeProgressStorage.getEpisodeSimklProgress(
-                    imdbId: discoveredImdbId,
-                  ),
-                  TrackerEpisodeProgressStorage.getConnectedEpisodeMdblistProgress(
-                    imdbId: discoveredImdbId,
-                  ),
-                ])
-              : const <Map<String, double>>[];
+          final trackers = discoveredImdbId != null
+              ? EpisodeTrackerPercents.of(await EpisodeTrackerPercents.read(discoveredImdbId))
+              : EpisodeTrackerPercents.empty;
 
           Map<String, dynamic> watchState(int season, int episode) {
             final episodeKey = '${season}_$episode';
@@ -203,37 +194,16 @@ final class NativeMetadataPush {
             final positionMs = (local?['positionMs'] as num?)?.toInt() ?? 0;
             final durationMs = (local?['durationMs'] as num?)?.toInt() ?? 0;
             final locallyWatched = locallyFinished[season.toString()]?.contains(episode) ?? false;
-            final traktPercent = trackerMaps.isNotEmpty
-                ? trackingPolicy.guideProgressFrom(
-                    TrackingSource.trakt,
-                    trackerMaps[0][episodeKey],
-                  )
-                : null;
-            final simklPercent = trackerMaps.length > 1
-                ? trackingPolicy.guideProgressFrom(
-                    TrackingSource.simkl,
-                    trackerMaps[1][episodeKey],
-                  )
-                : null;
-            final mdblistPercent = trackerMaps.length > 2
-                ? trackingPolicy.guideProgressFrom(
-                    TrackingSource.mdblist,
-                    trackerMaps[2][episodeKey],
-                  )
-                : null;
+            final guide = trackers.guide(trackingPolicy, episodeKey);
             final localState = resolveEpisodeLocalWatchState(
               locallyWatched: trackingPolicy.progressFrom(TrackingSource.local) && locallyWatched,
               localPositionMs: trackingPolicy.progressFrom(TrackingSource.local) ? positionMs : 0,
               localDurationMs: durationMs,
-              traktPercent: traktPercent,
-              simklPercent: simklPercent,
-              mdblistPercent: mdblistPercent,
+              traktPercent: guide.trakt,
+              simklPercent: guide.simkl,
+              mdblistPercent: guide.mdblist,
             );
-            final trackerPercent = furthestEpisodeTrackerPercent([
-              traktPercent,
-              simklPercent,
-              mdblistPercent,
-            ]);
+            final trackerPercent = trackers.furthest(trackingPolicy, episodeKey);
             return {
               // Explicit zeros clear stale cached state on rows which are not
               // currently playing. Native protects the live row from a late
@@ -392,6 +362,8 @@ final class NativeMetadataPush {
           if (singleEntryGuideOnly || discoveredAfterLaunch)
             EpisodeTrackerSnapshotService.refreshTrakt(discoveredImdbId),
           if (discoveredAfterLaunch) EpisodeTrackerSnapshotService.refreshSimkl(discoveredImdbId),
+          if (discoveredAfterLaunch && kLedgerEnabled)
+            EpisodeTrackerSnapshotService.refreshLedger(discoveredImdbId),
         ];
 
         // Publish the established trackers as one update, independently from

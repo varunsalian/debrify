@@ -1,3 +1,4 @@
+import 'package:debrify/services/storage/ledger_storage.dart';
 import 'package:debrify/services/storage/mdblist_storage.dart';
 import 'package:debrify/services/storage/simkl_storage.dart';
 import 'package:debrify/services/storage/tracking_source_storage.dart';
@@ -181,6 +182,9 @@ final homeTrackingPolicyRepositoryProvider = Provider.autoDispose
                 canContinue: current,
               ),
               TrackingSource.mdblist => MdblistStorage.hasMdblistCredential(
+                canContinue: current,
+              ),
+              TrackingSource.ledger => LedgerStorage.hasCredential(
                 canContinue: current,
               ),
               TrackingSource.local => Future.value(true),

@@ -1,4 +1,6 @@
+import 'package:debrify/features/ledger/models/ledger_brand.dart';
 import 'package:debrify/screens/settings/widgets/settings_widgets.dart';
+
 import 'settings_summaries.dart';
 
 /// Canonical connection views; read current summaries and retain action tear-offs.
@@ -9,6 +11,7 @@ class SettingsConnections {
     Future<void> Function() openAllDebridSettings,
     Future<void> Function() openIndexerManagersSettings,
     Future<void> Function() openIptvSettings,
+    Future<void> Function() openLedgerSettings,
     Future<void> Function() openMdblistSettings,
     Future<void> Function() openMediaServerSettings,
     Future<void> Function() openPikPakSettings,
@@ -161,6 +164,19 @@ class SettingsConnections {
         ? summaryFailureCaption('Simkl')
         : _summaries.simklCaption,
     onTap: _deps.openSimklSettings,
+  );
+  ConnectionInfo get ledgerInfo => ConnectionInfo(
+    title: kLedgerDisplayName,
+    connected:
+        !_summaries.summaryFailures.contains(kLedgerDisplayName) &&
+        _summaries.ledgerConnected,
+    status: _summaries.summaryFailures.contains(kLedgerDisplayName)
+        ? summaryFailureStatus(kLedgerDisplayName)
+        : _summaries.ledgerStatus,
+    caption: _summaries.summaryFailures.contains(kLedgerDisplayName)
+        ? summaryFailureCaption(kLedgerDisplayName)
+        : _summaries.ledgerCaption,
+    onTap: _deps.openLedgerSettings,
   );
   ConnectionInfo get mdblistInfo => ConnectionInfo(
     title: 'MDBList',

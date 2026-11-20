@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:debrify/features/ledger/models/ledger_brand.dart';
+import 'package:debrify/services/ledger/ledger_service.dart';
 import 'package:debrify/services/storage/tracker_episode_progress_storage.dart';
 import 'package:debrify/services/storage/trakt_storage.dart';
 import 'package:flutter/foundation.dart';
@@ -7,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import '../models/media_identity.dart';
 import '../models/profiles/profile_policy.dart';
 import '../utils/episode_progress_merge.dart';
+import 'episode_snapshot_refresh_coordinator.dart';
 import 'episode_tracker_snapshot_revision.dart';
 import 'mdblist/mdblist_service.dart';
 import 'profiles/profile_async_authorization.dart';
@@ -15,169 +18,13 @@ import 'trakt/trakt_service.dart';
 import 'tracking_source_policy.dart';
 import 'tracker_identity_service.dart';
 
-class _EpisodeSnapshotCacheEntry {
-  final DateTime expiresAt;
-  final Map<String, double> value;
-
-  const _EpisodeSnapshotCacheEntry({
-    required this.expiresAt,
-    required this.value,
-  });
-}
-
-class _EpisodeSnapshotFlight {
-  final Future<Map<String, double>?> future;
-  final bool forced;
-
-  const _EpisodeSnapshotFlight(this.future, {required this.forced});
-}
-
-/// Small process cache for guide refreshes. Keys include the complete profile
-/// scope identity, provider, operation, and IMDb id; a result warmed by one
-/// profile/session can therefore never be returned to another.
-class _EpisodeSnapshotRefreshCoordinator {
-  static const int _maxEntries = 128;
-  final Map<String, _EpisodeSnapshotCacheEntry> _cache = {};
-  final Map<String, _EpisodeSnapshotFlight> _inFlight = {};
-  final Map<String, Future<Map<String, double>?>> _queuedForced = {};
-  final Map<String, Future<void>> _serialTails = {};
-
-  Future<Map<String, double>?> run({
-    required String key,
-    required Duration ttl,
-    required bool force,
-    required Future<Map<String, double>?> Function() load,
-  }) {
-    final queued = _queuedForced[key];
-    if (queued != null) return queued;
-
-    final active = _inFlight[key];
-    if (active != null) {
-      if (!force || active.forced) return active.future;
-
-      // A forced refresh represents a post-mutation freshness boundary. If a
-      // normal refresh was already running before that mutation, joining it
-      // could publish stale data. Queue exactly one forced follow-up instead.
-      late final Future<Map<String, double>?> followUp;
-      followUp = () async {
-        try {
-          await active.future;
-        } catch (_) {
-          // The forced attempt is still required after a failed prior read.
-        }
-        try {
-          return await _start(key: key, ttl: ttl, forced: true, load: load);
-        } finally {
-          if (identical(_queuedForced[key], followUp)) {
-            _queuedForced.remove(key);
-          }
-        }
-      }();
-      _queuedForced[key] = followUp;
-      return followUp;
-    }
-
-    final now = DateTime.now();
-    _prune(now);
-    final cached = _cache[key];
-    if (!force && cached != null && now.isBefore(cached.expiresAt)) {
-      return Future<Map<String, double>?>.value(cached.value);
-    }
-    return _start(key: key, ttl: ttl, forced: force, load: load);
-  }
-
-  Future<Map<String, double>?> _start({
-    required String key,
-    required Duration ttl,
-    required bool forced,
-    required Future<Map<String, double>?> Function() load,
-  }) {
-    late final Future<Map<String, double>?> future;
-    future = () async {
-      try {
-        final loaded = await load();
-        if (loaded == null) return null;
-        final stable = Map<String, double>.unmodifiable(loaded);
-        if (ttl > Duration.zero) {
-          _cache[key] = _EpisodeSnapshotCacheEntry(
-            expiresAt: DateTime.now().add(ttl),
-            value: stable,
-          );
-          _trimToLimit();
-        }
-        return stable;
-      } finally {
-        if (identical(_inFlight[key]?.future, future)) {
-          _inFlight.remove(key);
-        }
-      }
-    }();
-    _inFlight[key] = _EpisodeSnapshotFlight(future, forced: forced);
-    return future;
-  }
-
-  void invalidate(String key) {
-    _cache.remove(key);
-  }
-
-  void clear() {
-    _cache.clear();
-    _inFlight.clear();
-    _queuedForced.clear();
-    _serialTails.clear();
-  }
-
-  /// Run operations that replace the same persisted snapshot in invocation
-  /// order. MDBList's playback seed is read/modify/write while full history is
-  /// replace-all; serializing the whole operations prevents a slow seed from
-  /// overwriting a newer history refresh with state it read beforehand.
-  Future<T> serialize<T>(String key, Future<T> Function() operation) {
-    final previous = _serialTails[key] ?? Future<void>.value();
-    final release = Completer<void>();
-    final tail = release.future;
-    _serialTails[key] = tail;
-
-    return () async {
-      await previous;
-      try {
-        return await operation();
-      } finally {
-        release.complete();
-        if (identical(_serialTails[key], tail)) {
-          _serialTails.remove(key);
-        }
-      }
-    }();
-  }
-
-  void _prune(DateTime now) {
-    _cache.removeWhere((_, entry) => !now.isBefore(entry.expiresAt));
-  }
-
-  void _trimToLimit() {
-    while (_cache.length > _maxEntries) {
-      String? oldestKey;
-      DateTime? oldestExpiry;
-      for (final entry in _cache.entries) {
-        if (oldestExpiry == null ||
-            entry.value.expiresAt.isBefore(oldestExpiry)) {
-          oldestKey = entry.key;
-          oldestExpiry = entry.value.expiresAt;
-        }
-      }
-      if (oldestKey == null) return;
-      _cache.remove(oldestKey);
-    }
-  }
-}
-
 /// Refreshes the replaceable, IMDb-keyed episode snapshots used by player
 /// guides. Full history reads belong off the playback launch-critical path.
 class EpisodeTrackerSnapshotService {
   const EpisodeTrackerSnapshotService._();
 
   static const Duration _refreshTtl = Duration(seconds: 30);
-  static final _refreshCoordinator = _EpisodeSnapshotRefreshCoordinator();
+  static final _refreshCoordinator = EpisodeSnapshotRefreshCoordinator();
 
   static String _refreshKey(
     String provider,
@@ -430,9 +277,79 @@ class EpisodeTrackerSnapshotService {
   static Future<Map<String, double>?> refreshSimkl(
     String imdbId, {
     bool force = false,
-  }) async {
+  }) {
     // A catalog's own show is local-only: Simkl has no ID for it.
-    if (!MediaIdentity.isApiId(imdbId)) return null;
+    if (!MediaIdentity.isApiId(imdbId)) return Future.value();
+    final simkl = SimklService.instance;
+    return _refreshWatchedAndPlayback(
+      provider: 'simkl',
+      label: 'Simkl',
+      imdbId: imdbId,
+      force: force,
+      isAuthenticated: simkl.isAuthenticated,
+      fetchWatched: () => simkl.fetchWatchedShowEpisodes(imdbId),
+      fetchPlayback: () => simkl.fetchEpisodePlaybackProgress(imdbId),
+      save: (percents) =>
+          TrackerEpisodeProgressStorage.saveEpisodeSimklProgress(
+            imdbId: imdbId,
+            percents: percents,
+          ),
+    );
+  }
+
+  /// Refreshes the replaceable Ledger snapshot with [refreshSimkl]'s
+  /// contract: remote truth merged at display/resume time, cleared on a
+  /// failed refresh so stale completion ticks are never left behind.
+  static Future<Map<String, double>?> refreshLedger(
+    String imdbId, {
+    bool force = false,
+  }) {
+    if (!kLedgerEnabled || !LedgerService.supportsId(imdbId)) {
+      return Future.value();
+    }
+    final ledger = LedgerService.instance;
+    // One per-show read serves both halves of the snapshot.
+    Future<({Set<String> watched, Map<String, double> progress})>? states;
+    Future<({Set<String> watched, Map<String, double> progress})> load() =>
+        states ??= ledger
+            .showEpisodeStates(imdbId)
+            .then(
+              (value) =>
+                  value ?? (throw StateError('Ledger snapshot unavailable')),
+            );
+    return _refreshWatchedAndPlayback(
+      provider: 'ledger',
+      label: 'Ledger',
+      imdbId: imdbId,
+      force: force,
+      isAuthenticated: ledger.isAuthenticated,
+      // Its reads are connected-only and sign-out clears it: nothing to
+      // publish (or write) for a profile without Ledger.
+      clearWhenSignedOut: false,
+      fetchWatched: () async => (await load()).watched,
+      fetchPlayback: () async => (await load()).progress,
+      save: (percents) =>
+          TrackerEpisodeProgressStorage.saveEpisodeLedgerProgress(
+            imdbId: imdbId,
+            percents: percents,
+          ),
+    );
+  }
+
+  /// The shared refresh for trackers whose snapshot is "watched episodes +
+  /// paused playback" (Simkl, Ledger). Unauthenticated publishes an empty
+  /// snapshot; a failure clears it unless a newer revision superseded it.
+  static Future<Map<String, double>?> _refreshWatchedAndPlayback({
+    required String provider,
+    required String label,
+    required String imdbId,
+    required bool force,
+    required Future<bool> Function() isAuthenticated,
+    required Future<Set<String>> Function() fetchWatched,
+    required Future<Map<String, double>> Function() fetchPlayback,
+    required Future<void> Function(Map<String, double> percents) save,
+    bool clearWhenSignedOut = true,
+  }) async {
     ProfileAsyncAuthorization? authorization;
     String? storeWriteKey;
     int? snapshotRevision;
@@ -442,32 +359,24 @@ class EpisodeTrackerSnapshotService {
         ProfileFeature.trackersAndDiscovery,
       );
       authorizationCaptured = true;
-      final simkl = SimklService.instance;
-      storeWriteKey = _storeWriteKey('simkl', authorization);
-      final authenticated = await _runBound(
-        authorization,
-        simkl.isAuthenticated,
-      );
+      storeWriteKey = _storeWriteKey(provider, authorization);
+      final authenticated = await _runBound(authorization, isAuthenticated);
       if (!authenticated) {
+        // Nothing was refreshed (callers treat null as "no update").
+        if (!clearWhenSignedOut) return null;
         await _refreshCoordinator.serialize(
           storeWriteKey,
-          () => _runBound(
-            authorization,
-            () => TrackerEpisodeProgressStorage.saveEpisodeSimklProgress(
-              imdbId: imdbId,
-              percents: const {},
-            ),
-          ),
+          () => _runBound(authorization, () => save(const {})),
         );
         return const {};
       }
       final refreshRevision = EpisodeTrackerSnapshotRevision.identity(
-        'simkl',
+        provider,
         imdbId,
       );
       snapshotRevision = refreshRevision;
       final key = _refreshKey(
-        'simkl',
+        provider,
         imdbId,
         authorization,
         snapshotRevision: refreshRevision,
@@ -479,37 +388,25 @@ class EpisodeTrackerSnapshotService {
         force: force,
         load: () async {
           final results = await Future.wait<Object?>([
-            _runBound(
-              authorization,
-              () => simkl.fetchWatchedShowEpisodes(imdbId),
-            ),
-            _runBound(
-              authorization,
-              () => simkl.fetchEpisodePlaybackProgress(imdbId),
-            ),
+            _runBound(authorization, fetchWatched),
+            _runBound(authorization, fetchPlayback),
           ]);
           final snapshot = buildEpisodeTrackerSnapshot(
             watched: results[0] as Set<String>,
             playback: results[1] as Map<String, double>,
           );
           final current = _snapshotRevisionIsCurrent(
-            provider: 'simkl',
+            provider: provider,
             imdbId: imdbId,
             expectedRevision: refreshRevision,
           );
           if (!current) return null;
           await _refreshCoordinator.serialize(
             storeWriteKey!,
-            () => _runBound(
-              authorization,
-              () => TrackerEpisodeProgressStorage.saveEpisodeSimklProgress(
-                imdbId: imdbId,
-                percents: snapshot,
-              ),
-            ),
+            () => _runBound(authorization, () => save(snapshot)),
           );
           final stillCurrent = _snapshotRevisionIsCurrent(
-            provider: 'simkl',
+            provider: provider,
             imdbId: imdbId,
             expectedRevision: refreshRevision,
           );
@@ -518,12 +415,12 @@ class EpisodeTrackerSnapshotService {
         },
       );
     } catch (error) {
-      // Match the existing Simkl contract: a failed launch refresh must not
-      // leave stale remote completion ticks behind.
+      // A failed launch refresh must not leave stale remote completion ticks
+      // behind.
       final revisionStillCurrent =
           snapshotRevision == null ||
           _snapshotRevisionIsCurrent(
-            provider: 'simkl',
+            provider: provider,
             imdbId: imdbId,
             expectedRevision: snapshotRevision,
           );
@@ -531,20 +428,14 @@ class EpisodeTrackerSnapshotService {
         try {
           await _refreshCoordinator.serialize(
             storeWriteKey!,
-            () => _runBound(
-              authorization,
-              () => TrackerEpisodeProgressStorage.saveEpisodeSimklProgress(
-                imdbId: imdbId,
-                percents: const {},
-              ),
-            ),
+            () => _runBound(authorization, () => save(const {})),
           );
         } catch (_) {
           // A changed/unauthorized profile must not receive the failed job's
           // cleanup publication either.
         }
       }
-      debugPrint('EpisodeTrackerSnapshot: Simkl refresh failed: $error');
+      debugPrint('EpisodeTrackerSnapshot: $label refresh failed: $error');
       return null;
     }
   }

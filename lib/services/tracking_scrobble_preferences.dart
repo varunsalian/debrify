@@ -1,3 +1,4 @@
+import '../features/ledger/models/ledger_brand.dart';
 import '../models/tracking_source.dart';
 import 'profiles/profile_preferences.dart';
 import 'profiles/profile_scope.dart';
@@ -104,15 +105,23 @@ class TrackingScrobblePreferences {
     return seeded;
   }
 
+  /// Ledger only while its feature flag is on: with it off a stored
+  /// `ledger` (from a dev build) reads as unknown and is never written back.
+  static bool _offered(TrackingSource source) =>
+      source != TrackingSource.ledger || kLedgerEnabled;
+
   static Set<TrackingSource> _decode(List<String> stored) => <TrackingSource>{
     TrackingSource.local,
     for (final value in stored)
-      if (TrackingSourceStorageName.parse(value) case final source?) source,
+      if (TrackingSourceStorageName.parse(value) case final source?
+          when _offered(source))
+        source,
   };
 
   static List<String> _encode(Set<TrackingSource> value) => <String>[
     for (final source in TrackingSource.values)
-      if (source == TrackingSource.local || value.contains(source))
+      if (source == TrackingSource.local ||
+          (value.contains(source) && _offered(source)))
         source.storageName,
   ];
 }

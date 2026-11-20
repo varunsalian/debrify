@@ -3,6 +3,7 @@ import 'package:debrify/services/storage/episode_progress_storage.dart';
 import '../models/tracking_source.dart';
 import '../models/custom_series_identity.dart';
 import 'profiles/profile_runtime.dart';
+import 'package:debrify/services/ledger/ledger_service.dart';
 import 'trakt/trakt_service.dart';
 import 'simkl/simkl_service.dart';
 import 'mdblist/mdblist_service.dart';
@@ -63,6 +64,8 @@ class SeasonWatchedService {
             for (final e in result.data!.entries)
               if (e.value >= 100) e.key,
           };
+        case TrackingSource.ledger:
+          inventory = await _ledgerInventory(imdbId);
       }
       return inventory == null
           ? null
@@ -87,12 +90,18 @@ class SeasonWatchedService {
     final numbers = episodes.toSet().toList()..sort();
     Future<int> run() async {
       Set<String> alreadyWatched = {};
-      if (watched && provider == TrackingSource.trakt && numbers.isNotEmpty) {
+      if (watched &&
+          (provider == TrackingSource.trakt ||
+              provider == TrackingSource.ledger) &&
+          numbers.isNotEmpty) {
         // History adds plays, not a watched flag. Re-read on every attempt,
         // and never treat an unavailable inventory as an empty history.
         try {
-          final inventory = await TraktService.instance
-              .fetchWatchedShowEpisodesOrNull(imdbId);
+          final inventory = provider == TrackingSource.ledger
+              ? await _ledgerInventory(imdbId)
+              : await TraktService.instance.fetchWatchedShowEpisodesOrNull(
+                  imdbId,
+                );
           if (inventory == null) return numbers.length;
           alreadyWatched = inventory;
         } catch (_) {
@@ -146,6 +155,12 @@ class SeasonWatchedService {
                 season: season,
                 episode: episode,
               ),
+            TrackingSource.ledger =>
+              await (watched
+                  ? LedgerService.instance.markEpisodesWatched
+                  : LedgerService.instance.markEpisodesUnwatched)(imdbId, [
+                (season: season, episode: episode),
+              ]),
             _ => false,
           };
           if (!ok) {
@@ -166,5 +181,11 @@ class SeasonWatchedService {
       return ProfileRuntime.withCapturedScope(ProfileRuntime.capture(), run);
     }
     return run();
+  }
+
+  /// Ledger's watched episodes in this service's `"season-episode"` form.
+  static Future<Set<String>?> _ledgerInventory(String imdbId) async {
+    final watched = await LedgerService.instance.watchedEpisodes(imdbId);
+    return watched?.map((key) => key.replaceFirst('_', '-')).toSet();
   }
 }

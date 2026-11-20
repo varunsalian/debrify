@@ -21,6 +21,10 @@ abstract interface class VpTraktScrobblerHost {
   ({int? season, int? episode}) traktSeasonEpisode();
   void bindEpisodeTrackerProgressIdentity(String imdbId);
   bool get traktScrobble;
+
+  /// Every user seek passes through [VpTraktScrobbler.traktScrobbleSeek];
+  /// this hands it to the trackers that follow the same funnel (Ledger).
+  void onUserSeek(Duration seekTarget);
   Duration get persistablePosition;
   ResumeWriteGuard get resumeWriteGuard;
   DeferredStartupSeek get stremioTvStartupSeek;
@@ -193,6 +197,7 @@ class VpTraktScrobbler {
   void traktScrobbleSeek(Duration seekTarget) {
     _host.stremioTvStartupSeek.cancel();
     _host.resumeWriteGuard.noteUserSeek();
+    _host.onUserSeek(seekTarget);
     if (_host.validationGateActive) return;
     if (!traktScrobbleEnabled || _host.contentImdbId == null) return;
     if (!_host.isPlaying || _host.duration.inMilliseconds <= 0) return;

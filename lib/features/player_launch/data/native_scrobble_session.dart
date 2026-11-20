@@ -25,4 +25,20 @@ final class NativeScrobbleSession {
   static int? simklLastKnownEpisode;
 
   static Timer? simklHeartbeatTimer;
+
+  /// Forgets the Trakt session's dedup marker and last-known position.
+  static void clearTraktState() {
+    traktLastScrobbleAction = null;
+    traktLastKnownProgress = 0.0;
+    traktLastKnownSeason = null;
+    traktLastKnownEpisode = null;
+  }
+
+  /// Forgets the Simkl session's dedup marker and last-known position.
+  static void clearSimklState() {
+    simklLastScrobbleAction = null;
+    simklLastKnownProgress = 0.0;
+    simklLastKnownSeason = null;
+    simklLastKnownEpisode = null;
+  }
 }

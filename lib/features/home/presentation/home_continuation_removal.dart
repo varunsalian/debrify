@@ -1,10 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../features/ledger/models/ledger_brand.dart';
 import '../../../models/stremio_addon.dart';
 import '../../../widgets/trakt/trakt_menu_helpers.dart'
     show TraktItemMenuAction;
 import '../application/home_continuation_providers.dart';
 import '../models/home_catalog_session.dart';
+import '../models/home_ledger_continuation.dart';
 import 'home_continuation_loading.dart';
 import 'home_continuation_section.dart';
 import 'home_detail_route.dart';
@@ -120,6 +122,25 @@ class HomeContinuationRemoval {
     await _deps.removeSimkl(item);
     if (!_playback.catalogNavigationCurrent()) return;
     await _loading.loadSimklContinueWatching(refreshBound: false);
+  }
+
+  /// Remove a Ledger Continue Watching card: clears its saved resume point,
+  /// or hides an up-next show from Ledger's Up Next.
+  Future<void> removeLedgerCwItem(StremioMeta item) async {
+    if (!_playback.catalogNavigationCurrent()) return;
+    final cw = _section.ledgerByKey[HomeLedgerContinuation.cardKey(item)];
+    if (cw == null) return;
+    final removed = await _ref
+        .read(homeLedgerHistoryRemovalProvider(_deps.session().owner))
+        .remove(cw, isCurrent: _playback.catalogNavigationCurrent);
+    if (removed == null || !_playback.catalogNavigationCurrent()) return;
+    if (!removed) {
+      _playback.snack(
+        "Couldn't remove \"${item.name}\" from $kLedgerDisplayName.",
+      );
+      return;
+    }
+    await _loading.loadLedgerContinueWatching(refreshBound: false);
   }
 
   /// Remove an IPTV Continue Watching card: a movie drops its own history +

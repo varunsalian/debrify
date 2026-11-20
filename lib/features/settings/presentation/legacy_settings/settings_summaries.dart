@@ -41,6 +41,9 @@ class SettingsSummaries {
   bool simklConnected = false;
   String simklStatus = 'Not connected';
   String simklCaption = 'Tap to connect';
+  bool ledgerConnected = false;
+  String ledgerStatus = 'Not connected';
+  String ledgerCaption = 'Tap to connect';
   bool mdblistConnected = false;
   String mdblistStatus = 'Not connected';
   String mdblistCaption = 'Tap to connect';

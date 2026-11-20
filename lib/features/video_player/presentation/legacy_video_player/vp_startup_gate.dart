@@ -5,8 +5,10 @@ import 'package:debrify/screens/video_player/services/android_renderer_startup_f
 import 'package:debrify/services/startup_stream_policy.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart' as mk;
+import 'vp_ledger_scrobbler.dart';
 
 abstract interface class VpStartupGateHost {
+  VpLedgerScrobbler get ledgerScrobbler;
   int get currentSourceIndex;
   int get decoderProbeGeneration;
   Duration get duration;
@@ -59,6 +61,7 @@ class VpStartupGate {
       _host.simklLastScrobbleAction = 'start';
       _host.startSimklHeartbeat();
     }
+    _host.ledgerScrobbler.onPlaying();
     _host.mdblistPlay();
   }
 
