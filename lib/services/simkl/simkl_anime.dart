@@ -1,10 +1,7 @@
-import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
 
 import '../../models/media_identity.dart';
-import 'simkl_constants.dart';
+import 'simkl_anime_ids.dart';
 import 'simkl_episode_codes.dart';
 
 /// Marks a `shows[]` history entry's seasons as TVDB/IMDb numbering, so
@@ -50,6 +47,9 @@ final class SimklAnimeEpisodes {
   /// cleared with the account ([forgetAccount]).
   static final Map<String, Set<int>> _coursById = {};
 
+  /// Every id each cour was seen with (Simkl id → aliases).
+  static final Map<int, Set<String>> _aliasesOfCour = {};
+
   /// Bumped by [forgetAccount]: a read started before then must not record
   /// the previous account's cours ([remember]'s `generation`).
   static int _accountGeneration = 0;
@@ -60,6 +60,8 @@ final class SimklAnimeEpisodes {
     _maps.clear();
     _inFlight.clear();
     _coursById.clear();
+    _aliasesOfCour.clear();
+    SimklAnimeIds.clearCache();
   }
 
   /// Ages every cached episode map by [by] (tests of expiry).
@@ -73,6 +75,7 @@ final class SimklAnimeEpisodes {
   /// Drops what belongs to the signed-in account (not the catalog maps).
   static void forgetAccount() {
     _coursById.clear();
+    _aliasesOfCour.clear();
     _accountGeneration++;
   }
 
@@ -94,14 +97,46 @@ final class SimklAnimeEpisodes {
   static void remember(dynamic ids, int generation) {
     final simklId = simklIdOf(ids);
     if (simklId == null || generation != _accountGeneration) return;
-    for (final id in MediaIdentity.aliases(ids)) {
+    final aliases = MediaIdentity.aliases(ids);
+    for (final id in aliases) {
       (_coursById[id] ??= <int>{}).add(simklId);
     }
+    (_aliasesOfCour[simklId] ??= <String>{}).addAll(aliases);
   }
 
-  /// The known anime cours of show [id] (empty for TV shows).
-  static Set<int> coursFor(String id) =>
-      _coursById[MediaIdentity.providerId(id)] ?? const <int>{};
+  /// The account's anime cours of show [id] (empty for TV shows).
+  ///
+  /// The library names cours by Simkl and TMDB ids only, so an IMDb id
+  /// first knows just the cours whose full ids were read. Cours sharing a
+  /// TMDB id with those are then read from the catalog, and only those whose
+  /// own IMDb id is [id] join: Simkl gives a franchise one TMDB id where IMDb
+  /// may split it (JoJo and Steel Ball Run). A cour whose ids can't be read
+  /// is left out, since clearing history acts on every cour returned.
+  static Future<Set<int>> coursFor(String id) async {
+    final key = MediaIdentity.providerId(id).trim().toLowerCase();
+    final known = _coursById[key];
+    if (known == null || known.isEmpty) return const <int>{};
+    final cours = {...known};
+    if (!MediaIdentity.isImdb(key)) return cours;
+    final generation = _accountGeneration;
+    final candidates = <int>{
+      for (final cour in known)
+        for (final alias in _aliasesOfCour[cour] ?? const <String>{})
+          if (alias.startsWith('tmdb:')) ...?_coursById[alias],
+    }.difference(known).toList();
+    for (var offset = 0; offset < candidates.length; offset += 4) {
+      await Future.wait([
+        for (final cour in candidates.skip(offset).take(4))
+          SimklAnimeIds.complete({'simkl': cour}).then((ids) {
+            final imdb = ids['imdb'];
+            if (imdb is! String || imdb.trim().toLowerCase() != key) return;
+            cours.add(cour);
+            remember(ids, generation);
+          }),
+      ]);
+    }
+    return generation == _accountGeneration ? cours : const <int>{};
+  }
 
   /// The TVDB coordinate of regular episode [number] of Simkl anime title
   /// [simklId], or null when Simkl has no mapping (or the catalog read
@@ -128,7 +163,7 @@ final class SimklAnimeEpisodes {
     return _inFlight[simklId] ??= () async {
       Map<int, SimklTvdbEpisode>? map;
       try {
-        final raw = await _getPublic('/anime/episodes/$simklId');
+        final raw = await simklPublicGet('/anime/episodes/$simklId');
         if (raw is List) map = parseEpisodeMap(raw);
       } catch (_) {
         map = null;
@@ -279,6 +314,16 @@ final class SimklAnimeEpisodes {
         '_number': number,
       });
     }
+    // Full ids first: a franchise may share one TMDB id across shows IMDb
+    // keeps apart (JoJo and Steel Ball Run), and each keeps its own row.
+    for (var offset = 0; offset < rows.length; offset += 4) {
+      await Future.wait([
+        for (final row in rows.skip(offset).take(4))
+          _withFullIds(row['show'] as Map, generation).then((show) {
+            row['show'] = show;
+          }),
+      ]);
+    }
     String showOf(Map<String, dynamic> row) =>
         MediaIdentity.preferred((row['show'] as Map)['ids']) ??
         'simkl:${row['_simkl_id']}';
@@ -324,6 +369,23 @@ final class SimklAnimeEpisodes {
     int generation,
   ) async {
     if (!hasAnime(sessions)) return sessions;
+    // Read each title's ids up front, a few at a time, so a slow catalog
+    // costs one wait, not one per session.
+    final titles = <int, dynamic>{
+      for (final raw in sessions)
+        if (raw is Map &&
+            raw['anime'] is Map &&
+            raw['show'] == null &&
+            raw['movie'] == null)
+          if (simklIdOf((raw['anime'] as Map)['ids']) case final id?)
+            id: (raw['anime'] as Map)['ids'],
+    }.values.toList();
+    for (var offset = 0; offset < titles.length; offset += 4) {
+      await Future.wait([
+        for (final ids in titles.skip(offset).take(4))
+          SimklAnimeIds.complete(ids),
+      ]);
+    }
     final out = <dynamic>[];
     for (final raw in sessions) {
       if (raw is! Map ||
@@ -337,7 +399,10 @@ final class SimklAnimeEpisodes {
       final ep = raw['episode'];
       if (raw['type'] != 'movie') remember(anime['ids'], generation);
       if (raw['type'] == 'movie') {
-        out.add({...raw.cast<String, dynamic>(), 'movie': anime});
+        out.add({
+          ...raw.cast<String, dynamic>(),
+          'movie': await _withFullIds(anime, generation, episodic: false),
+        });
         continue;
       }
       // A special (season 0) reuses regular episode numbers and has no TVDB
@@ -367,7 +432,7 @@ final class SimklAnimeEpisodes {
       }
       out.add({
         ...raw.cast<String, dynamic>(),
-        'show': anime,
+        'show': await _withFullIds(anime, generation),
         'episode': {
           ...ep.cast<String, dynamic>(),
           'season': coordinate.season,
@@ -383,32 +448,22 @@ final class SimklAnimeEpisodes {
   static bool hasAnime(List<dynamic> sessions) =>
       sessions.any((raw) => raw is Map && raw['anime'] is Map);
 
+  /// [content] with its ids completed ([SimklAnimeIds.complete]), so the row
+  /// is keyed by its IMDb id like any show; an episodic title's cours become
+  /// findable by that id too.
+  static Future<Map<String, dynamic>> _withFullIds(
+    Map content,
+    int generation, {
+    bool episodic = true,
+  }) async {
+    final ids = await SimklAnimeIds.complete(content['ids']);
+    if (episodic) remember(ids, generation);
+    return {...content.cast<String, dynamic>(), 'ids': ids};
+  }
+
   static String _code(SimklTvdbEpisode c) =>
       'S${c.season.toString().padLeft(2, '0')}'
       'E${c.episode.toString().padLeft(2, '0')}';
-
-  /// A public catalog GET (client id only, no user token); decoded JSON or
-  /// null on failure.
-  static Future<dynamic> _getPublic(String path) async {
-    final uri = Uri.parse('$kSimklApiBaseUrl$path').replace(
-      queryParameters: {
-        'client_id': kSimklClientId,
-        'app-name': kSimklAppName,
-        'app-version': kSimklAppVersion,
-      },
-    );
-    final response = await http
-        .get(
-          uri,
-          headers: {'simkl-api-key': kSimklClientId, 'User-Agent': 'Debrify'},
-        )
-        .timeout(const Duration(seconds: 15));
-    if (response.statusCode != 200) {
-      debugPrint('Simkl: anime episodes failed (${response.statusCode})');
-      return null;
-    }
-    return jsonDecode(response.body);
-  }
 
   /// Regular episode number → TVDB coordinate, from a
   /// `/anime/episodes/{id}` response. Specials (`type: special`, season 0)

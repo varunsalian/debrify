@@ -918,7 +918,8 @@ class SimklService {
       return false;
     }
     // An anime: every cour, removed by Simkl id in its own numbering.
-    final cours = SimklAnimeEpisodes.coursFor(imdbId);
+    final cours = await SimklAnimeEpisodes.coursFor(imdbId);
+    if (canContinue?.call() == false) return false;
     final anime = cours.isEmpty
         ? null
         : SimklAnimeEpisodes.removalItems(
@@ -1772,7 +1773,7 @@ class SimklService {
     final token = await SimklStorage.getSimklAccessToken();
     if (token == null || token.isEmpty) return null;
     // An anime placed in TVDB numbering; unreadable: the plain read below.
-    final cours = SimklAnimeEpisodes.coursFor(showImdbId);
+    final cours = await SimklAnimeEpisodes.coursFor(showImdbId);
     final anime = cours.isEmpty
         ? null
         : await SimklAnimeEpisodes.watchedAsShow(
