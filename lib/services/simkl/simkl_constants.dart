@@ -26,12 +26,14 @@ const String kSimklTrendingUrl =
 /// against the shows in the user's Simkl library (see SimklCalendarService).
 /// Regenerated every ~6h and CDN-cached ~5h; query strings are ignored.
 ///
-/// The sibling `calendar/anime.json` is deliberately NOT used: its entries
-/// carry only MAL/AniDB/Simkl ids (no IMDb id) and no season number, so this
-/// IMDb-keyed app can neither match them to the user's library nor open their
-/// detail page — every anime entry would drop. The Simkl calendar is therefore
-/// TV-shows-only, consistent with the app's existing IMDb-centric model.
+/// Anime airs come from the sibling [kSimklCalendarAnimeUrl].
 const String kSimklCalendarTvUrl = 'https://data.simkl.in/calendar/tv.json';
+
+/// The anime counterpart: entries carry only Simkl/MAL/TMDB ids and the
+/// cour's own episode number, so SimklCalendarService matches them to the
+/// user's library by Simkl id and maps the episode to its TVDB season.
+const String kSimklCalendarAnimeUrl =
+    'https://data.simkl.in/calendar/anime.json';
 
 const String kSimklPinUrl = '$kSimklApiBaseUrl/oauth/pin';
 String simklPinPollUrl(String userCode) => '$kSimklPinUrl/$userCode';

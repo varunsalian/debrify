@@ -4,6 +4,8 @@ import 'package:debrify/services/storage/movie_progress_storage.dart';
 import 'package:debrify/services/storage/tracking_source_storage.dart';
 import 'package:debrify/services/tracking_source_policy.dart';
 import 'package:debrify/services/simkl/simkl_item_transformer.dart';
+import 'package:debrify/services/simkl/simkl_completed_titles.dart';
+import 'package:debrify/services/simkl/simkl_episode_codes.dart';
 import 'package:debrify/services/simkl/simkl_service.dart';
 import 'package:debrify/widgets/movie_watched_badge.dart';
 import 'package:flutter/material.dart';
@@ -103,7 +105,7 @@ void main() {
         'ids': {'imdb': 'tt1000001'},
       },
     };
-    final snapshot = SimklService.debugParseCompletedTitleIds({
+    final snapshot = SimklCompletedTitles.parse({
       'movies': [
         {
           'status': 'completed',
@@ -147,8 +149,8 @@ void main() {
       )?.type,
       'movie',
     );
-    expect(SimklService.parseSimklEpisodeCode('S00E01'), isNull);
-    expect(SimklService.parseSimklEpisodeCode('S03E12'), (
+    expect(SimklEpisodeCodes.seasonEpisode('S00E01'), isNull);
+    expect(SimklEpisodeCodes.seasonEpisode('S03E12'), (
       season: 3,
       episode: 12,
     ));

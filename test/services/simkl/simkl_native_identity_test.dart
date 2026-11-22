@@ -90,7 +90,7 @@ void main() {
             ];
           case '/sync/playback/movies':
             body = [];
-          case '/sync/all-items/shows/watching':
+          case '/sync/all-items/all/watching':
             body = {
               'shows': [
                 {'show': show, 'next_to_watch': 'S04E07'},

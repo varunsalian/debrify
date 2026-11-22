@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../models/trakt/trakt_calendar_entry.dart';
+import 'simkl_anime.dart';
 import 'simkl_constants.dart';
 import 'simkl_service.dart';
 
@@ -15,8 +16,10 @@ import 'simkl_service.dart';
 /// [TraktCalendarService], not sharing its Trakt-specific fetch/chunk logic
 /// (mirrors why the rest of the Simkl integration stays parallel to Trakt).
 ///
-/// TV-shows-only by design: Simkl's anime calendar has no IMDb ids or season
-/// numbers, so an IMDb-keyed app can't use it (see [kSimklCalendarTvUrl]).
+/// Anime comes from a separate file whose entries carry only Simkl ids and
+/// the cour's own episode number: an entry is kept when its Simkl title is in
+/// the library (which supplies the IMDb id) and the catalog maps the episode
+/// to a TVDB season (see [SimklAnimeEpisodes]).
 ///
 /// The public file is a single rolling window (not per-range), so ONE fetch
 /// serves any month; the intersected result is cached in memory with a 15-min
@@ -117,16 +120,22 @@ class SimklCalendarService {
   /// caller won't cache it). A genuinely empty library returns an empty list.
   Future<List<TraktCalendarEntry>?> _fetchAndIntersect() async {
     try {
-      final libraryImdbIds = await _fetchLibraryShowImdbIds();
-      if (libraryImdbIds == null) return null; // library fetch failed / unauthed
+      final library = await _fetchLibraryShowIds();
+      if (library == null) return null; // library fetch failed / unauthed
+      final libraryImdbIds = library.imdb;
       // Genuinely no shows in the library ⇒ nothing to intersect (authoritative
       // empty — safe to cache).
       if (libraryImdbIds.isEmpty) return const <TraktCalendarEntry>[];
 
-      final decoded = await SimklService.instance.fetchPublicOrNull(
-        kSimklCalendarTvUrl,
-      );
-      if (decoded is! List) return null; // CDN fetch failed (expected a JSON array)
+      final [decoded, anime] = await Future.wait([
+        SimklService.instance.fetchPublicOrNull(kSimklCalendarTvUrl),
+        if (library.animeImdbBySimkl.isEmpty)
+          Future.value()
+        else
+          SimklService.instance.fetchPublicOrNull(kSimklCalendarAnimeUrl),
+      ]);
+      // CDN fetch failed (expected a JSON array).
+      if (decoded is! List) return null;
 
       final out = <TraktCalendarEntry>[];
       final seen = <String>{};
@@ -142,6 +151,17 @@ class SimklCalendarService {
         final key = '$imdb-${entry.seasonNumber}-${entry.episodeNumber}';
         if (seen.add(key)) out.add(entry);
       }
+      // A failed anime file only leaves anime out.
+      if (anime is List) {
+        for (final entry in await _animeEntries(
+          anime,
+          library.animeImdbBySimkl,
+        )) {
+          final key =
+              '${entry.showImdbId}-${entry.seasonNumber}-${entry.episodeNumber}';
+          if (seen.add(key)) out.add(entry);
+        }
+      }
       return out;
     } catch (e) {
       debugPrint('SimklCalendarService: fetch failed: $e');
@@ -149,15 +169,76 @@ class SimklCalendarService {
     }
   }
 
-  /// IMDb ids of every non-dropped show/anime in the user's library, or NULL
-  /// when the library fetch failed / the user isn't authenticated (so the
-  /// caller treats it as non-authoritative rather than "no shows"). Reuses
-  /// SimklService's cached `all/all` snapshot — one shared fetch, tagged with
-  /// each item's own `status` — instead of issuing per-status calls.
-  Future<Set<String>?> _fetchLibraryShowImdbIds() async {
+  /// Anime calendar entries for titles in the library, placed in TVDB
+  /// numbering under the library's IMDb id. Films and unmapped episodes are
+  /// left out; catalog reads are cached per title and bounded.
+  Future<List<TraktCalendarEntry>> _animeEntries(
+    List<dynamic> anime,
+    Map<int, String> imdbBySimkl,
+  ) async {
+    final matched = [
+      for (final item in anime)
+        if (item is Map &&
+            item['anime_type'] != 'movie' &&
+            item['episode'] is Map &&
+            imdbBySimkl[SimklAnimeEpisodes.simklIdOf(item['ids'])] != null)
+          item,
+    ];
+    final out = <TraktCalendarEntry>[];
+    for (var offset = 0; offset < matched.length; offset += 4) {
+      final batch = await Future.wait([
+        for (final item in matched.skip(offset).take(4))
+          () async {
+            // One malformed entry must not take the TV calendar down with it.
+            try {
+              final simklId = SimklAnimeEpisodes.simklIdOf(item['ids'])!;
+              final number = (item['episode'] as Map)['episode'];
+              if (number is! int) return null;
+              final c = await SimklAnimeEpisodes.tvdbCoordinate(
+                simklId,
+                number,
+              );
+              if (c == null) return null;
+              return TraktCalendarEntry.fromSimklCalendarJson({
+                ...item.cast<String, dynamic>(),
+                'date': _animeAirDay(item['date']),
+                'ids': {'imdb': imdbBySimkl[simklId]},
+                'episode': {'season': c.season, 'episode': c.episode},
+              });
+            } catch (_) {
+              return null;
+            }
+          }(),
+      ]);
+      out.addAll(batch.whereType<TraktCalendarEntry>());
+    }
+    return out;
+  }
+
+  /// The anime file's `date` as the day marker the shared parser reads. Unlike
+  /// the TV file's nominal midnights, a timed anime date is a real air time in
+  /// Japan (`…T01:00:00+09:00` is the previous evening in the Americas), so it
+  /// moves to the viewer's own day; a bare midnight stays a day marker.
+  static Object? _animeAirDay(Object? date) {
+    final at = date is String ? DateTime.tryParse(date) : null;
+    if (at == null || (date as String).contains('T00:00:00')) return date;
+    final day = at.toLocal();
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${day.year}-${two(day.month)}-${two(day.day)}T00:00:00';
+  }
+
+  /// IMDb ids of every non-dropped show/anime in the user's library, plus each
+  /// episodic anime's Simkl id → IMDb id, or NULL when the library fetch
+  /// failed / the user isn't authenticated (so the caller treats it as
+  /// non-authoritative rather than "no shows"). Reuses SimklService's cached
+  /// `all/all` snapshot — one shared fetch, tagged with each item's own
+  /// `status` — instead of issuing per-status calls.
+  Future<({Set<String> imdb, Map<int, String> animeImdbBySimkl})?>
+  _fetchLibraryShowIds() async {
     final data = await SimklService.instance.fetchLibrarySnapshotOrNull();
     if (data == null) return null;
     final ids = <String>{};
+    final animeImdbBySimkl = <int, String>{};
     // Only the show/anime buckets matter to an episode calendar (movies have no
     // upcoming episodes).
     for (final bucketKey in const ['shows', 'anime']) {
@@ -171,9 +252,17 @@ class SimklCalendarService {
         final idsMap = show is Map ? show['ids'] : null;
         if (idsMap is! Map) continue;
         final imdb = idsMap['imdb'];
-        if (imdb is String && imdb.startsWith('tt')) ids.add(imdb);
+        if (imdb is String && imdb.startsWith('tt')) {
+          ids.add(imdb);
+          final simklId = SimklAnimeEpisodes.simklIdOf(idsMap);
+          if (bucketKey == 'anime' &&
+              item['anime_type'] != 'movie' &&
+              simklId != null) {
+            animeImdbBySimkl[simklId] = imdb;
+          }
+        }
       }
     }
-    return ids;
+    return (imdb: ids, animeImdbBySimkl: animeImdbBySimkl);
   }
 }

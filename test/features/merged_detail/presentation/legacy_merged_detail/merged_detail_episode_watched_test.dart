@@ -200,6 +200,7 @@ void main() {
             'shows': [
               {
                 'ids': {'imdb': id},
+                'use_tvdb_anime_seasons': true,
                 'seasons': [
                   {
                     'number': 1,
