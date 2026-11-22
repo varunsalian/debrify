@@ -48,6 +48,12 @@ final class WebDavReleaseName {
 
   static final _leadingGroup = RegExp(r'^\s*\[[^\]]*\]\s*');
   static final _extension = RegExp(r'\.[A-Za-z0-9]{2,4}$');
+
+  /// A release site's address before the title: "www.Site.xyz - Title".
+  static final _sitePrefix = RegExp(
+    r'^\s*www\.\S+?\.[a-z]{2,6}(?:\s*[-–—_|:]+\s*|\s+)',
+    caseSensitive: false,
+  );
   static final _idTag = RegExp(
     r'[\[{]\s*(imdb|tmdb|tvdb)(?:id)?\s*[-=]\s*([a-z0-9]+)\s*[\]}]',
     caseSensitive: false,
@@ -213,6 +219,8 @@ final class WebDavReleaseName {
     var raw = name.trim();
     if (isFile) raw = raw.replaceFirst(_extension, '');
     raw = raw.replaceFirst(_leadingGroup, '');
+    final unprefixed = raw.replaceFirst(_sitePrefix, '');
+    if (unprefixed.trim().isNotEmpty) raw = unprefixed;
     String? imdbId;
     for (final tag in _idTag.allMatches(raw)) {
       final value = tag.group(2)!.toLowerCase();

@@ -118,4 +118,40 @@ void main() {
       ),
     );
   });
+
+  test('names and folders that servers report unevenly', () async {
+    String response(String href, {String? name, bool collection = false}) =>
+        '<D:response><D:href>$href</D:href><D:propstat><D:prop>'
+        '${name == null ? '' : '<D:displayname>$name</D:displayname>'}'
+        '<D:resourcetype>${collection ? '<D:collection/>' : ''}'
+        '</D:resourcetype></D:prop></D:propstat></D:response>';
+    body =
+        '<?xml version="1.0" encoding="utf-8"?><D:multistatus xmlns:D="DAV:">'
+        '${response('/dav/', collection: true)}'
+        // The display name drops the extension.
+        '${response('/dav/Dune%20(2021).mkv', name: 'Dune (2021)')}'
+        // The display name is still percent-encoded.
+        '${response('/dav/Heat%20(1995).mkv', name: 'Heat%20(1995).mkv')}'
+        // A folder without <collection/>; its address ends in "/".
+        '${response('/dav/Movies/', name: 'Movies')}'
+        // A folder's display name needs no extension.
+        '${response('/dav/Shows/', name: 'TV', collection: true)}'
+        // A real "%20" in a name stays.
+        '${response('/dav/Rate%20100%2520Pct.mkv', name: 'Rate 100%20Pct.mkv')}'
+        '</D:multistatus>';
+    final items = {for (final item in await list()) item.name: item};
+    expect(
+      items.keys,
+      unorderedEquals([
+        'Dune (2021).mkv',
+        'Heat (1995).mkv',
+        'Rate 100%20Pct.mkv',
+        'Movies',
+        'TV',
+      ]),
+    );
+    expect(items['Movies']!.isDirectory, isTrue);
+    expect(items['Movies']!.path, 'Movies/');
+    expect(items['Dune (2021).mkv']!.isDirectory, isFalse);
+  });
 }

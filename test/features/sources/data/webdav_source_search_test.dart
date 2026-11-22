@@ -416,4 +416,190 @@ void main() {
     expect(server.calls, ['', 'Dune.2021.2160p.WEB-DL/']);
     expect(out.rows.single.name, 'dune.mkv');
   });
+
+  group('layouts that are not named like a library', () {
+    final inception = AdvancedSearchSelection(
+      imdbId: 'tt1375666',
+      isSeries: false,
+      title: 'Inception',
+      year: '2010',
+    );
+
+    test('opens drive, user and language folders, never system ones', () async {
+      final server = FakeServer({
+        '': [dir('HDD1'), dir('@eaDir'), dir('#recycle'), dir('Photos')],
+        'HDD1/': [dir('HDD1/Media')],
+        'HDD1/Media/': [dir('HDD1/Media/English'), dir('HDD1/Media/Hindi')],
+        'HDD1/Media/English/': [dir('HDD1/Media/English/Dune (2021)')],
+        'HDD1/Media/English/Dune (2021)/': [
+          file('HDD1/Media/English/Dune (2021)/Dune.mkv'),
+        ],
+      });
+      final out = await run(server, dune);
+      expect(out.rows.single.name, 'Dune.mkv');
+      expect(
+        server.calls,
+        isNot(anyElement(anyOf('@eaDir/', '#recycle/', 'Photos/'))),
+      );
+      expect(out.result.single.phase, WebDavSearchPhase.done);
+    });
+
+    test('collections inside a library are opened after its titles', () async {
+      final server = FakeServer({
+        '': [dir('Movies')],
+        'Movies/': [
+          dir('Movies/Christopher Nolan'),
+          dir('Movies/Heat (1995)'),
+          dir('Movies/Marvel'),
+        ],
+        'Movies/Christopher Nolan/': [
+          dir('Movies/Christopher Nolan/Inception (2010)'),
+        ],
+        'Movies/Christopher Nolan/Inception (2010)/': [
+          file('Movies/Christopher Nolan/Inception (2010)/Inception.mkv'),
+        ],
+      });
+      final out = await run(server, inception);
+      expect(out.rows.single.name, 'Inception.mkv');
+      expect(server.calls, isNot(contains('Movies/Heat (1995)/')));
+    });
+
+    test('a folder holding the title has no categories to open', () async {
+      final server = FakeServer({
+        '': [dir('Movies')],
+        'Movies/': [dir('Movies/Dune (2021)'), dir('Movies/Marvel')],
+        'Movies/Dune (2021)/': [file('Movies/Dune (2021)/Dune.mkv')],
+      });
+      final out = await run(server, dune);
+      expect(server.calls, ['', 'Movies/', 'Movies/Dune (2021)/']);
+      expect(out.rows, hasLength(1));
+    });
+
+    test('a folder of many plain names lists titles and is not opened', () {
+      final server = FakeServer({
+        '': [for (var i = 0; i < 13; i++) dir('Show Name $i')],
+      });
+      return run(server, dune).then((out) {
+        expect(server.calls, ['']);
+        final status = out.result.single;
+        expect(status.phase, WebDavSearchPhase.done);
+        expect(status.found, 0);
+      });
+    });
+
+    test('guesses wait for library folders', () async {
+      final server = FakeServer({
+        '': [dir('Archive'), dir('Movies')],
+        'Movies/': [dir('Movies/Heat (1995)')],
+      });
+      await run(server, dune, limits: const WebDavSearchLimits(concurrency: 1));
+      expect(server.calls, ['', 'Movies/', 'Archive/']);
+    });
+
+    test('a guess never shares a wave with a library folder', () async {
+      final server = FakeServer({
+        '': [dir('Movies'), dir('HDD2'), dir('HDD3')],
+        'Movies/': [dir('Movies/Dune (2021)')],
+        'Movies/Dune (2021)/': [file('Movies/Dune (2021)/Dune.2021.mkv')],
+      });
+      server.gates['HDD2/'] = Completer<void>(); // A drive that never wakes.
+      server.gates['HDD3/'] = Completer<void>();
+      final out = await run(
+        server,
+        dune,
+        limits: const WebDavSearchLimits(
+          timeLimit: Duration(milliseconds: 300),
+        ),
+      );
+      expect(out.rows.single.name, 'Dune.2021.mkv');
+      expect(server.calls, ['', 'Movies/', 'Movies/Dune (2021)/']);
+    });
+
+    test('five library levels are searched', () async {
+      final server = FakeServer({
+        '': [dir('Media')],
+        'Media/': [dir('Media/Movies')],
+        'Media/Movies/': [dir('Media/Movies/English Movies')],
+        'Media/Movies/English Movies/': [dir('Media/Movies/English Movies/HD')],
+        'Media/Movies/English Movies/HD/': [
+          dir('Media/Movies/English Movies/HD/Movies 2021'),
+        ],
+        'Media/Movies/English Movies/HD/Movies 2021/': [
+          file('Media/Movies/English Movies/HD/Movies 2021/Dune.2021.mkv'),
+        ],
+      });
+      final out = await run(server, dune);
+      expect(out.rows.single.name, 'Dune.2021.mkv');
+    });
+
+    test('a video content type counts without a video extension', () async {
+      final server = FakeServer({
+        '': [
+          const WebDavItem(
+            name: 'Dune 2021',
+            path: 'Dune 2021',
+            isDirectory: false,
+            sizeBytes: 2000000000,
+            contentType: 'video/x-matroska',
+          ),
+        ],
+      });
+      final out = await run(server, dune);
+      expect(out.rows.single.name, 'Dune 2021');
+    });
+
+    test('guesses are dropped once the title is found', () async {
+      final server = FakeServer({
+        '': [dir('Movies'), dir('alice'), dir('bob')],
+        'Movies/': [dir('Movies/Dune (2021)')],
+        'Movies/Dune (2021)/': [file('Movies/Dune (2021)/Dune.mkv')],
+      });
+      final out = await run(
+        server,
+        dune,
+        limits: const WebDavSearchLimits(concurrency: 1),
+      );
+      expect(server.calls, ['', 'Movies/', 'Movies/Dune (2021)/']);
+      expect(out.rows, hasLength(1));
+    });
+
+    test('a long listing of releases opens none of its plain names', () async {
+      final server = FakeServer({
+        '': [
+          for (var i = 0; i < 60; i++) dir('Other.Release.$i.2023.1080p'),
+          dir('Band of Brothers'),
+          dir('Cowboy Bebop'),
+        ],
+      });
+      final out = await run(server, dune);
+      expect(server.calls, ['']);
+      expect(out.result.single.phase, WebDavSearchPhase.done);
+    });
+
+    test('a guess that holds another title opens nothing below it', () async {
+      final server = FakeServer({
+        '': [dir('Band of Brothers'), dir('Movies')],
+        'Band of Brothers/': [
+          dir('Band of Brothers/Disc 1'),
+          dir('Band of Brothers/Bonus'),
+          file('Band of Brothers/Part One.mkv'),
+        ],
+      });
+      await run(server, dune);
+      expect(
+        server.calls,
+        unorderedEquals(['', 'Movies/', 'Band of Brothers/']),
+      );
+    });
+
+    test('guesses go at most two folders deep in a row', () async {
+      final server = FakeServer({
+        '': [dir('HDD1')],
+        'HDD1/': [dir('HDD1/English')],
+        'HDD1/English/': [dir('HDD1/English/Action')],
+      });
+      await run(server, dune);
+      expect(server.calls, ['', 'HDD1/', 'HDD1/English/']);
+    });
+  });
 }

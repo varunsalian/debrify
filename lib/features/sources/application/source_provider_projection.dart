@@ -187,7 +187,7 @@ List<CinemaSourceProvider> projectCinemaSourceProviders({
     for (final server in webDav)
       server.key:
           server.summary(withLabel: false) ??
-          (server.found == 0 ? 'No files named after this title.' : null),
+          (server.found == 0 ? server.nothingFoundMessage : null),
   };
   final keys = SourceOrdering.orderBy(
     names.keys.toList()..sort(),

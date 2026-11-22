@@ -141,13 +141,15 @@ class WebDavService {
       if (href == null || href.trim().isEmpty) return;
       final itemPath = _relativePathFromHref(href, basePath);
       if (_samePath(itemPath, currentPath)) return;
-      final name = _cleanName(fields['displayname'], itemPath, isDirectory);
+      // Collections' addresses end in "/"; some servers omit <collection/>.
+      final folder = isDirectory || _hrefIsFolder(href);
+      final name = _cleanName(fields['displayname'], itemPath, folder);
       if (name.isEmpty) return;
       results.add(
         WebDavItem(
           name: name,
-          path: _normalizePath(itemPath, directory: isDirectory),
-          isDirectory: isDirectory,
+          path: _normalizePath(itemPath, directory: folder),
+          isDirectory: folder,
           sizeBytes: int.tryParse(fields['getcontentlength'] ?? ''),
           modifiedAt: _parseHttpDate(fields['getlastmodified']),
           contentType: fields['getcontenttype'],
@@ -477,15 +479,41 @@ class WebDavService {
         _normalizeDirPath(b).replaceAll(RegExp(r'/+$'), '');
   }
 
+  static bool _hrefIsFolder(String href) {
+    final path = Uri.tryParse(href.trim())?.path ?? href.trim();
+    return path.endsWith('/');
+  }
+
+  static final _escape = RegExp(r'%[0-9A-Fa-f]{2}');
+  static final _extension = RegExp(r'\.[A-Za-z0-9]{2,4}$');
+
+  /// The display name, unless the server left it percent-encoded or it
+  /// lacks the file's extension, which the address still has.
   static String _cleanName(String? displayName, String path, bool isDirectory) {
-    final fromDisplay = displayName?.trim();
-    if (fromDisplay != null && fromDisplay.isNotEmpty) return fromDisplay;
     final normalized = _normalizePath(
       path,
       directory: isDirectory,
     ).replaceAll(RegExp(r'/+$'), '');
-    if (normalized.isEmpty) return '';
-    return normalized.split('/').last;
+    final fromPath = normalized.isEmpty ? '' : normalized.split('/').last;
+    var fromDisplay = displayName?.trim() ?? '';
+    // Decoded only when that gives the address's own name, so a real "%20"
+    // in a name stays.
+    if (fromDisplay.contains(_escape)) {
+      try {
+        if (Uri.decodeComponent(fromDisplay).trim() == fromPath) {
+          fromDisplay = fromPath;
+        }
+      } on Object {
+        // A literal "%" that only looks like an escape; keep the name.
+      }
+    }
+    if (fromDisplay.isEmpty) return fromPath;
+    final extension = isDirectory ? null : _extension.stringMatch(fromPath);
+    if (extension != null &&
+        !fromDisplay.toLowerCase().endsWith(extension.toLowerCase())) {
+      return fromPath;
+    }
+    return fromDisplay;
   }
 
   /// A date the server formats oddly is left out rather than failing the

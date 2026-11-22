@@ -376,7 +376,8 @@ void main() {
           requireYear: true,
         ),
       );
-      expect(strict.libraryFolder('Dune').kind, WebDavFolderKind.skip);
+      // A yearless folder is at most a guess, never the title itself.
+      expect(strict.libraryFolder('Dune').kind, isNot(WebDavFolderKind.title));
       expect(strict.libraryFolder('Dune (2021)').kind, WebDavFolderKind.title);
       expect(
         movie('Dune', '2021').libraryFolder('Dune').kind,
@@ -494,6 +495,215 @@ void main() {
         isFile: true,
       );
       expect(mixed.episodeEnd, 3);
+    });
+  });
+
+  group('layouts users actually have', () {
+    test('unrecognised short folders are guesses; system ones never', () {
+      final dune = movie('Dune', '2021');
+      for (final name in [
+        'HDD1',
+        'English',
+        'New folder',
+        'admin',
+        'Christopher Nolan Collection',
+      ]) {
+        expect(
+          dune.libraryFolder(name).kind,
+          WebDavFolderKind.guess,
+          reason: name,
+        );
+      }
+      for (final name in [
+        '@eaDir',
+        '#recycle',
+        r'$RECYCLE.BIN',
+        '.snapshot',
+        'lost+found',
+        'Photos',
+        'Music',
+        'Subs',
+        'Some.Movie.2019.1080p',
+        'Other Show S01',
+      ]) {
+        expect(
+          dune.libraryFolder(name).kind,
+          WebDavFolderKind.skip,
+          reason: name,
+        );
+      }
+      for (final name in ['Hollywood', 'Cinema', 'homes', 'Storage']) {
+        expect(
+          dune.libraryFolder(name).kind,
+          WebDavFolderKind.browse,
+          reason: name,
+        );
+      }
+    });
+
+    test('year folders open near the title year only', () {
+      final dune = movie('Dune', '2021');
+      for (final name in ['2021', 'Movies 2021', '2020-2029', '2020s']) {
+        expect(
+          dune.libraryFolder(name).kind,
+          WebDavFolderKind.browse,
+          reason: name,
+        );
+      }
+      for (final name in ['2010', 'Movies 2010', '2000s']) {
+        expect(
+          dune.libraryFolder(name).kind,
+          WebDavFolderKind.skip,
+          reason: name,
+        );
+      }
+    });
+
+    test('a letter index under a library name', () {
+      final dune = movie('Dune', '2021');
+      expect(dune.libraryFolder('Movies A-L').kind, WebDavFolderKind.browse);
+      expect(dune.libraryFolder('Movies M-Z').kind, WebDavFolderKind.skip);
+    });
+
+    test('run-together names match when the year agrees', () {
+      final ironMan = movie('Iron Man', '2008');
+      expect(
+        ironMan.matchesFile('IronMan.2008.1080p.mkv', insideTitle: false),
+        isTrue,
+      );
+      expect(ironMan.matchesFile('IronMan.mkv', insideTitle: false), isFalse);
+      expect(
+        ironMan.matchesFile('Iron.Man.2.2010.mkv', insideTitle: false),
+        isFalse,
+      );
+      expect(
+        movie(
+          'Spider-Man: No Way Home',
+          '2021',
+        ).matchesFile('Spiderman.No.Way.Home.2021.mkv', insideTitle: false),
+        isTrue,
+      );
+      // Short titles and other years stay apart: "I.T." (2016) is not "It".
+      expect(
+        movie('It', '2017').matchesFile('I.T.2016.mkv', insideTitle: false),
+        isFalse,
+      );
+      expect(
+        movie(
+          'Iron Man',
+          '2008',
+        ).matchesFile('IronMan.2009.mkv', insideTitle: false),
+        isFalse,
+      );
+    });
+
+    test('site prefixes, edition words and leading years', () {
+      final inception = movie('Inception', '2010');
+      for (final name in [
+        'www.Site.xyz - Inception (2010).mkv',
+        'Inception.Extended.Cut.2010.1080p.mkv',
+        '2010 - Inception.mkv',
+      ]) {
+        expect(
+          inception.matchesFile(name, insideTitle: false),
+          isTrue,
+          reason: name,
+        );
+      }
+      expect(
+        inception.libraryFolder("Inception Director's Cut (2010)").kind,
+        WebDavFolderKind.title,
+      );
+      expect(
+        inception.matchesFile('2014 - Interstellar.mkv', insideTitle: false),
+        isFalse,
+      );
+      expect(
+        movie(
+          'Blade Runner',
+          '1982',
+        ).libraryFolder('Blade Runner The Final Cut (1982)').kind,
+        WebDavFolderKind.title,
+      );
+    });
+
+    test('a title that starts with a year is not read as a release year', () {
+      final mobyDick = movie('Moby Dick', '2011');
+      for (final name in [
+        '2010.Moby.Dick.2010.1080p.BluRay.mkv',
+        '2010 Moby Dick.mkv',
+      ]) {
+        expect(
+          mobyDick.matchesFile(name, insideTitle: false),
+          isFalse,
+          reason: name,
+        );
+      }
+      expect(
+        mobyDick.libraryFolder('2010 Moby Dick (2010)').kind,
+        isNot(WebDavFolderKind.title),
+      );
+    });
+
+    test('an edition name without a year is not the title', () {
+      final lotr = movie('The Lord of the Rings', '1978');
+      expect(
+        lotr.libraryFolder('The.Lord.of.the.Rings.Extended.Edition').kind,
+        isNot(WebDavFolderKind.title),
+      );
+      expect(
+        lotr.matchesFile(
+          'The.Lord.of.the.Rings.Extended.Edition.mkv',
+          insideTitle: false,
+        ),
+        isFalse,
+      );
+    });
+
+    test('a collection named after the title is opened despite its words', () {
+      final hungerGames = movie('The Hunger Games', '2012');
+      for (final name in ['The Hunger Games Collection', 'Hunger Games Saga']) {
+        expect(
+          hungerGames.libraryFolder(name).kind,
+          WebDavFolderKind.guess,
+          reason: name,
+        );
+      }
+      expect(hungerGames.libraryFolder('Games').kind, WebDavFolderKind.skip);
+      expect(
+        movie('Inception', '2010').libraryFolder('Inception Extras').kind,
+        WebDavFolderKind.skip,
+      );
+      expect(
+        movie('Inception', '2010').libraryFolder('Backup').kind,
+        WebDavFolderKind.guess,
+      );
+    });
+
+    test('edition words never widen a series match', () {
+      expect(
+        episode('Doctor Who', 1, 1).libraryFolder('Doctor Who Special').kind,
+        isNot(WebDavFolderKind.title),
+      );
+    });
+
+    test('automatic picks still need the year for loose forms', () {
+      final strict = WebDavTitleMatcher(
+        WebDavMatchTarget(
+          title: 'Iron Man',
+          year: '2008',
+          isSeries: false,
+          requireYear: true,
+        ),
+      );
+      expect(
+        strict.matchesFile('IronMan.2008.mkv', insideTitle: false),
+        isTrue,
+      );
+      expect(
+        strict.matchesFile('Iron Man Extended.mkv', insideTitle: false),
+        isFalse,
+      );
     });
   });
 }
