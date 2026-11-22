@@ -46,6 +46,7 @@ class HomeContentStartup {
     _catalog.integrations.refreshTraktAuthState();
     _catalog.integrations.refreshSimklAuthState();
     _catalog.integrations.refreshMdblistAuthState();
+    _catalog.integrations.refreshLedgerAuthState();
     _catalog.navigation.loadMergedSeriesFlag();
     // (The keyword restore itself ran earlier — before _board.boardConfiguration.loadHomeDefaultView —
     // see the ordering comment there.) A restored search carries its own
@@ -99,6 +100,7 @@ class HomeContentStartup {
         // here would be pure duplicate startup work on weak TV hardware.
         _continuation.loadSimklContinueWatching(refreshBound: false),
         _continuation.loadMdblistContinueWatching(refreshBound: false),
+        _continuation.loadLedgerContinueWatching(refreshBound: false),
         _continuation.loadIptvContinueWatching(),
         _saved.loadTvFavorites(),
         _saved.loadStremioTvFavorites(),

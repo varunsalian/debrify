@@ -18,6 +18,9 @@ class ConnectionsSummary extends StatefulWidget {
   final ConnectionInfo tracking;
   // Null when MDBList is hidden (alpha) — its card + focus node are then omitted.
   final ConnectionInfo? mdblist;
+  // Debrify's own tracker. Optional so a host that omits it keeps the
+  // original three-card tracker grid.
+  final ConnectionInfo? ledger;
   final FocusNode? firstCardFocusNode;
 
   const ConnectionsSummary({
@@ -35,6 +38,7 @@ class ConnectionsSummary extends StatefulWidget {
     required this.simkl,
     required this.tracking,
     this.mdblist,
+    this.ledger,
     this.firstCardFocusNode,
   });
 
@@ -52,7 +56,7 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
   // [indexerManagers, iptv]
   // [tracking policy]      (full width)
   // [trakt,       simkl]
-  // [mdblist]     (alone)
+  // [mdblist,     ledger]  (either may be absent; a lone card sits left)
   late final FocusNode _torboxFocusNode;
   late final FocusNode _premiumizeFocusNode;
   late final FocusNode _allDebridFocusNode;
@@ -67,6 +71,7 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
   late final FocusNode _traktFocusNode;
   late final FocusNode _simklFocusNode;
   late final FocusNode _mdblistFocusNode;
+  final FocusNode _ledgerFocusNode = FocusNode(debugLabel: 'settings-ledger');
 
   @override
   void initState() {
@@ -100,6 +105,7 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
     _traktFocusNode.dispose();
     _simklFocusNode.dispose();
     _mdblistFocusNode.dispose();
+    _ledgerFocusNode.dispose();
     super.dispose();
   }
 
@@ -299,6 +305,8 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
                         upNeighbor: _trackingFocusNode,
                         downNeighbor: wide && widget.mdblist != null
                             ? _mdblistFocusNode
+                            : wide && widget.ledger != null
+                            ? _ledgerFocusNode
                             : _simklFocusNode,
                       ),
                     ),
@@ -312,6 +320,8 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
                         upNeighbor: wide ? _trackingFocusNode : _traktFocusNode,
                         downNeighbor: !wide && widget.mdblist != null
                             ? _mdblistFocusNode
+                            : widget.ledger != null
+                            ? _ledgerFocusNode
                             : null,
                       ),
                     ),
@@ -323,7 +333,33 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
                           info: widget.mdblist!,
                           focusNode: _mdblistFocusNode,
                           isLeftColumn: true,
+                          rightNeighbor: wide && widget.ledger != null
+                              ? _ledgerFocusNode
+                              : null,
                           upNeighbor: wide ? _traktFocusNode : _simklFocusNode,
+                          downNeighbor: !wide && widget.ledger != null
+                              ? _ledgerFocusNode
+                              : null,
+                        ),
+                      ),
+                    // MDBList's row partner (right), or alone on the left.
+                    if (widget.ledger != null)
+                      SizedBox(
+                        width: itemWidth,
+                        child: ConnectionCard(
+                          info: widget.ledger!,
+                          focusNode: _ledgerFocusNode,
+                          isLeftColumn: !wide || widget.mdblist == null,
+                          leftNeighbor: wide && widget.mdblist != null
+                              ? _mdblistFocusNode
+                              : null,
+                          upNeighbor: wide
+                              ? (widget.mdblist != null
+                                    ? _simklFocusNode
+                                    : _traktFocusNode)
+                              : (widget.mdblist != null
+                                    ? _mdblistFocusNode
+                                    : _simklFocusNode),
                         ),
                       ),
                   ],

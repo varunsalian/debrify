@@ -43,6 +43,7 @@ class HomePostPlaybackRefreshController extends Notifier<bool> {
     required Future<void> Function() iptv,
     required Future<void> Function() trakt,
     required Future<void> Function() simkl,
+    Future<void> Function()? ledger,
     required bool Function() shouldRefreshMdblist,
     required Future<void> Function() mdblist,
     required Future<void> Function() boundSources,
@@ -71,6 +72,7 @@ class HomePostPlaybackRefreshController extends Notifier<bool> {
         await Future.wait([
           trakt(),
           simkl(),
+          ?ledger?.call(),
           // Evaluate after local refreshes, preserving the scrobble controller's
           // current pending/force-fresh decision rather than capturing it early.
           if (shouldRefreshMdblist()) mdblist(),

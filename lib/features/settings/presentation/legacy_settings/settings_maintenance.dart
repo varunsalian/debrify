@@ -1,4 +1,6 @@
 import 'dart:io' show Platform, exit;
+
+import 'package:debrify/features/ledger/models/ledger_brand.dart';
 import 'package:debrify/models/profiles/profile_policy.dart';
 import 'package:debrify/models/profiles/user_profile.dart';
 import 'package:debrify/screens/settings/profile_backup_flows.dart';
@@ -7,6 +9,7 @@ import 'package:debrify/services/account_service.dart';
 import 'package:debrify/services/alldebrid_account_service.dart';
 import 'package:debrify/services/debrify_tv_repository.dart';
 import 'package:debrify/services/download_service.dart';
+import 'package:debrify/services/ledger/ledger_service.dart';
 import 'package:debrify/services/mdblist/mdblist_service.dart';
 import 'package:debrify/services/profiles/profile_app_lifecycle_participant.dart';
 import 'package:debrify/services/profiles/profile_authorization.dart';
@@ -256,6 +259,8 @@ class SettingsMaintenance {
     await SimklService.instance.logout();
     // Clears the key + username AND the in-memory list/items cache.
     await MdblistService.instance.logout();
+    // Clears the session + username AND the in-memory caches (no revoke).
+    if (kLedgerEnabled) await LedgerService.instance.forgetLocalSession();
     await DownloadService.instance.clearDownloadDatabase();
     // Reset is a device-local wipe: none of these clears may record synced
     // deletions, or reconnecting sync later replays them circle-wide.

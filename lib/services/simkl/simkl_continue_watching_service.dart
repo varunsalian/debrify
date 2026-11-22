@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import '../../models/advanced_search_selection.dart';
 import '../../models/stremio_addon.dart';
 import '../../models/simkl_continue_watching_item.dart';
+import 'simkl_anime.dart';
+import 'simkl_episode_codes.dart';
 import 'simkl_item_transformer.dart';
 import 'simkl_service.dart';
 
@@ -211,7 +213,13 @@ class SimklContinueWatchingService {
       final imdb = _canonical(show['ids'], 'series', libIndex);
       if (imdb == null) continue;
       // Parked/finished/dropped in the library ⇒ not "continue watching".
-      if (_hiddenStatuses.contains(statusIndex['series|$imdb'])) continue;
+      // Judged by the session's own entry first: anime cours share the
+      // show's other ids.
+      final simklId = SimklAnimeEpisodes.simklIdOf(show['ids']);
+      final own = simklId == null ? null : statusIndex['series|simkl:$simklId'];
+      if (_hiddenStatuses.contains(own ?? statusIndex['series|$imdb'])) {
+        continue;
+      }
       final ep = raw['episode'];
       if (ep is! Map) continue;
       final season = _asInt(ep['season']);
@@ -241,9 +249,9 @@ class SimklContinueWatchingService {
   /// "Up next" entries — the next unwatched episode of each watching show, from
   /// Simkl's server-computed `next_to_watch`. Skips shows already in [pausedIds]
   /// (a paused entry is more specific and wins) and shows with no next episode
-  /// (`next_to_watch == null`). TV-only: an anime `next_to_watch` is absolute
-  /// (`"E01"`, no season) which doesn't map to the app's IMDb S/E model, so
-  /// [SimklService.parseSimklEpisodeCode] returns null for it and it's skipped.
+  /// (`next_to_watch == null`). Anime arrives as shows-shaped rows already in
+  /// TVDB numbering (see [SimklService.fetchUpNextShowsOrNull]); its cours
+  /// share the show's id, so the most recently watched cour wins.
   List<SimklContinueWatchingItem> _buildUpNextItems(
     List<dynamic>? shows,
     Map<String, StremioMeta> libIndex,
@@ -253,22 +261,32 @@ class SimklContinueWatchingService {
     final byImdb = <String, SimklContinueWatchingItem>{};
     for (final raw in shows) {
       if (raw is! Map) continue;
-      final se = SimklService.parseSimklEpisodeCode(raw['next_to_watch']);
+      final se = SimklEpisodeCodes.seasonEpisode(raw['next_to_watch']);
       if (se == null) {
-        continue; // null / completed / anime-absolute → no up-next
+        continue; // null / completed / unmapped anime → no up-next
       }
       final show = raw['show'];
       if (show is! Map) continue;
       final imdb = _canonical(show['ids'], 'series', libIndex);
       if (imdb == null || pausedIds.contains(imdb)) continue;
-      byImdb[imdb] = SimklContinueWatchingItem(
-        meta: _metaFor(imdb, 'series', libIndex['series|$imdb'], show['title']),
-        progress: null, // not started — no resume position / progress bar
-        season: se.season,
-        episode: se.episode,
-        pausedAtMs: _pausedAtMs(raw['last_watched_at']),
-        isMovie: false,
-        isUpNext: true,
+      // Anime cours share the show's id: the most recently watched one wins.
+      _keepNewest(
+        byImdb,
+        imdb,
+        SimklContinueWatchingItem(
+          meta: _metaFor(
+            imdb,
+            'series',
+            libIndex['series|$imdb'],
+            show['title'],
+          ),
+          progress: null, // not started — no resume position / progress bar
+          season: se.season,
+          episode: se.episode,
+          pausedAtMs: _pausedAtMs(raw['last_watched_at']),
+          isMovie: false,
+          isUpNext: true,
+        ),
       );
     }
     return byImdb.values.toList();

@@ -1,6 +1,8 @@
+import 'package:debrify/services/ledger/ledger_service.dart';
 import 'package:collection/collection.dart';
 import 'package:debrify/features/player_launch/data/android_tv_playback_payload.dart';
 import 'package:debrify/features/player_launch/data/entry_url_resolver.dart';
+import 'package:debrify/features/player_launch/data/episode_tracker_percents.dart';
 import 'package:debrify/features/player_launch/data/movie_resume_state.dart';
 import 'package:debrify/features/player_launch/data/stream_redirect_resolver.dart';
 import 'package:debrify/features/player_launch/models/android_tv_playback_item.dart';
@@ -18,7 +20,6 @@ import 'package:debrify/services/storage/episode_resume_storage.dart';
 import 'package:debrify/services/storage/local_completion_storage.dart';
 import 'package:debrify/services/storage/merged_episode_progress_storage.dart';
 import 'package:debrify/services/storage/quick_play_storage.dart';
-import 'package:debrify/services/storage/tracker_episode_progress_storage.dart';
 import 'package:debrify/services/storage/video_progress_storage.dart';
 import 'package:debrify/services/tracking_source_policy.dart';
 import 'package:debrify/utils/episode_progress_merge.dart';
@@ -31,7 +32,14 @@ class AndroidTvPlaybackPayloadBuilder {
   final VideoPlayerLaunchArgs args;
 
   final bool Function()? canContinue;
-  const AndroidTvPlaybackPayloadBuilder(this.args, {this.canContinue});
+
+  /// Defaults to [LedgerService.instance]; tests pass a fake server.
+  final LedgerService? ledger;
+  const AndroidTvPlaybackPayloadBuilder(
+    this.args, {
+    this.canContinue,
+    this.ledger,
+  });
 
   Future<AndroidTvPlaybackPayloadResult?> build() async {
     if (canContinue?.call() == false) return null;
@@ -55,6 +63,7 @@ class AndroidTvPlaybackPayloadBuilder {
           traktScrobble: args.traktScrobble,
           simklScrobble: args.simklScrobble,
           mdblistScrobble: args.mdblistScrobble,
+          ledgerScrobble: args.ledgerScrobble,
         ) &&
         args.stremioTvChannels == null &&
         args.iptvChannels == null;
@@ -87,25 +96,12 @@ class AndroidTvPlaybackPayloadBuilder {
     // `traktProgressPercent` field name, but each value is the furthest of
     // Trakt, Simkl, and MDBList.
     if (canContinue?.call() == false) return null;
-    final trackerProgressMaps = args.contentImdbId != null
-        ? await Future.wait([
-            TrackerEpisodeProgressStorage.getEpisodeTraktProgress(imdbId: args.contentImdbId!),
-            TrackerEpisodeProgressStorage.getEpisodeSimklProgress(imdbId: args.contentImdbId!),
-            TrackerEpisodeProgressStorage.getConnectedEpisodeMdblistProgress(
-              imdbId: args.contentImdbId!,
-            ),
-          ])
-        : const <Map<String, double>>[];
+    final trackerPercents = args.contentImdbId != null
+        ? EpisodeTrackerPercents.of(
+            await EpisodeTrackerPercents.read(args.contentImdbId!),
+          )
+        : EpisodeTrackerPercents.empty;
     if (canContinue?.call() == false) return null;
-    final traktProgress = trackerProgressMaps.isNotEmpty
-        ? trackerProgressMaps[0]
-        : const <String, double>{};
-    final simklProgress = trackerProgressMaps.length > 1
-        ? trackerProgressMaps[1]
-        : const <String, double>{};
-    final mdblistProgress = trackerProgressMaps.length > 2
-        ? trackerProgressMaps[2]
-        : const <String, double>{};
     final startIndex = await _determineStartIndex(
       contentType,
       seriesPlaylist,
@@ -185,6 +181,7 @@ class AndroidTvPlaybackPayloadBuilder {
       final locallyWatched = episodeKey != null
           ? locallyFinished[season.toString()]?.contains(episode) ?? false
           : false;
+      final trackerGuide = trackerPercents.guide(trackingPolicy, episodeKey);
       final resolvedLocal = resolveEpisodeLocalWatchState(
         locallyWatched:
             trackingPolicy.progressFrom(TrackingSource.local) && locallyWatched,
@@ -192,24 +189,9 @@ class AndroidTvPlaybackPayloadBuilder {
             ? resumeInfo.positionMs
             : 0,
         localDurationMs: resumeInfo.durationMs,
-        traktPercent: episodeKey == null
-            ? null
-            : trackingPolicy.guideProgressFrom(
-                TrackingSource.trakt,
-                traktProgress[episodeKey],
-              ),
-        simklPercent: episodeKey == null
-            ? null
-            : trackingPolicy.guideProgressFrom(
-                TrackingSource.simkl,
-                simklProgress[episodeKey],
-              ),
-        mdblistPercent: episodeKey == null
-            ? null
-            : trackingPolicy.guideProgressFrom(
-                TrackingSource.mdblist,
-                mdblistProgress[episodeKey],
-              ),
+        traktPercent: trackerGuide.trakt,
+        simklPercent: trackerGuide.simkl,
+        mdblistPercent: trackerGuide.mdblist,
       );
 
       items.add(
@@ -235,22 +217,10 @@ class AndroidTvPlaybackPayloadBuilder {
           allowLocalProgressDisplay: trackingPolicy.progressFrom(
             TrackingSource.local,
           ),
-          traktProgressPercent: episodeKey != null
-              ? furthestEpisodeTrackerPercent([
-                  trackingPolicy.guideProgressFrom(
-                    TrackingSource.trakt,
-                    traktProgress[episodeKey],
-                  ),
-                  trackingPolicy.guideProgressFrom(
-                    TrackingSource.simkl,
-                    simklProgress[episodeKey],
-                  ),
-                  trackingPolicy.guideProgressFrom(
-                    TrackingSource.mdblist,
-                    mdblistProgress[episodeKey],
-                  ),
-                ])
-              : null,
+          traktProgressPercent: trackerPercents.furthest(
+            trackingPolicy,
+            episodeKey,
+          ),
         ),
       );
     }
@@ -329,6 +299,21 @@ class AndroidTvPlaybackPayloadBuilder {
         StreamRedirectResolver.cacheResolvedStream(entry.resumeId, entry.entry.url);
       }
     }
+    // Native only knows the launch percent, so a movie's saved Ledger resume
+    // point (possibly from another device) is read here when none was given.
+    final ledgerLaunchPercent =
+        !trackingPolicy.progressFrom(TrackingSource.ledger)
+        ? null
+        : args.ledgerProgressPercent ??
+              ((args.ledgerScrobble ||
+                          trackingPolicy.progressSource ==
+                              WatchProgressSource.ledger) &&
+                      args.contentType == 'movie'
+                  ? await (ledger ?? LedgerService.instance).movieResumePercent(
+                      args.contentImdbId,
+                    )
+                  : null);
+    if (canContinue?.call() == false) return null;
     final payload = AndroidTvPlaybackPayload(
       contentType: contentType,
       declaredContentType: args.contentType,
@@ -372,6 +357,8 @@ class AndroidTvPlaybackPayloadBuilder {
           trackingPolicy.progressFrom(TrackingSource.mdblist)
           ? args.mdblistProgressPercent
           : null,
+      ledgerScrobble: args.ledgerScrobble,
+      ledgerProgressPercent: ledgerLaunchPercent,
       localCompletionTracking: localCompletionTracking,
       movieCompletionThreshold: completionThresholds[0],
       episodeCompletionThreshold: completionThresholds[1],

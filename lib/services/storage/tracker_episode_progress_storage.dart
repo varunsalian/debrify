@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
+import 'package:debrify/services/storage/ledger_storage.dart';
 import 'package:debrify/services/storage/mdblist_storage.dart';
 import 'package:debrify/utils/json_isolate.dart';
 import 'package:synchronized/synchronized.dart';
@@ -105,6 +106,60 @@ final class TrackerEpisodeProgressStorage {
     required Map<String, double> percents,
   }) => _saveEpisodeTrackerProgress(
     storeKey: _episodeSimklProgressKey,
+    imdbId: imdbId,
+    percents: percents,
+  );
+
+  // Ledger's replace-on-launch snapshot, separate from local history and the
+  // other trackers for the same reason as Simkl's above.
+  static const String _episodeLedgerProgressKey = 'episode_ledger_progress_v1';
+
+  /// Cross-device Ledger progress per episode (percent, 0–100), keyed by the
+  /// show's IMDb id. Episode keys are "season_episode".
+  static Future<Map<String, double>> getEpisodeLedgerProgress({
+    required String imdbId,
+  }) async {
+    if (imdbId.isEmpty) return {};
+    final prefs = await ProfilePreferences.instance();
+    final raw = prefs.getString(_episodeLedgerProgressKey);
+    if (raw == null || raw.isEmpty) return {};
+    try {
+      final decoded = await decodeJsonAsync(raw);
+      if (decoded is! Map) return {};
+      final series = decoded[_episodeSimklKeyFor(imdbId)];
+      if (series is! Map) return {};
+      final out = <String, double>{};
+      series.forEach((k, v) {
+        final p = (v as num?)?.toDouble();
+        if (p != null) out[k.toString()] = p;
+      });
+      return out;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  /// [getEpisodeLedgerProgress] only while Ledger is connected, so a snapshot
+  /// can never outlive the connection that produced it.
+  static Future<Map<String, double>> getConnectedEpisodeLedgerProgress({
+    required String imdbId,
+  }) async {
+    if (!await LedgerStorage.hasCredential()) return {};
+    return getEpisodeLedgerProgress(imdbId: imdbId);
+  }
+
+  /// Drops every show's Ledger snapshot (sign-out).
+  static Future<void> clearEpisodeLedgerProgress() => _episodeTrackerSnapshotWriteLock.synchronized(() async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.remove(_episodeLedgerProgressKey);
+  });
+
+  /// Replace the stored Ledger per-episode snapshot for [imdbId].
+  static Future<void> saveEpisodeLedgerProgress({
+    required String imdbId,
+    required Map<String, double> percents,
+  }) => _saveEpisodeTrackerProgress(
+    storeKey: _episodeLedgerProgressKey,
     imdbId: imdbId,
     percents: percents,
   );

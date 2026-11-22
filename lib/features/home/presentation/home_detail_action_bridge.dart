@@ -21,6 +21,7 @@ class HomeDetailActionBridge {
     required this.refreshTrakt,
     required this.refreshSimkl,
     required this.refreshMdblist,
+    this.refreshLedger,
   });
 
   final bool Function() canStart, isCurrent, isSearch;
@@ -29,6 +30,7 @@ class HomeDetailActionBridge {
       refreshTrakt,
       refreshSimkl,
       refreshMdblist;
+  final Future<void> Function()? refreshLedger;
 
   Future<void> trakt(
     TraktItemMenuAction action, {
@@ -55,6 +57,7 @@ class HomeDetailActionBridge {
         refreshTrakt(),
         refreshSimkl(),
         refreshMdblist(),
+        if (refreshLedger case final refresh?) refresh(),
       ]);
       return;
     }

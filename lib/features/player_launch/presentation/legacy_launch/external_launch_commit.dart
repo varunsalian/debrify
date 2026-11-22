@@ -1,3 +1,5 @@
+import 'package:debrify/services/ledger/ledger_api.dart';
+import 'package:debrify/services/ledger/ledger_service.dart';
 import 'package:debrify/features/player_launch/models/video_player_launch_args.dart';
 import 'package:debrify/services/mdblist/mdblist_models.dart';
 import 'package:debrify/services/mdblist/mdblist_service.dart';
@@ -54,7 +56,10 @@ final class ExternalLaunchCommit {
     if (imdbId == null || imdbId.isEmpty) return;
     // Channel rotation is not a watchable title; mirrors the local CW skip.
     if (args.stremioTvChannels != null) return;
-    if (!args.traktScrobble && !args.simklScrobble && !args.mdblistScrobble) {
+    if (!args.traktScrobble &&
+        !args.simklScrobble &&
+        !args.mdblistScrobble &&
+        !args.ledgerScrobble) {
       return;
     }
 
@@ -125,6 +130,31 @@ final class ExternalLaunchCommit {
             );
           } catch (err) {
             debugPrint('ExternalPlayer: Simkl CW seed failed: $err');
+          }
+        }(),
+      if (args.ledgerScrobble)
+        () async {
+          try {
+            // A PAUSE saves a resume point on Ledger. Never replace a real
+            // saved position with the just-started sentinel.
+            final ledger = LedgerService.instance;
+            final double? existing;
+            if (isSeries) {
+              final episodes = await ledger.episodePlaybackProgress(imdbId);
+              existing = episodes == null ? null : episodes['${s}_$e'];
+            } else {
+              existing = await ledger.moviePlaybackProgress(imdbId);
+            }
+            if (existing != null && existing > progress) return;
+            await ledger.scrobble(
+              LedgerScrobbleAction.pause,
+              imdbId,
+              progress,
+              season: s,
+              episode: e,
+            );
+          } catch (err) {
+            debugPrint('ExternalPlayer: Ledger CW seed failed: $err');
           }
         }(),
       if (args.mdblistScrobble)

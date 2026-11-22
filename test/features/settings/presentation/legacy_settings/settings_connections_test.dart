@@ -11,6 +11,7 @@ SettingsConnections connectionViews(
     openAllDebridSettings: action,
     openIndexerManagersSettings: action,
     openIptvSettings: action,
+    openLedgerSettings: action,
     openMdblistSettings: action,
     openMediaServerSettings: action,
     openPikPakSettings: action,

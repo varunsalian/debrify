@@ -321,8 +321,17 @@ void main() {
       // The rail already shows the server name.
       expect(broken.message, startsWith('The server rejected its sign-in.'));
       expect(
-        project(searching.copyWith(phase: WebDavSearchPhase.done)).last.message,
+        project(
+          searching.copyWith(phase: WebDavSearchPhase.done, foldersChecked: 1),
+        ).last.message,
         'No files named after this title.',
+      );
+      // It says how far it looked.
+      expect(
+        project(
+          searching.copyWith(phase: WebDavSearchPhase.done, foldersChecked: 12),
+        ).last.message,
+        'Checked 12 folders and found no files named after this title.',
       );
     });
   });

@@ -70,6 +70,8 @@ Map<String, Object?> debrifyTvPlayerFields(VideoPlayerScreen p) => {
   'simklProgressPercent': p.simklProgressPercent,
   'mdblistScrobble': p.mdblistScrobble,
   'mdblistProgressPercent': p.mdblistProgressPercent,
+  'ledgerScrobble': p.ledgerScrobble,
+  'ledgerProgressPercent': p.ledgerProgressPercent,
   'initialSubtitles': p.initialSubtitles,
 };
 
@@ -92,6 +94,7 @@ const Map<String, Object?> _pinnedDefaults = {
   'traktScrobble': false,
   'simklScrobble': false,
   'mdblistScrobble': false,
+  'ledgerScrobble': false,
 };
 const _requiredFields = {'videoUrl', 'title'};
 

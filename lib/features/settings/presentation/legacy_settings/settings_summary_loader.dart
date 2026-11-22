@@ -1,3 +1,4 @@
+import 'package:debrify/features/ledger/models/ledger_brand.dart';
 import 'package:debrify/models/profiles/connection_resource.dart';
 import 'package:debrify/models/tv_hero_artwork_quality.dart';
 import 'package:debrify/models/tv_render_quality.dart';
@@ -21,6 +22,7 @@ import 'package:debrify/services/storage/home_appearance_storage.dart';
 import 'package:debrify/services/storage/iptv_appearance_storage.dart';
 import 'package:debrify/services/storage/iptv_playlist_storage.dart';
 import 'package:debrify/services/storage/launch_ident_storage.dart';
+import 'package:debrify/services/storage/ledger_storage.dart';
 import 'package:debrify/services/storage/mdblist_storage.dart';
 import 'package:debrify/services/storage/player_appearance_storage.dart';
 import 'package:debrify/services/storage/premiumize_storage.dart';
@@ -38,8 +40,10 @@ import 'package:debrify/services/torbox_account_service.dart';
 import 'package:debrify/utils/app_version_info.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+
 import '../../application/settings_pending_credentials.dart';
 import 'settings_summaries.dart';
+import 'settings_tracker_summaries.dart';
 
 /// One Settings State owns this section; dependencies and summaries are borrowed.
 class SettingsSummaryLoader {
@@ -314,6 +318,21 @@ class SettingsSummaryLoader {
         () async => (await MediaServerService.connections()).length,
         0,
       ),
+      // Ledger's card is hidden while its feature flag is off.
+      kLedgerEnabled
+          ? summaries.read(
+              kLedgerDisplayName,
+              () => LedgerStorage.hasCredential(),
+              false,
+            )
+          : Future.value(false),
+      kLedgerEnabled
+          ? summaries.read(
+              kLedgerDisplayName,
+              () => LedgerStorage.getUsername(),
+              null,
+            )
+          : Future.value(null),
     ]);
 
     if (!_deps.mounted() || ProfileRuntime.scope.value != startingScope) return;
@@ -368,6 +387,8 @@ class SettingsSummaryLoader {
     final configuredIptvPlaylists = results[43] as List;
     final includeAlphaUpdates = results[44] as bool;
     _summaries.mediaServerCount = results[45] as int;
+    final ledgerConnected = results[46] as bool;
+    final ledgerUsername = results[47] as String?;
 
     // Set initial state from cached data
     // Use cached account info if available
@@ -436,50 +457,18 @@ class SettingsSummaryLoader {
       _summaries.webDavCaption = 'Tap to connect';
     }
 
-    final traktExpired =
-        traktExpiry != null &&
-        DateTime.now().millisecondsSinceEpoch >= traktExpiry;
-    if (traktConnected) {
-      if (!traktExpired) {
-        _summaries.traktConnected = true;
-        _summaries.traktStatus = 'Active';
-        _summaries.traktCaption = traktUsername != null
-            ? 'Logged in as $traktUsername'
-            : 'Logged in';
-      } else {
-        _summaries.traktStatus = 'Expired';
-        _summaries.traktCaption = 'Tap to reconnect';
-      }
-    }
-
-    // Simkl's PIN-issued tokens don't expire, so unlike Trakt there's no
-    // "Expired" branch here — a stored token means connected.
-    if (simklConnected) {
-      _summaries.simklConnected = true;
-      _summaries.simklStatus = 'Active';
-      _summaries.simklCaption = simklUsername != null
-          ? 'Logged in as $simklUsername'
-          : 'Logged in';
-    } else {
-      _summaries.simklConnected = false;
-      _summaries.simklStatus = 'Not connected';
-      _summaries.simklCaption = 'Tap to connect';
-    }
-
-    // MDBList uses a plain API key (no expiry) — a stored key means connected.
-    // Reset on the empty branch (like WebDAV above) so the card clears after a
-    // logout, since this method re-runs when returning from the settings page.
-    if (mdblistConnected) {
-      _summaries.mdblistConnected = true;
-      _summaries.mdblistStatus = 'Active';
-      _summaries.mdblistCaption = mdblistUsername != null
-          ? 'Logged in as $mdblistUsername'
-          : 'Logged in';
-    } else {
-      _summaries.mdblistConnected = false;
-      _summaries.mdblistStatus = 'Not connected';
-      _summaries.mdblistCaption = 'Tap to connect';
-    }
+    applyTrackerSummaries(
+      _summaries,
+      traktConnected: traktConnected,
+      traktExpiry: traktExpiry,
+      traktUsername: traktUsername,
+      simklConnected: simklConnected,
+      simklUsername: simklUsername,
+      ledgerConnected: ledgerConnected,
+      ledgerUsername: ledgerUsername,
+      mdblistConnected: mdblistConnected,
+      mdblistUsername: mdblistUsername,
+    );
 
     if (indexerManagers.isNotEmpty) {
       _summaries.indexerManagersConfigured = true;

@@ -227,9 +227,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       _r.episodeSeasonDropdownFocusNode.onKeyEvent =
           _parts.classicChrome.handleEpisodeSeasonDropdownKeyEvent;
     }
-    _a.resolveTraktAuth();
-    _a.resolveSimklAuth();
-    _a.resolveMdblistAuth();
+    _a.resolveTrackerAuth();
     _sv.mdblistService.playbackRevision.addListener(
       _a.onMdblistPlaybackRevision,
     );

@@ -1,3 +1,4 @@
+import 'package:debrify/services/storage/ledger_storage.dart';
 import 'package:debrify/services/storage/mdblist_storage.dart';
 import 'package:debrify/services/storage/simkl_storage.dart';
 import 'package:debrify/services/storage/tracking_source_storage.dart';
@@ -36,12 +37,14 @@ class TrackingSourcePolicy {
       : MediaIdentity.isNative(id)
       ? TrackingSourcePolicy(
           scrobbleTargets: scrobbleTargets,
-          // Trakt/MDBList resume selection still consumes IMDb-only feeds.
-          // Keep the existing local fallback until those readers support native
-          // identities; this does not disable writes or Smart progress reads.
+          // Trakt/MDBList/Ledger resume selection still consumes IMDb-only
+          // feeds. Keep the existing local fallback until those readers support
+          // native identities; this does not disable writes or Smart progress
+          // reads.
           progressSource:
               progressSource == WatchProgressSource.trakt ||
-                  progressSource == WatchProgressSource.mdblist
+                  progressSource == WatchProgressSource.mdblist ||
+                  progressSource == WatchProgressSource.ledger
               ? WatchProgressSource.local
               : progressSource,
           homeTickSources: homeTickSources,
@@ -70,6 +73,7 @@ class TrackingSourcePolicy {
       WatchProgressSource.trakt => TrackingSource.trakt,
       WatchProgressSource.simkl => TrackingSource.simkl,
       WatchProgressSource.mdblist => TrackingSource.mdblist,
+      WatchProgressSource.ledger => TrackingSource.ledger,
       _ => null,
     };
     if (dedicated != null) {
@@ -81,6 +85,9 @@ class TrackingSourcePolicy {
           canContinue: canContinue,
         ),
         TrackingSource.mdblist => MdblistStorage.hasMdblistCredential(
+          canContinue: canContinue,
+        ),
+        TrackingSource.ledger => LedgerStorage.hasCredential(
           canContinue: canContinue,
         ),
         TrackingSource.local => Future<bool>.value(true),
@@ -116,6 +123,7 @@ class TrackingSourcePolicy {
     WatchProgressSource.trakt => source == TrackingSource.trakt,
     WatchProgressSource.simkl => source == TrackingSource.simkl,
     WatchProgressSource.mdblist => source == TrackingSource.mdblist,
+    WatchProgressSource.ledger => source == TrackingSource.ledger,
   };
 
   bool homeTicksFrom(TrackingSource source) => homeTickSources.contains(source);
@@ -139,10 +147,12 @@ class TrackingSourcePolicy {
     required bool traktScrobble,
     required bool simklScrobble,
     required bool mdblistScrobble,
+    bool ledgerScrobble = false,
   }) =>
       forcesLocalCompletion ||
       (!simklScrobble &&
-          (nativeIdentity || (!traktScrobble && !mdblistScrobble)));
+          (nativeIdentity ||
+              (!traktScrobble && !mdblistScrobble && !ledgerScrobble)));
 
   bool get isSmart => progressSource == WatchProgressSource.smart;
 }

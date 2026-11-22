@@ -11,6 +11,7 @@ import 'package:debrify/services/storage/tv_display_storage.dart';
 import 'package:debrify/services/storage/ui_feedback_storage.dart';
 import 'package:flutter/foundation.dart';
 
+import 'package:debrify/services/ledger/ledger_service.dart';
 import '../../screens/video_player/services/subtitle_settings_service.dart';
 import '../../theme/app_theme_controller.dart';
 import '../account_service.dart';
@@ -71,6 +72,7 @@ class ProfileAppLifecycleParticipant implements ProfileLifecycleParticipant {
     StremioService.instance.invalidateCache();
     TraktService.instance.resetProfileScope();
     SimklService.instance.resetProfileScope();
+    LedgerService.instance.resetProfileScope();
     PikPakApiService.instance.resetProfileScope();
     MdblistService.instance.resetProfileScope();
     MdblistIdResolver.instance.resetProfileScope();
@@ -135,6 +137,7 @@ class ProfileAppLifecycleParticipant implements ProfileLifecycleParticipant {
       _warmed('Stremio', scope, StremioService.instance.invalidateCache);
       _warmed('Trakt', scope, TraktService.instance.resetProfileScope);
       _warmed('Simkl', scope, SimklService.instance.resetProfileScope);
+      _warmed('Ledger', scope, LedgerService.instance.resetProfileScope);
       _warmed('PikPak', scope, PikPakApiService.instance.resetProfileScope);
       _warmed('MDBList', scope, MdblistService.instance.resetProfileScope);
       await MdblistStorage.retireMdblistSavedCloneMarkers();

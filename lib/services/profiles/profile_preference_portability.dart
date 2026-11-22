@@ -220,6 +220,12 @@ abstract final class ProfilePreferencePortability {
   };
 
   static const Set<String> _nonPortableKeys = <String>{
+    // The Ledger session is device-bound: the server revokes it when an
+    // exchanged refresh token is replayed, so it must never be copied.
+    'ledger_access_token',
+    'ledger_refresh_token',
+    'ledger_username',
+    'ledger_token_expiry',
     'imported_launch_animation_v1',
     // Registry resources are the sole portable copy of connection material.
     'real_debrid_endpoint',

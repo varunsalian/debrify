@@ -4,6 +4,7 @@ import 'package:debrify/screens/settings/debrify_tv_settings_page.dart';
 import 'package:debrify/screens/settings/indexer_managers_settings_page.dart';
 import 'package:debrify/screens/settings/iptv_channel_order_page.dart';
 import 'package:debrify/screens/settings/iptv_settings_page.dart';
+import 'package:debrify/screens/settings/ledger_settings_page.dart';
 import 'package:debrify/screens/settings/mdblist_settings_page.dart';
 import 'package:debrify/screens/settings/media_server_settings_page.dart';
 import 'package:debrify/screens/settings/pikpak_settings_page.dart';
@@ -161,6 +162,20 @@ class SettingsConnectionNavigation {
     final context = _deps.context();
     if (!context.mounted) return;
     await pushSettingsPage(context, const SimklSettingsPage());
+    if (!context.mounted) return;
+    await _deps.loadSummaries();
+  }
+
+  Future<void> openLedgerSettings() async {
+    if (!await _deps.ensureProfileFeature(
+      ProfileFeature.trackersAndDiscovery,
+    )) {
+      return;
+    }
+    if (!_deps.mounted()) return;
+    final context = _deps.context();
+    if (!context.mounted) return;
+    await pushSettingsPage(context, const LedgerSettingsPage());
     if (!context.mounted) return;
     await _deps.loadSummaries();
   }

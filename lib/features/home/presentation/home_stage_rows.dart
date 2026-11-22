@@ -7,7 +7,7 @@ import '../models/home_favorite_row_ref.dart';
 // disposed by a layout. Keeping their live references preserves focus and lazy
 // callbacks when rows change while an existing view or menu is still mounted.
 
-enum HomeContinuationKind { local, trakt, simkl, mdblist, iptv }
+enum HomeContinuationKind { local, trakt, simkl, mdblist, iptv, ledger }
 
 /// A leading "Continue Watching" board row (local or Trakt). Carries its own
 /// header, focus nodes, per-item progress lookup, and open / quick-play

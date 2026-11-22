@@ -175,6 +175,8 @@ void main() {
             WatchProgressSource.trakt => [40.0, 30.0, null, 6.0],
             WatchProgressSource.simkl => [50.0, 35.0, null, 7.0],
             WatchProgressSource.mdblist => [4.0, 2.0, 3.0, 8.0],
+            // Not in [sources]; covered by the Ledger panel tests.
+            WatchProgressSource.ledger => throw StateError('not exercised'),
           };
           expect([
             for (final season in f.view.seasons)
@@ -194,6 +196,7 @@ void main() {
             WatchProgressSource.trakt => {'api.trakt.tv'},
             WatchProgressSource.simkl => {'api.simkl.com'},
             WatchProgressSource.mdblist => {'api.mdblist.com'},
+            WatchProgressSource.ledger => throw StateError('not exercised'),
           });
         });
       },

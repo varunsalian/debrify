@@ -1,3 +1,4 @@
+import 'package:debrify/services/ledger/ledger_service.dart';
 import 'package:debrify/services/storage/continue_watching_storage.dart';
 import 'package:debrify/services/storage/episode_resume_storage.dart';
 import 'package:debrify/services/storage/home_page_storage.dart';
@@ -6,6 +7,7 @@ import 'package:debrify/services/storage/playback_cleanup_storage.dart';
 import 'package:debrify/services/storage/tracking_source_storage.dart';
 import 'package:debrify/services/storage/video_progress_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../services/episode_artwork_service.dart';
 import '../../../services/iptv_cw_history.dart';
 import '../../../services/local_history_removal.dart';
@@ -23,12 +25,15 @@ import '../../../services/trakt/trakt_service.dart';
 import '../data/home_continuation_layout_repository.dart';
 import '../data/home_episode_artwork_repository.dart';
 import '../data/home_iptv_history_removal.dart';
+import '../data/home_ledger_continuation_reader.dart';
+import '../data/home_ledger_history_removal.dart';
 import '../data/home_local_continuation_repository.dart';
 import '../data/home_mdblist_continuation_repository.dart';
 import '../data/home_simkl_continuation_reader.dart';
 import '../data/home_trakt_continuation_repository.dart';
 import '../data/home_trakt_history_removal.dart';
 import '../models/home_catalog_session.dart';
+import '../models/home_ledger_continuation.dart';
 import '../models/home_tracker_authentication.dart';
 
 final homeContinuationLayoutRepositoryProvider =
@@ -42,7 +47,8 @@ final homeContinuationLayoutRepositoryProvider =
 final homeLocalContinuationRepositoryProvider =
     Provider<HomeLocalContinuationRepository>(
       (ref) => HomeLocalContinuationRepository(
-        readProgressSource: TrackingSourceStorage.getWatchProgressSource,
+        readProgressSource:
+            TrackingSourceStorage.getEffectiveWatchProgressSource,
         readEnabled: HomePageStorage.getHomeContinueWatchingEnabled,
         readItems: ContinueWatchingStorage.getContinueWatchingItems,
         readAddons: StremioService.instance.getEnabledAddons,
@@ -80,6 +86,30 @@ final homeSimklContinuationReaderProvider =
 final homeSimklHistoryRemovalProvider = Provider.autoDispose
     .family<SimklContinueWatchingRemoval, ProfileSessionOwner>(
       (ref, owner) => SimklContinueWatchingRemoval(owner),
+      dependencies: const [],
+    );
+
+final homeLedgerContinuationReaderProvider =
+    Provider<HomeLedgerContinuationReader>(
+      (ref) => () async {
+        final ledger = LedgerService.instance;
+        if (!await ledger.isAuthenticated()) {
+          return const <HomeLedgerContinuationItem>[];
+        }
+        final entries = await ledger.upNext();
+        if (entries == null) return null;
+        return [
+          for (final entry in entries)
+            if (HomeLedgerContinuationItem.fromEntry(entry) case final item?)
+              item,
+        ];
+      },
+      dependencies: const [],
+    );
+
+final homeLedgerHistoryRemovalProvider = Provider.autoDispose
+    .family<HomeLedgerHistoryRemoval, ProfileSessionOwner>(
+      (ref, owner) => HomeLedgerHistoryRemoval(owner),
       dependencies: const [],
     );
 
@@ -138,6 +168,7 @@ final homeTrackerAuthReaderProvider = Provider.autoDispose
           HomeTracker.trakt => TraktService.instance.isAuthenticated(),
           HomeTracker.simkl => SimklService.instance.isAuthenticated(),
           HomeTracker.mdblist => MdblistService.instance.isAuthenticated(),
+          HomeTracker.ledger => LedgerService.instance.isAuthenticated(),
         };
         final scope = session.view.owner.scope;
         return scope == null

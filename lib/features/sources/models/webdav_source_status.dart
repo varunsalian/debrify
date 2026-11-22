@@ -119,6 +119,12 @@ final class WebDavSourceStatus {
     };
   }
 
+  /// Shown after a finished search that found nothing and had nothing else
+  /// to explain, with how far it looked.
+  String get nothingFoundMessage => foldersChecked <= 1
+      ? 'No files named after this title.'
+      : 'Checked $_folders and found no files named after this title.';
+
   /// Whether the summary is a problem the user may want to act on.
   bool get hasIssue =>
       phase != WebDavSearchPhase.searching && resultMessage != null;

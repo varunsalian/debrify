@@ -1,6 +1,8 @@
+import 'package:debrify/features/ledger/models/ledger_brand.dart';
 import 'package:debrify/models/tracking_source.dart';
 import 'package:debrify/services/hide_watched_prefs.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
+import 'package:debrify/services/storage/ledger_storage.dart';
 import 'package:debrify/services/tracking_scrobble_preferences.dart';
 import 'package:flutter/foundation.dart';
 
@@ -20,7 +22,13 @@ final class TrackingSourceStorage {
     TrackingSource.trakt,
     TrackingSource.simkl,
     TrackingSource.mdblist,
+    TrackingSource.ledger,
   };
+
+  /// The sources this build offers: Ledger only while its feature flag is on,
+  /// so with it off stored, defaulted and transferred choices match the app
+  /// before Ledger (a `ledger` value from a dev build reads as unknown).
+  static bool _offered(TrackingSource source) => source != TrackingSource.ledger || kLedgerEnabled;
 
   /// Reads the new master scrobble switches. On first read, adopt the retired
   /// per-tracker catalog switches once. An absent legacy value means ON: that
@@ -51,9 +59,24 @@ final class TrackingSourceStorage {
     final prefs = await ProfilePreferences.instance();
     final stored = prefs.getString(watchProgressSourceKey);
     return WatchProgressSource.values.firstWhere(
-      (source) => source.name == stored,
+      (source) => source.name == stored && (source != WatchProgressSource.ledger || kLedgerEnabled),
       orElse: () => WatchProgressSource.smart,
     );
+  }
+
+  /// The Progress source this device can honour: a synced Ledger choice on
+  /// a device without a Ledger session reads as Smart (never rewritten, see
+  /// [fallbackDisconnectedProgressSource]). Every other choice is returned
+  /// as stored.
+  /// While Ledger is off this is [getWatchProgressSource] itself (which
+  /// never returns Ledger then), so Home reads it exactly as before Ledger.
+  static Future<WatchProgressSource> getEffectiveWatchProgressSource() =>
+      kLedgerEnabled ? _effectiveWithLedger() : getWatchProgressSource();
+
+  static Future<WatchProgressSource> _effectiveWithLedger() async {
+    final stored = await getWatchProgressSource();
+    if (stored != WatchProgressSource.ledger) return stored;
+    return await LedgerStorage.hasCredential() ? stored : WatchProgressSource.smart;
   }
 
   static Future<void> setWatchProgressSource(WatchProgressSource value) async {
@@ -73,6 +96,10 @@ final class TrackingSourceStorage {
       WatchProgressSource.trakt => disconnected == TrackingSource.trakt,
       WatchProgressSource.simkl => disconnected == TrackingSource.simkl,
       WatchProgressSource.mdblist => disconnected == TrackingSource.mdblist,
+      // Ledger sessions are per device while this choice syncs: a device
+      // without a session reads it as Smart in memory and never rewrites it,
+      // or it would switch the connected devices off Ledger too.
+      WatchProgressSource.ledger => false,
       _ => false,
     };
     if (!owns) return false;
@@ -110,16 +137,18 @@ final class TrackingSourceStorage {
   static Future<Set<TrackingSource>> getHomeTickSources() async {
     final prefs = await ProfilePreferences.instance();
     final stored = prefs.getStringList(homeTickSourcesKey);
-    if (stored == null) return Set<TrackingSource>.of(_allTrackingSources);
+    if (stored == null) {
+      return Set<TrackingSource>.of(_allTrackingSources.where(_offered));
+    }
     return <TrackingSource>{
       for (final value in stored)
-        if (TrackingSourceStorageName.parse(value) case final source?) source,
+        if (TrackingSourceStorageName.parse(value) case final source? when _offered(source)) source,
     };
   }
 
   static Future<void> setHomeTickSources(Set<TrackingSource> value) async {
     final prefs = await ProfilePreferences.instance();
-    final normalized = value.where(_allTrackingSources.contains).toSet();
+    final normalized = value.where((source) => _allTrackingSources.contains(source) && _offered(source)).toSet();
     await prefs.setStringList(
       homeTickSourcesKey,
       normalized.map((source) => source.storageName).toList(growable: false),
@@ -132,7 +161,7 @@ final class TrackingSourceStorage {
     final progress = await getWatchProgressSource();
     final ticks = await getHomeTickSources();
     return <String, dynamic>{
-      'scrobble_targets': scrobble.map((source) => source.storageName).toList(growable: false),
+      'scrobble_targets': scrobble.where(_offered).map((source) => source.storageName).toList(growable: false),
       'progress_source': progress.name,
       'home_tick_sources': ticks.map((source) => source.storageName).toList(growable: false),
       'hide_watched': await HideWatchedPrefs.read(),
@@ -159,12 +188,16 @@ final class TrackingSourceStorage {
     if (scrobble is List) {
       await setTrackingScrobbleTargets(<TrackingSource>{
         for (final value in scrobble.whereType<String>())
-          if (TrackingSourceStorageName.parse(value) case final source?) source,
+          if (TrackingSourceStorageName.parse(value) case final source? when _offered(source)) source,
       });
     }
     final progress = payload['progress_source'];
     if (progress is String) {
-      final parsed = WatchProgressSource.values.where((source) => source.name == progress).firstOrNull;
+      final parsed = WatchProgressSource.values
+          .where(
+            (source) => source.name == progress && (source != WatchProgressSource.ledger || kLedgerEnabled),
+          )
+          .firstOrNull;
       if (parsed != null) await setWatchProgressSource(parsed);
     }
     final ticks = payload['home_tick_sources'];

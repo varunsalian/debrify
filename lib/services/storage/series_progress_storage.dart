@@ -1,3 +1,4 @@
+import 'package:debrify/features/ledger/models/ledger_brand.dart';
 import 'package:debrify/services/storage/local_completion_storage.dart';
 import 'package:debrify/services/storage/movie_progress_storage.dart';
 import 'package:debrify/services/storage/playback_identity_storage.dart';
@@ -29,6 +30,9 @@ final class SeriesProgressStorage {
     await MovieProgressStorage.setSeriesExplicitlyWatched(id, watched: false);
     await TrackerEpisodeProgressStorage.saveEpisodeTraktProgress(imdbId: id, percents: {});
     await TrackerEpisodeProgressStorage.saveEpisodeSimklProgress(imdbId: id, percents: {});
+    if (kLedgerEnabled) {
+      await TrackerEpisodeProgressStorage.saveEpisodeLedgerProgress(imdbId: id, percents: {});
+    }
     await TrackerEpisodeProgressStorage.saveEpisodeMdblistProgress(imdbId: id, percents: {});
     LocalCompletionStorage.localCompletionRevision.value++;
   }

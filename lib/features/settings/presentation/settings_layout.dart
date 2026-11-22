@@ -207,6 +207,7 @@ class SettingsLayout extends StatelessWidget {
     connections.trakt,
     connections.simkl,
     if (connections.mdblist != null) connections.mdblist!,
+    if (connections.ledger != null) connections.ledger!,
   ];
 
   bool showsLargeCollectionStyles(BuildContext context) =>

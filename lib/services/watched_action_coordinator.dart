@@ -13,6 +13,8 @@ import 'simkl/simkl_service.dart';
 import 'tracking_source_policy.dart';
 import 'trakt/trakt_service.dart';
 import 'watched_status_service.dart';
+import 'package:debrify/services/ledger/ledger_service.dart';
+import '../features/ledger/models/ledger_brand.dart';
 
 class WatchedActionResult {
   const WatchedActionResult(this.failedTargets, {this.cancelled = false});
@@ -167,6 +169,29 @@ class WatchedActionCoordinator {
       }
     }
     if (!current()) return retired();
+    if (LedgerService.supportsId(id) &&
+        _writes(policy, forceTargets, TrackingSource.ledger)) {
+      final service = LedgerService.instance;
+      final connected = await service.isAuthenticated(canContinue: current);
+      if (!current()) return retired();
+      if (connected) {
+        var ok = watched
+            ? await service.markWatched(id, contentType, canContinue: current)
+            : await service.markUnwatched(
+                id,
+                contentType,
+                canContinue: current,
+              );
+        if (!current()) return retired();
+        if (watched && ok && !series) {
+          // A finished movie must not keep resurfacing from an old resume
+          // point (a rewatch saves a new one).
+          ok = await service.deletePlayback(id, canContinue: current);
+        }
+        if (!ok) failures.add(kLedgerDisplayName);
+      }
+    }
+    if (!current()) return retired();
     WatchedStatusService.instance.ensureStarted();
     return WatchedActionResult(failures);
   }
@@ -197,6 +222,11 @@ class WatchedActionCoordinator {
         await MdblistService.instance.isAuthenticated() &&
         !MdblistMediaIds.forContent(imdbId).isEmpty) {
       providers.add(TrackingSource.mdblist);
+    }
+    if (LedgerService.supportsId(imdbId) &&
+        _writes(policy, const <TrackingSource>{}, TrackingSource.ledger) &&
+        await LedgerService.instance.isAuthenticated()) {
+      providers.add(TrackingSource.ledger);
     }
     return providers;
   }
@@ -287,6 +317,22 @@ class WatchedActionCoordinator {
               episode: episode,
             );
       if (!ok) failures.add('MDBList');
+    }
+    if (LedgerService.supportsId(imdbId) &&
+        _writes(policy, forceTargets, TrackingSource.ledger) &&
+        await LedgerService.instance.isAuthenticated()) {
+      final ledger = LedgerService.instance;
+      final ok = watched
+          ? await ledger.markEpisodesWatched(imdbId, [
+              (season: season, episode: episode),
+            ])
+          : await ledger.markEpisodesUnwatched(imdbId, [
+              (season: season, episode: episode),
+            ]);
+      if (watched && ok) {
+        await ledger.deletePlayback(imdbId, season: season, episode: episode);
+      }
+      if (!ok) failures.add(kLedgerDisplayName);
     }
     return WatchedActionResult(failures);
   }

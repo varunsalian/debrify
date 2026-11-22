@@ -1,11 +1,14 @@
 import 'dart:async';
+
 import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_auth.dart';
 import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_deps.dart';
 import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_services.dart';
 import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_view_state.dart';
+import 'package:debrify/features/ledger/models/ledger_brand.dart';
 import 'package:debrify/models/media_identity.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/services/diagnostic_log.dart';
+import 'package:debrify/services/ledger/ledger_service.dart';
 import 'package:debrify/services/storage/episode_resume_storage.dart';
 import 'package:debrify/services/tracking_source_policy.dart';
 import 'package:debrify/utils/episode_progress_merge.dart';
@@ -91,9 +94,10 @@ class EpisodesPanelProgress {
     final inputs = <String, Map<String, double>>{'local': Map.of(merged)};
     final statuses = <String, String>{
       for (final source in TrackingSource.values)
-        source.name: policy.progressFrom(source)
-            ? 'not_connected'
-            : 'excluded_by_policy',
+        if (source != TrackingSource.ledger || kLedgerEnabled)
+          source.name: policy.progressFrom(source)
+              ? 'not_connected'
+              : 'excluded_by_policy',
       'local': policy.progressFrom(TrackingSource.local)
           ? 'loaded'
           : 'excluded_by_policy',
@@ -179,6 +183,41 @@ class EpisodesPanelProgress {
       }
     }
 
+    // Overlay Ledger state with the same merge rules (watched wins outright,
+    // partials only raise). Its keys are "season_episode"; this map uses
+    // "season-episode". Signed-out users pay no network call.
+    if (kLedgerEnabled &&
+        policy.progressFrom(TrackingSource.ledger) &&
+        LedgerService.supportsId(imdbId) &&
+        await LedgerService.instance.isAuthenticated()) {
+      if (!mounted || generation != _s.episodeModeGeneration) return;
+      final states = await LedgerService.instance.showEpisodeStates(imdbId);
+      if (!mounted || generation != _s.episodeModeGeneration) return;
+      if (states == null) {
+        statuses['ledger'] = 'error';
+      } else {
+        final watched = states.watched;
+        final playback = states.progress;
+        String dashed(String key) => key.replaceFirst('_', '-');
+        inputs['ledger'] = {
+          for (final entry in playback.entries) dashed(entry.key): entry.value,
+          for (final key in watched) dashed(key): 100.0,
+        };
+        statuses['ledger'] = 'loaded';
+        for (final key in watched) {
+          merged[dashed(key)] = 100.0;
+        }
+        for (final entry in playback.entries) {
+          final key = dashed(entry.key);
+          final existing = merged[key] ?? 0;
+          if (existing >= 100.0) continue;
+          if (entry.value > 5.0 && entry.value > existing) {
+            merged[key] = entry.value;
+          }
+        }
+      }
+    }
+
     if ((MediaIdentity.isImdb(imdbId) || MediaIdentity.isNative(imdbId)) &&
         await _sv.mdblistService.isAuthenticated()) {
       if (policy.progressFrom(TrackingSource.mdblist)) {
@@ -256,7 +295,8 @@ class EpisodesPanelProgress {
             return value != null &&
                 value > 0 &&
                 value == progress &&
-                (!const ['trakt', 'simkl'].contains(entry.key) || value > 5);
+                (!const ['trakt', 'simkl', 'ledger'].contains(entry.key) ||
+                    value > 5);
           })
           .map((entry) => entry.key)
           .toList();

@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+
+import '../../../features/ledger/models/ledger_brand.dart';
+import '../models/home_ledger_row_ids.dart';
 import 'home_continuation_section.dart';
 import 'home_saved_content_section.dart';
 
@@ -42,6 +45,7 @@ class HomeContinuationAnnouncements {
       _section.simklSeriesNodes,
       _section.mdblistMovieNodes,
       _section.mdblistSeriesNodes,
+      _section.ledgerNodes,
       _section.iptvCwMovieNodes,
       _section.iptvCwSeriesNodes,
     ],
@@ -69,6 +73,7 @@ class HomeContinuationAnnouncements {
     belowNodes: [
       _section.mdblistMovieNodes,
       _section.mdblistSeriesNodes,
+      _section.ledgerNodes,
       _section.iptvCwMovieNodes,
       _section.iptvCwSeriesNodes,
     ],
@@ -93,6 +98,30 @@ class HomeContinuationAnnouncements {
       _section.traktSeriesNodes,
       _section.simklMovieNodes,
       _section.simklSeriesNodes,
+    ],
+    belowNodes: [
+      _section.ledgerNodes,
+      _section.iptvCwMovieNodes,
+      _section.iptvCwSeriesNodes,
+    ],
+  );
+
+  /// The Ledger row: rendered after MDBList and before IPTV.
+  void maybeAnnounceLedgerRows() => maybeAnnounceCwRows(
+    label: kLedgerDisplayName,
+    visible:
+        _section.ledgerAll.isNotEmpty &&
+        !_deps.disabled().contains(HomeLedgerRowIds.continueWatching),
+    ownNodes: [_section.ledgerNodes],
+    aboveNodes: [
+      _section.cwMovieNodes,
+      _section.cwSeriesNodes,
+      _section.traktMovieNodes,
+      _section.traktSeriesNodes,
+      _section.simklMovieNodes,
+      _section.simklSeriesNodes,
+      _section.mdblistMovieNodes,
+      _section.mdblistSeriesNodes,
     ],
     belowNodes: [_section.iptvCwMovieNodes, _section.iptvCwSeriesNodes],
   );

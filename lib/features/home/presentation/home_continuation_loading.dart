@@ -15,6 +15,7 @@ typedef HomeContinuationLoadingDeps = ({
   VoidCallback announceTrakt,
   VoidCallback announceSimkl,
   VoidCallback announceMdblist,
+  VoidCallback announceLedger,
   Future<void> Function() refreshBound,
 });
 
@@ -174,6 +175,40 @@ class HomeContinuationLoading {
           );
           _deps.autoFocus();
           if (!hadRows) _deps.announceSimkl();
+          if (refreshBound) unawaited(_deps.refreshBound());
+        },
+      );
+
+  /// Fetch the Ledger Continue Watching row (resume points + next episodes)
+  /// from the connected account's Up Next. Generation-guarded against
+  /// overlap; clears the row when Ledger isn't connected and keeps it on a
+  /// failed fetch. [refreshBound] runs a bound-source refresh at the end.
+  Future<void> loadLedgerContinueWatching({bool refreshBound = true}) =>
+      _section.ledgerContinuationController.load(
+        isCurrent: () => _deps.mounted(),
+        beforeRows: (next) {
+          _section.continuationNodes.resize(
+            HomeContinuationKind.ledger,
+            movies: next.all.length,
+            series: 0,
+            requestFocus: _deps.requestRowFocus,
+          );
+        },
+        onRows: (next, hadRows, current) {
+          _deps.setState(
+            () => _section.episodeArtworkController.clear(
+              HomeEpisodeArtworkSource.ledger,
+            ),
+          );
+          unawaited(
+            _section.enrichCwEpisodeArtwork(
+              refs: next.episodeRefs,
+              source: HomeEpisodeArtworkSource.ledger,
+              isCurrent: current,
+            ),
+          );
+          _deps.autoFocus();
+          if (!hadRows) _deps.announceLedger();
           if (refreshBound) unawaited(_deps.refreshBound());
         },
       );

@@ -172,6 +172,12 @@ class HomeBoardConfigurationSection {
             : _continuationSection.mdblistSeries.length,
         requestFocus: _boardFocus.requestRowFocus,
       );
+      _continuationSection.continuationNodes.resize(
+        HomeContinuationKind.ledger,
+        movies: _continuationSection.ledgerAll.length,
+        series: 0,
+        requestFocus: _boardFocus.requestRowFocus,
+      );
     });
   }
 

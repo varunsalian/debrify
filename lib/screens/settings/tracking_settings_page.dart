@@ -1,6 +1,8 @@
 import 'package:debrify/services/storage/tracking_source_storage.dart';
 import 'package:flutter/material.dart';
 
+import 'package:debrify/services/ledger/ledger_service.dart';
+import '../../features/ledger/models/ledger_brand.dart';
 import '../../models/tracking_source.dart';
 import '../../services/analytics_service.dart';
 import '../../services/hide_watched_prefs.dart';
@@ -44,17 +46,22 @@ class _TrackingSettingsPageState extends State<TrackingSettingsPage> {
       MdblistService.instance.isAuthenticated(),
       TrackingSourceStorage.takeTrackingProgressFallbackNotice(),
       HideWatchedPrefs.read(),
+      LedgerService.instance.isAuthenticated(),
     ]);
     if (!mounted) return;
     final connected = <TrackingSource>{
       if (values[3] as bool) TrackingSource.trakt,
       if (values[4] as bool) TrackingSource.simkl,
       if (values[5] as bool) TrackingSource.mdblist,
+      if (values[8] as bool) TrackingSource.ledger,
     };
     var progress = values[1] as WatchProgressSource;
     final dedicated = _trackingSourceForProgress(progress);
     var fellBack = false;
-    if (dedicated != null &&
+    if (dedicated == TrackingSource.ledger && !connected.contains(dedicated)) {
+      // Synced choice, per-device session: show Smart here, keep the choice.
+      progress = WatchProgressSource.smart;
+    } else if (dedicated != null &&
         dedicated != TrackingSource.local &&
         !connected.contains(dedicated)) {
       progress = WatchProgressSource.smart;
@@ -88,6 +95,7 @@ class _TrackingSettingsPageState extends State<TrackingSettingsPage> {
         WatchProgressSource.trakt => TrackingSource.trakt,
         WatchProgressSource.simkl => TrackingSource.simkl,
         WatchProgressSource.mdblist => TrackingSource.mdblist,
+        WatchProgressSource.ledger => TrackingSource.ledger,
       };
 
   String _label(TrackingSource source) => switch (source) {
@@ -95,6 +103,7 @@ class _TrackingSettingsPageState extends State<TrackingSettingsPage> {
     TrackingSource.trakt => 'Trakt',
     TrackingSource.simkl => 'Simkl',
     TrackingSource.mdblist => 'MDBList',
+    TrackingSource.ledger => kLedgerDisplayName,
   };
 
   String _progressLabel(WatchProgressSource source) => switch (source) {
@@ -103,7 +112,12 @@ class _TrackingSettingsPageState extends State<TrackingSettingsPage> {
     WatchProgressSource.trakt => 'Trakt',
     WatchProgressSource.simkl => 'Simkl',
     WatchProgressSource.mdblist => 'MDBList',
+    WatchProgressSource.ledger => kLedgerDisplayName,
   };
+
+  /// Ledger stays off the page while its feature flag is off.
+  static Iterable<TrackingSource> get _listedSources => TrackingSource.values
+      .where((source) => source != TrackingSource.ledger || kLedgerEnabled);
 
   bool _available(TrackingSource source) =>
       source == TrackingSource.local || _connected.contains(source);
@@ -145,7 +159,7 @@ class _TrackingSettingsPageState extends State<TrackingSettingsPage> {
     blurb:
         'Which services record what you watch. Debrify always keeps its own progress.',
     children: [
-      for (final source in TrackingSource.values)
+      for (final source in _listedSources)
         CheckboxListTile(
           value: _scrobble.contains(source),
           onChanged: source == TrackingSource.local || !_available(source)
@@ -229,7 +243,7 @@ class _TrackingSettingsPageState extends State<TrackingSettingsPage> {
         'Which histories draw the ✓ on posters — Home, Search, Discover and '
         'detail pages. Episode lists follow your Progress source instead.',
     children: [
-      for (final source in TrackingSource.values)
+      for (final source in _listedSources)
         CheckboxListTile(
           value: _ticks.contains(source),
           onChanged: !_available(source)

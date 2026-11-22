@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../features/ledger/models/ledger_brand.dart';
 import '../../../models/stremio_addon.dart';
 import 'home_continuation_loading.dart';
 import 'home_continuation_playback.dart';
@@ -46,6 +47,23 @@ class HomeContinuationSeeAll {
       onReload: () async {
         await _returns.refreshAfterPlayback(trackers: true);
         return List<StremioMeta>.of(_section.simklAll);
+      },
+    );
+  }
+
+  /// "See All" for the Ledger Continue Watching row.
+  void openLedgerCwSeeAll([String initialCategory = 'all']) {
+    pushCwSeeAll(
+      title: '$kLedgerDisplayName Continue Watching',
+      initialCategory: initialCategory,
+      items: _section.ledgerAll,
+      progressOf: (m) =>
+          _section.cwCardProgress(HomeContinuationKind.ledger, m),
+      onOpen: _playback.openLedgerCwItem,
+      onQuickPlay: _deps.pikpakOnly() ? null : _playback.playLedgerCwItem,
+      onReload: () async {
+        await _returns.refreshAfterPlayback(trackers: true);
+        return List<StremioMeta>.of(_section.ledgerAll);
       },
     );
   }

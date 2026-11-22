@@ -1,3 +1,5 @@
+import 'package:debrify/features/ledger/models/ledger_brand.dart';
+
 /// Pure helpers for the user-defined order of Home rows.
 ///
 /// The persisted list may contain rows that are currently unavailable (an
@@ -68,6 +70,8 @@ class HomeRowOrder {
     'simkl:shows',
     'mdblist:movies',
     'mdblist:shows',
+    // Ledger (Debrify's own tracker): one combined row, see HomeLedgerRowIds.
+    'ledger:continue',
     'iptv:movies',
     'iptv:series',
     // Opt-in; extends the Continue Watching family with upcoming episodes.
@@ -79,9 +83,23 @@ class HomeRowOrder {
   /// keep the position the user chose.
   static List<String> seedNewRows(Iterable<String> saved) => insertMissingAfter(
     insertMissingAfter(
-      saved,
-      additions: const ['mdblist:movies', 'mdblist:shows'],
-      anchors: const ['simkl:movies', 'simkl:shows'],
+      insertMissingAfter(
+        saved,
+        additions: const ['mdblist:movies', 'mdblist:shows'],
+        anchors: const ['simkl:movies', 'simkl:shows'],
+      ),
+      // After the tracker rows, ahead of IPTV, like the canonical order.
+      additions: kLedgerEnabled ? const ['ledger:continue'] : const [],
+      anchors: const [
+        'cw:movies',
+        'cw:series',
+        'trakt:movies',
+        'trakt:shows',
+        'simkl:movies',
+        'simkl:shows',
+        'mdblist:movies',
+        'mdblist:shows',
+      ],
     ),
     additions: const ['airing:soon'],
     anchors: continueWatchingIds.where((id) => id != 'airing:soon'),

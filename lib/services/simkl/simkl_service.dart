@@ -15,6 +15,9 @@ import '../profiles/profile_async_authorization.dart';
 import '../profiles/profile_runtime.dart';
 import '../profiles/profile_session_memory.dart';
 import 'simkl_calendar_service.dart';
+import 'simkl_anime.dart';
+import 'simkl_completed_titles.dart';
+import 'simkl_episode_codes.dart';
 import 'simkl_constants.dart';
 
 /// The user's Simkl relationship to a single title — mirrors
@@ -126,6 +129,7 @@ class SimklService {
     _invalidatePlaybackCache();
     _pinAuthorizations.clear();
     SimklCalendarService.instance.invalidate();
+    SimklAnimeEpisodes.forgetAccount();
   }
 
   Future<Map<String, dynamic>?> _cachedLibAllAll({
@@ -137,6 +141,7 @@ class SimklService {
       return _libCacheData;
     }
     final generation = _libCacheGeneration;
+    final animeGeneration = SimklAnimeEpisodes.accountGeneration;
     final data = await fetchAllItemsOrNull(
       'all',
       'all',
@@ -147,6 +152,7 @@ class SimklService {
     // cache while this fetch was in flight — a transient failure or a
     // superseded fetch shouldn't poison/clobber the cache.
     if (data != null && generation == _libCacheGeneration) {
+      SimklAnimeEpisodes.rememberLibrary(data, animeGeneration);
       _libCacheData = data;
       _libCacheAt = DateTime.now();
     }
@@ -181,80 +187,15 @@ class SimklService {
     if (token == null || token.isEmpty) {
       return (movies: <String>{}, series: <String>{});
     }
+    final animeGeneration = SimklAnimeEpisodes.accountGeneration;
     final data = await _getOrNull(
       _apiUri('/sync/all-items/all/all'),
       headers: _apiHeaders(accessToken: token),
       label: 'fetchCompletedTitleIds',
     );
     if (data is! Map<String, dynamic>) return null;
-    return debugParseCompletedTitleIds(data);
-  }
-
-  /// Kept visible for response-shape and completion-semantics regression tests.
-  @visibleForTesting
-  static ({Set<String> movies, Set<String> series}) debugParseCompletedTitleIds(
-    Map<String, dynamic> data,
-  ) {
-    final movies = <String>{};
-    final series = <String>{};
-
-    String? imdbOf(Map<String, dynamic> raw) {
-      final content = (raw['movie'] ?? raw['show']) as Map<String, dynamic>?;
-      final ids = content?['ids'] as Map<String, dynamic>?;
-      return MediaIdentity.preferred(ids);
-    }
-
-    void parseMovies(dynamic bucket) {
-      if (bucket is! List) return;
-      for (final raw in bucket) {
-        if (raw is! Map<String, dynamic> || raw['status'] != 'completed') {
-          continue;
-        }
-        final imdb = imdbOf(raw);
-        if (imdb != null) movies.addAll(MediaIdentity.aliases((raw['movie'] ?? raw['show'])['ids']).map((id) => MediaIdentity.progressId(id, 'movie')));
-      }
-    }
-
-    void parseSeries(dynamic bucket) {
-      if (bucket is! List) return;
-      for (final raw in bucket) {
-        if (raw is! Map<String, dynamic>) continue;
-        final imdb = imdbOf(raw);
-        if (imdb == null) continue;
-        final watched = _asNum(raw['watched_episodes_count'])?.toInt();
-        final total = _asNum(raw['total_episodes_count'])?.toInt();
-        final notAired = _asNum(raw['not_aired_episodes_count'])?.toInt() ?? 0;
-        final aired = total == null ? null : total - notAired;
-        final caughtUp =
-            watched != null && aired != null && aired > 0 && watched >= aired;
-        // `completed` remains a safe fallback for older/minimal response
-        // shapes that omit counters entirely.
-        if (caughtUp ||
-            (watched == null &&
-                total == null &&
-                raw['status'] == 'completed')) {
-          series.addAll(MediaIdentity.aliases((raw['show'] ?? raw['movie'])['ids']));
-        }
-      }
-    }
-
-    parseMovies(data['movies']);
-    parseSeries(data['shows']);
-    // Simkl wraps anime movies and episodic anime together. Preserve the same
-    // mapping used by SimklItemTransformer so their poster cards get the
-    // correct movie/series badge semantics too.
-    final anime = data['anime'];
-    if (anime is List) {
-      parseMovies([
-        for (final raw in anime)
-          if (raw is Map<String, dynamic> && raw['anime_type'] == 'movie') raw,
-      ]);
-      parseSeries([
-        for (final raw in anime)
-          if (raw is Map<String, dynamic> && raw['anime_type'] != 'movie') raw,
-      ]);
-    }
-    return (movies: movies, series: series);
+    SimklAnimeEpisodes.rememberLibrary(data, animeGeneration);
+    return SimklCompletedTitles.parse(data);
   }
 
   /// The user's relationship to a single title: which watchlist status (if
@@ -364,6 +305,7 @@ class SimklService {
     // the derived calendar (mirrors TraktService clearing TraktCalendarService).
     _invalidateLibraryCache();
     SimklCalendarService.instance.invalidate();
+    SimklAnimeEpisodes.forgetAccount();
     MovieProgressStorage.movieFinishedRevision.value++;
   }
 
@@ -572,13 +514,15 @@ class SimklService {
     return data is Map<String, dynamic> ? data : null;
   }
 
-  /// The user's "watching" TV shows with Simkl's server-computed `next_to_watch`
-  /// (via `next_watch_info=yes`) — powers the Continue Watching "up next"
-  /// entries (the next episode of a show you're mid-way through but haven't
-  /// paused). Deliberately no `extended=full`: the per-show next-watch fields +
-  /// the show summary object are enough, and `full` would bloat the response
-  /// with the whole watched-episode list. Returns the raw `shows` list (empty
-  /// when the list is genuinely empty), or null on failure / when disconnected.
+  /// The user's "watching" TV shows and anime with Simkl's server-computed
+  /// `next_to_watch` (via `next_watch_info=yes`) — powers the Continue Watching
+  /// "up next" entries (the next episode of a show you're mid-way through but
+  /// haven't paused). Deliberately no `extended=full`: the per-show next-watch
+  /// fields + the show summary object are enough, and `full` would bloat the
+  /// response with the whole watched-episode list. Returns the raw `shows` list
+  /// plus each placeable anime as a shows-shaped row in TVDB numbering (see
+  /// [SimklAnimeEpisodes.upNextAsShows]; empty when the list is genuinely
+  /// empty), or null on failure / when disconnected.
   Future<List<dynamic>?> fetchUpNextShowsOrNull({
     bool Function()? canContinue,
   }) async {
@@ -589,19 +533,25 @@ class SimklService {
     if (canContinue?.call() == false || token == null || token.isEmpty) {
       return null;
     }
-    final uri = _apiUri('/sync/all-items/shows/watching', {
-      'next_watch_info': 'yes',
-    });
+    // `all` returns anime (its own Simkl list) beside the shows in the same
+    // single request; anime is mapped to TV seasons below.
+    final animeGeneration = SimklAnimeEpisodes.accountGeneration;
     final data = await _getOrNull(
-      uri,
+      _apiUri('/sync/all-items/all/watching', {'next_watch_info': 'yes'}),
       headers: _apiHeaders(accessToken: token),
-      label: 'upNext shows',
+      label: 'upNext watching',
     );
     if (canContinue?.call() == false || data is! Map<String, dynamic>) {
       return null;
     }
-    final shows = data['shows'];
-    return shows is List ? shows : const [];
+    final shows = data['shows'] is List ? data['shows'] as List : const [];
+    final anime = data['anime'];
+    if (anime is! List || anime.isEmpty) return shows;
+    final animeShows = await SimklAnimeEpisodes.upNextAsShows(
+      anime,
+      animeGeneration,
+    );
+    return canContinue?.call() == false ? null : [...shows, ...animeShows];
   }
 
   /// Fetch the user's rated items for one content type via
@@ -967,15 +917,25 @@ class SimklService {
     if (token == null || token.isEmpty || canContinue?.call() == false) {
       return false;
     }
-    final rows = await _postOrNull(
-      '/sync/watched',
-      [
-        {...MediaIdentity.apiIds(imdbId), 'type': 'show'},
-      ],
-      token: token,
-      label: 'clearSeriesHistory read',
-      query: {'extended': 'episodes'},
-    );
+    // An anime: every cour, removed by Simkl id in its own numbering.
+    final cours = SimklAnimeEpisodes.coursFor(imdbId);
+    final anime = cours.isEmpty
+        ? null
+        : SimklAnimeEpisodes.removalItems(
+            await _animeWatched(cours, token),
+            cours,
+          );
+    final rows = anime != null
+        ? const <dynamic>[]
+        : await _postOrNull(
+            '/sync/watched',
+            [
+              {...MediaIdentity.apiIds(imdbId), 'type': 'show'},
+            ],
+            token: token,
+            label: 'clearSeriesHistory read',
+            query: {'extended': 'episodes'},
+          );
     if (rows is! List || canContinue?.call() == false) return false;
     final seasons = <Map<String, dynamic>>[];
     for (final row in rows) {
@@ -996,14 +956,15 @@ class SimklService {
           seasons.add({'number': season['number'], 'episodes': episodes});
       }
     }
-    if (seasons.isEmpty) return true;
+    final shows = [
+      ...?anime,
+      if (seasons.isNotEmpty)
+        {'ids': MediaIdentity.apiIds(imdbId), 'seasons': seasons},
+    ];
+    if (shows.isEmpty) return true;
     final result = await _postOrNull(
       '/sync/history/remove',
-      {
-        'shows': [
-          {'ids': MediaIdentity.apiIds(imdbId), 'seasons': seasons},
-        ],
-      },
+      {'shows': shows},
       token: token,
       label: 'clearSeriesHistory',
     );
@@ -1022,6 +983,7 @@ class SimklService {
   Map<String, dynamic> _episodeRef(String showImdbId, int season, int episode) {
     return {
       'ids': MediaIdentity.apiIds(showImdbId),
+      ...kSimklTvdbAnimeSeasons,
       'seasons': [
         {
           'number': season,
@@ -1300,13 +1262,22 @@ class SimklService {
       canContinue: ownerCurrent,
     );
     if (!ownerCurrent() || token == null || token.isEmpty) return null;
+    final animeGeneration = SimklAnimeEpisodes.accountGeneration;
     final data = await _getOrNull(
       _apiUri('/sync/playback/episodes'),
       headers: _apiHeaders(accessToken: token),
       label: 'playback episodes',
     );
     if (!ownerCurrent()) return null;
-    final list = data is List ? data : null;
+    final list = data is! List
+        ? null
+        : SimklAnimeEpisodes.hasAnime(data)
+        ? await SimklAnimeEpisodes.normalizePlaybackSessions(
+            data,
+            animeGeneration,
+          )
+        : data;
+    if (!ownerCurrent()) return null;
     if (list != null && generation == _playbackCacheGeneration) {
       _playbackCacheData = list;
       _playbackCacheAt = DateTime.now();
@@ -1440,8 +1411,9 @@ class SimklService {
   /// The next unwatched episode of a show, from Simkl's server-computed
   /// `next_to_watch` (watched-progress based, via `next_watch_info=yes`).
   /// Returns null when the show isn't in the 'watching' list, has nothing left
-  /// (completed / `next_to_watch` null), or its `next_to_watch` is an anime-style
-  /// absolute number (no season) rather than `SxxExx`. This is the series-resume
+  /// (completed / `next_to_watch` null), or is an anime episode with no TVDB
+  /// mapping (anime rows arrive already mapped, see [fetchUpNextShowsOrNull]);
+  /// of several anime cours, the most recently watched wins. This is the series-resume
   /// FALLBACK used when a show has no paused playback session — so a series
   /// watched up to E3 on another device resumes at E4, not the default S01E01.
   Future<({int season, int episode})?> fetchNextToWatch(
@@ -1455,30 +1427,27 @@ class SimklService {
     if (canContinue?.call() == false) return null;
     final shows = await fetchUpNextShowsOrNull(canContinue: canContinue);
     if (shows == null) return null;
+    // Anime cours share the show's id: the most recently watched one wins.
+    Map? latest;
+    DateTime? at(Map raw) => DateTime.tryParse('${raw['last_watched_at']}');
     for (final raw in shows) {
       if (raw is! Map) continue;
       final show = raw['show'];
       final ids = show is Map ? show['ids'] : null;
       if (!_matches(ids, showImdbId)) continue;
-      return parseSimklEpisodeCode(raw['next_to_watch']);
+      // Like Continue Watching, only a placeable next episode competes.
+      final next = SimklEpisodeCodes.seasonEpisode(raw['next_to_watch']);
+      if (next == null) continue;
+      final rawAt = at(raw);
+      final latestAt = latest == null ? null : at(latest);
+      if (latest == null ||
+          (rawAt != null && (latestAt == null || rawAt.isAfter(latestAt)))) {
+        latest = raw;
+      }
     }
-    return null;
-  }
-
-  /// Parse a Simkl `SxxExx` episode code (e.g. `next_to_watch`'s `"S02E06"`)
-  /// into season/episode. Returns null for anything that isn't a regular-season
-  /// `SxxExx` — including Season 0 specials and anime-style absolute codes
-  /// (`"E148"`, no season), which the app's IMDb S/E model can't place. Shared
-  /// by the Continue Watching up-next builder and the series-resume fallback so
-  /// they never disagree on the parse rule.
-  static ({int season, int episode})? parseSimklEpisodeCode(dynamic value) {
-    if (value is! String) return null;
-    final m = RegExp(r'^[Ss](\d+)[Ee](\d+)$').firstMatch(value.trim());
-    if (m == null) return null;
-    final s = int.tryParse(m.group(1)!);
-    final e = int.tryParse(m.group(2)!);
-    if (s == null || s <= 0 || e == null || e <= 0) return null;
-    return (season: s, episode: e);
+    return latest == null
+        ? null
+        : SimklEpisodeCodes.seasonEpisode(latest['next_to_watch']);
   }
 
   /// Raw paused-playback sessions for movies — parallel to
@@ -1510,12 +1479,20 @@ class SimklService {
     final token = await SimklStorage.getSimklAccessToken();
     if (token == null || token.isEmpty) return null;
     final generation = _playbackCacheGeneration;
+    final animeGeneration = SimklAnimeEpisodes.accountGeneration;
     final data = await _getOrNull(
       _apiUri('/sync/playback/movies'),
       headers: _apiHeaders(accessToken: token),
       label: 'playback movies',
     );
-    final list = data is List ? data : null;
+    final list = data is! List
+        ? null
+        : SimklAnimeEpisodes.hasAnime(data)
+        ? await SimklAnimeEpisodes.normalizePlaybackSessions(
+            data,
+            animeGeneration,
+          )
+        : data;
     if (list != null && generation == _playbackCacheGeneration) {
       _moviePlaybackCacheData = list;
       _moviePlaybackCacheAt = DateTime.now();
@@ -1777,6 +1754,16 @@ class SimklService {
     return out;
   }
 
+  /// An anime's watched episodes read per cour (an IMDb id resolves to one
+  /// cour), each in the cour's own numbering.
+  Future<dynamic> _animeWatched(Set<int> cours, String token) => _postOrNull(
+    '/sync/watched',
+    SimklAnimeEpisodes.watchedRequest(cours),
+    token: token,
+    label: 'fetchWatchedAnimeEpisodes',
+    query: {'extended': 'episodes'},
+  );
+
   Future<Map<String, dynamic>?> _fetchWatchedShowEpisodeItem(
     String showImdbId,
   ) async {
@@ -1784,6 +1771,15 @@ class SimklService {
     if (!MediaIdentity.isApiId(showImdbId)) return null;
     final token = await SimklStorage.getSimklAccessToken();
     if (token == null || token.isEmpty) return null;
+    // An anime placed in TVDB numbering; unreadable: the plain read below.
+    final cours = SimklAnimeEpisodes.coursFor(showImdbId);
+    final anime = cours.isEmpty
+        ? null
+        : await SimklAnimeEpisodes.watchedAsShow(
+            await _animeWatched(cours, token),
+            cours,
+          );
+    if (anime != null) return anime;
     final result = await _postOrNull(
       '/sync/watched',
       [{...MediaIdentity.apiIds(showImdbId), 'type': 'show'}],

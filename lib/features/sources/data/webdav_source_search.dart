@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import '../../../models/advanced_search_selection.dart';
 import '../../../models/torrent.dart';
 import '../../../models/webdav_item.dart';
+import '../../../services/diagnostic_log.dart';
 import '../../../services/profiles/connection_resource_service.dart';
 import '../../../services/profiles/profile_runtime.dart';
 import '../../../services/source_search_preferences.dart';
@@ -15,6 +16,7 @@ import '../../../services/webdav_service.dart';
 import '../../../services/webdav_source_tickets.dart';
 import '../../../utils/file_utils.dart';
 import '../models/webdav_source_status.dart';
+import 'webdav_folder_names.dart';
 import 'webdav_listing_cache.dart';
 import 'webdav_title_matcher.dart';
 
@@ -26,8 +28,10 @@ typedef WebDavAccessCheck = Future<void> Function(WebDavConfig config);
 final class WebDavSearchLimits {
   const WebDavSearchLimits({
     this.maxFolders = 40,
-    this.maxLibraryDepth = 3,
+    this.maxLibraryDepth = 5,
     this.maxTitleDepth = 3,
+    this.maxGuessesPerFolder = 12,
+    this.maxGuessListing = 50,
     this.concurrency = 2,
     this.maxRows = 30,
     this.timeLimit = const Duration(seconds: 15),
@@ -43,6 +47,14 @@ final class WebDavSearchLimits {
 
   /// Levels opened below the title's own folder (seasons, packs).
   final int maxTitleDepth;
+
+  /// A folder with more unrecognised sub-folders than this lists titles,
+  /// not categories, so none of them is opened.
+  final int maxGuessesPerFolder;
+
+  /// A folder listing more sub-folders than this is a title list (a debrid
+  /// folder, a big library), so none of its unrecognised ones is opened.
+  final int maxGuessListing;
   final int concurrency;
   final int maxRows;
   final Duration timeLimit;
@@ -55,8 +67,9 @@ final class WebDavSearchLimits {
 }
 
 /// Finds a title's files on the profile's WebDAV servers by folder and file
-/// names. WebDAV has no search, so this opens only folders that can lead to
-/// the title, within [WebDavSearchLimits], and reports progress as it goes.
+/// names. WebDAV has no search, so this opens the folders most likely to lead
+/// to the title first, within [WebDavSearchLimits], and reports progress as
+/// it goes.
 final class WebDavSourceSearch {
   WebDavSourceSearch({
     Future<List<WebDavConfig>> Function()? servers,
@@ -223,6 +236,9 @@ final class _Folder {
     this.insideTitle = false,
     this.titleDepth = 0,
     this.season,
+    this.guessed = false,
+    this.guessChain = 0,
+    this.order = 0,
   });
 
   final String path;
@@ -230,6 +246,26 @@ final class _Folder {
   final bool insideTitle;
   final int titleDepth;
   final int? season;
+
+  /// Opened on a guess that it groups titles ([WebDavFolderKind.guess]).
+  final bool guessed;
+
+  /// Guessed folders in a row down to this one ("HDD1/English" is 2).
+  final int guessChain;
+
+  /// Discovery order, so equally ranked folders keep their listing order.
+  final int order;
+}
+
+/// What one server's walk opened and passed over, for diagnostics. Counts
+/// only: folder names are private.
+final class _WalkCounts {
+  var titleFolders = 0;
+  var libraryFolders = 0;
+  var guessedFolders = 0;
+  var droppedGuesses = 0;
+  var skippedFolders = 0;
+  var deepestLevel = 0;
 }
 
 /// One server's bounded, cancellable walk.
@@ -260,6 +296,8 @@ final class _ServerWalk {
   final _queue = <_Folder>[];
   final _opened = <String>{};
   final _found = <String>{};
+  final _counts = _WalkCounts();
+  var _queued = 0;
   var _finished = false;
 
   WebDavSearchLimits get _limits => search.limits;
@@ -343,23 +381,68 @@ final class _ServerWalk {
       unreachable: unreachable,
     );
     _publish(summary);
+    _log(summary, stopped: !active());
     return summary;
   }
 
-  /// Title folders first (they hold the answer), then shallow library folders.
+  void _log(WebDavSourceStatus summary, {required bool stopped}) {
+    DiagnosticLog.instance.recordEvent(
+      source: 'webdav_source',
+      event: 'title_search_completed',
+      fields: {
+        'outcome': DiagnosticLabel(summary.phase.name),
+        'stopped': stopped,
+        'failure': summary.failure == null
+            ? null
+            : DiagnosticLabel(summary.failure!.name),
+        'automatic': target.requireYear,
+        'series': target.isSeries,
+        'folders_checked': summary.foldersChecked,
+        'folders_failed': summary.failedFolders,
+        'found': summary.found,
+        'title_folders': _counts.titleFolders,
+        'library_folders': _counts.libraryFolders,
+        'guessed_folders': _counts.guessedFolders,
+        'dropped_guesses': _counts.droppedGuesses,
+        'skipped_folders': _counts.skippedFolders,
+        'deepest_level': _counts.deepestLevel,
+        'left_unchecked': _queue.length,
+      },
+    );
+  }
+
+  /// Title folders first (they hold the answer), then library folders, then
+  /// guesses; shallower first, and in listing order among equals.
   List<_Folder> _takeWave() {
+    // Guesses only help find the title; once it is found they cost time.
+    if (_found.isNotEmpty) {
+      final before = _queue.length;
+      _queue.removeWhere((folder) => folder.guessed);
+      _counts.droppedGuesses += before - _queue.length;
+    }
     _queue.sort((a, b) {
       if (a.insideTitle != b.insideTitle) return a.insideTitle ? -1 : 1;
-      return a.depth.compareTo(b.depth);
+      if (a.guessed != b.guessed) return a.guessed ? 1 : -1;
+      final depth = a.depth.compareTo(b.depth);
+      return depth != 0 ? depth : a.order.compareTo(b.order);
     });
     final room = _limits.maxFolders - status.foldersChecked;
+    // A wave waits for its slowest listing, so a guess (a sleeping drive, a
+    // huge folder) never shares one with a folder that may hold the title.
+    final firstGuess = _queue.indexWhere((folder) => folder.guessed);
+    final sameKind = firstGuess <= 0 ? _queue.length : firstGuess;
     final count = [
       _limits.concurrency,
       room,
-      _queue.length,
+      sameKind,
     ].reduce((a, b) => a < b ? a : b);
     final wave = _queue.sublist(0, count);
     _queue.removeRange(0, count);
+    for (final folder in wave) {
+      if (folder.depth > _counts.deepestLevel) {
+        _counts.deepestLevel = folder.depth;
+      }
+    }
     return wave;
   }
 
@@ -429,6 +512,10 @@ final class _ServerWalk {
 
   Future<List<Torrent>> _visit(_Folder folder, List<WebDavItem> items) async {
     final rows = <Torrent>[];
+    final guesses = <WebDavItem>[];
+    var holdsTitle = false;
+    var folders = 0;
+    var holdsRelease = false;
     final clock = Stopwatch()..start();
     for (var i = 0; i < items.length; i++) {
       if (i % 32 == 31 && clock.elapsed > _burst) {
@@ -438,9 +525,23 @@ final class _ServerWalk {
       }
       final item = items[i];
       if (item.isDirectory) {
-        _consider(folder, item);
-      } else if (_found.length < _limits.maxRows &&
-          FileUtils.isVideoFile(item.name) &&
+        folders++;
+        if (folder.guessed && !holdsRelease) {
+          holdsRelease = !WebDavFolderNames.mayBeCategory(item.name);
+        }
+        switch (_consider(folder, item)) {
+          case WebDavFolderKind.title:
+            holdsTitle = true;
+          case WebDavFolderKind.guess:
+            guesses.add(item);
+          case _:
+        }
+      } else if (folder.guessed && !holdsRelease && _isVideo(item)) {
+        holdsRelease = true;
+      }
+      if (!item.isDirectory &&
+          _found.length < _limits.maxRows &&
+          _isVideo(item) &&
           !_found.contains(item.path) &&
           matcher.matchesFile(
             item.name,
@@ -450,17 +551,66 @@ final class _ServerWalk {
           )) {
         _found.add(item.path);
         rows.add(_row(item, folder));
+        holdsTitle = true;
       }
     }
+    _guess(
+      folder,
+      guesses,
+      holdsTitle: holdsTitle,
+      folders: folders,
+      holdsRelease: holdsRelease,
+    );
     return rows;
   }
 
-  void _consider(_Folder parent, WebDavItem item) {
-    if (!_opened.add(item.path)) return;
+  static bool _isVideo(WebDavItem item) =>
+      FileUtils.isVideoFile(item.name) ||
+      (item.contentType?.toLowerCase().startsWith('video/') ?? false);
+
+  /// Opens a folder's unrecognised sub-folders last, unless the folder
+  /// already held the title (its other folders are other titles), lists too
+  /// many folders to be a list of categories, or is itself a guess that
+  /// turned out to be some other title (it holds videos or releases).
+  void _guess(
+    _Folder parent,
+    List<WebDavItem> guesses, {
+    required bool holdsTitle,
+    required int folders,
+    required bool holdsRelease,
+  }) {
+    if (guesses.isEmpty) return;
+    if (holdsTitle ||
+        guesses.length > _limits.maxGuessesPerFolder ||
+        folders > _limits.maxGuessListing ||
+        (parent.guessed && (holdsRelease || parent.guessChain >= 2)) ||
+        parent.depth + 1 > _limits.maxLibraryDepth) {
+      _counts.droppedGuesses += guesses.length;
+      return;
+    }
+    _counts.guessedFolders += guesses.length;
+    for (final item in guesses) {
+      _queue.add(
+        _Folder(
+          item.path,
+          depth: parent.depth + 1,
+          guessed: true,
+          guessChain: parent.guessed ? parent.guessChain + 1 : 1,
+          order: _queued++,
+        ),
+      );
+    }
+  }
+
+  /// Queues [item] unless it is a guess, which [_guess] decides per folder.
+  WebDavFolderKind _consider(_Folder parent, WebDavItem item) {
+    if (!_opened.add(item.path)) return WebDavFolderKind.skip;
     if (parent.insideTitle) {
-      if (parent.titleDepth >= _limits.maxTitleDepth) return;
+      if (parent.titleDepth >= _limits.maxTitleDepth) {
+        return WebDavFolderKind.skip;
+      }
       final decision = matcher.innerFolder(item.name, season: parent.season);
-      if (decision.kind == WebDavFolderKind.skip) return;
+      if (decision.kind == WebDavFolderKind.skip) return decision.kind;
       _queue.add(
         _Folder(
           item.path,
@@ -468,15 +618,19 @@ final class _ServerWalk {
           insideTitle: true,
           titleDepth: parent.titleDepth + 1,
           season: decision.season,
+          order: _queued++,
         ),
       );
-      return;
+      return decision.kind;
     }
     final decision = matcher.libraryFolder(item.name);
     switch (decision.kind) {
       case WebDavFolderKind.skip:
-        return;
+        _counts.skippedFolders++;
+      case WebDavFolderKind.guess:
+        break;
       case WebDavFolderKind.title:
+        _counts.titleFolders++;
         _queue.add(
           _Folder(
             item.path,
@@ -484,12 +638,20 @@ final class _ServerWalk {
             insideTitle: true,
             titleDepth: 1,
             season: decision.season,
+            order: _queued++,
           ),
         );
       case WebDavFolderKind.browse:
-        if (parent.depth + 1 > _limits.maxLibraryDepth) return;
-        _queue.add(_Folder(item.path, depth: parent.depth + 1));
+        if (parent.depth + 1 > _limits.maxLibraryDepth) {
+          _counts.skippedFolders++;
+          return WebDavFolderKind.skip;
+        }
+        _counts.libraryFolders++;
+        _queue.add(
+          _Folder(item.path, depth: parent.depth + 1, order: _queued++),
+        );
     }
+    return decision.kind;
   }
 
   Torrent _row(WebDavItem item, _Folder folder) {

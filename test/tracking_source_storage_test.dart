@@ -1,3 +1,4 @@
+import 'package:debrify/features/ledger/models/ledger_brand.dart';
 import 'package:debrify/services/backup_restore_service.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/storage/mdblist_storage.dart';
@@ -22,7 +23,8 @@ void main() {
   test('absent legacy scrobble switches seed all tracker masters on', () async {
     final targets = await TrackingSourceStorage.getTrackingScrobbleTargets();
 
-    expect(targets, Set<TrackingSource>.of(TrackingSource.values));
+    // Ledger has no legacy switch: connecting it turns its master on.
+    expect(targets, _legacyTrackers);
     final prefs = await SharedPreferences.getInstance();
     expect(
       prefs.getStringList(TrackingSourceStorage.trackingScrobbleTargetsKey),
@@ -108,6 +110,9 @@ void main() {
   });
 
   test('simultaneous tracker connections merge every target', () async {
+    // Connecting Ledger needs its feature flag on.
+    debugLedgerEnabled = true;
+    addTearDown(() => debugLedgerEnabled = null);
     await TrackingSourceStorage.setTrackingScrobbleTargets(<TrackingSource>{
       TrackingSource.local,
     });
@@ -118,6 +123,7 @@ void main() {
       TrackingSourceStorage.enableTrackingScrobbleTarget(
         TrackingSource.mdblist,
       ),
+      TrackingSourceStorage.enableTrackingScrobbleTarget(TrackingSource.ledger),
     ]);
 
     expect(
@@ -132,7 +138,7 @@ void main() {
       // App start seeds the masters (all ON) before any restore happens.
       expect(
         await TrackingSourceStorage.getTrackingScrobbleTargets(),
-        Set<TrackingSource>.of(TrackingSource.values),
+        _legacyTrackers,
       );
 
       // An old backup's tracker sections then restore the legacy switches —
@@ -274,3 +280,8 @@ void main() {
     });
   });
 }
+
+/// Every tracker with a legacy per-tracker switch (all but Ledger).
+final Set<TrackingSource> _legacyTrackers = Set<TrackingSource>.of(
+  TrackingSource.values,
+)..remove(TrackingSource.ledger);

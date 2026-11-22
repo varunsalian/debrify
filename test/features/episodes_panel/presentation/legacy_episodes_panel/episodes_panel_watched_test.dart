@@ -25,10 +25,13 @@ final simklQueryString = Uri(queryParameters: simklQuery).query;
 Map<String, Object> episodeBody(
   Map<String, Object> ids, {
   Map<String, Object> attributes = const {},
+  bool simkl = false,
 }) => {
   'shows': [
     {
       'ids': ids,
+      // Simkl places anime cours by the app's TVDB numbering (no-op otherwise).
+      if (simkl) 'use_tvdb_anime_seasons': true,
       'seasons': [
         {
           'number': 1,
@@ -165,7 +168,7 @@ void main() {
             host: 'api.simkl.com',
             path: watched ? '/sync/history' : '/sync/history/remove',
             query: simklQuery,
-            body: episodeBody(ids),
+            body: episodeBody(ids, simkl: true),
           );
           if (watched) {
             expectRequest(
@@ -353,7 +356,7 @@ void main() {
         host: 'api.simkl.com',
         path: '/sync/history',
         query: simklQuery,
-        body: episodeBody({'imdb': f.id}),
+        body: episodeBody({'imdb': f.id}, simkl: true),
       );
       expect(
         find.text('Marked as Watched on this device — failed on Simkl'),

@@ -62,6 +62,7 @@ class HomeCatalogBadges {
       ..._continuationSection.simklSeries,
       ..._continuationSection.mdblistMovies,
       ..._continuationSection.mdblistSeries,
+      ..._continuationSection.ledgerAll,
     ];
     return boundCountsController.load(
       ids: items.map(imdbOf),

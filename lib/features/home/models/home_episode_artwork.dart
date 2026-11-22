@@ -1,4 +1,4 @@
-enum HomeEpisodeArtworkSource { local, trakt, simkl }
+enum HomeEpisodeArtworkSource { local, trakt, simkl, ledger }
 
 typedef HomeEpisodeReference = ({int season, int episode});
 typedef HomeEpisodeArtwork = Map<HomeEpisodeArtworkSource, Map<String, String>>;

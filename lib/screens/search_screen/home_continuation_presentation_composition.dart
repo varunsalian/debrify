@@ -68,6 +68,7 @@ HomeContinuationPresentation createHomeContinuationPresentation(
       openTrakt: (category) => seeAll.openTraktSeeAll(category),
       openSimkl: (category) => seeAll.openSimklCwSeeAll(category),
       openMdblist: (category) => seeAll.openMdblistCwSeeAll(category),
+      openLedger: (category) => seeAll.openLedgerCwSeeAll(category),
       searchMode: deps.searchMode,
       discoverMode: deps.discoverMode,
       traktAuthenticated: () => deps.integrations().isTraktAuthenticated,

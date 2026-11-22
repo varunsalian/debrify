@@ -40,6 +40,10 @@ class AndroidTvPlaybackPayload {
   final double? simklProgressPercent;
   final bool mdblistScrobble;
   final double? mdblistProgressPercent;
+  // Ledger pair: the scrobble flag drives NativeLedgerSession; the percent
+  // folds into the native resume seed like Simkl's.
+  final bool ledgerScrobble;
+  final double? ledgerProgressPercent;
   MdblistScrobbleSession? mdblistSession;
   MdblistScrobbleSession Function(MdblistScrobbleTarget)? mdblistSessionFactory;
   int? mdblistSeason;
@@ -88,6 +92,8 @@ class AndroidTvPlaybackPayload {
     this.simklProgressPercent,
     this.mdblistScrobble = false,
     this.mdblistProgressPercent,
+    this.ledgerScrobble = false,
+    this.ledgerProgressPercent,
     this.localCompletionTracking = false,
     this.movieCompletionThreshold = LocalCompletionStorage.defaultLocalCompletionThreshold,
     this.episodeCompletionThreshold = LocalCompletionStorage.defaultLocalCompletionThreshold,
@@ -105,6 +111,7 @@ class AndroidTvPlaybackPayload {
       traktProgressPercent,
       simklProgressPercent,
       mdblistProgressPercent,
+      ledgerProgressPercent,
     ]) {
       if (pct == null || pct <= 0 || pct >= 100) continue;
       if (best == null || pct > best) best = pct;

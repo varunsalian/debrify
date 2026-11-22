@@ -15,8 +15,10 @@ import 'package:debrify/services/source_selection_diagnostics.dart';
 import 'package:debrify/services/startup_stream_policy.dart';
 import 'package:flutter/widgets.dart';
 import 'package:media_kit/media_kit.dart' as mk;
+import 'vp_ledger_scrobbler.dart';
 
 abstract interface class VpPlayerSubscriptionsHost {
+  VpLedgerScrobbler get ledgerScrobbler;
   VpSubtitleApplyAttempt? get activeSubtitleApplyAttempt;
   Timer? get bufferingDebounceTimer;
   set bufferingDebounceTimer(Timer? v);
@@ -305,6 +307,14 @@ class VpPlayerSubscriptions {
           _host.simklLastScrobbleAction != 'stop') {
         _host.simklScrobble('pause');
         _host.stopSimklHeartbeat();
+      }
+      if (!_host.validationGateActive && p && _host.duration > Duration.zero) {
+        _host.ledgerScrobbler.onPlaying();
+      } else if (!_host.validationGateActive &&
+          !p &&
+          wasPlaying &&
+          !_host.isTransitioning) {
+        _host.ledgerScrobbler.onPaused();
       }
       if (!_host.validationGateActive && p && _host.duration > Duration.zero) {
         _host.mdblistPlay();

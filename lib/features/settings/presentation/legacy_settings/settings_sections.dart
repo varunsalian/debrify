@@ -189,6 +189,7 @@ class SettingsSections {
         openIndexerManagersSettings:
             _connectionNavigation.openIndexerManagersSettings,
         openIptvSettings: _connectionNavigation.openIptvSettings,
+        openLedgerSettings: _connectionNavigation.openLedgerSettings,
         openMdblistSettings: _connectionNavigation.openMdblistSettings,
         openMediaServerSettings: _connectionNavigation.openMediaServerSettings,
         openPikPakSettings: _connectionNavigation.openPikPakSettings,

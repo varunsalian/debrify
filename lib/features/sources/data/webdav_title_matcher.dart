@@ -1,3 +1,4 @@
+import 'webdav_folder_names.dart';
 import 'webdav_release_name.dart';
 
 /// The title a Sources search is looking for on a WebDAV server.
@@ -43,6 +44,11 @@ enum WebDavFolderKind {
 
   /// The title's own folder (or a season/pack folder inside it).
   title,
+
+  /// An unrecognised folder that may group titles by language, drive, user
+  /// or collection ("Hollywood", "English", "HDD1"). Opened after every
+  /// recognised folder, and only from folders that look like categories.
+  guess,
 }
 
 final class WebDavFolderDecision {
@@ -50,6 +56,7 @@ final class WebDavFolderDecision {
 
   static const skip = WebDavFolderDecision(WebDavFolderKind.skip);
   static const browse = WebDavFolderDecision(WebDavFolderKind.browse);
+  static const guess = WebDavFolderDecision(WebDavFolderKind.guess);
 
   final WebDavFolderKind kind;
 
@@ -58,8 +65,9 @@ final class WebDavFolderDecision {
 }
 
 /// Pure keyword rules deciding which folders to open and which files match.
-/// Folder pruning is what keeps a search to a handful of requests: WebDAV can
-/// only list one folder at a time and has no search.
+/// WebDAV can only list one folder at a time and has no search, so folders
+/// are ranked: the title's own first, then library folders, then folders
+/// that may be categories. Other titles' release folders are never opened.
 final class WebDavTitleMatcher {
   WebDavTitleMatcher(this.target)
     : _needle = _needleFor(target.titleKey),
@@ -80,7 +88,10 @@ final class WebDavTitleMatcher {
   static const _libraryWords = {
     'all',
     'anime',
+    'bollywood',
     'cartoons',
+    'cinema',
+    'collections',
     'complete',
     'completed',
     'content',
@@ -98,6 +109,8 @@ final class WebDavTitleMatcher {
     'peliculas',
     'serien',
     'history',
+    'hollywood',
+    'homes',
     'kids',
     'library',
     'links',
@@ -116,6 +129,7 @@ final class WebDavTitleMatcher {
     'shared',
     'show',
     'shows',
+    'storage',
     'television',
     'torrents',
     'tv',
@@ -165,6 +179,45 @@ final class WebDavTitleMatcher {
   static String _withoutArticle(String key) =>
       key.startsWith('the ') ? key.substring(4) : key;
 
+  /// Edition words that may sit between a title and its year
+  /// ("Inception.Extended.Cut.2010", "Blade Runner The Final Cut").
+  static const _editionWords = {
+    'anniversary',
+    'collectors',
+    'criterion',
+    'cut',
+    'dc',
+    'director',
+    'directors',
+    'edition',
+    'enhanced',
+    'extended',
+    'final',
+    'imax',
+    'remaster',
+    'remastered',
+    'restored',
+    'special',
+    'the',
+    'theatrical',
+    'ultimate',
+    'uncensored',
+    'uncut',
+    'unrated',
+    'version',
+  };
+
+  static String _withoutEdition(String key) {
+    final words = key.split(' ');
+    var end = words.length;
+    while (end > 1 && _editionWords.contains(words[end - 1])) {
+      end--;
+    }
+    return words.take(end).join(' ');
+  }
+
+  static final _leadingYear = RegExp(r'^((?:19|20)\d{2}) (.+)$');
+
   static String? _needleFor(String key) {
     // "and" may stand for "&" in the raw name; "the" is often dropped.
     final words =
@@ -187,14 +240,21 @@ final class WebDavTitleMatcher {
     return name.toLowerCase().replaceAll(_apostrophes, '').contains(needle);
   }
 
+  /// Whether an ASCII [name] holds the title's longest word ("Games" in
+  /// "The Hunger Games Collection").
+  bool _namesTitle(String name) =>
+      _needle != null && _ascii.hasMatch(name) && mayName(name);
+
   static final _apostrophes = RegExp(r"['`]");
 
   static final _nonWord = RegExp(r'[^a-z0-9]+');
+  static final _numbersOnly = RegExp(r'^[\d\s._()\[\]–-]+s?$');
 
   /// Cheap test for folders while still looking for the title: one split and
   /// set lookups, so a flat folder of thousands of release names stays fast.
   bool mayBeLibraryOrTitle(String name) {
     if (name.length <= 5) return true; // Index folders: "A", "A-F", "#".
+    if (_numbersOnly.hasMatch(name)) return true; // "2010-2019"
     if (mayName(name)) return true;
     final words = name.toLowerCase().split(_nonWord);
     if (words.any(_libraryWords.contains)) return true;
@@ -213,9 +273,7 @@ final class WebDavTitleMatcher {
     final wanted = target.imdbId;
     if (wanted != null && name.imdbId != null) return name.imdbId == wanted;
     if (name.titleKey.isEmpty) return false;
-    var titleMatches =
-        name.titleKey == target.titleKey ||
-        _comparable(name.titleKey) == _withoutArticle(target.titleKey);
+    var titleMatches = _titleKeyMatches(name.titleKey);
     // "Free.for.All.S01E01": a trailing "All"/"Complete" read as a pack word
     // may still end the title.
     if (!titleMatches &&
@@ -231,7 +289,13 @@ final class WebDavTitleMatcher {
       titleMatches = true;
       year = null;
     }
-    if (!titleMatches) return false;
+    // "Star Wars Special Edition" alone could be any "Star Wars"; an
+    // edition name needs its year.
+    if (!titleMatches && !target.isSeries && year != null) {
+      final trimmed = _withoutEdition(name.titleKey);
+      titleMatches = trimmed != name.titleKey && _titleKeyMatches(trimmed);
+    }
+    if (!titleMatches) return !target.isSeries && _looseMatch(name);
     final targetYear = target.year;
     if (targetYear == null) return true;
     // Series packs are often dated by their season ("The.Bear.2024.S03"),
@@ -241,6 +305,39 @@ final class WebDavTitleMatcher {
     // One year of slack covers festival-versus-release dating.
     return (year - targetYear).abs() <= 1;
   }
+
+  bool _titleKeyMatches(String key) =>
+      key == target.titleKey ||
+      _comparable(key) == _withoutArticle(target.titleKey);
+
+  /// Looser movie forms, accepted only when the name states the target's
+  /// year: a leading year ("2010 - Inception") and run-together words
+  /// ("IronMan.2008", "Spiderman.No.Way.Home.2021"). Both need the exact
+  /// year, and run-together words a longer title ("I.T." 2016 is not "It").
+  /// A leading year counts only when no other year follows, since some
+  /// titles start with one ("2010: Moby Dick (2010)").
+  bool _looseMatch(WebDavReleaseName name) {
+    final targetYear = target.year;
+    if (targetYear == null) return false;
+    var key = name.titleKey;
+    var year = name.year;
+    if (year == null) {
+      final lead = _leadingYear.firstMatch(key);
+      if (lead == null || int.parse(lead[1]!) != targetYear) return false;
+      year = targetYear;
+      key = lead[2]!;
+    }
+    if ((year - targetYear).abs() > 1) return false;
+    key = _withoutEdition(key);
+    if (_titleKeyMatches(key)) return true;
+    final squashed = _comparable(key).replaceAll(' ', '');
+    return year == targetYear &&
+        squashed.length >= 5 &&
+        squashed == _comparable(target.titleKey).replaceAll(' ', '');
+  }
+
+  static bool _isLetterIndex(String key) =>
+      key.length == 1 || RegExp(r'^[a-z0-9] [a-z0-9]$').hasMatch(key);
 
   bool _letterIndexFits(String key) {
     if (key.length == 1) return _initials.contains(key);
@@ -255,7 +352,7 @@ final class WebDavTitleMatcher {
 
   /// A folder seen while still looking for the title.
   WebDavFolderDecision libraryFolder(String name) {
-    if (!mayBeLibraryOrTitle(name)) return WebDavFolderDecision.skip;
+    if (!mayBeLibraryOrTitle(name)) return _unrecognised(name);
     final key = WebDavReleaseName.fold(name);
     if (key.isEmpty) return WebDavFolderDecision.browse; // "#", "__"
     final parsed = WebDavReleaseName.parse(name);
@@ -263,7 +360,44 @@ final class WebDavTitleMatcher {
     if (_letterIndexFits(key) || _isLibraryName(key, parsed)) {
       return WebDavFolderDecision.browse;
     }
-    return WebDavFolderDecision.skip;
+    if (_isLetterIndex(key)) return WebDavFolderDecision.skip;
+    // "Movies A-L": an index under a library name.
+    final words = key.split(' ');
+    final index = words.skipWhile(_isLibraryWord).join(' ');
+    if (index != key && _isLetterIndex(index)) {
+      return _letterIndexFits(index)
+          ? WebDavFolderDecision.browse
+          : WebDavFolderDecision.skip;
+    }
+    // "2010", "Movies 2010", "2010-2019", "2010s".
+    if (WebDavFolderNames.yearSpan(key, _isLibraryWord) case (
+      final from,
+      final to,
+    )) {
+      final year = target.year;
+      return year != null && year >= from - 1 && year <= to + 1
+          ? WebDavFolderDecision.browse
+          : WebDavFolderDecision.skip;
+    }
+    if (parsed.year != null || parsed.hasSeasonInfo) {
+      return WebDavFolderDecision.skip;
+    }
+    return _unrecognised(name);
+  }
+
+  static bool _isLibraryWord(String word) =>
+      _libraryWords.contains(word) ||
+      _qualityWords.contains(word) ||
+      _connectors.contains(word);
+
+  WebDavFolderDecision _unrecognised(String name) {
+    // The cheap marker test first: a flat debrid folder lists thousands.
+    if (!WebDavFolderNames.mayBeCategory(name) ||
+        WebDavFolderNames.isNeverMedia(name, namesTitle: _namesTitle(name)) ||
+        _extrasFolders.contains(WebDavReleaseName.fold(name))) {
+      return WebDavFolderDecision.skip;
+    }
+    return WebDavFolderDecision.guess;
   }
 
   /// "Movies", "Kids Movies", "Movies (4K)", "TV Shows - English": library

@@ -1,3 +1,5 @@
+import 'package:debrify/features/player_launch/data/episode_tracker_percents.dart';
+import 'package:debrify/features/player_launch/data/native_ledger_session.dart';
 import 'dart:async';
 import 'dart:math';
 import 'package:debrify/features/player_launch/data/android_tv_payload_builder.dart';
@@ -29,7 +31,6 @@ import 'package:debrify/services/startup_recovery_sources.dart';
 import 'package:debrify/services/storage/merged_episode_progress_storage.dart';
 import 'package:debrify/services/storage/quick_play_storage.dart';
 import 'package:debrify/services/storage/torrent_search_storage.dart';
-import 'package:debrify/services/storage/tracker_episode_progress_storage.dart';
 import 'package:debrify/services/torrent_playback_service.dart';
 import 'package:debrify/services/tracking_source_policy.dart';
 import 'package:debrify/utils/episode_progress_merge.dart';
@@ -60,18 +61,15 @@ final class AndroidTvNativeLaunch {
     // Reset Trakt scrobble state for clean session
     NativeScrobbleSession.traktHeartbeatTimer?.cancel();
     NativeScrobbleSession.traktHeartbeatTimer = null;
-    NativeScrobbleSession.traktLastScrobbleAction = null;
-    NativeScrobbleSession.traktLastKnownProgress = 0.0;
-    NativeScrobbleSession.traktLastKnownSeason = null;
-    NativeScrobbleSession.traktLastKnownEpisode = null;
+    NativeScrobbleSession.clearTraktState();
 
     // Reset Simkl scrobble state for clean session
     NativeScrobbleSession.simklHeartbeatTimer?.cancel();
     NativeScrobbleSession.simklHeartbeatTimer = null;
-    NativeScrobbleSession.simklLastScrobbleAction = null;
-    NativeScrobbleSession.simklLastKnownProgress = 0.0;
-    NativeScrobbleSession.simklLastKnownSeason = null;
-    NativeScrobbleSession.simklLastKnownEpisode = null;
+    NativeScrobbleSession.clearSimklState();
+
+    // Reset Ledger scrobble state for clean session
+    NativeLedgerSession.reset();
 
     AndroidTvPlaybackPayload? builtPayload;
     final serverWatch = MediaServerWatchController();
@@ -300,25 +298,10 @@ final class AndroidTvNativeLaunch {
           }
 
           final sourceImdbId = effectiveContentImdbId();
-          final sourceTrackerMaps = sourceImdbId != null
-              ? await Future.wait([
-                  TrackerEpisodeProgressStorage.getEpisodeTraktProgress(imdbId: sourceImdbId),
-                  TrackerEpisodeProgressStorage.getEpisodeSimklProgress(imdbId: sourceImdbId),
-                  TrackerEpisodeProgressStorage.getConnectedEpisodeMdblistProgress(
-                    imdbId: sourceImdbId,
-                  ),
-                ])
-              : const <Map<String, double>>[];
+          final sourceTrackers = sourceImdbId != null
+              ? EpisodeTrackerPercents.of(await EpisodeTrackerPercents.read(sourceImdbId))
+              : EpisodeTrackerPercents.empty;
           if (!active()) return null;
-          final sourceTraktProgress = sourceTrackerMaps.isNotEmpty
-              ? sourceTrackerMaps[0]
-              : const <String, double>{};
-          final sourceSimklProgress = sourceTrackerMaps.length > 1
-              ? sourceTrackerMaps[1]
-              : const <String, double>{};
-          final sourceMdblistProgress = sourceTrackerMaps.length > 2
-              ? sourceTrackerMaps[2]
-              : const <String, double>{};
 
           final stableSeriesTitle = args.contentTitle ?? seriesPlaylist?.seriesTitle ?? args.title;
           final localSeriesProgress = isSeries
@@ -366,22 +349,7 @@ final class AndroidTvNativeLaunch {
             final episodeKey = season != null && episodeNumber != null
                 ? '${season}_$episodeNumber'
                 : null;
-            final trackerPercent = episodeKey != null
-                ? furthestEpisodeTrackerPercent([
-                    trackingPolicy.guideProgressFrom(
-                      TrackingSource.trakt,
-                      sourceTraktProgress[episodeKey],
-                    ),
-                    trackingPolicy.guideProgressFrom(
-                      TrackingSource.simkl,
-                      sourceSimklProgress[episodeKey],
-                    ),
-                    trackingPolicy.guideProgressFrom(
-                      TrackingSource.mdblist,
-                      sourceMdblistProgress[episodeKey],
-                    ),
-                  ])
-                : null;
+            final trackerPercent = sourceTrackers.furthest(trackingPolicy, episodeKey);
             final localState = episodeKey != null
                 ? localSeriesProgress[episodeKey]
                 : sourceMovieState;
@@ -393,30 +361,16 @@ final class AndroidTvNativeLaunch {
                 : false;
             final localPositionMs = (localState?['positionMs'] as num?)?.toInt() ?? 0;
             final localDurationMs = (localState?['durationMs'] as num?)?.toInt() ?? 0;
+            final trackerGuide = sourceTrackers.guide(trackingPolicy, episodeKey);
             final resolvedLocal = resolveEpisodeLocalWatchState(
               locallyWatched: trackingPolicy.progressFrom(TrackingSource.local) && locallyWatched,
               localPositionMs: trackingPolicy.progressFrom(TrackingSource.local)
                   ? localPositionMs
                   : 0,
               localDurationMs: localDurationMs,
-              traktPercent: episodeKey == null
-                  ? null
-                  : trackingPolicy.guideProgressFrom(
-                      TrackingSource.trakt,
-                      sourceTraktProgress[episodeKey],
-                    ),
-              simklPercent: episodeKey == null
-                  ? null
-                  : trackingPolicy.guideProgressFrom(
-                      TrackingSource.simkl,
-                      sourceSimklProgress[episodeKey],
-                    ),
-              mdblistPercent: episodeKey == null
-                  ? null
-                  : trackingPolicy.guideProgressFrom(
-                      TrackingSource.mdblist,
-                      sourceMdblistProgress[episodeKey],
-                    ),
+              traktPercent: trackerGuide.trakt,
+              simklPercent: trackerGuide.simkl,
+              mdblistPercent: trackerGuide.mdblist,
             );
             items.add({
               'id': '${entry.title}_$i',
@@ -800,67 +754,28 @@ final class AndroidTvNativeLaunch {
                 seriesTitle: stableSeriesTitle,
                 imdbId: episodeImdbId,
               );
-              final trackerMaps = episodeImdbId != null
-                  ? await Future.wait([
-                      TrackerEpisodeProgressStorage.getEpisodeTraktProgress(
-                        imdbId: episodeImdbId,
-                      ),
-                      TrackerEpisodeProgressStorage.getEpisodeSimklProgress(
-                        imdbId: episodeImdbId,
-                      ),
-                      TrackerEpisodeProgressStorage.getConnectedEpisodeMdblistProgress(
-                        imdbId: episodeImdbId,
-                      ),
-                    ])
-                  : const <Map<String, double>>[];
+              final trackers = episodeImdbId != null
+                  ? EpisodeTrackerPercents.of(await EpisodeTrackerPercents.read(episodeImdbId))
+                  : EpisodeTrackerPercents.empty;
               final episodeKey = '${season}_$episode';
-              if (trackerMaps.isNotEmpty) {
-                final trackerPercent = furthestEpisodeTrackerPercent([
-                  trackingPolicy.guideProgressFrom(
-                    TrackingSource.trakt,
-                    trackerMaps[0][episodeKey],
-                  ),
-                  trackingPolicy.guideProgressFrom(
-                    TrackingSource.simkl,
-                    trackerMaps[1][episodeKey],
-                  ),
-                  trackingPolicy.guideProgressFrom(
-                    TrackingSource.mdblist,
-                    trackerMaps[2][episodeKey],
-                  ),
-                ]);
-                if (trackerPercent != null) {
-                  row['traktProgressPercent'] = trackerPercent;
-                }
+              final trackerPercent = trackers.furthest(trackingPolicy, episodeKey);
+              if (trackerPercent != null) {
+                row['traktProgressPercent'] = trackerPercent;
               }
               final localState = localProgress[episodeKey];
               final localPositionMs = (localState?['positionMs'] as num?)?.toInt() ?? 0;
               final localDurationMs = (localState?['durationMs'] as num?)?.toInt() ?? 0;
               final localWatched = locallyFinished[season.toString()]?.contains(episode) ?? false;
+              final trackerGuide = trackers.guide(trackingPolicy, episodeKey);
               final resolvedLocal = resolveEpisodeLocalWatchState(
                 locallyWatched: trackingPolicy.progressFrom(TrackingSource.local) && localWatched,
                 localPositionMs: trackingPolicy.progressFrom(TrackingSource.local)
                     ? localPositionMs
                     : 0,
                 localDurationMs: localDurationMs,
-                traktPercent: trackerMaps.isNotEmpty
-                    ? trackingPolicy.guideProgressFrom(
-                        TrackingSource.trakt,
-                        trackerMaps[0][episodeKey],
-                      )
-                    : null,
-                simklPercent: trackerMaps.length > 1
-                    ? trackingPolicy.guideProgressFrom(
-                        TrackingSource.simkl,
-                        trackerMaps[1][episodeKey],
-                      )
-                    : null,
-                mdblistPercent: trackerMaps.length > 2
-                    ? trackingPolicy.guideProgressFrom(
-                        TrackingSource.mdblist,
-                        trackerMaps[2][episodeKey],
-                      )
-                    : null,
+                traktPercent: trackerGuide.trakt,
+                simklPercent: trackerGuide.simkl,
+                mdblistPercent: trackerGuide.mdblist,
               );
               row['resumePositionMs'] = resolvedLocal.positionMs;
               row['durationMs'] = localDurationMs;

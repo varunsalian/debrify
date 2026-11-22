@@ -76,5 +76,7 @@ PlaybackMeta homeCatalogPlaybackMeta(
   simklScrobble: sel.simklSource,
   mdblistProgressPercent: sel.mdblistProgressPercent,
   mdblistScrobble: sel.mdblistSource,
+  ledgerProgressPercent: sel.ledgerProgressPercent,
+  ledgerScrobble: sel.ledgerSource,
   art: art,
 );

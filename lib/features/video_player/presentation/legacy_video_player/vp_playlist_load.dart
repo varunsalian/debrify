@@ -9,8 +9,10 @@ import 'package:debrify/services/resume_write_guard.dart';
 import 'package:debrify/utils/episode_playback_request.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart' as mk;
+import 'vp_ledger_scrobbler.dart';
 
 abstract interface class VpPlaylistLoadHost {
+  VpLedgerScrobbler get ledgerScrobbler;
   Map<String, String>? get activeHttpHeaders;
   set activeHttpHeaders(Map<String, String>? v);
   bool get activeMediaShouldPlay;
@@ -290,6 +292,7 @@ class VpPlaylistLoad {
     _host.traktScrobble('stop');
     _host.stopSimklHeartbeat();
     _host.simklScrobble('stop');
+    _host.ledgerScrobbler.onStopped();
     // Keep the MDBList session's playing bit until switchTarget captures it.
     // Calling exit here would make the incoming episode look paused and would
     // prevent its initial checkpoint/timer from starting.

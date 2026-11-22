@@ -9,8 +9,11 @@ import 'package:debrify/services/resume_write_guard.dart';
 import 'package:debrify/services/tracking_source_policy.dart';
 import 'package:debrify/services/storage/movie_progress_storage.dart';
 import 'package:debrify/utils/episode_progress_merge.dart';
+import 'vp_ledger_scrobbler.dart';
 
 abstract interface class VpResumeRestoreHost {
+  VpLedgerScrobbler get ledgerScrobbler;
+  double? get ledgerProgressPercent;
   bool get allowResumeForManualSelection;
   Duration get duration;
   String? get effectiveContentImdbId;
@@ -93,6 +96,9 @@ class VpResumeRestore {
     _host.launchSimklPercentSpent = true;
     final mdblistFirstLoad = !_host.launchMdblistPercentSpent;
     _host.launchMdblistPercentSpent = true;
+    final ledger = _host.ledgerScrobbler;
+    final ledgerFirstLoad = !ledger.launchLedgerPercentSpent;
+    ledger.launchLedgerPercentSpent = true;
 
     await _host.waitForDuration();
     final dur = _host.duration;
@@ -146,6 +152,33 @@ class VpResumeRestore {
       if (simklPct != null && (traktPct == null || simklPct > traktPct)) {
         traktPct = simklPct;
         explicitLaunch = explicitSimklPct != null;
+      }
+    }
+    // Ledger candidate, same rule: the explicit launch promise on first load,
+    // otherwise this episode's snapshot; the furthest remote progress wins.
+    if (!preferLocalResume &&
+        trackingPolicy.progressFrom(TrackingSource.ledger)) {
+      final explicitLedgerPct = ledgerFirstLoad
+          ? _host.ledgerProgressPercent
+          : null;
+      var ledgerPct = explicitLedgerPct;
+      // Checked synchronously so a launch that doesn't track Ledger takes no
+      // extra async step here: its resume timing stays exactly as before.
+      if (ledgerPct == null && ledger.consultsLedger(trackingPolicy)) {
+        final item = _host.resumeKey;
+        final epoch = _host.resumeVerifyEpoch;
+        ledgerPct = await ledger.resumePercent(policy: trackingPolicy);
+        // The item can change while Ledger answers (every open, switch and
+        // playlist load bumps the epoch): never resume onto another item.
+        if (!_host.mounted ||
+            _host.resumeVerifyEpoch != epoch ||
+            _host.resumeKey != item) {
+          return;
+        }
+      }
+      if (ledgerPct != null && (traktPct == null || ledgerPct > traktPct)) {
+        traktPct = ledgerPct;
+        explicitLaunch = explicitLedgerPct != null;
       }
     }
     final int traktMs =
