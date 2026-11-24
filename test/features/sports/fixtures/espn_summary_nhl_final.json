@@ -1,0 +1,418 @@
+{
+ "header": {
+  "competitions": [
+   {
+    "status": {
+     "type": {
+      "name": "STATUS_FINAL",
+      "state": "post",
+      "completed": true,
+      "detail": "Final",
+      "shortDetail": "Final"
+     }
+    },
+    "competitors": [
+     {
+      "id": "11",
+      "homeAway": "home",
+      "score": "3",
+      "winner": true,
+      "team": {
+       "id": "11",
+       "abbreviation": "NJ",
+       "displayName": "New Jersey Devils",
+       "color": "e30b2b",
+       "alternateColor": "000000",
+       "logos": [
+        {
+         "href": "https://a.espncdn.com/i/teamlogos/nhl/500/nj.png"
+        }
+       ]
+      },
+      "record": [
+       {
+        "type": "total",
+        "summary": "16-8-0",
+        "displayValue": "16-8-0, 32 PTS"
+       }
+      ]
+     },
+     {
+      "id": "29",
+      "homeAway": "away",
+      "score": "2",
+      "winner": false,
+      "team": {
+       "id": "29",
+       "abbreviation": "CBJ",
+       "displayName": "Columbus Blue Jackets",
+       "color": "002d62",
+       "alternateColor": "e31937",
+       "logos": [
+        {
+         "href": "https://a.espncdn.com/i/teamlogos/nhl/500/cbj.png"
+        }
+       ]
+      },
+      "record": [
+       {
+        "type": "total",
+        "summary": "9-13-0",
+        "displayValue": "9-13-0, 18 PTS"
+       }
+      ]
+     }
+    ],
+    "date": "2026-11-24T00:00Z"
+   }
+  ]
+ },
+ "boxscore": {
+  "teams": [
+   {
+    "homeAway": "away",
+    "team": {
+     "id": "29",
+     "abbreviation": "CBJ",
+     "displayName": "Columbus Blue Jackets",
+     "shortDisplayName": "Blue Jackets",
+     "color": "002d62",
+     "alternateColor": "e31937",
+     "logo": "https://a.espncdn.com/i/teamlogos/nhl/500/cbj.png"
+    },
+    "statistics": [
+     {
+      "name": "blockedShots",
+      "abbreviation": "BS",
+      "displayValue": "14",
+      "label": "Blocked Shots"
+     },
+     {
+      "name": "hits",
+      "abbreviation": "HT",
+      "displayValue": "16",
+      "label": "Hits"
+     },
+     {
+      "name": "takeaways",
+      "abbreviation": "TK",
+      "displayValue": "6",
+      "label": "Takeaways"
+     },
+     {
+      "name": "shotsTotal",
+      "abbreviation": "S",
+      "displayValue": "21",
+      "label": "Shots"
+     },
+     {
+      "name": "powerPlayGoals",
+      "abbreviation": "PPG",
+      "displayValue": "0",
+      "label": "Power Play Goals"
+     },
+     {
+      "name": "powerPlayOpportunities",
+      "abbreviation": "PPO",
+      "displayValue": "2",
+      "label": "Power Play Opportunities"
+     },
+     {
+      "name": "powerPlayPct",
+      "abbreviation": "PCT",
+      "displayValue": "0.0",
+      "label": "Power Play Percentage"
+     },
+     {
+      "name": "shortHandedGoals",
+      "abbreviation": "SHG",
+      "displayValue": "1",
+      "label": "Short Handed Goals"
+     },
+     {
+      "name": "shootoutGoals",
+      "abbreviation": "SOG",
+      "displayValue": "0",
+      "label": "Shootout Goals"
+     },
+     {
+      "name": "faceoffsWon",
+      "abbreviation": "FW",
+      "displayValue": "22",
+      "label": "Faceoffs Won"
+     },
+     {
+      "name": "faceoffPercent",
+      "abbreviation": "FO%",
+      "displayValue": "48.9",
+      "label": "Faceoff Win Percent"
+     },
+     {
+      "name": "giveaways",
+      "abbreviation": "GV",
+      "displayValue": "10",
+      "label": "Giveaways"
+     },
+     {
+      "name": "penalties",
+      "abbreviation": "PN",
+      "displayValue": "3",
+      "label": "Total Penalties"
+     },
+     {
+      "name": "penaltyMinutes",
+      "abbreviation": "PIM",
+      "displayValue": "6",
+      "label": "Penalty Minutes"
+     }
+    ]
+   },
+   {
+    "homeAway": "home",
+    "team": {
+     "id": "11",
+     "abbreviation": "NJ",
+     "displayName": "New Jersey Devils",
+     "shortDisplayName": "Devils",
+     "color": "e30b2b",
+     "alternateColor": "000000",
+     "logo": "https://a.espncdn.com/i/teamlogos/nhl/500/nj.png"
+    },
+    "statistics": [
+     {
+      "name": "blockedShots",
+      "abbreviation": "BS",
+      "displayValue": "15",
+      "label": "Blocked Shots"
+     },
+     {
+      "name": "hits",
+      "abbreviation": "HT",
+      "displayValue": "17",
+      "label": "Hits"
+     },
+     {
+      "name": "takeaways",
+      "abbreviation": "TK",
+      "displayValue": "0",
+      "label": "Takeaways"
+     },
+     {
+      "name": "shotsTotal",
+      "abbreviation": "S",
+      "displayValue": "30",
+      "label": "Shots"
+     },
+     {
+      "name": "powerPlayGoals",
+      "abbreviation": "PPG",
+      "displayValue": "0",
+      "label": "Power Play Goals"
+     },
+     {
+      "name": "powerPlayOpportunities",
+      "abbreviation": "PPO",
+      "displayValue": "3",
+      "label": "Power Play Opportunities"
+     },
+     {
+      "name": "powerPlayPct",
+      "abbreviation": "PCT",
+      "displayValue": "0.0",
+      "label": "Power Play Percentage"
+     },
+     {
+      "name": "shortHandedGoals",
+      "abbreviation": "SHG",
+      "displayValue": "0",
+      "label": "Short Handed Goals"
+     },
+     {
+      "name": "shootoutGoals",
+      "abbreviation": "SOG",
+      "displayValue": "0",
+      "label": "Shootout Goals"
+     },
+     {
+      "name": "faceoffsWon",
+      "abbreviation": "FW",
+      "displayValue": "23",
+      "label": "Faceoffs Won"
+     },
+     {
+      "name": "faceoffPercent",
+      "abbreviation": "FO%",
+      "displayValue": "51.1",
+      "label": "Faceoff Win Percent"
+     },
+     {
+      "name": "giveaways",
+      "abbreviation": "GV",
+      "displayValue": "15",
+      "label": "Giveaways"
+     },
+     {
+      "name": "penalties",
+      "abbreviation": "PN",
+      "displayValue": "2",
+      "label": "Total Penalties"
+     },
+     {
+      "name": "penaltyMinutes",
+      "abbreviation": "PIM",
+      "displayValue": "4",
+      "label": "Penalty Minutes"
+     }
+    ]
+   }
+  ]
+ },
+ "leaders": [
+  {
+   "team": {
+    "id": "11"
+   },
+   "leaders": [
+    {
+     "name": "goals",
+     "displayName": "Goals",
+     "leaders": [
+      {
+       "displayValue": "1",
+       "athlete": {
+        "displayName": "Connor Brown",
+        "shortName": "C. Brown",
+        "headshot": {
+         "href": "https://a.espncdn.com/i/headshots/nhl/players/full/3067951.png",
+         "alt": "Connor Brown"
+        },
+        "position": {
+         "name": "Right Wing",
+         "displayName": "Right Wing",
+         "abbreviation": "RW"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "name": "assists",
+     "displayName": "Assists",
+     "leaders": [
+      {
+       "displayValue": "1",
+       "athlete": {
+        "displayName": "Connor Brown",
+        "shortName": "C. Brown",
+        "headshot": {
+         "href": "https://a.espncdn.com/i/headshots/nhl/players/full/3067951.png",
+         "alt": "Connor Brown"
+        },
+        "position": {
+         "name": "Right Wing",
+         "displayName": "Right Wing",
+         "abbreviation": "RW"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "name": "points",
+     "displayName": "Points",
+     "leaders": [
+      {
+       "displayValue": "2",
+       "athlete": {
+        "displayName": "Connor Brown",
+        "shortName": "C. Brown",
+        "headshot": {
+         "href": "https://a.espncdn.com/i/headshots/nhl/players/full/3067951.png",
+         "alt": "Connor Brown"
+        },
+        "position": {
+         "name": "Right Wing",
+         "displayName": "Right Wing",
+         "abbreviation": "RW"
+        }
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "team": {
+    "id": "29"
+   },
+   "leaders": [
+    {
+     "name": "goals",
+     "displayName": "Goals",
+     "leaders": [
+      {
+       "displayValue": "1",
+       "athlete": {
+        "displayName": "Charlie Coyle",
+        "shortName": "C. Coyle",
+        "headshot": {
+         "href": "https://a.espncdn.com/i/headshots/nhl/players/full/2555315.png",
+         "alt": "Charlie Coyle"
+        },
+        "position": {
+         "name": "Center",
+         "displayName": "Center",
+         "abbreviation": "C"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "name": "assists",
+     "displayName": "Assists",
+     "leaders": [
+      {
+       "displayValue": "1",
+       "athlete": {
+        "displayName": "Damon Severson",
+        "shortName": "D. Severson",
+        "headshot": {
+         "href": "https://a.espncdn.com/i/headshots/nhl/players/full/3068087.png",
+         "alt": "Damon Severson"
+        },
+        "position": {
+         "name": "Defense",
+         "displayName": "Defense",
+         "abbreviation": "D"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "name": "points",
+     "displayName": "Points",
+     "leaders": [
+      {
+       "displayValue": "1",
+       "athlete": {
+        "displayName": "Charlie Coyle",
+        "shortName": "C. Coyle",
+        "headshot": {
+         "href": "https://a.espncdn.com/i/headshots/nhl/players/full/2555315.png",
+         "alt": "Charlie Coyle"
+        },
+        "position": {
+         "name": "Center",
+         "displayName": "Center",
+         "abbreviation": "C"
+        }
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

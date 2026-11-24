@@ -1,0 +1,805 @@
+{
+ "header": {
+  "competitions": [
+   {
+    "status": {
+     "type": {
+      "name": "STATUS_FINAL",
+      "state": "post",
+      "completed": true,
+      "detail": "Final",
+      "shortDetail": "Final"
+     }
+    },
+    "competitors": [
+     {
+      "id": "34",
+      "homeAway": "home",
+      "score": "26",
+      "winner": true,
+      "team": {
+       "id": "34",
+       "abbreviation": "HOU",
+       "displayName": "Houston Texans",
+       "color": "021018",
+       "alternateColor": "eb0028",
+       "logos": [
+        {
+         "href": "https://a.espncdn.com/i/teamlogos/nfl/500/hou.png"
+        }
+       ]
+      },
+      "record": [
+       {
+        "type": "total",
+        "summary": "4-6",
+        "displayValue": "4-6"
+       }
+      ]
+     },
+     {
+      "id": "11",
+      "homeAway": "away",
+      "score": "3",
+      "winner": false,
+      "team": {
+       "id": "11",
+       "abbreviation": "IND",
+       "displayName": "Indianapolis Colts",
+       "color": "003b75",
+       "alternateColor": "ffffff",
+       "logos": [
+        {
+         "href": "https://a.espncdn.com/i/teamlogos/nfl/500/ind.png"
+        }
+       ]
+      },
+      "record": [
+       {
+        "type": "total",
+        "summary": "3-8",
+        "displayValue": "3-8"
+       }
+      ]
+     }
+    ],
+    "date": "2026-11-20T01:15Z"
+   }
+  ]
+ },
+ "boxscore": {
+  "teams": [
+   {
+    "homeAway": "away",
+    "team": {
+     "id": "11",
+     "abbreviation": "IND",
+     "displayName": "Indianapolis Colts",
+     "shortDisplayName": "Colts",
+     "color": "003b75",
+     "alternateColor": "ffffff",
+     "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/ind.png"
+    },
+    "statistics": [
+     {
+      "name": "firstDowns",
+      "displayValue": "8",
+      "value": 8.0,
+      "label": "1st Downs"
+     },
+     {
+      "name": "firstDownsPassing",
+      "displayValue": "6",
+      "value": 6.0,
+      "label": "Passing 1st downs"
+     },
+     {
+      "name": "firstDownsRushing",
+      "displayValue": "1",
+      "value": 1.0,
+      "label": "Rushing 1st downs"
+     },
+     {
+      "name": "firstDownsPenalty",
+      "displayValue": "1",
+      "value": 1.0,
+      "label": "1st downs from penalties"
+     },
+     {
+      "name": "thirdDownEff",
+      "displayValue": "1-11",
+      "value": 0.0909090909,
+      "label": "3rd down efficiency"
+     },
+     {
+      "name": "fourthDownEff",
+      "displayValue": "1-2",
+      "value": 0.5,
+      "label": "4th down efficiency"
+     },
+     {
+      "name": "totalOffensivePlays",
+      "displayValue": "48",
+      "value": 48.0,
+      "label": "Total Plays"
+     },
+     {
+      "name": "totalYards",
+      "displayValue": "167",
+      "value": "-",
+      "label": "Total Yards"
+     },
+     {
+      "name": "yardsPerPlay",
+      "displayValue": "3.5",
+      "value": 3.4791666667,
+      "label": "Yards per Play"
+     },
+     {
+      "name": "totalDrives",
+      "displayValue": "10",
+      "value": 10.0,
+      "label": "Total Drives"
+     },
+     {
+      "name": "netPassingYards",
+      "displayValue": "129",
+      "value": 129.0,
+      "label": "Passing"
+     },
+     {
+      "name": "completionAttempts",
+      "displayValue": "12/29",
+      "value": "-",
+      "label": "Comp/Att"
+     },
+     {
+      "name": "yardsPerPass",
+      "displayValue": "4.2",
+      "value": 4.161290322580645,
+      "label": "Yards per pass"
+     },
+     {
+      "name": "interceptions",
+      "displayValue": "1",
+      "value": 1.0,
+      "label": "Interceptions thrown"
+     },
+     {
+      "name": "sacksYardsLost",
+      "displayValue": "2-15",
+      "value": "-",
+      "label": "Sacks-Yards Lost"
+     },
+     {
+      "name": "rushingYards",
+      "displayValue": "38",
+      "value": 38.0,
+      "label": "Rushing"
+     },
+     {
+      "name": "rushingAttempts",
+      "displayValue": "17",
+      "value": 17.0,
+      "label": "Rushing Attempts"
+     },
+     {
+      "name": "yardsPerRushAttempt",
+      "displayValue": "2.2",
+      "value": 2.235,
+      "label": "Yards per rush"
+     },
+     {
+      "name": "redZoneAttempts",
+      "displayValue": "0-1",
+      "value": 0.0,
+      "label": "Red Zone (Made-Att)"
+     },
+     {
+      "name": "totalPenaltiesYards",
+      "displayValue": "2-15",
+      "value": "-",
+      "label": "Penalties"
+     },
+     {
+      "name": "turnovers",
+      "displayValue": "1",
+      "value": "-",
+      "label": "Turnovers"
+     },
+     {
+      "name": "fumblesLost",
+      "displayValue": "0",
+      "value": 0.0,
+      "label": "Fumbles lost"
+     },
+     {
+      "name": "interceptions",
+      "displayValue": "1",
+      "value": 1.0,
+      "label": "Interceptions thrown"
+     },
+     {
+      "name": "defensiveTouchdowns",
+      "displayValue": "0",
+      "value": 0.0,
+      "label": "Defensive / Special Teams TDs"
+     },
+     {
+      "name": "possessionTime",
+      "displayValue": "22:14",
+      "value": 1334,
+      "label": "Possession"
+     }
+    ]
+   },
+   {
+    "homeAway": "home",
+    "team": {
+     "id": "34",
+     "abbreviation": "HOU",
+     "displayName": "Houston Texans",
+     "shortDisplayName": "Texans",
+     "color": "021018",
+     "alternateColor": "eb0028",
+     "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/hou.png"
+    },
+    "statistics": [
+     {
+      "name": "firstDowns",
+      "displayValue": "21",
+      "value": 21.0,
+      "label": "1st Downs"
+     },
+     {
+      "name": "firstDownsPassing",
+      "displayValue": "12",
+      "value": 12.0,
+      "label": "Passing 1st downs"
+     },
+     {
+      "name": "firstDownsRushing",
+      "displayValue": "8",
+      "value": 8.0,
+      "label": "Rushing 1st downs"
+     },
+     {
+      "name": "firstDownsPenalty",
+      "displayValue": "1",
+      "value": 1.0,
+      "label": "1st downs from penalties"
+     },
+     {
+      "name": "thirdDownEff",
+      "displayValue": "8-14",
+      "value": 0.5714285714,
+      "label": "3rd down efficiency"
+     },
+     {
+      "name": "fourthDownEff",
+      "displayValue": "0-1",
+      "value": 0,
+      "label": "4th down efficiency"
+     },
+     {
+      "name": "totalOffensivePlays",
+      "displayValue": "65",
+      "value": 65.0,
+      "label": "Total Plays"
+     },
+     {
+      "name": "totalYards",
+      "displayValue": "354",
+      "value": "-",
+      "label": "Total Yards"
+     },
+     {
+      "name": "yardsPerPlay",
+      "displayValue": "5.4",
+      "value": 5.4461538462,
+      "label": "Yards per Play"
+     },
+     {
+      "name": "totalDrives",
+      "displayValue": "10",
+      "value": 10.0,
+      "label": "Total Drives"
+     },
+     {
+      "name": "netPassingYards",
+      "displayValue": "187",
+      "value": 187.0,
+      "label": "Passing"
+     },
+     {
+      "name": "completionAttempts",
+      "displayValue": "21/27",
+      "value": "-",
+      "label": "Comp/Att"
+     },
+     {
+      "name": "yardsPerPass",
+      "displayValue": "6.7",
+      "value": 6.678571428571429,
+      "label": "Yards per pass"
+     },
+     {
+      "name": "interceptions",
+      "displayValue": "1",
+      "value": 1.0,
+      "label": "Interceptions thrown"
+     },
+     {
+      "name": "sacksYardsLost",
+      "displayValue": "1-7",
+      "value": "-",
+      "label": "Sacks-Yards Lost"
+     },
+     {
+      "name": "rushingYards",
+      "displayValue": "167",
+      "value": 167.0,
+      "label": "Rushing"
+     },
+     {
+      "name": "rushingAttempts",
+      "displayValue": "37",
+      "value": 37.0,
+      "label": "Rushing Attempts"
+     },
+     {
+      "name": "yardsPerRushAttempt",
+      "displayValue": "4.5",
+      "value": 4.514,
+      "label": "Yards per rush"
+     },
+     {
+      "name": "redZoneAttempts",
+      "displayValue": "1-2",
+      "value": 0.5,
+      "label": "Red Zone (Made-Att)"
+     },
+     {
+      "name": "totalPenaltiesYards",
+      "displayValue": "4-23",
+      "value": "-",
+      "label": "Penalties"
+     },
+     {
+      "name": "turnovers",
+      "displayValue": "1",
+      "value": "-",
+      "label": "Turnovers"
+     },
+     {
+      "name": "fumblesLost",
+      "displayValue": "0",
+      "value": 0.0,
+      "label": "Fumbles lost"
+     },
+     {
+      "name": "interceptions",
+      "displayValue": "1",
+      "value": 1.0,
+      "label": "Interceptions thrown"
+     },
+     {
+      "name": "defensiveTouchdowns",
+      "displayValue": "0",
+      "value": 0.0,
+      "label": "Defensive / Special Teams TDs"
+     },
+     {
+      "name": "possessionTime",
+      "displayValue": "37:46",
+      "value": 2266,
+      "label": "Possession"
+     }
+    ]
+   }
+  ]
+ },
+ "leaders": [
+  {
+   "team": {
+    "id": "34"
+   },
+   "leaders": [
+    {
+     "name": "passingYards",
+     "displayName": "Passing Yards",
+     "leaders": [
+      {
+       "displayValue": "21/27, 194 YDS, 3 TD, 1 INT",
+       "athlete": {
+        "displayName": "C.J. Stroud",
+        "shortName": "C.J. Stroud",
+        "headshot": {
+         "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4432577.png",
+         "alt": "C.J. Stroud"
+        },
+        "position": {
+         "name": "Quarterback",
+         "displayName": "Quarterback",
+         "abbreviation": "QB"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "name": "rushingYards",
+     "displayName": "Rushing Yards",
+     "leaders": [
+      {
+       "displayValue": "26 CAR, 107 YDS",
+       "athlete": {
+        "displayName": "David Montgomery",
+        "shortName": "D. Montgomery",
+        "headshot": {
+         "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4035538.png",
+         "alt": "David Montgomery"
+        },
+        "position": {
+         "name": "Running Back",
+         "displayName": "Running Back",
+         "abbreviation": "RB"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "name": "receivingYards",
+     "displayName": "Receiving Yards",
+     "leaders": [
+      {
+       "displayValue": "3 REC, 58 YDS, 1 TD",
+       "athlete": {
+        "displayName": "Nico Collins",
+        "shortName": "N. Collins",
+        "headshot": {
+         "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4258173.png",
+         "alt": "Nico Collins"
+        },
+        "position": {
+         "name": "Wide Receiver",
+         "displayName": "Wide Receiver",
+         "abbreviation": "WR"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "name": "sacks",
+     "displayName": "Sacks",
+     "leaders": [
+      {
+       "displayValue": "1",
+       "athlete": {
+        "displayName": "Jadeveon Clowney",
+        "shortName": "J. Clowney",
+        "headshot": {
+         "href": "https://a.espncdn.com/i/headshots/nfl/players/full/16734.png",
+         "alt": "Jadeveon Clowney"
+        },
+        "position": {
+         "name": "Defensive End",
+         "displayName": "Defensive End",
+         "abbreviation": "DE"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "name": "totalTackles",
+     "displayName": "Tackles",
+     "leaders": [
+      {
+       "displayValue": "6",
+       "athlete": {
+        "displayName": "Tommy Togiai",
+        "shortName": "T. Togiai",
+        "headshot": {
+         "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4361366.png",
+         "alt": "Tommy Togiai"
+        },
+        "position": {
+         "name": "Defensive Tackle",
+         "displayName": "Defensive Tackle",
+         "abbreviation": "DT"
+        }
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "team": {
+    "id": "11"
+   },
+   "leaders": [
+    {
+     "name": "passingYards",
+     "displayName": "Passing Yards",
+     "leaders": [
+      {
+       "displayValue": "12/27, 144 YDS, 1 INT",
+       "athlete": {
+        "displayName": "Daniel Jones",
+        "shortName": "D. Jones",
+        "headshot": {
+         "href": "https://a.espncdn.com/i/headshots/nfl/players/full/3917792.png",
+         "alt": "Daniel Jones"
+        },
+        "position": {
+         "name": "Quarterback",
+         "displayName": "Quarterback",
+         "abbreviation": "QB"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "name": "rushingYards",
+     "displayName": "Rushing Yards",
+     "leaders": [
+      {
+       "displayValue": "11 CAR, 21 YDS",
+       "athlete": {
+        "displayName": "Jonathan Taylor",
+        "shortName": "J. Taylor",
+        "headshot": {
+         "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4242335.png",
+         "alt": "Jonathan Taylor"
+        },
+        "position": {
+         "name": "Running Back",
+         "displayName": "Running Back",
+         "abbreviation": "RB"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "name": "receivingYards",
+     "displayName": "Receiving Yards",
+     "leaders": [
+      {
+       "displayValue": "2 REC, 48 YDS",
+       "athlete": {
+        "displayName": "Anthony Gould",
+        "shortName": "A. Gould",
+        "headshot": {
+         "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4429684.png",
+         "alt": "Anthony Gould"
+        },
+        "position": {
+         "name": "Wide Receiver",
+         "displayName": "Wide Receiver",
+         "abbreviation": "WR"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "name": "sacks",
+     "displayName": "Sacks",
+     "leaders": [
+      {
+       "displayValue": "1",
+       "athlete": {
+        "displayName": "Adetomiwa Adebawore",
+        "shortName": "A. Adebawore",
+        "headshot": {
+         "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4427635.png",
+         "alt": "Adetomiwa Adebawore"
+        },
+        "position": {
+         "name": "Defensive Tackle",
+         "displayName": "Defensive Tackle",
+         "abbreviation": "DT"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "name": "totalTackles",
+     "displayName": "Tackles",
+     "leaders": [
+      {
+       "displayValue": "16",
+       "athlete": {
+        "displayName": "CJ Allen",
+        "shortName": "C. Allen",
+        "headshot": {
+         "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4870598.png",
+         "alt": "CJ Allen"
+        },
+        "position": {
+         "name": "Linebacker",
+         "displayName": "Linebacker",
+         "abbreviation": "LB"
+        }
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "winprobability": [
+  {
+   "homeWinPercentage": 0.7478,
+   "tiePercentage": 0.0,
+   "playId": "4018730661"
+  },
+  {
+   "homeWinPercentage": 0.674,
+   "tiePercentage": 0.0,
+   "playId": "401873066133"
+  },
+  {
+   "homeWinPercentage": 0.7014,
+   "tiePercentage": 0.0,
+   "playId": "401873066254"
+  },
+  {
+   "homeWinPercentage": 0.7158,
+   "tiePercentage": 0.0,
+   "playId": "401873066362"
+  },
+  {
+   "homeWinPercentage": 0.7026,
+   "tiePercentage": 0.0,
+   "playId": "401873066504"
+  },
+  {
+   "homeWinPercentage": 0.6121,
+   "tiePercentage": 0.0,
+   "playId": "401873066607"
+  },
+  {
+   "homeWinPercentage": 0.6616,
+   "tiePercentage": 0.0,
+   "playId": "401873066736"
+  },
+  {
+   "homeWinPercentage": 0.7934,
+   "tiePercentage": 0.0,
+   "playId": "401873066834"
+  },
+  {
+   "homeWinPercentage": 0.8024,
+   "tiePercentage": 0.0,
+   "playId": "401873066969"
+  },
+  {
+   "homeWinPercentage": 0.8138,
+   "tiePercentage": 0.0,
+   "playId": "4018730661114"
+  },
+  {
+   "homeWinPercentage": 0.8378,
+   "tiePercentage": 0.0,
+   "playId": "4018730661236"
+  },
+  {
+   "homeWinPercentage": 0.8967,
+   "tiePercentage": 0.0,
+   "playId": "4018730661357"
+  },
+  {
+   "homeWinPercentage": 0.9066,
+   "tiePercentage": 0.0,
+   "playId": "4018730661483"
+  },
+  {
+   "homeWinPercentage": 0.8898,
+   "tiePercentage": 0.0,
+   "playId": "4018730661634"
+  },
+  {
+   "homeWinPercentage": 0.8889,
+   "tiePercentage": 0.0,
+   "playId": "4018730661738"
+  },
+  {
+   "homeWinPercentage": 0.9186,
+   "tiePercentage": 0.0,
+   "playId": "4018730661848"
+  },
+  {
+   "homeWinPercentage": 0.9401,
+   "tiePercentage": 0.0,
+   "playId": "4018730661987"
+  },
+  {
+   "homeWinPercentage": 0.939,
+   "tiePercentage": 0.0,
+   "playId": "4018730662071"
+  },
+  {
+   "homeWinPercentage": 0.943,
+   "tiePercentage": 0.0,
+   "playId": "4018730662182"
+  },
+  {
+   "homeWinPercentage": 0.9398,
+   "tiePercentage": 0.0,
+   "playId": "4018730662294"
+  },
+  {
+   "homeWinPercentage": 0.9754,
+   "tiePercentage": 0.0,
+   "playId": "4018730662392"
+  },
+  {
+   "homeWinPercentage": 0.975,
+   "tiePercentage": 0.0,
+   "playId": "4018730662509"
+  },
+  {
+   "homeWinPercentage": 0.9879,
+   "tiePercentage": 0.0,
+   "playId": "4018730662627"
+  },
+  {
+   "homeWinPercentage": 0.9957,
+   "tiePercentage": 0.0,
+   "playId": "4018730662753"
+  },
+  {
+   "homeWinPercentage": 0.9968,
+   "tiePercentage": 0.0,
+   "playId": "4018730662855"
+  },
+  {
+   "homeWinPercentage": 0.9963,
+   "tiePercentage": 0.0,
+   "playId": "4018730662972"
+  },
+  {
+   "homeWinPercentage": 0.9959,
+   "tiePercentage": 0.0,
+   "playId": "4018730663086"
+  },
+  {
+   "homeWinPercentage": 0.999,
+   "tiePercentage": 0.0,
+   "playId": "4018730663196"
+  },
+  {
+   "homeWinPercentage": 0.999,
+   "tiePercentage": 0.0,
+   "playId": "4018730663305"
+  },
+  {
+   "homeWinPercentage": 0.999,
+   "tiePercentage": 0.0,
+   "playId": "4018730663404"
+  },
+  {
+   "homeWinPercentage": 0.999,
+   "tiePercentage": 0.0,
+   "playId": "4018730663534"
+  },
+  {
+   "homeWinPercentage": 0.999,
+   "tiePercentage": 0.0,
+   "playId": "4018730663638"
+  },
+  {
+   "homeWinPercentage": 1.0,
+   "tiePercentage": 0.0,
+   "playId": "4018730663734"
+  }
+ ]
+}

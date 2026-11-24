@@ -16,6 +16,7 @@ import 'package:flutter/services.dart';
 
 import 'sports_clock.dart';
 import 'sports_event_card.dart';
+import 'sports_match_stats_page.dart';
 import 'sports_reminder_pill.dart';
 import 'sports_team_crest.dart';
 
@@ -219,6 +220,17 @@ class _DetailsSurfaceState extends State<_DetailsSurface> {
               .firstOrNull;
     _focusClaimed = _playedOption != null;
     final rows = <Widget>[_header(), const SizedBox(height: 16), _matchup()];
+    if (sportsMatchStatsAvailable(_event)) {
+      rows
+        ..add(const SizedBox(height: 6))
+        ..add(
+          SportsMatchStatsButton(
+            event: _event,
+            hideScores: widget.follows.hideScores,
+          ),
+        )
+        ..add(const SizedBox(height: 6));
+    }
     // Guide listings first, then event streams found by their own name:
     // on the user's channels, but not in their guide.
     for (final (kind, title) in const [

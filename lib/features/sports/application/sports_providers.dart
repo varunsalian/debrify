@@ -11,6 +11,7 @@ import 'package:debrify/features/sports/data/sports_feed_client.dart';
 import 'package:debrify/features/sports/data/sports_follow_store.dart';
 import 'package:debrify/features/sports/data/sports_http_fetch.dart';
 import 'package:debrify/features/sports/data/sports_league_filter_store.dart';
+import 'package:debrify/features/sports/data/sports_match_stats_client.dart';
 import 'package:debrify/features/sports/data/sports_reminder_store.dart';
 import 'package:debrify/features/sports/models/sports_guide_contract.dart';
 import 'package:debrify/features/sports/models/sports_league_filter.dart';
@@ -33,6 +34,21 @@ export 'package:debrify/features/sports/models/sports_league_filter.dart';
 final sportsFeedClientProvider = Provider<SportsFeedClient>(
   (ref) => SportsFeedClient(fetch: httpSportsFetch),
   dependencies: const [],
+);
+
+/// Match summaries for the stats page. App-wide, with no `dependencies`: the
+/// page is a route above the board's own scope, and the data is public and
+/// device-wide.
+final sportsMatchStatsClientProvider = Provider<SportsMatchStatsClient>(
+  (ref) => SportsMatchStatsClient(fetch: httpSportsFetch),
+  retry: (_, _) => null,
+);
+
+/// The stats page's clock (when a preview is due to kick off). App-wide
+/// like the client: [sportsClockProvider] is scoped to the board.
+final sportsMatchStatsClockProvider = Provider<DateTime Function()>(
+  (ref) => DateTime.now,
+  retry: (_, _) => null,
 );
 
 /// Followed leagues, teams and the score-hiding choice.
