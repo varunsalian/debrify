@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import '../../models/advanced_search_selection.dart';
 import '../../models/stremio_addon.dart';
 import '../../models/simkl_continue_watching_item.dart';
-import 'simkl_anime.dart';
 import 'simkl_episode_codes.dart';
 import 'simkl_item_transformer.dart';
 import 'simkl_service.dart';
@@ -149,11 +148,20 @@ class SimklContinueWatchingService {
       final imdb = _canonical(movie['ids'], 'movie', libIndex);
       if (imdb == null) continue;
       // Parked/finished/dropped in the library ⇒ not "continue watching".
-      if (_hiddenStatuses.contains(statusIndex['movie|$imdb'])) continue;
+      // The library may know the film by other ids than [imdb] (anime).
+      final status =
+          _byAnyId(movie['ids'], 'movie', statusIndex) ??
+          statusIndex['movie|$imdb'];
+      if (_hiddenStatuses.contains(status)) continue;
       final progress = _visibleProgress(raw['progress']);
       if (progress == null) continue;
       final cand = SimklContinueWatchingItem(
-        meta: _metaFor(imdb, 'movie', libIndex['movie|$imdb'], movie['title']),
+        meta: _metaFor(
+          imdb,
+          'movie',
+          _byAnyId(movie['ids'], 'movie', libIndex) ?? libIndex['movie|$imdb'],
+          movie['title'],
+        ),
         progress: progress,
         season: null,
         episode: null,
@@ -215,11 +223,10 @@ class SimklContinueWatchingService {
       // Parked/finished/dropped in the library ⇒ not "continue watching".
       // Judged by the session's own entry first: anime cours share the
       // show's other ids.
-      final simklId = SimklAnimeEpisodes.simklIdOf(show['ids']);
-      final own = simklId == null ? null : statusIndex['series|simkl:$simklId'];
-      if (_hiddenStatuses.contains(own ?? statusIndex['series|$imdb'])) {
-        continue;
-      }
+      final status =
+          _byAnyId(show['ids'], 'series', statusIndex) ??
+          statusIndex['series|$imdb'];
+      if (_hiddenStatuses.contains(status)) continue;
       final ep = raw['episode'];
       if (ep is! Map) continue;
       final season = _asInt(ep['season']);
@@ -234,7 +241,12 @@ class SimklContinueWatchingService {
         continue;
       }
       final cand = SimklContinueWatchingItem(
-        meta: _metaFor(imdb, 'series', libIndex['series|$imdb'], show['title']),
+        meta: _metaFor(
+          imdb,
+          'series',
+          _byAnyId(show['ids'], 'series', libIndex) ?? libIndex['series|$imdb'],
+          show['title'],
+        ),
         progress: progress,
         season: season,
         episode: number,
@@ -277,7 +289,8 @@ class SimklContinueWatchingService {
           meta: _metaFor(
             imdb,
             'series',
-            libIndex['series|$imdb'],
+            _byAnyId(show['ids'], 'series', libIndex) ??
+                libIndex['series|$imdb'],
             show['title'],
           ),
           progress: null, // not started — no resume position / progress bar
@@ -350,14 +363,35 @@ class SimklContinueWatchingService {
     String type,
     Map<String, StremioMeta> library,
   ) {
+    final own = MediaIdentity.preferred(ids);
+    // An IMDb id the row carries beats any library entry: anime share TMDB
+    // ids across shows IMDb keeps apart.
+    if (MediaIdentity.isImdb(own)) return own;
     for (final alias in MediaIdentity.aliases(ids)) {
       final meta = library['$type|$alias'];
       if (meta != null) return meta.effectiveImdbId ?? meta.id;
     }
-    return MediaIdentity.preferred(ids);
+    return own;
   }
 
   String? _imdbOf(dynamic ids) => MediaIdentity.preferred(ids);
+
+  /// The [index] entry for any of [ids], or null. The title's own Simkl
+  /// id goes first: anime cours share their other ids, so those may name
+  /// another cour.
+  T? _byAnyId<T>(dynamic ids, String type, Map<String, T> index) {
+    final aliases = MediaIdentity.aliases(ids).toList()
+      ..sort(
+        (a, b) => (b.startsWith('simkl:') ? 1 : 0).compareTo(
+          a.startsWith('simkl:') ? 1 : 0,
+        ),
+      );
+    for (final alias in aliases) {
+      final value = index['$type|$alias'];
+      if (value != null) return value;
+    }
+    return null;
+  }
 
   /// Progress in (0,100), else null — mirrors the "hide un-started/finished"
   /// rule the Trakt CW list uses (TraktContinueWatchingService._visibleProgress).

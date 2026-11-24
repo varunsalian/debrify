@@ -1,0 +1,698 @@
+{
+ "header": {
+  "competitions": [
+   {
+    "status": {
+     "type": {
+      "name": "STATUS_FINAL",
+      "state": "post",
+      "completed": true,
+      "detail": "Final",
+      "shortDetail": "Final"
+     }
+    },
+    "competitors": [
+     {
+      "id": "30",
+      "homeAway": "home",
+      "score": "1",
+      "winner": false,
+      "team": {
+       "id": "30",
+       "abbreviation": "TB",
+       "displayName": "Tampa Bay Rays",
+       "color": "092c5c",
+       "alternateColor": "8fbce6",
+       "logos": [
+        {
+         "href": "https://a.espncdn.com/i/teamlogos/mlb/500/tb.png"
+        }
+       ]
+      },
+      "record": [
+       {
+        "type": "total",
+        "summary": "98-64",
+        "displayValue": "98-64"
+       }
+      ]
+     },
+     {
+      "id": "8",
+      "homeAway": "away",
+      "score": "4",
+      "winner": true,
+      "team": {
+       "id": "8",
+       "abbreviation": "MIL",
+       "displayName": "Milwaukee Brewers",
+       "color": "13294b",
+       "alternateColor": "ffc72c",
+       "logos": [
+        {
+         "href": "https://a.espncdn.com/i/teamlogos/mlb/500/mil.png"
+        }
+       ]
+      },
+      "record": [
+       {
+        "type": "total",
+        "summary": "103-59",
+        "displayValue": "103-59"
+       }
+      ]
+     }
+    ],
+    "date": "2026-10-29T00:00Z"
+   }
+  ]
+ },
+ "boxscore": {
+  "teams": [
+   {
+    "homeAway": "away",
+    "team": {
+     "id": "8",
+     "abbreviation": "MIL",
+     "displayName": "Milwaukee Brewers",
+     "shortDisplayName": "Brewers",
+     "color": "13294b",
+     "alternateColor": "ffc72c",
+     "logo": "https://a.espncdn.com/i/teamlogos/mlb/500/mil.png"
+    },
+    "statistics": [
+     {
+      "name": "batting",
+      "displayName": "Batting",
+      "stats": [
+       {
+        "name": "strikeouts",
+        "displayName": "Strikeouts",
+        "shortDisplayName": "K",
+        "description": "The number of times a player strikes out.",
+        "abbreviation": "SO",
+        "value": 10.0,
+        "displayValue": "10"
+       },
+       {
+        "name": "RBIs",
+        "displayName": "Runs Batted In",
+        "shortDisplayName": "RBI",
+        "description": "The number of runs scored by a batter's play.",
+        "abbreviation": "RBI",
+        "value": 4.0,
+        "displayValue": "4"
+       },
+       {
+        "name": "hits",
+        "displayName": "Hits",
+        "shortDisplayName": "H",
+        "description": "The number of hits.",
+        "abbreviation": "H",
+        "value": 8.0,
+        "displayValue": "8"
+       },
+       {
+        "name": "stolenBases",
+        "displayName": "Stolen Bases",
+        "shortDisplayName": "SB",
+        "description": "The number of bases stolen.",
+        "abbreviation": "SB",
+        "value": 1.0,
+        "displayValue": "1"
+       },
+       {
+        "name": "walks",
+        "displayName": "Walks",
+        "shortDisplayName": "BB",
+        "description": "The number of times a batter reaches base on four balls",
+        "abbreviation": "BB",
+        "value": 1.0,
+        "displayValue": "1"
+       },
+       {
+        "name": "runs",
+        "displayName": "Runs",
+        "shortDisplayName": "R",
+        "description": "The number of runs scored.",
+        "abbreviation": "R",
+        "value": 4.0,
+        "displayValue": "4"
+       },
+       {
+        "name": "homeRuns",
+        "displayName": "Home Runs",
+        "shortDisplayName": "HR",
+        "description": "The number of hits that allowed the batter to round the bases and score without the aid of an error of the defense.",
+        "abbreviation": "HR",
+        "value": 0.0,
+        "displayValue": "0"
+       },
+       {
+        "name": "pitches",
+        "displayName": "Pitches",
+        "shortDisplayName": "P",
+        "description": "The number of pitches faced.",
+        "abbreviation": "P",
+        "value": 120.0,
+        "displayValue": "120"
+       },
+       {
+        "name": "avg",
+        "displayName": "Batting Average",
+        "shortDisplayName": "AVG",
+        "description": "The average number of times the batter reached successfully on base due to a hit: hits / atBats",
+        "abbreviation": "AVG",
+        "value": 0.25,
+        "displayValue": ".250"
+       }
+      ]
+     },
+     {
+      "name": "pitching",
+      "displayName": "Pitching",
+      "stats": [
+       {
+        "name": "strikeouts",
+        "displayName": "Strikeouts",
+        "shortDisplayName": "K",
+        "description": "The number of times the pitcher struck out a batter.",
+        "abbreviation": "K",
+        "value": 6.0,
+        "displayValue": "6"
+       },
+       {
+        "name": "hits",
+        "displayName": "Hits",
+        "shortDisplayName": "H",
+        "description": "The number of hits surrendered by a pitcher.",
+        "abbreviation": "H",
+        "value": 4.0,
+        "displayValue": "4"
+       },
+       {
+        "name": "earnedRuns",
+        "displayName": "Earned runs",
+        "shortDisplayName": "ER",
+        "description": "The number of earned runs surrendered by a pitcher.",
+        "abbreviation": "ER",
+        "value": 1.0,
+        "displayValue": "1"
+       },
+       {
+        "name": "walks",
+        "displayName": "Walks",
+        "shortDisplayName": "BB",
+        "description": "The number of times a pitcher surrenders a base on balls.",
+        "abbreviation": "BB",
+        "value": 1.0,
+        "displayValue": "1"
+       },
+       {
+        "name": "runs",
+        "displayName": "Runs",
+        "shortDisplayName": "R",
+        "description": "The number of runs allowed by a pitcher.",
+        "abbreviation": "R",
+        "value": 1.0,
+        "displayValue": "1"
+       },
+       {
+        "name": "stolenBases",
+        "displayName": "Stolen Bases",
+        "shortDisplayName": "SB",
+        "description": "The number of times a pitcher allows a baserunner to steal a base.",
+        "abbreviation": "SB",
+        "value": 0.0,
+        "displayValue": "0"
+       },
+       {
+        "name": "homeRuns",
+        "displayName": "Home Runs",
+        "shortDisplayName": "HR",
+        "description": "The number of times a pitcher has allowed a home run.",
+        "abbreviation": "HR",
+        "value": 0.0,
+        "displayValue": "0"
+       },
+       {
+        "name": "RBIs",
+        "displayName": "Runs Batted In",
+        "shortDisplayName": "RBI",
+        "description": "The number of runs scored due to the actions of the batter.",
+        "abbreviation": "RBI",
+        "value": 1.0,
+        "displayValue": "1"
+       },
+       {
+        "name": "pitches",
+        "displayName": "Pitches",
+        "shortDisplayName": "P",
+        "description": "The number of pitches a pitcher throws.",
+        "abbreviation": "P",
+        "value": 135.0,
+        "displayValue": "135"
+       },
+       {
+        "name": "ERA",
+        "displayName": "Earned Run Average",
+        "shortDisplayName": "ERA",
+        "description": "The average number of runs a pitcher yields per 9 innings thrown",
+        "abbreviation": "ERA",
+        "value": 1.0,
+        "displayValue": "1.00"
+       }
+      ]
+     },
+     {
+      "name": "fielding",
+      "displayName": "Fielding",
+      "stats": [
+       {
+        "name": "errors",
+        "displayName": "Errors",
+        "shortDisplayName": "E",
+        "description": "The number of times a fielder fails to make the play they are expected to make.",
+        "abbreviation": "E",
+        "value": 2.0,
+        "displayValue": "2"
+       },
+       {
+        "name": "hits",
+        "displayName": "Hits",
+        "shortDisplayName": "H",
+        "description": "The number of hits surrendered.",
+        "abbreviation": "H",
+        "value": 0.0,
+        "displayValue": "0"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "homeAway": "home",
+    "team": {
+     "id": "30",
+     "abbreviation": "TB",
+     "displayName": "Tampa Bay Rays",
+     "shortDisplayName": "Rays",
+     "color": "092c5c",
+     "alternateColor": "8fbce6",
+     "logo": "https://a.espncdn.com/i/teamlogos/mlb/500/tb.png"
+    },
+    "statistics": [
+     {
+      "name": "batting",
+      "displayName": "Batting",
+      "stats": [
+       {
+        "name": "strikeouts",
+        "displayName": "Strikeouts",
+        "shortDisplayName": "K",
+        "description": "The number of times a player strikes out.",
+        "abbreviation": "SO",
+        "value": 6.0,
+        "displayValue": "6"
+       },
+       {
+        "name": "RBIs",
+        "displayName": "Runs Batted In",
+        "shortDisplayName": "RBI",
+        "description": "The number of runs scored by a batter's play.",
+        "abbreviation": "RBI",
+        "value": 1.0,
+        "displayValue": "1"
+       },
+       {
+        "name": "hits",
+        "displayName": "Hits",
+        "shortDisplayName": "H",
+        "description": "The number of hits.",
+        "abbreviation": "H",
+        "value": 4.0,
+        "displayValue": "4"
+       },
+       {
+        "name": "stolenBases",
+        "displayName": "Stolen Bases",
+        "shortDisplayName": "SB",
+        "description": "The number of bases stolen.",
+        "abbreviation": "SB",
+        "value": 0.0,
+        "displayValue": "0"
+       },
+       {
+        "name": "walks",
+        "displayName": "Walks",
+        "shortDisplayName": "BB",
+        "description": "The number of times a batter reaches base on four balls",
+        "abbreviation": "BB",
+        "value": 1.0,
+        "displayValue": "1"
+       },
+       {
+        "name": "runs",
+        "displayName": "Runs",
+        "shortDisplayName": "R",
+        "description": "The number of runs scored.",
+        "abbreviation": "R",
+        "value": 1.0,
+        "displayValue": "1"
+       },
+       {
+        "name": "homeRuns",
+        "displayName": "Home Runs",
+        "shortDisplayName": "HR",
+        "description": "The number of hits that allowed the batter to round the bases and score without the aid of an error of the defense.",
+        "abbreviation": "HR",
+        "value": 0.0,
+        "displayValue": "0"
+       },
+       {
+        "name": "pitches",
+        "displayName": "Pitches",
+        "shortDisplayName": "P",
+        "description": "The number of pitches faced.",
+        "abbreviation": "P",
+        "value": 135.0,
+        "displayValue": "135"
+       },
+       {
+        "name": "avg",
+        "displayName": "Batting Average",
+        "shortDisplayName": "AVG",
+        "description": "The average number of times the batter reached successfully on base due to a hit: hits / atBats",
+        "abbreviation": "AVG",
+        "value": 0.125,
+        "displayValue": ".125"
+       }
+      ]
+     },
+     {
+      "name": "pitching",
+      "displayName": "Pitching",
+      "stats": [
+       {
+        "name": "strikeouts",
+        "displayName": "Strikeouts",
+        "shortDisplayName": "K",
+        "description": "The number of times the pitcher struck out a batter.",
+        "abbreviation": "K",
+        "value": 10.0,
+        "displayValue": "10"
+       },
+       {
+        "name": "hits",
+        "displayName": "Hits",
+        "shortDisplayName": "H",
+        "description": "The number of hits surrendered by a pitcher.",
+        "abbreviation": "H",
+        "value": 8.0,
+        "displayValue": "8"
+       },
+       {
+        "name": "earnedRuns",
+        "displayName": "Earned runs",
+        "shortDisplayName": "ER",
+        "description": "The number of earned runs surrendered by a pitcher.",
+        "abbreviation": "ER",
+        "value": 4.0,
+        "displayValue": "4"
+       },
+       {
+        "name": "walks",
+        "displayName": "Walks",
+        "shortDisplayName": "BB",
+        "description": "The number of times a pitcher surrenders a base on balls.",
+        "abbreviation": "BB",
+        "value": 1.0,
+        "displayValue": "1"
+       },
+       {
+        "name": "runs",
+        "displayName": "Runs",
+        "shortDisplayName": "R",
+        "description": "The number of runs allowed by a pitcher.",
+        "abbreviation": "R",
+        "value": 4.0,
+        "displayValue": "4"
+       },
+       {
+        "name": "stolenBases",
+        "displayName": "Stolen Bases",
+        "shortDisplayName": "SB",
+        "description": "The number of times a pitcher allows a baserunner to steal a base.",
+        "abbreviation": "SB",
+        "value": 1.0,
+        "displayValue": "1"
+       },
+       {
+        "name": "homeRuns",
+        "displayName": "Home Runs",
+        "shortDisplayName": "HR",
+        "description": "The number of times a pitcher has allowed a home run.",
+        "abbreviation": "HR",
+        "value": 0.0,
+        "displayValue": "0"
+       },
+       {
+        "name": "RBIs",
+        "displayName": "Runs Batted In",
+        "shortDisplayName": "RBI",
+        "description": "The number of runs scored due to the actions of the batter.",
+        "abbreviation": "RBI",
+        "value": 4.0,
+        "displayValue": "4"
+       },
+       {
+        "name": "pitches",
+        "displayName": "Pitches",
+        "shortDisplayName": "P",
+        "description": "The number of pitches a pitcher throws.",
+        "abbreviation": "P",
+        "value": 120.0,
+        "displayValue": "120"
+       },
+       {
+        "name": "ERA",
+        "displayName": "Earned Run Average",
+        "shortDisplayName": "ERA",
+        "description": "The average number of runs a pitcher yields per 9 innings thrown",
+        "abbreviation": "ERA",
+        "value": 4.0,
+        "displayValue": "4.00"
+       }
+      ]
+     },
+     {
+      "name": "fielding",
+      "displayName": "Fielding",
+      "stats": [
+       {
+        "name": "errors",
+        "displayName": "Errors",
+        "shortDisplayName": "E",
+        "description": "The number of times a fielder fails to make the play they are expected to make.",
+        "abbreviation": "E",
+        "value": 0.0,
+        "displayValue": "0"
+       },
+       {
+        "name": "hits",
+        "displayName": "Hits",
+        "shortDisplayName": "H",
+        "description": "The number of hits surrendered.",
+        "abbreviation": "H",
+        "value": 0.0,
+        "displayValue": "0"
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ "winprobability": [
+  {
+   "homeWinPercentage": 0.428,
+   "tiePercentage": 0.0,
+   "playId": "4019080460001990057"
+  },
+  {
+   "homeWinPercentage": 0.443,
+   "tiePercentage": 0.0,
+   "playId": "4019080460003990057"
+  },
+  {
+   "homeWinPercentage": 0.417,
+   "tiePercentage": 0.0,
+   "playId": "4019080460102990057"
+  },
+  {
+   "homeWinPercentage": 0.411,
+   "tiePercentage": 0.0,
+   "playId": "4019080460104990057"
+  },
+  {
+   "homeWinPercentage": 0.389,
+   "tiePercentage": 0.0,
+   "playId": "4019080460202990057"
+  },
+  {
+   "homeWinPercentage": 0.295,
+   "tiePercentage": 0.0,
+   "playId": "4019080460204990057"
+  },
+  {
+   "homeWinPercentage": 0.299,
+   "tiePercentage": 0.0,
+   "playId": "4019080460301990057"
+  },
+  {
+   "homeWinPercentage": 0.289,
+   "tiePercentage": 0.0,
+   "playId": "4019080460303990057"
+  },
+  {
+   "homeWinPercentage": 0.306,
+   "tiePercentage": 0.0,
+   "playId": "4019080460402990057"
+  },
+  {
+   "homeWinPercentage": 0.29,
+   "tiePercentage": 0.0,
+   "playId": "4019080460501990057"
+  },
+  {
+   "homeWinPercentage": 0.303,
+   "tiePercentage": 0.0,
+   "playId": "4019080460503990057"
+  },
+  {
+   "homeWinPercentage": 0.303,
+   "tiePercentage": 0.0,
+   "playId": "4019080460601990057"
+  },
+  {
+   "homeWinPercentage": 0.316,
+   "tiePercentage": 0.0,
+   "playId": "4019080460603990057"
+  },
+  {
+   "homeWinPercentage": 0.326,
+   "tiePercentage": 0.0,
+   "playId": "4019080460702990057"
+  },
+  {
+   "homeWinPercentage": 0.328,
+   "tiePercentage": 0.0,
+   "playId": "4019080460704990057"
+  },
+  {
+   "homeWinPercentage": 0.287,
+   "tiePercentage": 0.0,
+   "playId": "4019080460801990057"
+  },
+  {
+   "homeWinPercentage": 0.217,
+   "tiePercentage": 0.0,
+   "playId": "4019080460803990057"
+  },
+  {
+   "homeWinPercentage": 0.173,
+   "tiePercentage": 0.0,
+   "playId": "4019080460805990057"
+  },
+  {
+   "homeWinPercentage": 0.173,
+   "tiePercentage": 0.0,
+   "playId": "4019080460901990057"
+  },
+  {
+   "homeWinPercentage": 0.167,
+   "tiePercentage": 0.0,
+   "playId": "4019080460903990057"
+  },
+  {
+   "homeWinPercentage": 0.083,
+   "tiePercentage": 0.0,
+   "playId": "4019080461002990057"
+  },
+  {
+   "homeWinPercentage": 0.075,
+   "tiePercentage": 0.0,
+   "playId": "4019080461004990057"
+  },
+  {
+   "homeWinPercentage": 0.062,
+   "tiePercentage": 0.0,
+   "playId": "4019080461006990057"
+  },
+  {
+   "homeWinPercentage": 0.057,
+   "tiePercentage": 0.0,
+   "playId": "4019080461101990057"
+  },
+  {
+   "homeWinPercentage": 0.049,
+   "tiePercentage": 0.0,
+   "playId": "4019080461103990057"
+  },
+  {
+   "homeWinPercentage": 0.052,
+   "tiePercentage": 0.0,
+   "playId": "4019080461202990057"
+  },
+  {
+   "homeWinPercentage": 0.041,
+   "tiePercentage": 0.0,
+   "playId": "4019080461301990057"
+  },
+  {
+   "homeWinPercentage": 0.043,
+   "tiePercentage": 0.0,
+   "playId": "4019080461303990057"
+  },
+  {
+   "homeWinPercentage": 0.032,
+   "tiePercentage": 0.0,
+   "playId": "4019080461401990057"
+  },
+  {
+   "homeWinPercentage": 0.036,
+   "tiePercentage": 0.0,
+   "playId": "4019080461403990057"
+  },
+  {
+   "homeWinPercentage": 0.018,
+   "tiePercentage": 0.0,
+   "playId": "4019080461502990057"
+  },
+  {
+   "homeWinPercentage": 0.016,
+   "tiePercentage": 0.0,
+   "playId": "4019080461601990057"
+  },
+  {
+   "homeWinPercentage": 0.018,
+   "tiePercentage": 0.0,
+   "playId": "4019080461603990057"
+  },
+  {
+   "homeWinPercentage": 0.017,
+   "tiePercentage": 0.0,
+   "playId": "4019080461702990057"
+  },
+  {
+   "homeWinPercentage": 0.013,
+   "tiePercentage": 0.0,
+   "playId": "4019080461704990057"
+  },
+  {
+   "homeWinPercentage": 0.0,
+   "tiePercentage": 0.0,
+   "playId": "4019080461705990057"
+  }
+ ]
+}

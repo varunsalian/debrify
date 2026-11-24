@@ -1,0 +1,344 @@
+{
+ "header": {
+  "competitions": [
+   {
+    "status": {
+     "type": {
+      "name": "STATUS_SCHEDULED",
+      "state": "pre",
+      "completed": false,
+      "detail": "Fri, December 4th at 2:45 PM EST",
+      "shortDetail": "12/4 - 2:45 PM EST"
+     }
+    },
+    "competitors": [
+     {
+      "id": "25898",
+      "homeAway": "home",
+      "team": {
+       "id": "25898",
+       "abbreviation": "BAT",
+       "displayName": "Bath Rugby",
+       "shortDisplayName": "Bath Rugby",
+       "color": "000099",
+       "logos": [
+        {
+         "href": "https://a.espncdn.com/i/teamlogos/rugby/teams/500/25898.png"
+        }
+       ]
+      },
+      "record": [
+       {
+        "type": "total",
+        "summary": "WLWWL",
+        "displayValue": "WLWWL"
+       }
+      ]
+     },
+     {
+      "id": "25899",
+      "homeAway": "away",
+      "team": {
+       "id": "25899",
+       "abbreviation": "BRI",
+       "displayName": "Bristol Rugby",
+       "shortDisplayName": "Bristol Rugby",
+       "color": ""
+      },
+      "record": [
+       {
+        "type": "total",
+        "summary": "LLLWL",
+        "displayValue": "LLLWL"
+       }
+      ]
+     }
+    ],
+    "date": "2026-12-04T19:45Z"
+   }
+  ]
+ },
+ "boxscore": {
+  "teams": [
+   {
+    "homeAway": "home",
+    "team": {
+     "id": "25898",
+     "abbreviation": "BAT",
+     "displayName": "Bath Rugby",
+     "shortDisplayName": "Bath Rugby",
+     "color": "000099",
+     "logo": "https://a.espncdn.com/i/teamlogos/rugby/teams/500/25898.png"
+    },
+    "statistics": []
+   },
+   {
+    "homeAway": "away",
+    "team": {
+     "id": "25899",
+     "abbreviation": "BRI",
+     "displayName": "Bristol Rugby",
+     "shortDisplayName": "Bristol Rugby",
+     "color": ""
+    },
+    "statistics": []
+   }
+  ]
+ },
+ "lastFiveGames": [
+  {
+   "team": {
+    "id": "25898",
+    "abbreviation": "BAT",
+    "displayName": "Bath Rugby",
+    "logo": "https://a.espncdn.com/i/teamlogos/rugby/teams/500/25898.png",
+    "logos": [
+     {
+      "href": "https://a.espncdn.com/i/teamlogos/rugby/teams/500/25898.png"
+     }
+    ]
+   },
+   "events": [
+    {
+     "id": "604637",
+     "gameDate": "2026-10-31T15:05Z",
+     "atVs": "vs",
+     "score": "36-28",
+     "gameResult": "W",
+     "homeTeamId": "25898",
+     "awayTeamId": "25908",
+     "homeTeamScore": "36",
+     "awayTeamScore": "28",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/rugby/teams/500/25908.png",
+     "opponent": {
+      "id": "25908",
+      "abbreviation": "SAL",
+      "displayName": "Sale Sharks",
+      "logo": "https://a.espncdn.com/i/teamlogos/rugby/teams/500/25908.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/rugby/teams/500/25908.png"
+       }
+      ]
+     }
+    },
+    {
+     "id": "604629",
+     "gameDate": "2026-10-23T18:45Z",
+     "atVs": "@",
+     "score": "23-5",
+     "gameResult": "L",
+     "homeTeamId": "25900",
+     "awayTeamId": "25898",
+     "homeTeamScore": "23",
+     "awayTeamScore": "5",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/rugby/teams/500/25900.png",
+     "opponent": {
+      "id": "25900",
+      "abbreviation": "GLO",
+      "displayName": "Gloucester Rugby",
+      "logo": "https://a.espncdn.com/i/teamlogos/rugby/teams/500/25900.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/rugby/teams/500/25900.png"
+       }
+      ]
+     }
+    },
+    {
+     "id": "604254",
+     "gameDate": "2026-10-17T19:00Z",
+     "atVs": "vs",
+     "score": "32-14",
+     "gameResult": "L",
+     "homeTeamId": "25898",
+     "awayTeamId": "25918",
+     "homeTeamScore": "14",
+     "awayTeamScore": "32",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/rugby/teams/500/25918.png",
+     "opponent": {
+      "id": "25918",
+      "abbreviation": "MON",
+      "displayName": "Montpellier Herault",
+      "logo": "https://a.espncdn.com/i/teamlogos/rugby/teams/500/25918.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/rugby/teams/500/25918.png"
+       }
+      ]
+     }
+    },
+    {
+     "id": "604625",
+     "gameDate": "2026-10-10T14:05Z",
+     "atVs": "@",
+     "score": "71-48",
+     "gameResult": "L",
+     "homeTeamId": "25907",
+     "awayTeamId": "25898",
+     "homeTeamScore": "71",
+     "awayTeamScore": "48",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/rugby/teams/500/25907.png",
+     "opponent": {
+      "id": "25907",
+      "abbreviation": "NOR",
+      "displayName": "Northampton Saints",
+      "logo": "https://a.espncdn.com/i/teamlogos/rugby/teams/500/25907.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/rugby/teams/500/25907.png"
+       }
+      ]
+     }
+    },
+    {
+     "id": "604619",
+     "gameDate": "2026-10-02T18:45Z",
+     "atVs": "vs",
+     "score": "40-34",
+     "gameResult": "W",
+     "homeTeamId": "25898",
+     "awayTeamId": "116227",
+     "homeTeamScore": "40",
+     "awayTeamScore": "34",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/rugby/teams/500/116227.png",
+     "opponent": {
+      "id": "116227",
+      "abbreviation": "EXE",
+      "displayName": "Exeter Chiefs",
+      "logo": "https://a.espncdn.com/i/teamlogos/rugby/teams/500/116227.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/rugby/teams/500/116227.png"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "team": {
+    "id": "25899",
+    "abbreviation": "BRI",
+    "displayName": "Bristol Rugby"
+   },
+   "events": [
+    {
+     "id": "604634",
+     "gameDate": "2026-10-30T19:45Z",
+     "atVs": "vs",
+     "score": "22-16",
+     "gameResult": "L",
+     "homeTeamId": "25899",
+     "awayTeamId": "25903",
+     "homeTeamScore": "16",
+     "awayTeamScore": "22",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/rugby/teams/500/25903.png",
+     "opponent": {
+      "id": "25903",
+      "abbreviation": "LEI",
+      "displayName": "Leicester Tigers",
+      "logo": "https://a.espncdn.com/i/teamlogos/rugby/teams/500/25903.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/rugby/teams/500/25903.png"
+       }
+      ]
+     }
+    },
+    {
+     "id": "604631",
+     "gameDate": "2026-10-24T16:30Z",
+     "atVs": "vs",
+     "score": "20-7",
+     "gameResult": "W",
+     "homeTeamId": "25899",
+     "awayTeamId": "116227",
+     "homeTeamScore": "20",
+     "awayTeamScore": "7",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/rugby/teams/500/116227.png",
+     "opponent": {
+      "id": "116227",
+      "abbreviation": "EXE",
+      "displayName": "Exeter Chiefs",
+      "logo": "https://a.espncdn.com/i/teamlogos/rugby/teams/500/116227.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/rugby/teams/500/116227.png"
+       }
+      ]
+     }
+    },
+    {
+     "id": "604250",
+     "gameDate": "2026-10-17T14:15Z",
+     "atVs": "@",
+     "score": "49-12",
+     "gameResult": "L",
+     "homeTeamId": "25962",
+     "awayTeamId": "25899",
+     "homeTeamScore": "49",
+     "awayTeamScore": "12",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/rugby/teams/500/25962.png",
+     "opponent": {
+      "id": "25962",
+      "abbreviation": "STO",
+      "displayName": "Stormers",
+      "logo": "https://a.espncdn.com/i/teamlogos/rugby/teams/500/25962.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/rugby/teams/500/25962.png"
+       }
+      ]
+     }
+    },
+    {
+     "id": "604626",
+     "gameDate": "2026-10-10T16:30Z",
+     "atVs": "@",
+     "score": "30-7",
+     "gameResult": "L",
+     "homeTeamId": "25909",
+     "awayTeamId": "25899",
+     "homeTeamScore": "30",
+     "awayTeamScore": "7",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/rugby/teams/500/25909.png",
+     "opponent": {
+      "id": "25909",
+      "abbreviation": "SAR",
+      "displayName": "Saracens",
+      "logo": "https://a.espncdn.com/i/teamlogos/rugby/teams/500/25909.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/rugby/teams/500/25909.png"
+       }
+      ]
+     }
+    },
+    {
+     "id": "604620",
+     "gameDate": "2026-10-03T14:05Z",
+     "atVs": "vs",
+     "score": "41-26",
+     "gameResult": "W",
+     "homeTeamId": "25899",
+     "awayTeamId": "25907",
+     "homeTeamScore": "41",
+     "awayTeamScore": "26",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/rugby/teams/500/25907.png",
+     "opponent": {
+      "id": "25907",
+      "abbreviation": "NOR",
+      "displayName": "Northampton Saints",
+      "logo": "https://a.espncdn.com/i/teamlogos/rugby/teams/500/25907.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/rugby/teams/500/25907.png"
+       }
+      ]
+     }
+    }
+   ]
+  }
+ ]
+}

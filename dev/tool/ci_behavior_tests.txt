@@ -966,3 +966,10 @@ test/features/iptv/presentation/legacy_iptv/iptv_keep_player_lineup_test.dart
 test/services/webdav_service_listing_test.dart
 test/services/source_search_preferences_test.dart
 test/features/source_search_settings
+# 2026-11-24: sports match stats page (ESPN summary parser, client cache, stat curation, live polling, page focus/reveal).
+test/features/sports/data/espn_summary_parser_test.dart
+test/features/sports/data/sports_match_stats_client_test.dart
+test/features/sports/application/sports_match_stat_rows_test.dart
+test/features/sports/application/sports_match_stats_notifier_test.dart
+test/features/sports/presentation/sports_match_stats_page_test.dart
+test/features/sports/presentation/sports_stats_frame_test.dart

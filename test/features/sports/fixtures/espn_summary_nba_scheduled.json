@@ -1,0 +1,665 @@
+{
+ "header": {
+  "competitions": [
+   {
+    "status": {
+     "type": {
+      "name": "STATUS_SCHEDULED",
+      "state": "pre",
+      "completed": false,
+      "detail": "Tue, November 24th at 7:00 PM EST",
+      "shortDetail": "11/24 - 7:00 PM EST"
+     }
+    },
+    "competitors": [
+     {
+      "id": "19",
+      "homeAway": "home",
+      "team": {
+       "id": "19",
+       "abbreviation": "ORL",
+       "displayName": "Orlando Magic",
+       "color": "0150b5",
+       "alternateColor": "9ca0a3",
+       "logos": [
+        {
+         "href": "https://a.espncdn.com/i/teamlogos/nba/500/orl.png"
+        }
+       ]
+      },
+      "record": [
+       {
+        "type": "total",
+        "summary": "7-9",
+        "displayValue": "7-9"
+       }
+      ]
+     },
+     {
+      "id": "8",
+      "homeAway": "away",
+      "team": {
+       "id": "8",
+       "abbreviation": "DET",
+       "displayName": "Detroit Pistons",
+       "color": "1d428a",
+       "alternateColor": "c8102e",
+       "logos": [
+        {
+         "href": "https://a.espncdn.com/i/teamlogos/nba/500/det.png"
+        }
+       ]
+      },
+      "record": [
+       {
+        "type": "total",
+        "summary": "10-6",
+        "displayValue": "10-6"
+       }
+      ]
+     }
+    ],
+    "date": "2026-11-25T00:00Z"
+   }
+  ]
+ },
+ "boxscore": {
+  "teams": [
+   {
+    "homeAway": "away",
+    "team": {
+     "id": "8",
+     "abbreviation": "DET",
+     "displayName": "Detroit Pistons",
+     "shortDisplayName": "Pistons",
+     "color": "1d428a",
+     "alternateColor": "c8102e",
+     "logo": "https://a.espncdn.com/i/teamlogos/nba/500/det.png"
+    },
+    "statistics": [
+     {
+      "name": "streak",
+      "displayValue": "L2",
+      "abbreviation": "STRK",
+      "label": "Streak"
+     },
+     {
+      "name": "avgPointsAgainst",
+      "displayValue": "108.6",
+      "abbreviation": "OPP PPG",
+      "label": "Points Against"
+     },
+     {
+      "name": "Last Ten Games",
+      "displayValue": "5-5",
+      "abbreviation": "L10",
+      "label": "Last Ten Games"
+     },
+     {
+      "name": "avgPoints",
+      "displayValue": "113.4",
+      "abbreviation": "PTS",
+      "label": "Points Per Game"
+     },
+     {
+      "name": "fieldGoalPct",
+      "displayValue": "47",
+      "abbreviation": "FG%",
+      "label": "Field Goal %"
+     },
+     {
+      "name": "threePointFieldGoalPct",
+      "displayValue": "37",
+      "abbreviation": "3P%",
+      "label": "Three Point %"
+     },
+     {
+      "name": "avgRebounds",
+      "displayValue": "43.1",
+      "abbreviation": "REB",
+      "label": "Rebounds Per Game"
+     },
+     {
+      "name": "avgAssists",
+      "displayValue": "27.6",
+      "abbreviation": "AST",
+      "label": "Assists Per Game"
+     },
+     {
+      "name": "avgBlocks",
+      "displayValue": "5.8",
+      "abbreviation": "BLK",
+      "label": "Blocks Per Game"
+     },
+     {
+      "name": "avgSteals",
+      "displayValue": "9.3",
+      "abbreviation": "STL",
+      "label": "Steals Per Game"
+     },
+     {
+      "name": "avgTeamTurnovers",
+      "displayValue": "0.8",
+      "abbreviation": "TTO",
+      "label": "Team Turnovers Per Game"
+     },
+     {
+      "name": "avgTotalTurnovers",
+      "displayValue": "14.2",
+      "abbreviation": "ToTO",
+      "label": "Total Turnovers Per Game"
+     }
+    ]
+   },
+   {
+    "homeAway": "home",
+    "team": {
+     "id": "19",
+     "abbreviation": "ORL",
+     "displayName": "Orlando Magic",
+     "shortDisplayName": "Magic",
+     "color": "0150b5",
+     "alternateColor": "9ca0a3",
+     "logo": "https://a.espncdn.com/i/teamlogos/nba/500/orl.png"
+    },
+    "statistics": [
+     {
+      "name": "streak",
+      "displayValue": "L1",
+      "abbreviation": "STRK",
+      "label": "Streak"
+     },
+     {
+      "name": "avgPointsAgainst",
+      "displayValue": "112.9",
+      "abbreviation": "OPP PPG",
+      "label": "Points Against"
+     },
+     {
+      "name": "Last Ten Games",
+      "displayValue": "5-5",
+      "abbreviation": "L10",
+      "label": "Last Ten Games"
+     },
+     {
+      "name": "avgPoints",
+      "displayValue": "108.8",
+      "abbreviation": "PTS",
+      "label": "Points Per Game"
+     },
+     {
+      "name": "fieldGoalPct",
+      "displayValue": "45",
+      "abbreviation": "FG%",
+      "label": "Field Goal %"
+     },
+     {
+      "name": "threePointFieldGoalPct",
+      "displayValue": "35",
+      "abbreviation": "3P%",
+      "label": "Three Point %"
+     },
+     {
+      "name": "avgRebounds",
+      "displayValue": "42.4",
+      "abbreviation": "REB",
+      "label": "Rebounds Per Game"
+     },
+     {
+      "name": "avgAssists",
+      "displayValue": "26.6",
+      "abbreviation": "AST",
+      "label": "Assists Per Game"
+     },
+     {
+      "name": "avgBlocks",
+      "displayValue": "4.2",
+      "abbreviation": "BLK",
+      "label": "Blocks Per Game"
+     },
+     {
+      "name": "avgSteals",
+      "displayValue": "7.6",
+      "abbreviation": "STL",
+      "label": "Steals Per Game"
+     },
+     {
+      "name": "avgTeamTurnovers",
+      "displayValue": "0.8",
+      "abbreviation": "TTO",
+      "label": "Team Turnovers Per Game"
+     },
+     {
+      "name": "avgTotalTurnovers",
+      "displayValue": "15.8",
+      "abbreviation": "ToTO",
+      "label": "Total Turnovers Per Game"
+     }
+    ]
+   }
+  ]
+ },
+ "leaders": [
+  {
+   "team": {
+    "id": "19"
+   },
+   "leaders": [
+    {
+     "name": "pointsPerGame",
+     "displayName": "Points",
+     "leaders": [
+      {
+       "displayValue": "24.5",
+       "athlete": {
+        "displayName": "Franz Wagner",
+        "shortName": "F. Wagner",
+        "headshot": {
+         "href": "https://a.espncdn.com/i/headshots/nba/players/full/4566434.png",
+         "alt": "Franz Wagner"
+        },
+        "position": {
+         "name": "Forward",
+         "displayName": "Forward",
+         "abbreviation": "F"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "name": "assistsPerGame",
+     "displayName": "Assists",
+     "leaders": [
+      {
+       "displayValue": "8.2",
+       "athlete": {
+        "displayName": "Franz Wagner",
+        "shortName": "F. Wagner",
+        "headshot": {
+         "href": "https://a.espncdn.com/i/headshots/nba/players/full/4566434.png",
+         "alt": "Franz Wagner"
+        },
+        "position": {
+         "name": "Forward",
+         "displayName": "Forward",
+         "abbreviation": "F"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "name": "reboundsPerGame",
+     "displayName": "Rebounds",
+     "leaders": [
+      {
+       "displayValue": "8.6",
+       "athlete": {
+        "displayName": "Wendell Carter Jr.",
+        "shortName": "W. Carter Jr.",
+        "headshot": {
+         "href": "https://a.espncdn.com/i/headshots/nba/players/full/4277847.png",
+         "alt": "Wendell Carter Jr."
+        },
+        "position": {
+         "name": "Center",
+         "displayName": "Center",
+         "abbreviation": "C"
+        }
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "team": {
+    "id": "8"
+   },
+   "leaders": [
+    {
+     "name": "pointsPerGame",
+     "displayName": "Points",
+     "leaders": [
+      {
+       "displayValue": "24.2",
+       "athlete": {
+        "displayName": "Cade Cunningham",
+        "shortName": "C. Cunningham",
+        "headshot": {
+         "href": "https://a.espncdn.com/i/headshots/nba/players/full/4432166.png",
+         "alt": "Cade Cunningham"
+        },
+        "position": {
+         "name": "Guard",
+         "displayName": "Guard",
+         "abbreviation": "G"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "name": "assistsPerGame",
+     "displayName": "Assists",
+     "leaders": [
+      {
+       "displayValue": "8.3",
+       "athlete": {
+        "displayName": "Cade Cunningham",
+        "shortName": "C. Cunningham",
+        "headshot": {
+         "href": "https://a.espncdn.com/i/headshots/nba/players/full/4432166.png",
+         "alt": "Cade Cunningham"
+        },
+        "position": {
+         "name": "Guard",
+         "displayName": "Guard",
+         "abbreviation": "G"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "name": "reboundsPerGame",
+     "displayName": "Rebounds",
+     "leaders": [
+      {
+       "displayValue": "8.6",
+       "athlete": {
+        "displayName": "Ausar Thompson",
+        "shortName": "A. Thompson",
+        "headshot": {
+         "href": "https://a.espncdn.com/i/headshots/nba/players/full/4684742.png",
+         "alt": "Ausar Thompson"
+        },
+        "position": {
+         "name": "Guard",
+         "displayName": "Guard",
+         "abbreviation": "G"
+        }
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "lastFiveGames": [
+  {
+   "team": {
+    "id": "19",
+    "abbreviation": "ORL",
+    "displayName": "Orlando Magic",
+    "logo": "https://a.espncdn.com/i/teamlogos/nba/500/orl.png",
+    "logos": [
+     {
+      "href": "https://a.espncdn.com/i/teamlogos/nba/500/orl.png"
+     }
+    ]
+   },
+   "events": [
+    {
+     "id": "401909297",
+     "gameDate": "2026-11-14T00:00Z",
+     "atVs": "vs",
+     "score": "107-99",
+     "gameResult": "W",
+     "homeTeamId": "19",
+     "awayTeamId": "15",
+     "homeTeamScore": "107",
+     "awayTeamScore": "99",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/nba/500/mil.png",
+     "opponent": {
+      "id": "15",
+      "abbreviation": "MIL",
+      "displayName": "Milwaukee Bucks",
+      "logo": "https://a.espncdn.com/i/teamlogos/nba/500/mil.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/nba/500/mil.png"
+       }
+      ]
+     }
+    },
+    {
+     "id": "401909994",
+     "gameDate": "2026-11-17T00:00Z",
+     "atVs": "@",
+     "score": "115-105",
+     "gameResult": "W",
+     "homeTeamId": "2",
+     "awayTeamId": "19",
+     "homeTeamScore": "105",
+     "awayTeamScore": "115",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/nba/500/bos.png",
+     "opponent": {
+      "id": "2",
+      "abbreviation": "BOS",
+      "displayName": "Boston Celtics",
+      "logo": "https://a.espncdn.com/i/teamlogos/nba/500/bos.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/nba/500/bos.png"
+       }
+      ]
+     }
+    },
+    {
+     "id": "401910010",
+     "gameDate": "2026-11-19T00:00Z",
+     "atVs": "vs",
+     "score": "121-116",
+     "gameResult": "L",
+     "homeTeamId": "19",
+     "awayTeamId": "20",
+     "homeTeamScore": "116",
+     "awayTeamScore": "121",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/nba/500/phi.png",
+     "opponent": {
+      "id": "20",
+      "abbreviation": "PHI",
+      "displayName": "Philadelphia 76ers",
+      "logo": "https://a.espncdn.com/i/teamlogos/nba/500/phi.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/nba/500/phi.png"
+       }
+      ]
+     }
+    },
+    {
+     "id": "401909306",
+     "gameDate": "2026-11-21T00:30Z",
+     "atVs": "@",
+     "score": "113-111",
+     "gameResult": "W",
+     "homeTeamId": "17",
+     "awayTeamId": "19",
+     "homeTeamScore": "111",
+     "awayTeamScore": "113",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/nba/500/bkn.png",
+     "opponent": {
+      "id": "17",
+      "abbreviation": "BKN",
+      "displayName": "Brooklyn Nets",
+      "logo": "https://a.espncdn.com/i/teamlogos/nba/500/bkn.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/nba/500/bkn.png"
+       }
+      ]
+     }
+    },
+    {
+     "id": "401910031",
+     "gameDate": "2026-11-23T00:00Z",
+     "atVs": "@",
+     "score": "116-96",
+     "gameResult": "L",
+     "homeTeamId": "27",
+     "awayTeamId": "19",
+     "homeTeamScore": "116",
+     "awayTeamScore": "96",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/nba/500/wsh.png",
+     "opponent": {
+      "id": "27",
+      "abbreviation": "WSH",
+      "displayName": "Washington Wizards",
+      "logo": "https://a.espncdn.com/i/teamlogos/nba/500/wsh.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/nba/500/wsh.png"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "team": {
+    "id": "8",
+    "abbreviation": "DET",
+    "displayName": "Detroit Pistons",
+    "logo": "https://a.espncdn.com/i/teamlogos/nba/500/det.png",
+    "logos": [
+     {
+      "href": "https://a.espncdn.com/i/teamlogos/nba/500/det.png"
+     }
+    ]
+   },
+   "events": [
+    {
+     "id": "401909982",
+     "gameDate": "2026-11-15T01:00Z",
+     "atVs": "@",
+     "score": "137-117",
+     "gameResult": "L",
+     "homeTeamId": "14",
+     "awayTeamId": "8",
+     "homeTeamScore": "137",
+     "awayTeamScore": "117",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/nba/500/mia.png",
+     "opponent": {
+      "id": "14",
+      "abbreviation": "MIA",
+      "displayName": "Miami Heat",
+      "logo": "https://a.espncdn.com/i/teamlogos/nba/500/mia.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/nba/500/mia.png"
+       }
+      ]
+     }
+    },
+    {
+     "id": "401910004",
+     "gameDate": "2026-11-18T01:00Z",
+     "atVs": "@",
+     "score": "105-93",
+     "gameResult": "W",
+     "homeTeamId": "24",
+     "awayTeamId": "8",
+     "homeTeamScore": "93",
+     "awayTeamScore": "105",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/nba/500/sa.png",
+     "opponent": {
+      "id": "24",
+      "abbreviation": "SA",
+      "displayName": "San Antonio Spurs",
+      "logo": "https://a.espncdn.com/i/teamlogos/nba/500/sa.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/nba/500/sa.png"
+       }
+      ]
+     }
+    },
+    {
+     "id": "401910013",
+     "gameDate": "2026-11-19T01:00Z",
+     "atVs": "@",
+     "score": "122-109",
+     "gameResult": "W",
+     "homeTeamId": "3",
+     "awayTeamId": "8",
+     "homeTeamScore": "109",
+     "awayTeamScore": "122",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/nba/500/no.png",
+     "opponent": {
+      "id": "3",
+      "abbreviation": "NO",
+      "displayName": "New Orleans Pelicans",
+      "logo": "https://a.espncdn.com/i/teamlogos/nba/500/no.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/nba/500/no.png"
+       }
+      ]
+     }
+    },
+    {
+     "id": "401909308",
+     "gameDate": "2026-11-21T00:30Z",
+     "atVs": "vs",
+     "score": "105-102",
+     "gameResult": "L",
+     "homeTeamId": "8",
+     "awayTeamId": "28",
+     "homeTeamScore": "102",
+     "awayTeamScore": "105",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/nba/500/tor.png",
+     "opponent": {
+      "id": "28",
+      "abbreviation": "TOR",
+      "displayName": "Toronto Raptors",
+      "logo": "https://a.espncdn.com/i/teamlogos/nba/500/tor.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/nba/500/tor.png"
+       }
+      ]
+     }
+    },
+    {
+     "id": "401910029",
+     "gameDate": "2026-11-22T20:30Z",
+     "atVs": "@",
+     "score": "107-97",
+     "gameResult": "L",
+     "homeTeamId": "1",
+     "awayTeamId": "8",
+     "homeTeamScore": "107",
+     "awayTeamScore": "97",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/nba/500/atl.png",
+     "opponent": {
+      "id": "1",
+      "abbreviation": "ATL",
+      "displayName": "Atlanta Hawks",
+      "logo": "https://a.espncdn.com/i/teamlogos/nba/500/atl.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/nba/500/atl.png"
+       }
+      ]
+     }
+    }
+   ]
+  }
+ ],
+ "predictor": {
+  "header": "Matchup Predictor",
+  "homeTeam": {
+   "id": "19",
+   "gameProjection": "46.1",
+   "teamChanceLoss": "53.9"
+  },
+  "awayTeam": {
+   "id": "8",
+   "gameProjection": "53.9",
+   "teamChanceLoss": "46.1"
+  }
+ }
+}

@@ -38,6 +38,18 @@ const _aotS3p2Episodes = [
 
 const _aotIds = {'simkl': 931899, 'imdb': 'tt2560140', 'tvdb': '267440'};
 
+/// How the account's lists name an anime: Simkl and TMDB ids only (Simkl's
+/// anime guide). The IMDb id comes from the public `GET /anime/{id}`.
+const _aotListIds = {'simkl': 931899, 'tmdb': '1429'};
+const _aotCatalogIds = {
+  'simkl': 931899,
+  'slug': 'shingeki-no-kyojin-season-3-part-2',
+  'mal': '38524',
+  'imdb': 'tt2560140',
+  'tmdb': '1429',
+  'tvdb': '267440',
+};
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   final simkl = SimklService.instance;
@@ -64,8 +76,16 @@ void main() {
     Map<String, Object> account, {
     List<String>? requests,
     bool catalogFails = false,
+    bool idsFail = false,
   }) => MockClient((request) async {
     requests?.add(request.url.path);
+    if (request.url.path == '/anime/931899') {
+      if (idsFail) return http.Response('{}', 503);
+      return http.Response(
+        jsonEncode({'title': 'AoT S3P2', 'ids': _aotCatalogIds}),
+        200,
+      );
+    }
     if (request.url.path == '/anime/episodes/931899') {
       if (catalogFails) return http.Response('{}', 503);
       return http.Response(jsonEncode(_aotS3p2Episodes), 200);
@@ -227,6 +247,199 @@ void main() {
       );
     });
 
+    test('an anime listed without its IMDb id plays like any show', () async {
+      Map<String, Object> account() => {
+        '/sync/all-items/all/watching': {
+          'shows': [],
+          'anime': [
+            {
+              'show': {'title': 'AoT S3P2', 'ids': _aotListIds},
+              'next_to_watch': 'E05',
+              'anime_type': 'tv',
+              'last_watched_at': '2026-11-20T10:00:00Z',
+            },
+          ],
+        },
+        '/sync/playback/episodes': [],
+        '/sync/playback/movies': [],
+        '/sync/all-items/all/all': {
+          'shows': [],
+          'movies': [],
+          'anime': [
+            {
+              'show': {
+                'title': 'AoT S3P2',
+                'poster': '70/7098975f8b45ba7bc',
+                'ids': _aotListIds,
+              },
+              'anime_type': 'tv',
+              'status': 'watching',
+            },
+          ],
+        },
+      };
+      final requests = <String>[];
+      await http.runWithClient(() async {
+        final show = (await SimklContinueWatchingService.instance.fetchItems())!
+            .shows
+            .single;
+        expect(show.id, 'tt2560140');
+        expect(show.meta.imdbId, 'tt2560140');
+        expect(show.meta.poster, isNotNull);
+        expect((show.season, show.episode), (3, 17));
+        expect(await simkl.fetchNextToWatch('tt2560140'), (
+          season: 3,
+          episode: 17,
+        ));
+        expect(await SimklAnimeEpisodes.coursFor('tt2560140'), {931899});
+      }, () => client(account(), requests: requests));
+      expect(
+        requests.where((path) => path == '/anime/931899'),
+        hasLength(1),
+        reason: 'the ids are read once per title',
+      );
+
+      // Without the catalog the row keeps the ids the account gave.
+      simkl.resetProfileScope();
+      SimklAnimeEpisodes.debugReset();
+      await http.runWithClient(() async {
+        final show = (await SimklContinueWatchingService.instance.fetchItems())!
+            .shows
+            .single;
+        expect(show.id, 'tmdb:1429');
+      }, () => client(account(), idsFail: true));
+    });
+
+    test(
+      'a show found by its IMDb id gets the cours with that IMDb id',
+      () async {
+        final generation = SimklAnimeEpisodes.accountGeneration;
+        Map<String, Object> cour(int simkl, String tmdb) => {
+          'show': {
+            'ids': {'simkl': simkl, 'tmdb': tmdb},
+          },
+          'anime_type': 'tv',
+        };
+        // Live catalog ids (2026-11-23): Simkl gives JoJo and Steel Ball Run
+        // one TMDB id, while IMDb keeps them apart.
+        const catalog = {
+          38049: 'tt2359704', // JoJo Phantom Blood
+          45984: 'tt2359704', // JoJo Stardust Crusaders
+          2754038: 'tt38268282', // Steel Ball Run
+        };
+        SimklAnimeEpisodes.rememberLibrary({
+          'anime': [
+            for (final id in catalog.keys) cour(id, '45790'),
+            cour(4242, '45790'), // Its ids can't be read.
+            cour(1990194, '209867'),
+          ],
+        }, generation);
+        final requests = <String>[];
+        await http.runWithClient(
+          () async {
+            // Steel Ball Run's full ids arrive with Continue Watching.
+            SimklAnimeEpisodes.remember({
+              'simkl': 2754038,
+              'imdb': 'tt38268282',
+              'tmdb': '45790',
+            }, generation);
+            expect(await SimklAnimeEpisodes.coursFor('tt38268282'), {2754038});
+            expect(await SimklAnimeEpisodes.coursFor('tt2359704'), isEmpty);
+            SimklAnimeEpisodes.remember({
+              'simkl': 38049,
+              'imdb': 'tt2359704',
+              'tmdb': '45790',
+            }, generation);
+            expect(await SimklAnimeEpisodes.coursFor('tt2359704'), {
+              38049,
+              45984,
+            });
+            expect(await SimklAnimeEpisodes.coursFor('tmdb:209867'), {1990194});
+          },
+          () => MockClient((request) async {
+            requests.add(request.url.path);
+            final id = int.parse(request.url.pathSegments.last);
+            final imdb = catalog[id];
+            return imdb == null
+                ? http.Response('{}', 503)
+                : http.Response(
+                    jsonEncode({
+                      'ids': {'simkl': id, 'imdb': imdb, 'tmdb': '45790'},
+                    }),
+                    200,
+                  );
+          }),
+        );
+        expect(
+          requests.toSet(),
+          hasLength(requests.length),
+          reason: 'each cour\'s ids are read once',
+        );
+      },
+    );
+
+    test('shows that share a TMDB id keep their own up-next rows', () async {
+      await http.runWithClient(
+        () async {
+          final rows = await SimklAnimeEpisodes.upNextAsShows([
+            for (final (id, at) in [(38049, '10'), (2754038, '11')])
+              {
+                'show': {
+                  'ids': {'simkl': id, 'tmdb': '45790'},
+                },
+                'next_to_watch': 'E02',
+                'anime_type': 'tv',
+                'last_watched_at':
+                    '2026-11-$at'
+                    'T10:00:00Z',
+              },
+          ], SimklAnimeEpisodes.accountGeneration);
+          expect([
+            for (final row in rows) row['show']['ids']['imdb'],
+          ], unorderedEquals(['tt2359704', 'tt38268282']));
+        },
+        () => MockClient((request) async {
+          final id = int.parse(request.url.pathSegments.last);
+          if (request.url.path.startsWith('/anime/episodes/')) {
+            return http.Response(
+              jsonEncode([
+                {
+                  'episode': 2,
+                  'type': 'episode',
+                  'tvdb': {'season': 1, 'episode': 2},
+                },
+              ]),
+              200,
+            );
+          }
+          final imdb = id == 38049 ? 'tt2359704' : 'tt38268282';
+          return http.Response(
+            jsonEncode({
+              'ids': {'simkl': id, 'imdb': imdb, 'tmdb': '45790'},
+            }),
+            200,
+          );
+        }),
+      );
+    });
+
+    test(
+      'an IMDb id from the account is used without a catalog read',
+      () async {
+        final requests = <String>[];
+        await http.runWithClient(() async {
+          await SimklAnimeEpisodes.upNextAsShows([
+            {
+              'show': {'ids': _aotIds},
+              'next_to_watch': 'E05',
+              'anime_type': 'tv',
+            },
+          ], SimklAnimeEpisodes.accountGeneration);
+        }, () => client({}, requests: requests));
+        expect(requests, isNot(contains('/anime/931899')));
+      },
+    );
+
     test('of two watching cours, the latest watched is next', () async {
       await http.runWithClient(
         () async {
@@ -367,6 +580,72 @@ void main() {
         });
         expect(sessions[3]['show'], isNull, reason: 'specials stay unplaced');
         expect(sessions[4]['show'], isNull);
+      }, () => client({}));
+    });
+
+    test('a paused anime film on hold stays hidden', () async {
+      await http.runWithClient(
+        () async {
+          final items = await SimklContinueWatchingService.instance
+              .fetchItems();
+          expect(items!.movies, isEmpty);
+        },
+        () => MockClient((request) async {
+          final body = switch (request.url.path) {
+            '/anime/49394' => {
+              'ids': {'simkl': 49394, 'imdb': 'tt5311514', 'tmdb': '372058'},
+            },
+            '/sync/playback/movies' => [
+              {
+                'id': 7,
+                'type': 'movie',
+                'progress': 40,
+                'paused_at': '2026-11-20T10:00:00Z',
+                'anime': {
+                  'title': 'Kimi no Na wa.',
+                  'ids': {'simkl': 49394, 'tmdb': '372058'},
+                },
+              },
+            ],
+            '/sync/playback/episodes' => [],
+            '/sync/all-items/all/watching' => {'shows': [], 'anime': []},
+            '/sync/all-items/all/all' => {
+              'shows': [],
+              'movies': [],
+              'anime': [
+                {
+                  'show': {
+                    'title': 'Kimi no Na wa.',
+                    'ids': {'simkl': 49394, 'tmdb': '372058'},
+                  },
+                  'anime_type': 'movie',
+                  'status': 'hold',
+                },
+              ],
+            },
+            _ => null,
+          };
+          return body == null
+              ? http.Response('{}', 404)
+              : http.Response(jsonEncode(body), 200);
+        }),
+      );
+    });
+
+    test('a paused anime listed without its IMDb id gets it', () async {
+      await http.runWithClient(() async {
+        final sessions = await SimklAnimeEpisodes.normalizePlaybackSessions([
+          {
+            'id': 1,
+            'type': 'episode',
+            'progress': 40,
+            'anime': {'title': 'AoT S3P2', 'ids': _aotListIds},
+            'episode': {'season': 1, 'number': 5},
+          },
+        ], SimklAnimeEpisodes.accountGeneration);
+        expect(sessions.single['show']['ids'], _aotCatalogIds);
+        expect(sessions.single['show']['title'], 'AoT S3P2');
+        expect(sessions.single['episode']['season'], 3);
       }, () => client({}));
     });
 
@@ -837,26 +1116,29 @@ void main() {
       },
     );
 
-    test('a read that finishes after an account change records nothing', () {
-      final before = SimklAnimeEpisodes.accountGeneration;
-      simkl.resetProfileScope();
-      SimklAnimeEpisodes.rememberLibrary(library, before);
-      expect(SimklAnimeEpisodes.coursFor('tt2560140'), isEmpty);
-      SimklAnimeEpisodes.rememberLibrary(
-        library,
-        SimklAnimeEpisodes.accountGeneration,
-      );
-      expect(SimklAnimeEpisodes.coursFor('tt2560140'), {39687, 931899});
-    });
+    test(
+      'a read that finishes after an account change records nothing',
+      () async {
+        final before = SimklAnimeEpisodes.accountGeneration;
+        simkl.resetProfileScope();
+        SimklAnimeEpisodes.rememberLibrary(library, before);
+        expect(await SimklAnimeEpisodes.coursFor('tt2560140'), isEmpty);
+        SimklAnimeEpisodes.rememberLibrary(
+          library,
+          SimklAnimeEpisodes.accountGeneration,
+        );
+        expect(await SimklAnimeEpisodes.coursFor('tt2560140'), {39687, 931899});
+      },
+    );
 
     test('a profile or account change forgets the cours', () async {
       final bodies = <Object?>[];
       await http.runWithClient(() async {
         await simkl.fetchLibrarySnapshotOrNull();
       }, () => watchedClient(bodies));
-      expect(SimklAnimeEpisodes.coursFor('tt2560140'), {39687, 931899});
+      expect(await SimklAnimeEpisodes.coursFor('tt2560140'), {39687, 931899});
       simkl.resetProfileScope();
-      expect(SimklAnimeEpisodes.coursFor('tt2560140'), isEmpty);
+      expect(await SimklAnimeEpisodes.coursFor('tt2560140'), isEmpty);
     });
   });
 

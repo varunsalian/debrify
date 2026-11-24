@@ -1,0 +1,806 @@
+{
+ "header": {
+  "competitions": [
+   {
+    "status": {
+     "type": {
+      "name": "STATUS_FULL_TIME",
+      "state": "post",
+      "completed": true,
+      "detail": "FT",
+      "shortDetail": "FT"
+     }
+    },
+    "competitors": [
+     {
+      "id": "306",
+      "homeAway": "home",
+      "score": "2",
+      "winner": true,
+      "team": {
+       "id": "306",
+       "abbreviation": "HUL",
+       "displayName": "Hull City",
+       "shortDisplayName": "Hull",
+       "color": "f28800",
+       "alternateColor": "ffffff",
+       "logos": [
+        {
+         "href": "https://a.espncdn.com/i/teamlogos/soccer/500/306.png"
+        }
+       ]
+      },
+      "record": [
+       {
+        "type": "total",
+        "summary": "3-5-3",
+        "displayValue": "3-5-3"
+       }
+      ]
+     },
+     {
+      "id": "331",
+      "homeAway": "away",
+      "score": "0",
+      "winner": false,
+      "team": {
+       "id": "331",
+       "abbreviation": "BHA",
+       "displayName": "Brighton & Hove Albion",
+       "shortDisplayName": "Brighton",
+       "color": "0606fa",
+       "alternateColor": "005F60",
+       "logos": [
+        {
+         "href": "https://a.espncdn.com/i/teamlogos/soccer/500/331.png"
+        }
+       ]
+      },
+      "record": [
+       {
+        "type": "total",
+        "summary": "7-1-3",
+        "displayValue": "7-1-3"
+       }
+      ]
+     }
+    ],
+    "date": "2026-11-22T14:00Z"
+   }
+  ]
+ },
+ "boxscore": {
+  "teams": [
+   {
+    "homeAway": "home",
+    "team": {
+     "id": "306",
+     "abbreviation": "HUL",
+     "displayName": "Hull City",
+     "shortDisplayName": "Hull",
+     "color": "f28800",
+     "alternateColor": "ffffff",
+     "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/306.png"
+    },
+    "statistics": [
+     {
+      "name": "foulsCommitted",
+      "displayValue": "7",
+      "label": "Fouls"
+     },
+     {
+      "name": "yellowCards",
+      "displayValue": "2",
+      "label": "Yellow Cards"
+     },
+     {
+      "name": "redCards",
+      "displayValue": "0",
+      "label": "Red Cards"
+     },
+     {
+      "name": "offsides",
+      "displayValue": "3",
+      "label": "Offsides"
+     },
+     {
+      "name": "wonCorners",
+      "displayValue": "3",
+      "label": "Corner Kicks"
+     },
+     {
+      "name": "saves",
+      "displayValue": "7",
+      "label": "Saves"
+     },
+     {
+      "name": "possessionPct",
+      "displayValue": "29.8",
+      "label": "Possession"
+     },
+     {
+      "name": "totalShots",
+      "displayValue": "11",
+      "label": "SHOTS"
+     },
+     {
+      "name": "shotsOnTarget",
+      "displayValue": "5",
+      "label": "ON GOAL"
+     },
+     {
+      "name": "shotPct",
+      "displayValue": "0.5",
+      "label": "On Target %"
+     },
+     {
+      "name": "penaltyKickGoals",
+      "displayValue": "0",
+      "label": "Penalty Goals"
+     },
+     {
+      "name": "penaltyKickShots",
+      "displayValue": "0",
+      "label": "Penalty Kicks Taken"
+     },
+     {
+      "name": "accuratePasses",
+      "displayValue": "135",
+      "label": "Accurate Passes"
+     },
+     {
+      "name": "totalPasses",
+      "displayValue": "242",
+      "label": "Passes"
+     },
+     {
+      "name": "passPct",
+      "displayValue": "0.6",
+      "label": "Pass Completion %"
+     },
+     {
+      "name": "accurateCrosses",
+      "displayValue": "3",
+      "label": "Accurate Crosses"
+     },
+     {
+      "name": "totalCrosses",
+      "displayValue": "15",
+      "label": "Crosses"
+     },
+     {
+      "name": "crossPct",
+      "displayValue": "0.2",
+      "label": "Cross %"
+     },
+     {
+      "name": "totalLongBalls",
+      "displayValue": "81",
+      "label": "Long Balls"
+     },
+     {
+      "name": "accurateLongBalls",
+      "displayValue": "22",
+      "label": "Accurate Long Balls"
+     },
+     {
+      "name": "longballPct",
+      "displayValue": "0.3",
+      "label": "Long Balls %"
+     },
+     {
+      "name": "blockedShots",
+      "displayValue": "2",
+      "label": "Blocked Shots"
+     },
+     {
+      "name": "effectiveTackles",
+      "displayValue": "10",
+      "label": "Effective Tackles"
+     },
+     {
+      "name": "totalTackles",
+      "displayValue": "16",
+      "label": "Tackles"
+     },
+     {
+      "name": "tacklePct",
+      "displayValue": "0.6",
+      "label": "Tackle %"
+     },
+     {
+      "name": "interceptions",
+      "displayValue": "9",
+      "label": "Interceptions"
+     },
+     {
+      "name": "effectiveClearance",
+      "displayValue": "23",
+      "label": "Effective Clearances"
+     },
+     {
+      "name": "totalClearance",
+      "displayValue": "23",
+      "label": "Clearances"
+     }
+    ]
+   },
+   {
+    "homeAway": "away",
+    "team": {
+     "id": "331",
+     "abbreviation": "BHA",
+     "displayName": "Brighton & Hove Albion",
+     "shortDisplayName": "Brighton",
+     "color": "0606fa",
+     "alternateColor": "005F60",
+     "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/331.png"
+    },
+    "statistics": [
+     {
+      "name": "foulsCommitted",
+      "displayValue": "17",
+      "label": "Fouls"
+     },
+     {
+      "name": "yellowCards",
+      "displayValue": "2",
+      "label": "Yellow Cards"
+     },
+     {
+      "name": "redCards",
+      "displayValue": "1",
+      "label": "Red Cards"
+     },
+     {
+      "name": "offsides",
+      "displayValue": "1",
+      "label": "Offsides"
+     },
+     {
+      "name": "wonCorners",
+      "displayValue": "5",
+      "label": "Corner Kicks"
+     },
+     {
+      "name": "saves",
+      "displayValue": "3",
+      "label": "Saves"
+     },
+     {
+      "name": "possessionPct",
+      "displayValue": "70.2",
+      "label": "Possession"
+     },
+     {
+      "name": "totalShots",
+      "displayValue": "15",
+      "label": "SHOTS"
+     },
+     {
+      "name": "shotsOnTarget",
+      "displayValue": "8",
+      "label": "ON GOAL"
+     },
+     {
+      "name": "shotPct",
+      "displayValue": "0.5",
+      "label": "On Target %"
+     },
+     {
+      "name": "penaltyKickGoals",
+      "displayValue": "0",
+      "label": "Penalty Goals"
+     },
+     {
+      "name": "penaltyKickShots",
+      "displayValue": "0",
+      "label": "Penalty Kicks Taken"
+     },
+     {
+      "name": "accuratePasses",
+      "displayValue": "501",
+      "label": "Accurate Passes"
+     },
+     {
+      "name": "totalPasses",
+      "displayValue": "589",
+      "label": "Passes"
+     },
+     {
+      "name": "passPct",
+      "displayValue": "0.9",
+      "label": "Pass Completion %"
+     },
+     {
+      "name": "accurateCrosses",
+      "displayValue": "6",
+      "label": "Accurate Crosses"
+     },
+     {
+      "name": "totalCrosses",
+      "displayValue": "24",
+      "label": "Crosses"
+     },
+     {
+      "name": "crossPct",
+      "displayValue": "0.3",
+      "label": "Cross %"
+     },
+     {
+      "name": "totalLongBalls",
+      "displayValue": "63",
+      "label": "Long Balls"
+     },
+     {
+      "name": "accurateLongBalls",
+      "displayValue": "37",
+      "label": "Accurate Long Balls"
+     },
+     {
+      "name": "longballPct",
+      "displayValue": "0.6",
+      "label": "Long Balls %"
+     },
+     {
+      "name": "blockedShots",
+      "displayValue": "3",
+      "label": "Blocked Shots"
+     },
+     {
+      "name": "effectiveTackles",
+      "displayValue": "8",
+      "label": "Effective Tackles"
+     },
+     {
+      "name": "totalTackles",
+      "displayValue": "13",
+      "label": "Tackles"
+     },
+     {
+      "name": "tacklePct",
+      "displayValue": "0.6",
+      "label": "Tackle %"
+     },
+     {
+      "name": "interceptions",
+      "displayValue": "13",
+      "label": "Interceptions"
+     },
+     {
+      "name": "effectiveClearance",
+      "displayValue": "23",
+      "label": "Effective Clearances"
+     },
+     {
+      "name": "totalClearance",
+      "displayValue": "23",
+      "label": "Clearances"
+     }
+    ]
+   }
+  ]
+ },
+ "leaders": [
+  {
+   "team": {
+    "id": "306"
+   },
+   "leaders": [
+    {
+     "name": "totalShots",
+     "displayName": "Total Shots",
+     "leaders": [
+      {
+       "displayValue": "3",
+       "athlete": {
+        "displayName": "Mohamed Belloumi",
+        "shortName": "M. Belloumi",
+        "position": {
+         "name": "Forward",
+         "displayName": "Forward",
+         "abbreviation": "F"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "name": "accuratePasses",
+     "displayName": "Accurate Passes",
+     "leaders": [
+      {
+       "displayValue": "20",
+       "athlete": {
+        "displayName": "Nobel Mendy",
+        "shortName": "N. Mendy",
+        "position": {
+         "name": "Defender",
+         "displayName": "Defender",
+         "abbreviation": "D"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "name": "defensiveInterventions",
+     "displayName": "Defensive Interventions",
+     "leaders": [
+      {
+       "displayValue": "12",
+       "athlete": {
+        "displayName": "Elliot Stroud",
+        "shortName": "E. Stroud",
+        "position": {
+         "name": "Midfielder",
+         "displayName": "Midfielder",
+         "abbreviation": "M"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "name": "saves",
+     "displayName": "Saves",
+     "leaders": [
+      {
+       "displayValue": "7",
+       "athlete": {
+        "displayName": "Konstantinos Tzolakis",
+        "shortName": "K. Tzolakis",
+        "position": {
+         "name": "Goalkeeper",
+         "displayName": "Goalkeeper",
+         "abbreviation": "G"
+        }
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "team": {
+    "id": "331"
+   },
+   "leaders": [
+    {
+     "name": "totalShots",
+     "displayName": "Total Shots",
+     "leaders": [
+      {
+       "displayValue": "4",
+       "athlete": {
+        "displayName": "Diego G\u00f3mez",
+        "shortName": "D. G\u00f3mez",
+        "position": {
+         "name": "Midfielder",
+         "displayName": "Midfielder",
+         "abbreviation": "M"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "name": "accuratePasses",
+     "displayName": "Accurate Passes",
+     "leaders": [
+      {
+       "displayValue": "80",
+       "athlete": {
+        "displayName": "Lewis Dunk",
+        "shortName": "L. Dunk",
+        "position": {
+         "name": "Defender",
+         "displayName": "Defender",
+         "abbreviation": "D"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "name": "defensiveInterventions",
+     "displayName": "Defensive Interventions",
+     "leaders": [
+      {
+       "displayValue": "11",
+       "athlete": {
+        "displayName": "Costinha",
+        "shortName": "Costinha",
+        "position": {
+         "name": "Defender",
+         "displayName": "Defender",
+         "abbreviation": "D"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "name": "saves",
+     "displayName": "Saves",
+     "leaders": [
+      {
+       "displayValue": "3",
+       "athlete": {
+        "displayName": "Bart Verbruggen",
+        "shortName": "B. Verbruggen",
+        "position": {
+         "name": "Goalkeeper",
+         "displayName": "Goalkeeper",
+         "abbreviation": "G"
+        }
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "lastFiveGames": [
+  {
+   "team": {
+    "id": "306",
+    "abbreviation": "HUL",
+    "displayName": "Hull City",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/306.png",
+    "logos": [
+     {
+      "href": "https://a.espncdn.com/i/teamlogos/soccer/500/306.png"
+     }
+    ]
+   },
+   "events": [
+    {
+     "id": "401878774",
+     "gameDate": "2026-10-11T13:00Z",
+     "atVs": "vs",
+     "score": "2-2",
+     "gameResult": "D",
+     "homeTeamId": "306",
+     "awayTeamId": "368",
+     "homeTeamScore": "2",
+     "awayTeamScore": "2",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/soccer/500/368.png",
+     "opponent": {
+      "id": "368",
+      "abbreviation": "EVE",
+      "displayName": "Everton",
+      "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/368.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/soccer/500/368.png"
+       }
+      ]
+     }
+    },
+    {
+     "id": "401878770",
+     "gameDate": "2026-10-17T14:00Z",
+     "atVs": "@",
+     "score": "1-0",
+     "gameResult": "L",
+     "homeTeamId": "370",
+     "awayTeamId": "306",
+     "homeTeamScore": "1",
+     "awayTeamScore": "0",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/soccer/500/370.png",
+     "opponent": {
+      "id": "370",
+      "abbreviation": "FUL",
+      "displayName": "Fulham",
+      "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/370.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/soccer/500/370.png"
+       }
+      ]
+     }
+    },
+    {
+     "id": "401878766",
+     "gameDate": "2026-10-25T14:00Z",
+     "atVs": "vs",
+     "score": "1-1",
+     "gameResult": "D",
+     "homeTeamId": "306",
+     "awayTeamId": "337",
+     "homeTeamScore": "1",
+     "awayTeamScore": "1",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/soccer/500/337.png",
+     "opponent": {
+      "id": "337",
+      "abbreviation": "BRE",
+      "displayName": "Brentford",
+      "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/337.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/soccer/500/337.png"
+       }
+      ]
+     }
+    },
+    {
+     "id": "401878763",
+     "gameDate": "2026-10-31T15:00Z",
+     "atVs": "vs",
+     "score": "2-2",
+     "gameResult": "D",
+     "homeTeamId": "306",
+     "awayTeamId": "373",
+     "homeTeamScore": "2",
+     "awayTeamScore": "2",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/soccer/500/373.png",
+     "opponent": {
+      "id": "373",
+      "abbreviation": "IPS",
+      "displayName": "Ipswich Town",
+      "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/373.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/soccer/500/373.png"
+       }
+      ]
+     }
+    },
+    {
+     "id": "401878760",
+     "gameDate": "2026-11-07T15:00Z",
+     "atVs": "@",
+     "score": "1-0",
+     "gameResult": "L",
+     "homeTeamId": "359",
+     "awayTeamId": "306",
+     "homeTeamScore": "1",
+     "awayTeamScore": "0",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/soccer/500/359.png",
+     "opponent": {
+      "id": "359",
+      "abbreviation": "ARS",
+      "displayName": "Arsenal",
+      "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/359.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/soccer/500/359.png"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "team": {
+    "id": "331",
+    "abbreviation": "BHA",
+    "displayName": "Brighton & Hove Albion",
+    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/331.png",
+    "logos": [
+     {
+      "href": "https://a.espncdn.com/i/teamlogos/soccer/500/331.png"
+     }
+    ]
+   },
+   "events": [
+    {
+     "id": "401878765",
+     "gameDate": "2026-10-25T14:00Z",
+     "atVs": "@",
+     "score": "2-0",
+     "gameResult": "L",
+     "homeTeamId": "364",
+     "awayTeamId": "331",
+     "homeTeamScore": "2",
+     "awayTeamScore": "0",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/soccer/500/364.png",
+     "opponent": {
+      "id": "364",
+      "abbreviation": "LIV",
+      "displayName": "Liverpool",
+      "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/364.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/soccer/500/364.png"
+       }
+      ]
+     }
+    },
+    {
+     "id": "401921834",
+     "gameDate": "2026-10-28T19:30Z",
+     "atVs": "@",
+     "score": "2-2",
+     "gameResult": "L",
+     "homeTeamId": "382",
+     "awayTeamId": "331",
+     "homeTeamScore": "2",
+     "awayTeamScore": "2",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/soccer/500/382.png",
+     "opponent": {
+      "id": "382",
+      "abbreviation": "MNC",
+      "displayName": "Manchester City",
+      "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/382.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/soccer/500/382.png"
+       }
+      ]
+     }
+    },
+    {
+     "id": "401879245",
+     "gameDate": "2026-10-31T15:00Z",
+     "atVs": "@",
+     "score": "1-0",
+     "gameResult": "W",
+     "homeTeamId": "382",
+     "awayTeamId": "331",
+     "homeTeamScore": "0",
+     "awayTeamScore": "1",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/soccer/500/382.png",
+     "opponent": {
+      "id": "382",
+      "abbreviation": "MNC",
+      "displayName": "Manchester City",
+      "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/382.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/soccer/500/382.png"
+       }
+      ]
+     }
+    },
+    {
+     "id": "401915821",
+     "gameDate": "2026-11-05T20:00Z",
+     "atVs": "@",
+     "score": "1-0",
+     "gameResult": "W",
+     "homeTeamId": "2922",
+     "awayTeamId": "331",
+     "homeTeamScore": "0",
+     "awayTeamScore": "1",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/soccer/500/2922.png",
+     "opponent": {
+      "id": "2922",
+      "abbreviation": "GET",
+      "displayName": "Getafe",
+      "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/2922.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/soccer/500/2922.png"
+       }
+      ]
+     }
+    },
+    {
+     "id": "401879244",
+     "gameDate": "2026-11-08T14:00Z",
+     "atVs": "vs",
+     "score": "2-0",
+     "gameResult": "W",
+     "homeTeamId": "331",
+     "awayTeamId": "337",
+     "homeTeamScore": "2",
+     "awayTeamScore": "0",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/soccer/500/337.png",
+     "opponent": {
+      "id": "337",
+      "abbreviation": "BRE",
+      "displayName": "Brentford",
+      "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/337.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/soccer/500/337.png"
+       }
+      ]
+     }
+    }
+   ]
+  }
+ ]
+}

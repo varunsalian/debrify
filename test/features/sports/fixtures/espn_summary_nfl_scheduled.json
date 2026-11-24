@@ -1,0 +1,687 @@
+{
+ "header": {
+  "competitions": [
+   {
+    "status": {
+     "type": {
+      "name": "STATUS_SCHEDULED",
+      "state": "pre",
+      "completed": false,
+      "detail": "Thu, November 26th at 1:00 PM EST",
+      "shortDetail": "11/26 - 1:00 PM EST"
+     }
+    },
+    "competitors": [
+     {
+      "id": "8",
+      "homeAway": "home",
+      "team": {
+       "id": "8",
+       "abbreviation": "DET",
+       "displayName": "Detroit Lions",
+       "color": "0076b6",
+       "alternateColor": "bbbbbb",
+       "logos": [
+        {
+         "href": "https://a.espncdn.com/i/teamlogos/nfl/500/det.png"
+        }
+       ]
+      },
+      "record": [
+       {
+        "type": "total",
+        "summary": "8-2",
+        "displayValue": "8-2"
+       }
+      ]
+     },
+     {
+      "id": "3",
+      "homeAway": "away",
+      "team": {
+       "id": "3",
+       "abbreviation": "CHI",
+       "displayName": "Chicago Bears",
+       "color": "0b1c3a",
+       "alternateColor": "e64100",
+       "logos": [
+        {
+         "href": "https://a.espncdn.com/i/teamlogos/nfl/500/chi.png"
+        }
+       ]
+      },
+      "record": [
+       {
+        "type": "total",
+        "summary": "8-2",
+        "displayValue": "8-2"
+       }
+      ]
+     }
+    ],
+    "date": "2026-11-26T18:00Z"
+   }
+  ]
+ },
+ "boxscore": {
+  "teams": [
+   {
+    "homeAway": "away",
+    "team": {
+     "id": "3",
+     "abbreviation": "CHI",
+     "displayName": "Chicago Bears",
+     "shortDisplayName": "Bears",
+     "color": "0b1c3a",
+     "alternateColor": "e64100",
+     "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/chi.png"
+    },
+    "statistics": [
+     {
+      "name": "totalPointsPerGame",
+      "displayValue": "26.2",
+      "label": "Points Per Game"
+     },
+     {
+      "name": "yardsPerGame",
+      "displayValue": "391.5",
+      "label": "Total Yards"
+     },
+     {
+      "name": "passingYardsPerGame",
+      "displayValue": "249.1",
+      "label": "Yards Passing"
+     },
+     {
+      "name": "rushingYardsPerGame",
+      "displayValue": "142.4",
+      "label": "Yards Rushing"
+     },
+     {
+      "name": "totalPointsPerGameAllowed",
+      "displayValue": "19.7",
+      "label": "Points Allowed Per Game"
+     },
+     {
+      "name": "yardsPerGameAllowed",
+      "displayValue": "328.2",
+      "label": "Yards Allowed"
+     },
+     {
+      "name": "passingYardsPerGameAllowed",
+      "displayValue": "234.2",
+      "label": "Pass Yards Allowed"
+     },
+     {
+      "name": "rushingYardsPerGameAllowed",
+      "displayValue": "94.0",
+      "label": "Rush Yards Allowed"
+     }
+    ]
+   },
+   {
+    "homeAway": "home",
+    "team": {
+     "id": "8",
+     "abbreviation": "DET",
+     "displayName": "Detroit Lions",
+     "shortDisplayName": "Lions",
+     "color": "0076b6",
+     "alternateColor": "bbbbbb",
+     "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/det.png"
+    },
+    "statistics": [
+     {
+      "name": "totalPointsPerGame",
+      "displayValue": "28.8",
+      "label": "Points Per Game"
+     },
+     {
+      "name": "yardsPerGame",
+      "displayValue": "405.6",
+      "label": "Total Yards"
+     },
+     {
+      "name": "passingYardsPerGame",
+      "displayValue": "273.4",
+      "label": "Yards Passing"
+     },
+     {
+      "name": "rushingYardsPerGame",
+      "displayValue": "132.2",
+      "label": "Yards Rushing"
+     },
+     {
+      "name": "totalPointsPerGameAllowed",
+      "displayValue": "22.0",
+      "label": "Points Allowed Per Game"
+     },
+     {
+      "name": "yardsPerGameAllowed",
+      "displayValue": "351.5",
+      "label": "Yards Allowed"
+     },
+     {
+      "name": "passingYardsPerGameAllowed",
+      "displayValue": "258.1",
+      "label": "Pass Yards Allowed"
+     },
+     {
+      "name": "rushingYardsPerGameAllowed",
+      "displayValue": "93.4",
+      "label": "Rush Yards Allowed"
+     }
+    ]
+   }
+  ]
+ },
+ "leaders": [
+  {
+   "team": {
+    "id": "8"
+   },
+   "leaders": [
+    {
+     "name": "passingYards",
+     "displayName": "Passing Yards",
+     "leaders": [
+      {
+       "displayValue": "225/332, 2,716 YDS, 20 TD, 4 INT",
+       "athlete": {
+        "displayName": "Jared Goff",
+        "shortName": "J. Goff",
+        "headshot": {
+         "href": "https://a.espncdn.com/i/headshots/nfl/players/full/3046779.png",
+         "alt": "Jared Goff"
+        },
+        "position": {
+         "name": "Quarterback",
+         "displayName": "Quarterback",
+         "abbreviation": "QB"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "name": "rushingYards",
+     "displayName": "Rushing Yards",
+     "leaders": [
+      {
+       "displayValue": "222 CAR, 1,098 YDS, 13 TD",
+       "athlete": {
+        "displayName": "Jahmyr Gibbs",
+        "shortName": "J. Gibbs",
+        "headshot": {
+         "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4429795.png",
+         "alt": "Jahmyr Gibbs"
+        },
+        "position": {
+         "name": "Running Back",
+         "displayName": "Running Back",
+         "abbreviation": "RB"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "name": "receivingYards",
+     "displayName": "Receiving Yards",
+     "leaders": [
+      {
+       "displayValue": "70 REC, 792 YDS, 8 TD",
+       "athlete": {
+        "displayName": "Amon-Ra St. Brown",
+        "shortName": "A. St. Brown",
+        "headshot": {
+         "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4374302.png",
+         "alt": "Amon-Ra St. Brown"
+        },
+        "position": {
+         "name": "Wide Receiver",
+         "displayName": "Wide Receiver",
+         "abbreviation": "WR"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "name": "sacks",
+     "displayName": "Sacks",
+     "leaders": [
+      {
+       "displayValue": "7",
+       "athlete": {
+        "displayName": "DJ Wonnum",
+        "shortName": "D. Wonnum",
+        "headshot": {
+         "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4038849.png",
+         "alt": "DJ Wonnum"
+        },
+        "position": {
+         "name": "Linebacker",
+         "displayName": "Linebacker",
+         "abbreviation": "LB"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "name": "totalTackles",
+     "displayName": "Tackles",
+     "leaders": [
+      {
+       "displayValue": "61",
+       "athlete": {
+        "displayName": "Chuck Clark",
+        "shortName": "C. Clark",
+        "headshot": {
+         "href": "https://a.espncdn.com/i/headshots/nfl/players/full/3045463.png",
+         "alt": "Chuck Clark"
+        },
+        "position": {
+         "name": "Safety",
+         "displayName": "Safety",
+         "abbreviation": "S"
+        }
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "team": {
+    "id": "3"
+   },
+   "leaders": [
+    {
+     "name": "passingYards",
+     "displayName": "Passing Yards",
+     "leaders": [
+      {
+       "displayValue": "149/218, 1,727 YDS, 10 TD, 6 INT",
+       "athlete": {
+        "displayName": "Caleb Williams",
+        "shortName": "C. Williams",
+        "headshot": {
+         "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4431611.png",
+         "alt": "Caleb Williams"
+        },
+        "position": {
+         "name": "Quarterback",
+         "displayName": "Quarterback",
+         "abbreviation": "QB"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "name": "rushingYards",
+     "displayName": "Rushing Yards",
+     "leaders": [
+      {
+       "displayValue": "168 CAR, 627 YDS, 10 TD",
+       "athlete": {
+        "displayName": "D'Andre Swift",
+        "shortName": "D. Swift",
+        "headshot": {
+         "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4259545.png",
+         "alt": "D'Andre Swift"
+        },
+        "position": {
+         "name": "Running Back",
+         "displayName": "Running Back",
+         "abbreviation": "RB"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "name": "receivingYards",
+     "displayName": "Receiving Yards",
+     "leaders": [
+      {
+       "displayValue": "51 REC, 654 YDS, 4 TD",
+       "athlete": {
+        "displayName": "Luther Burden III",
+        "shortName": "L. Burden III",
+        "headshot": {
+         "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4685278.png",
+         "alt": "Luther Burden III"
+        },
+        "position": {
+         "name": "Wide Receiver",
+         "displayName": "Wide Receiver",
+         "abbreviation": "WR"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "name": "sacks",
+     "displayName": "Sacks",
+     "leaders": [
+      {
+       "displayValue": "5",
+       "athlete": {
+        "displayName": "Jeffery Simmons",
+        "shortName": "J. Simmons",
+        "headshot": {
+         "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4035369.png",
+         "alt": "Jeffery Simmons"
+        },
+        "position": {
+         "name": "Defensive Tackle",
+         "displayName": "Defensive Tackle",
+         "abbreviation": "DT"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "name": "totalTackles",
+     "displayName": "Tackles",
+     "leaders": [
+      {
+       "displayValue": "64",
+       "athlete": {
+        "displayName": "Dillon Thieneman",
+        "shortName": "D. Thieneman",
+        "headshot": {
+         "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4954445.png",
+         "alt": "Dillon Thieneman"
+        },
+        "position": {
+         "name": "Safety",
+         "displayName": "Safety",
+         "abbreviation": "S"
+        }
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "lastFiveGames": [
+  {
+   "team": {
+    "id": "8",
+    "abbreviation": "DET",
+    "displayName": "Detroit Lions",
+    "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/det.png",
+    "logos": [
+     {
+      "href": "https://a.espncdn.com/i/teamlogos/nfl/500/det.png"
+     }
+    ]
+   },
+   "events": [
+    {
+     "id": "401873020",
+     "gameDate": "2026-10-25T20:25Z",
+     "atVs": "vs",
+     "score": "20-17",
+     "gameResult": "W",
+     "homeTeamId": "8",
+     "awayTeamId": "9",
+     "homeTeamScore": "20",
+     "awayTeamScore": "17",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/nfl/500/gb.png",
+     "opponent": {
+      "id": "9",
+      "abbreviation": "GB",
+      "displayName": "Green Bay Packers",
+      "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/gb.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/nfl/500/gb.png"
+       }
+      ]
+     }
+    },
+    {
+     "id": "401873030",
+     "gameDate": "2026-11-01T18:00Z",
+     "atVs": "vs",
+     "score": "19-15",
+     "gameResult": "W",
+     "homeTeamId": "8",
+     "awayTeamId": "16",
+     "homeTeamScore": "19",
+     "awayTeamScore": "15",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/nfl/500/min.png",
+     "opponent": {
+      "id": "16",
+      "abbreviation": "MIN",
+      "displayName": "Minnesota Vikings",
+      "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/min.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/nfl/500/min.png"
+       }
+      ]
+     }
+    },
+    {
+     "id": "401873042",
+     "gameDate": "2026-11-08T18:00Z",
+     "atVs": "@",
+     "score": "19-9",
+     "gameResult": "W",
+     "homeTeamId": "15",
+     "awayTeamId": "8",
+     "homeTeamScore": "9",
+     "awayTeamScore": "19",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/nfl/500/mia.png",
+     "opponent": {
+      "id": "15",
+      "abbreviation": "MIA",
+      "displayName": "Miami Dolphins",
+      "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/mia.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/nfl/500/mia.png"
+       }
+      ]
+     }
+    },
+    {
+     "id": "401873053",
+     "gameDate": "2026-11-15T14:30Z",
+     "atVs": "vs",
+     "score": "35-10",
+     "gameResult": "W",
+     "homeTeamId": "8",
+     "awayTeamId": "17",
+     "homeTeamScore": "35",
+     "awayTeamScore": "10",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/nfl/500/ne.png",
+     "opponent": {
+      "id": "17",
+      "abbreviation": "NE",
+      "displayName": "New England Patriots",
+      "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/ne.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/nfl/500/ne.png"
+       }
+      ]
+     }
+    },
+    {
+     "id": "401873072",
+     "gameDate": "2026-11-22T18:00Z",
+     "atVs": "vs",
+     "score": "31-21",
+     "gameResult": "W",
+     "homeTeamId": "8",
+     "awayTeamId": "27",
+     "homeTeamScore": "31",
+     "awayTeamScore": "21",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/nfl/500/tb.png",
+     "opponent": {
+      "id": "27",
+      "abbreviation": "TB",
+      "displayName": "Tampa Bay Buccaneers",
+      "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/tb.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/nfl/500/tb.png"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "team": {
+    "id": "3",
+    "abbreviation": "CHI",
+    "displayName": "Chicago Bears",
+    "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/chi.png",
+    "logos": [
+     {
+      "href": "https://a.espncdn.com/i/teamlogos/nfl/500/chi.png"
+     }
+    ]
+   },
+   "events": [
+    {
+     "id": "401872999",
+     "gameDate": "2026-10-18T17:00Z",
+     "atVs": "@",
+     "score": "31-23",
+     "gameResult": "W",
+     "homeTeamId": "1",
+     "awayTeamId": "3",
+     "homeTeamScore": "23",
+     "awayTeamScore": "31",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/nfl/500/atl.png",
+     "opponent": {
+      "id": "1",
+      "abbreviation": "ATL",
+      "displayName": "Atlanta Falcons",
+      "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/atl.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/nfl/500/atl.png"
+       }
+      ]
+     }
+    },
+    {
+     "id": "401873010",
+     "gameDate": "2026-10-23T00:15Z",
+     "atVs": "vs",
+     "score": "30-24",
+     "gameResult": "W",
+     "homeTeamId": "3",
+     "awayTeamId": "17",
+     "homeTeamScore": "30",
+     "awayTeamScore": "24",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/nfl/500/ne.png",
+     "opponent": {
+      "id": "17",
+      "abbreviation": "NE",
+      "displayName": "New England Patriots",
+      "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/ne.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/nfl/500/ne.png"
+       }
+      ]
+     }
+    },
+    {
+     "id": "401873036",
+     "gameDate": "2026-11-03T01:15Z",
+     "atVs": "@",
+     "score": "34-17",
+     "gameResult": "W",
+     "homeTeamId": "26",
+     "awayTeamId": "3",
+     "homeTeamScore": "17",
+     "awayTeamScore": "34",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/nfl/500/sea.png",
+     "opponent": {
+      "id": "26",
+      "abbreviation": "SEA",
+      "displayName": "Seattle Seahawks",
+      "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/sea.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/nfl/500/sea.png"
+       }
+      ]
+     }
+    },
+    {
+     "id": "401873050",
+     "gameDate": "2026-11-09T01:20Z",
+     "atVs": "vs",
+     "score": "27-24",
+     "gameResult": "W",
+     "homeTeamId": "3",
+     "awayTeamId": "27",
+     "homeTeamScore": "27",
+     "awayTeamScore": "24",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/nfl/500/tb.png",
+     "opponent": {
+      "id": "27",
+      "abbreviation": "TB",
+      "displayName": "Tampa Bay Buccaneers",
+      "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/tb.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/nfl/500/tb.png"
+       }
+      ]
+     }
+    },
+    {
+     "id": "401873071",
+     "gameDate": "2026-11-22T18:00Z",
+     "atVs": "vs",
+     "score": "21-13",
+     "gameResult": "W",
+     "homeTeamId": "3",
+     "awayTeamId": "18",
+     "homeTeamScore": "21",
+     "awayTeamScore": "13",
+     "opponentLogo": "https://a.espncdn.com/i/teamlogos/nfl/500/no.png",
+     "opponent": {
+      "id": "18",
+      "abbreviation": "NO",
+      "displayName": "New Orleans Saints",
+      "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/no.png",
+      "logos": [
+       {
+        "href": "https://a.espncdn.com/i/teamlogos/nfl/500/no.png"
+       }
+      ]
+     }
+    }
+   ]
+  }
+ ],
+ "predictor": {
+  "header": "Matchup Predictor",
+  "homeTeam": {
+   "id": "8",
+   "gameProjection": "55.3"
+  },
+  "awayTeam": {
+   "id": "3",
+   "gameProjection": "44.3"
+  }
+ }
+}
