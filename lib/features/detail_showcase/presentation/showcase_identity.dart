@@ -3,6 +3,7 @@ import 'package:debrify/features/detail_showcase/presentation/showcase_identity_
 import 'package:debrify/features/detail_showcase/presentation/showcase_metrics.dart';
 import 'package:debrify/features/detail_showcase/presentation/showcase_style.dart';
 import 'package:debrify/features/detail_showcase/presentation/showcase_synopsis.dart';
+import 'package:debrify/features/ledger/models/ledger_brand.dart';
 import 'package:debrify/widgets/detail/detail_model.dart';
 import 'package:debrify/widgets/tracker_brand_marks.dart';
 import 'package:flutter/material.dart';
@@ -42,6 +43,25 @@ class ShowcaseIdentity extends StatelessWidget {
     this.synopsisNode,
     this.onSynopsisExitUp,
   });
+
+  /// How many action buttons [build] mounts for [m], in the same order and
+  /// under the same conditions. The layout sizes its focus nodes from this,
+  /// so a button added below without a line here would have no node.
+  static int actionCount(DetailModel m) {
+    var n = 0;
+    if (m.onToggleMyWatchlist != null) n++;
+    if (m.onTrackers != null) n++;
+    if (m.onTrackersSecondary != null) n++;
+    if (m.onTrackersTertiary != null) n++;
+    if (m.onLedgerMenu != null) n++;
+    if (m.hasTrailer) n++;
+    // The source browse (movie list / series pack search), mounted between
+    // trailer and the app menu.
+    if (m.onBrowse != null) n++;
+    if (m.onMetadataExplore != null) n++;
+    if (m.onAppMenu != null) n++;
+    return n;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -104,6 +124,16 @@ class ShowcaseIdentity extends StatelessWidget {
           mark: const MdblistMark(),
           label: 'MDBList',
           onTap: m.onTrackersTertiary!,
+        ),
+      );
+    }
+    if (m.onLedgerMenu != null && i < actionNodes.length) {
+      actions.add(
+        SCircle.mark(
+          node: next(),
+          mark: const LedgerMark(),
+          label: kLedgerDisplayName,
+          onTap: m.onLedgerMenu!,
         ),
       );
     }

@@ -166,6 +166,10 @@ class DetailModel {
   /// live state. It draws nothing while that tracker is not connected.
   final Widget Function(bool compact)? ledgerPill;
 
+  /// Opens that tracker's sheet. Set only while the tracker is connected, for
+  /// a layout that must know its button count up front (Showcase).
+  final VoidCallback? onLedgerMenu;
+
   /// Debrify's local, account-independent movie/series watchlist.
   final bool inMyWatchlist;
   final VoidCallback? onToggleMyWatchlist;
@@ -252,6 +256,7 @@ class DetailModel {
     required this.onSimklMenu,
     this.onMdblistMenu,
     this.ledgerPill,
+    this.onLedgerMenu,
     this.inMyWatchlist = false,
     this.onToggleMyWatchlist,
     this.onTrackers,

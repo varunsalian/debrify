@@ -16,6 +16,7 @@ import 'package:debrify/widgets/detail/detail_layout_showcase.dart';
 import 'package:debrify/widgets/detail/detail_layout_stage.dart';
 import 'package:debrify/widgets/detail/detail_model.dart';
 import 'package:debrify/widgets/detail/detail_style.dart';
+import 'package:debrify/widgets/detail/ledger_title_entry.dart';
 import 'package:debrify/widgets/detail/theme/detail_theme.dart';
 import 'package:debrify/widgets/episodes_panel.dart';
 import 'package:flutter/material.dart';
@@ -144,14 +145,22 @@ class MergedDetailBodyLayout {
           ),
         );
       case 'showcase':
+        // Showcase sizes its focus nodes from the buttons it will mount, so
+        // whether Debrify's own tracker has one is resolved before the model.
         return themed(
-          DetailShowcase(
-            model: _b.buildDetailModel(),
-            episodesHost: episodesHost,
-            // The INPUT axis: unlocks the touch drivers (scroll dissolve,
-            // kebab, compact presentation under 600 wide) off-TV. Width is
-            // deliberately not the test — a narrow TV must stay a TV.
-            dpad: PlatformUtil.isTelevision,
+          LedgerTitleHost(
+            titleKey: LedgerTitleEntry.keyFor(_deps.presentedItem()),
+            title: _deps.presentedItem().name,
+            isTelevision: _deps.isTelevision(),
+            onWatchedChanged: _deps.refreshAfterPlayback,
+            builder: (context, status, onLedgerMenu) => DetailShowcase(
+              model: _b.buildDetailModel(onLedgerMenu: onLedgerMenu),
+              episodesHost: episodesHost,
+              // The INPUT axis: unlocks the touch drivers (scroll dissolve,
+              // kebab, compact presentation under 600 wide) off-TV. Width is
+              // deliberately not the test — a narrow TV must stay a TV.
+              dpad: PlatformUtil.isTelevision,
+            ),
           ),
         );
       // Only 'classic' reaches here: every shipped alternate has a case above,

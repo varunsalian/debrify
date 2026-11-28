@@ -42,17 +42,56 @@ class LedgerTitleEntry extends StatelessWidget {
       (imdbId: item.imdbId ?? item.id, contentType: item.type);
 
   @override
+  Widget build(BuildContext context) => LedgerTitleHost(
+    titleKey: titleKey,
+    title: title,
+    isTelevision: isTelevision,
+    onWatchedChanged: onWatchedChanged,
+    builder: (context, status, onTap) => status == null || onTap == null
+        ? const SizedBox.shrink()
+        : builder(context, status, onTap),
+  );
+}
+
+/// The state behind [LedgerTitleEntry], for a layout that needs to know
+/// whether the tracker has a button before it builds (Showcase sizes its
+/// focus nodes from that). [builder] always runs; its status and tap are null
+/// while the tracker is off, signed out or cannot name the title.
+class LedgerTitleHost extends StatelessWidget {
+  const LedgerTitleHost({
+    super.key,
+    required this.titleKey,
+    required this.title,
+    required this.isTelevision,
+    required this.builder,
+    this.onWatchedChanged,
+  });
+
+  final LedgerTitleKey titleKey;
+  final String title;
+  final bool isTelevision;
+  final VoidCallback? onWatchedChanged;
+  final Widget Function(
+    BuildContext context,
+    LedgerTitleStatus? status,
+    VoidCallback? onTap,
+  )
+  builder;
+
+  @override
   Widget build(BuildContext context) {
     // A host mounted outside the app's provider scope (a bare detail page in
     // a widget test) has no tracker state to read, so it gets no button.
     if (context.findAncestorWidgetOfExactType<UncontrolledProviderScope>() ==
         null) {
-      return const SizedBox.shrink();
+      return builder(context, null, null);
     }
     return Consumer(
       builder: (context, ref, _) {
         final state = ref.watch(ledgerTitleControllerProvider(titleKey)).value;
-        if (state == null || !state.available) return const SizedBox.shrink();
+        if (state == null || !state.available) {
+          return builder(context, null, null);
+        }
         return builder(context, state.status, () => _open(context));
       },
     );

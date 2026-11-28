@@ -68,8 +68,11 @@ class MergedDetailModelFactory {
   }
 
   /// and tab state.
-  DetailModel buildDetailModel() {
+  /// [onLedgerMenu] comes from the host that reads the tracker's state; only
+  /// the Showcase body passes it.
+  DetailModel buildDetailModel({VoidCallback? onLedgerMenu}) {
     return DetailModel(
+      onLedgerMenu: onLedgerMenu,
       item: _item,
       metadataPreferences: metadataPreferences,
       isMovie: _ro.isMovie,

@@ -1009,7 +1009,7 @@ class _DetailShowcaseState extends State<DetailShowcase> {
         'identity',
         [
           if (m.showPrimary) m.focus.primaryEntry,
-          ..._grow(_actionNodes, _actionCount(m), 'showcase-act'),
+          ..._grow(_actionNodes, ShowcaseIdentity.actionCount(m), 'showcase-act'),
         ],
         _identityKey,
         0,
@@ -1271,7 +1271,7 @@ class _DetailShowcaseState extends State<DetailShowcase> {
                     primaryNode: m.focus.primaryEntry,
                     actionNodes: _grow(
                       _actionNodes,
-                      _actionCount(m),
+                      ShowcaseIdentity.actionCount(m),
                       'showcase-act',
                     ),
                     onFocused: () => _setBand('identity'),
@@ -1445,22 +1445,6 @@ class _DetailShowcaseState extends State<DetailShowcase> {
         if (opening) const _ShowcaseTvOpeningSkeleton(),
       ],
     );
-  }
-
-  int _actionCount(DetailModel m) {
-    var n = 0;
-    if (m.onToggleMyWatchlist != null) n++;
-    if (m.onTrackers != null) n++;
-    if (m.onTrackersSecondary != null) n++;
-    if (m.onTrackersTertiary != null) n++;
-    if (m.hasTrailer) n++;
-    // The source browse (movie list / series pack search) — mounted between
-    // trailer and the app menu by ShowcaseIdentity; the count here is what
-    // keeps its node real.
-    if (m.onBrowse != null) n++;
-    if (m.onMetadataExplore != null) n++;
-    if (m.onAppMenu != null) n++;
-    return n;
   }
 
   /// On a phone the settled card is always lifted under the parallax focus:

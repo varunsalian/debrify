@@ -76,6 +76,7 @@ DetailModel _model({
   bool hasMdblist = false,
   bool withSecondaryTracker = false,
   bool withTertiaryTracker = false,
+  VoidCallback? onLedgerMenu,
   bool inMyWatchlist = false,
   bool withMyWatchlist = false,
   List<SeriesSource> sources = const [],
@@ -147,6 +148,7 @@ DetailModel _model({
     onTrackers: () {},
     onTrackersSecondary: withSecondaryTracker ? () {} : null,
     onTrackersTertiary: withTertiaryTracker ? () {} : null,
+    onLedgerMenu: onLedgerMenu,
     inMyWatchlist: inMyWatchlist,
     onToggleMyWatchlist: withMyWatchlist ? () {} : null,
     onManageSources: () {},
@@ -633,6 +635,25 @@ void main() {
     expect(find.byType(TraktMark), findsNothing);
     expect(find.byType(SimklMark), findsNothing);
     expect(find.byType(MdblistMark), findsOneWidget);
+  });
+
+  testWidgets('Debrify\'s own tracker gets a button only while connected', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_host(_model()));
+    await tester.pumpAndSettle();
+    expect(find.byType(LedgerMark), findsNothing);
+
+    var opened = 0;
+    await tester.pumpWidget(_host(_model(onLedgerMenu: () => opened++)));
+    await tester.pumpAndSettle();
+    expect(find.byType(LedgerMark), findsOneWidget);
+    // The last button still has a focus node of its own to mount with.
+    expect(find.byIcon(Icons.more_horiz_rounded), findsOneWidget);
+
+    await tester.tap(find.byType(LedgerMark));
+    await tester.pump();
+    expect(opened, 1);
   });
 
   testWidgets('both connected trackers get their own branded action', (
