@@ -383,6 +383,24 @@ class LedgerService {
     return result?.status;
   }
 
+  /// Whether every aired regular episode of the show has a play. Null when
+  /// unknown; false when the catalog does not hold the show yet.
+  Future<bool?> showCompleted(
+    String showImdbId, {
+    bool Function()? canContinue,
+  }) async {
+    if (!supportsId(showImdbId) || canContinue?.call() == false) return null;
+    return _guarded('show completion', () async {
+      final found = await api.status(LedgerMediaRef.show(showImdbId));
+      final showId = found?.item?.id;
+      if (showId == null) return false;
+      final show = await api.showProgress(showId);
+      return show != null &&
+          show.airedEpisodes > 0 &&
+          show.completedEpisodes >= show.airedEpisodes;
+    });
+  }
+
   // ── Writes ────────────────────────────────────────────────────────────
 
   Future<bool> _write(
@@ -589,6 +607,66 @@ class LedgerService {
       canContinue: canContinue,
       showImdbId: imdbId,
     );
+  }
+
+  /// Marks the title dropped (it leaves Up Next), or takes the mark off.
+  Future<bool> setDropped(
+    String imdbId,
+    String contentType, {
+    required bool dropped,
+    bool Function()? canContinue,
+  }) {
+    if (!supportsId(imdbId)) return Future.value(false);
+    final ref = contentType == 'series'
+        ? LedgerMediaRef.show(imdbId)
+        : LedgerMediaRef.movie(imdbId);
+    return _write(
+      dropped ? 'drop' : 'undrop',
+      () => api.setDropped([ref], dropped: dropped),
+      canContinue: canContinue,
+      showImdbId: contentType == 'series' ? imdbId : null,
+    );
+  }
+
+  /// Removes every play of the title and its saved resume points (a show:
+  /// those of all its episodes).
+  Future<bool> clearProgress(
+    String imdbId,
+    String contentType, {
+    bool Function()? canContinue,
+  }) async {
+    if (!supportsId(imdbId)) return false;
+    final series = contentType == 'series';
+    final target = imdbId.trim().toLowerCase();
+    final showImdbId = series ? imdbId : null;
+    // Two writes, so plays that were removed refresh caches and badges even
+    // when clearing the resume points then fails. Announced once, at the end.
+    final plays = await _write(
+      'clear plays',
+      () => api.removeHistory([
+        series ? LedgerMediaRef.show(imdbId) : LedgerMediaRef.movie(imdbId),
+      ]),
+      canContinue: canContinue,
+      showImdbId: showImdbId,
+      announce: false,
+    );
+    if (!plays) return false;
+    final points = await _write(
+      'clear resume points',
+      () async {
+        final kind = series ? LedgerMediaKind.episode : LedgerMediaKind.movie;
+        for (final entry in await api.playback(kind: kind)) {
+          if (entry.item.titleImdbId?.toLowerCase() == target) {
+            await api.deletePlayback(entry.id);
+          }
+        }
+      },
+      canContinue: canContinue,
+      showImdbId: showImdbId,
+      announce: false,
+    );
+    _afterWrite(showImdbId: showImdbId);
+    return points;
   }
 
   Future<bool> setWatchlisted(

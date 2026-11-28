@@ -222,6 +222,22 @@ class LedgerApi {
     );
   }
 
+  /// Marks shows/movies dropped, or takes the mark off.
+  Future<void> setDropped(
+    List<LedgerMediaRef> items, {
+    required bool dropped,
+  }) async {
+    if (items.isEmpty) return;
+    await _send(
+      'POST',
+      dropped ? '/v1/me/hidden' : '/v1/me/hidden:remove',
+      body: {
+        'section': kLedgerDroppedSection,
+        'items': [for (final item in items) item.toJson()],
+      },
+    );
+  }
+
   // ── Watchlist / lists / ratings ───────────────────────────────────────
 
   Future<List<LedgerListedItem>> watchlist() async {

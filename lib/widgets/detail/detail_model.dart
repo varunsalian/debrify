@@ -162,6 +162,10 @@ class DetailModel {
   final VoidCallback? onSimklMenu;
   final VoidCallback? onMdblistMenu;
 
+  /// Debrify's own tracker pill, built by the host because it carries its own
+  /// live state. It draws nothing while that tracker is not connected.
+  final Widget Function(bool compact)? ledgerPill;
+
   /// Debrify's local, account-independent movie/series watchlist.
   final bool inMyWatchlist;
   final VoidCallback? onToggleMyWatchlist;
@@ -247,6 +251,7 @@ class DetailModel {
     required this.onTraktMenu,
     required this.onSimklMenu,
     this.onMdblistMenu,
+    this.ledgerPill,
     this.inMyWatchlist = false,
     this.onToggleMyWatchlist,
     this.onTrackers,

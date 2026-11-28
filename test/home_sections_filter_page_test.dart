@@ -44,7 +44,11 @@ Future<void> _saveAndClose(WidgetTester tester) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUp(() => SharedPreferences.setMockInitialValues({}));
+  setUp(() {
+    debugLedgerEnabled = false;
+    SharedPreferences.setMockInitialValues({});
+  });
+  tearDown(() => debugLedgerEnabled = null);
 
   testWidgets('the Ledger group is listed only while Ledger is on', (
     tester,
@@ -52,7 +56,6 @@ void main() {
     await _pumpPage(tester);
     expect(find.text(kLedgerDisplayName), findsNothing);
     debugLedgerEnabled = true;
-    addTearDown(() => debugLedgerEnabled = null);
     await tester.pumpWidget(const SizedBox());
     await _pumpPage(tester);
     expect(find.text(kLedgerDisplayName), findsWidgets);

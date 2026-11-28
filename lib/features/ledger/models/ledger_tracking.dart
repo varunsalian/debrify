@@ -265,6 +265,9 @@ class LedgerUserList {
 }
 
 /// The user's relationship to one title (`/v1/me/status`).
+/// The hidden section that marks a show or movie dropped.
+const String kLedgerDroppedSection = 'HIDDEN_SECTION_DROPPED';
+
 class LedgerItemStatus {
   const LedgerItemStatus({
     this.plays = 0,
@@ -272,6 +275,7 @@ class LedgerItemStatus {
     this.playbackProgress,
     this.rating,
     this.watchlistedAt,
+    this.dropped = false,
   });
 
   final int plays;
@@ -282,13 +286,18 @@ class LedgerItemStatus {
   final int? rating;
   final DateTime? watchlistedAt;
 
+  /// The user marked the show or movie dropped.
+  final bool dropped;
+
   bool get watched => plays > 0;
   bool get onWatchlist => watchlistedAt != null;
 
   static LedgerItemStatus fromJson(Object? json) {
     if (json is! Map) return const LedgerItemStatus();
     final playback = json['playback'];
+    final hidden = json['hidden'];
     return LedgerItemStatus(
+      dropped: hidden is List && hidden.contains(kLedgerDroppedSection),
       plays: ledgerNonNegativeInt(json['plays']) ?? 0,
       lastWatchedAt: ledgerTime(json['lastWatchedAt']),
       playbackProgress: playback is Map

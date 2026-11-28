@@ -15,6 +15,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() {
+    debugLedgerEnabled = false;
     ProfileRuntime.debugReset();
     ProfileRuntime.initializeLegacy();
     SharedPreferences.setMockInitialValues(<String, Object>{});

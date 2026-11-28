@@ -261,6 +261,9 @@ void main() {
   });
 
   group('HomeRowOrder.seedNewRows', () {
+    setUp(() => debugLedgerEnabled = false);
+    tearDown(() => debugLedgerEnabled = null);
+
     test('a saved order gets Airing soon right after Continue Watching', () {
       expect(
         HomeRowOrder.seedNewRows([
@@ -292,7 +295,6 @@ void main() {
 
     test('the Ledger row lands after the last saved tracker row', () {
       debugLedgerEnabled = true;
-      addTearDown(() => debugLedgerEnabled = null);
       expect(
         HomeRowOrder.seedNewRows([
           'trakt:movies',

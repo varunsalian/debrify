@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:debrify/features/ledger/models/ledger_brand.dart';
 import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_dependencies.dart';
 import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_focus_state.dart';
 import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_menus.dart';
@@ -16,6 +17,9 @@ import 'package:debrify/models/metadata_preferences.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/services/series_source_service.dart';
 import 'package:debrify/widgets/detail/detail_model.dart';
+import 'package:debrify/widgets/detail/detail_tracker_pill.dart';
+import 'package:debrify/widgets/detail/ledger_title_entry.dart';
+import 'package:debrify/widgets/tracker_brand_marks.dart';
 import 'package:debrify/widgets/trakt/trakt_menu_helpers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -138,6 +142,22 @@ class MergedDetailModelFactory {
       onMdblistMenu: _deps.onMdblistAction() != null
           ? _mn.showMdblistQuickActionsMenu
           : null,
+      ledgerPill: (compact) => LedgerTitleEntry(
+        titleKey: LedgerTitleEntry.keyFor(_item),
+        title: _item.name,
+        isTelevision: _deps.isTelevision(),
+        onWatchedChanged: _deps.refreshAfterPlayback,
+        builder: (context, status, onTap) => DetailTrackerPill(
+          mark: LedgerMark(size: 19, opacity: status.tracked ? 1 : 0.55),
+          brand: kLedgerDisplayName.toUpperCase(),
+          state: status.label,
+          rating: status.rating,
+          accent: kLedgerAccent,
+          tracked: status.tracked,
+          compact: compact,
+          onTap: onTap,
+        ),
+      ),
       inMyWatchlist: _k.inMyWatchlist,
       onToggleMyWatchlist: _wa.supportsMyWatchlist
           ? _wa.toggleMyWatchlist

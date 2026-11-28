@@ -1,3 +1,4 @@
+import 'package:debrify/features/ledger/models/ledger_brand.dart';
 import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_dependencies.dart';
 import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_focus_state.dart';
 import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_menus.dart';
@@ -17,6 +18,7 @@ import 'package:debrify/features/merged_detail/presentation/merged_primary_butto
 import 'package:debrify/features/merged_detail/presentation/merged_round_icon_button.dart';
 import 'package:debrify/features/merged_detail/presentation/merged_source_pill.dart';
 import 'package:debrify/features/merged_detail/presentation/merged_tracker_pill.dart';
+import 'package:debrify/widgets/detail/ledger_title_entry.dart';
 import 'package:debrify/widgets/tracker_brand_marks.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -223,6 +225,24 @@ class MergedDetailActionLayout {
             tooltip: 'MDBList options',
             onTap: _mn.showMdblistQuickActionsMenu,
           ),
+        // Debrify's own tracker. It carries its own live state, so it draws
+        // nothing until that tracker is connected.
+        LedgerTitleEntry(
+          titleKey: LedgerTitleEntry.keyFor(_deps.presentedItem()),
+          title: _deps.presentedItem().name,
+          isTelevision: _deps.isTelevision(),
+          onWatchedChanged: _deps.refreshAfterPlayback,
+          builder: (context, status, onTap) => MergedTrackerPill(
+            mark: LedgerMark(size: 21, opacity: status.tracked ? 1 : 0.55),
+            brand: kLedgerDisplayName.toUpperCase(),
+            state: status.label,
+            rating: status.rating,
+            accent: kLedgerAccent,
+            tracked: status.tracked,
+            tooltip: '$kLedgerDisplayName options',
+            onTap: onTap,
+          ),
+        ),
       ],
     );
   }

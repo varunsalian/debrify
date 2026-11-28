@@ -62,6 +62,8 @@ void main() {
     });
   }
   test('a stored Ledger session is unused while Ledger is off', () async {
+    debugLedgerEnabled = false;
+    addTearDown(() => debugLedgerEnabled = null);
     expect(await reader(HomeTracker.ledger)(), isFalse);
   });
   test(

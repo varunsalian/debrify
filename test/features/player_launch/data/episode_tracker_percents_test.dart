@@ -46,7 +46,7 @@ void main() {
   tearDown(ProfileRuntime.debugReset);
 
   test('a stored Ledger snapshot is unused while Ledger is off', () async {
-    debugLedgerEnabled = null;
+    debugLedgerEnabled = false;
     final percents = EpisodeTrackerPercents.of(
       await EpisodeTrackerPercents.read('tt1'),
     );
@@ -109,7 +109,7 @@ void main() {
 
   test('Ledger\'s snapshot is read only while Ledger is on', () async {
     expect(await EpisodeTrackerPercents.read('tt1'), hasLength(4));
-    debugLedgerEnabled = null;
+    debugLedgerEnabled = false;
     expect(
       await EpisodeTrackerPercents.read('tt1'),
       hasLength(3),

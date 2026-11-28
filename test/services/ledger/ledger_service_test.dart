@@ -270,4 +270,146 @@ void main() {
       ],
     });
   });
+
+  test(
+    'dropping sends the dropped section and undropping removes it',
+    () async {
+      routes = (_) => {};
+      final body = {
+        'section': 'HIDDEN_SECTION_DROPPED',
+        'items': [
+          {
+            'kind': 'MEDIA_KIND_SHOW',
+            'ids': {'imdb': 'tt1000001'},
+          },
+        ],
+      };
+      expect(
+        await service.setDropped('tt1000001', 'series', dropped: true),
+        isTrue,
+      );
+      expect(
+        await service.setDropped('tt1000001', 'series', dropped: false),
+        isTrue,
+      );
+      expect(requests.map((r) => r.url.path), [
+        '/v1/me/hidden',
+        '/v1/me/hidden:remove',
+      ]);
+      expect(requests.map((r) => jsonDecode(r.body)), [body, body]);
+    },
+  );
+
+  test('a title status reports the dropped mark', () async {
+    routes = (_) => {
+      'item': _show('tt1000001'),
+      'plays': 2,
+      'hidden': ['HIDDEN_SECTION_CALENDAR', 'HIDDEN_SECTION_DROPPED'],
+    };
+    final status = await service.titleStatus('tt1000001', 'series');
+    expect(status?.dropped, isTrue);
+    routes = (_) => {
+      'item': _show('tt1000001'),
+      'hidden': ['HIDDEN_SECTION_PROGRESS'],
+    };
+    expect(
+      (await service.titleStatus('tt1000001', 'series'))?.dropped,
+      isFalse,
+    );
+  });
+
+  test(
+    'a show is completed only when every aired episode has a play',
+    () async {
+      var completed = 7;
+      routes = (r) => r.url.path == '/v1/me/status'
+          ? {'item': _show('tt1000001')}
+          : {'show': _show('tt1000001'), 'aired': 8, 'completed': completed};
+      expect(await service.showCompleted('tt1000001'), isFalse);
+      completed = 8;
+      expect(await service.showCompleted('tt1000001'), isTrue);
+      expect(requests.last.url.path, '/v1/me/progress/shows/show-id');
+      expect(requests.last.url.queryParameters, isEmpty, reason: 'no specials');
+    },
+  );
+
+  test(
+    'a show the catalog lacks, or with nothing aired, is not completed',
+    () async {
+      routes = (_) => {};
+      expect(await service.showCompleted('tt1000001'), isFalse);
+      routes = (r) => r.url.path == '/v1/me/status'
+          ? {'item': _show('tt1000001')}
+          : {'show': _show('tt1000001'), 'aired': 0, 'completed': 0};
+      expect(await service.showCompleted('tt1000001'), isFalse);
+    },
+  );
+
+  test(
+    'clearing a show removes its plays and only its resume points',
+    () async {
+      routes = (r) => r.method == 'GET'
+          ? {
+              'playback': [
+                {
+                  'id': 'mine-1',
+                  'item': _episode('tt1000001', 1, 2),
+                  'progress': 5,
+                },
+                {
+                  'id': 'other',
+                  'item': _episode('tt1000002', 1, 2),
+                  'progress': 5,
+                },
+                {
+                  'id': 'mine-2',
+                  'item': _episode('tt1000001', 2, 1),
+                  'progress': 5,
+                },
+              ],
+            }
+          : <String, Object?>{};
+      final revision = service.revision.value;
+      expect(await service.clearProgress('tt1000001', 'series'), isTrue);
+      expect(requests.first.url.path, '/v1/me/history:remove');
+      expect(jsonDecode(requests.first.body), {
+        'items': [
+          {
+            'kind': 'MEDIA_KIND_SHOW',
+            'ids': {'imdb': 'tt1000001'},
+          },
+        ],
+      });
+      expect(
+        requests.where((r) => r.method == 'DELETE').map((r) => r.url.path),
+        ['/v1/me/playback/mine-1', '/v1/me/playback/mine-2'],
+      );
+      expect(service.revision.value, revision + 1);
+    },
+  );
+
+  test(
+    'plays that were cleared still refresh when resume points fail',
+    () async {
+      routes = (r) => r.method == 'GET'
+          ? throw StateError('playback unavailable')
+          : <String, Object?>{};
+      final revision = service.revision.value;
+      expect(await service.clearProgress('tt0133093', 'movie'), isFalse);
+      expect(requests.first.url.path, '/v1/me/history:remove');
+      expect(service.revision.value, revision + 1);
+    },
+  );
+
+  test('signed out, the title writes send nothing', () async {
+    routes = (_) => {};
+    session.signedIn = false;
+    expect(
+      await service.setDropped('tt1000001', 'series', dropped: true),
+      isFalse,
+    );
+    expect(await service.clearProgress('tt1000001', 'series'), isFalse);
+    expect(await service.showCompleted('tt1000001'), isNull);
+    expect(requests, isEmpty);
+  });
 }

@@ -8,6 +8,7 @@
 /// two widgets need to change.
 library;
 
+import 'package:debrify/features/ledger/models/ledger_brand.dart';
 import 'package:flutter/material.dart';
 
 /// Trakt brand red — also the tint for anything Trakt-owned in the UI.
@@ -158,6 +159,42 @@ class MdblistMark extends StatelessWidget {
         style: TextStyle(
           color: Colors.white,
           fontSize: size * 0.62,
+          fontWeight: FontWeight.w900,
+          height: 1,
+        ),
+      ),
+    ),
+  );
+}
+
+/// Debrify's own tracker's accent, beside the three above.
+const Color kLedgerAccent = Color(0xFF34D399);
+
+/// Ink that reads on [kLedgerAccent].
+const Color kLedgerOnAccent = Color(0xFF052E22);
+
+/// Debrify's own tracker's mark: a rounded tile carrying its initial.
+class LedgerMark extends StatelessWidget {
+  const LedgerMark({super.key, this.size = 20, this.opacity = 1});
+  final double size;
+  final double opacity;
+
+  @override
+  Widget build(BuildContext context) => Opacity(
+    opacity: opacity,
+    child: Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: kLedgerAccent,
+        borderRadius: BorderRadius.circular(size * 0.28),
+      ),
+      child: Text(
+        kLedgerDisplayName.substring(0, 1),
+        style: TextStyle(
+          color: kLedgerOnAccent,
+          fontSize: size * 0.64,
           fontWeight: FontWeight.w900,
           height: 1,
         ),
